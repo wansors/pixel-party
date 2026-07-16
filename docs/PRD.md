@@ -1,7 +1,7 @@
 # PRD — Pixel Party
 
-- **Version**: 0.1 (draft)
-- **Date**: 2026-07-16
+- **Version**: 0.2 (draft)
+- **Date**: 2026-07-17
 - **Author**: Andrés Cisneros
 - **Status**: In review
 
@@ -113,7 +113,8 @@ outcomes. See `minigame-catalog.md` §H and `scoring-system.md`.
 ### 5.3 Lobby
 - List of connected players (nickname, avatar, "ready" status).
 - Host configures: number of rounds, mini-game selection (random or manual), difficulty/timers.
-- Host starts the match when there are ≥ 2 players.
+- Host starts the match. Design range is **4–10 players** (the sweet spot for banter); the technical
+  minimum to start is **2**, and team games need ≥ 4.
 
 ### 5.4 Mini-game round
 1. **Intro**: screen with the mini-game name, brief rules, and a countdown.
@@ -253,8 +254,9 @@ deliberately minimal; formats, handicap, and analysis come in later phases.
 
 ### MVP (v1 — Phase 0)
 - Create/join a room by code (4–10 players); lobby with player list.
-- Host configures number of rounds; random mini-game selection.
-- **3 individual, latency-tolerant mini-games** (e.g., Quick reaction, Button masher, Trivia).
+- **Fixed default number of rounds** (host-configurable from Phase 1); random mini-game selection.
+- **3 individual, latency-tolerant mini-games**: Quick reaction (A1), Button masher (A2), Color Trap
+  (E1). Trivia (A3) and Balloon Chicken (D1) are the fast-follows (see `minigame-ideas.md`, `backlog.md`).
 - Full session cycle: rounds → results → final ranking.
 - Position-based scoring and session ranking with tiebreakers.
 - Basic reconnection.
@@ -297,13 +299,14 @@ deliberately minimal; formats, handicap, and analysis come in later phases.
 
 ## 12. Open questions / pending decisions
 
-1. Default number of rounds per session and target total duration.
-2. Random-only mini-game selection in MVP, or also manual by the host?
-3. Room code length/format.
-4. Scaling strategy (single-instance in MVP, or multi-instance with a backplane later?).
+1. Default number of rounds per session and target total duration (MVP uses a fixed default; value TBD).
+2. Room code length/format.
+3. Scaling strategy (single-instance in MVP, or multi-instance with a backplane later?).
 
 Resolved:
 - **Persistence** — no DB in Phase 1; strictly in-memory/ephemeral (see §8, `technical-architecture.md` §7).
 - **Art direction** — retro classic-arcade pixel-art identity (see `art-direction.md`).
+- **Mini-game selection** — MVP is **random-only**; host **manual** selection/editor is a later add (see
+  `backlog.md` Icebox). Configuring the **number of rounds** moves to **Phase 1** (`backlog.md`).
 
 > Stack is decided (§8). Remaining technical open points are tracked in `technical-architecture.md` §10.

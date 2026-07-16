@@ -1,7 +1,7 @@
 # Mini-game catalog — Pixel Party
 
-- **Version**: 0.2 (draft)
-- **Date**: 2026-07-16
+- **Version**: 0.3 (draft)
+- **Date**: 2026-07-17
 
 Initial mini-game catalog. Each one is designed for the **each player on their own device** model (PRD
 §4) and returns a **normalized result** to the engine (ranking or orderable score, §8.3).
@@ -29,7 +29,8 @@ Initial mini-game catalog. Each one is designed for the **each player on their o
 - **Dev complexity**: relative estimate (low/medium/high).
 - **Banter**: how much rivalry/laughter it tends to generate (💥 low → 💥💥💥 high).
 
-⭐ marks the recommended **MVP** candidates for their balance of fun, latency tolerance, and dev cost.
+⭐ marks the **MVP** mini-games (A1, A2, E1) — the 3 that ship in Phase 0 for their balance of fun,
+latency tolerance, and dev cost. A3 Trivia and D1 Balloon Chicken are the immediate fast-follows.
 
 ---
 
@@ -51,14 +52,14 @@ Initial mini-game catalog. Each one is designed for the **each player on their o
 - **Win condition**: highest tap count. · **Result**: ranking by count (higher wins).
 - **Latency**: low (aggregate count sent). · **Complexity**: low.
 
-### A3. ⭐ Lightning quiz ("Trivia")
+### A3. Lightning quiz ("Trivia") — *MVP fast-follow*
 - **Concept**: multiple-choice questions; rewards correctness and speed.
 - **Type**: FFA · **Input**: tap on option · **Duration**: 45–60 s (5–8 questions) · **Banter**: 💥💥
 - **Rules**: per-question time limit (~8 s). Points for correct answer + speed bonus.
 - **Win condition**: highest total score. · **Result**: ranking by points.
 - **Latency**: low. · **Complexity**: medium (question bank + i18n).
 
-### A4. ⭐ Sequence memory ("Simon")
+### A4. Sequence memory ("Simon")
 - **Concept**: repeat a growing sequence of colors/sounds.
 - **Type**: FFA · **Input**: tap · **Duration**: up to ~60 s · **Banter**: 💥
 - **Rules**: everyone sees the same growing sequence; a mistake eliminates you; furthest survives.
@@ -176,7 +177,7 @@ Initial mini-game catalog. Each one is designed for the **each player on their o
 
 ## D. Chaos / party (banter-first)
 
-### D1. Balloon Chicken ("Nerve")
+### D1. Balloon Chicken ("Nerve") — *MVP fast-follow*
 - **Concept**: pump a pixel balloon for points — but it bursts at a random threshold. Cash out before it
   pops or lose it all. Pure nerve, maximum trash talk.
 - **Type**: FFA · **Input**: tap to pump, tap to cash out · **Duration**: ~20 s · **Banter**: 💥💥💥
@@ -205,9 +206,8 @@ Initial mini-game catalog. Each one is designed for the **each player on their o
 Additional candidates, kept as short specs until scheduled. Full cards written when picked up. See
 `minigame-ideas.md` for the prioritized ranking.
 
-- **E1. Color Trap (Stroop)** — the word "RED" printed in blue ink; tap the **ink color**, not the word.
-  FFA · tap · fast rounds · low effort · low latency · banter 💥💥💥. Brain-teaser, very funny under time
-  pressure.
+- **E1. ⭐ Color Trap (Stroop)** *(MVP — full card below)* — see the promoted card at the end of this
+  section.
 - **E2. Quick Math** — fast arithmetic; answer as many as possible before the timer.
   FFA · tap · 30 s · low effort · low latency · banter 💥💥.
 - **E3. Odd One Out** — spot the single different pixel/tile in a grid; grid grows each round.
@@ -226,6 +226,19 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
   FFA · drag/keyboard · up to 45 s · medium effort · medium latency · banter 💥💥.
 - **E10. Line Clear Sprint** — Tetris-like: clear N lines fastest.
   FFA · tap/drag · up to 60 s · high effort · low latency · banter 💥.
+
+### E1 (full card). ⭐ Color Trap ("Stroop") — *MVP*
+- **Concept**: a color word (e.g., "RED") is shown in a mismatched ink color (e.g., blue). Tap the
+  button matching the **ink color**, not the word it spells. The brain-fight is the joke.
+- **Type**: FFA · **Input**: tap · **Duration**: 20–30 s (several fast rounds) · **Banter**: 💥💥💥
+- **Rules**: same word/ink sequence for everyone (common seed). Each round shows a prompt + a small set
+  of color buttons; correct tap scores, wrong tap or timeout scores nothing. Short per-prompt window
+  (~1.5–2 s) keeps the pressure high.
+- **Win condition**: most correct answers (tiebreak by total response time). · **Result**: ranking by
+  correct count, then speed.
+- **Latency**: low (server owns the seed; validates taps against the shown prompt). · **Complexity**: low.
+- **Accessibility**: never color-only — pair each color button with a distinct shape/symbol and label
+  so the mismatch is still solvable without color discrimination (see cross-cutting notes).
 
 ## H. Handicap / catch-up (per mini-game hooks)
 
@@ -246,22 +259,24 @@ that the engine tunes based on the current session standings (see `scoring-syste
 
 | Axis | Covered by |
 |------|------------|
-| Reflexes / reaction | A1, A6, B1 |
+| Reflexes / reaction | A1, A6, B1, E7 |
+| Attention / focus (inhibition) | E1, E3, E4 |
 | Speed / endurance | A2, A9, C1 |
 | Knowledge | A3 |
-| Memory | A4, A11 |
-| Precision / aim / timing | A5, A10, B2 |
+| Mental math | E2 |
+| Memory | A4, A11, E8 |
+| Precision / aim / timing | A5, A10, B2, E6 |
 | Survival / dodging | A7, A8, B3 |
-| Nerve / chance | D1, D3 |
+| Nerve / chance | D1, D3, E5 |
 | Teamwork | C1, C2, C3 |
-| Head-to-head rivalry | B1, B2, B3 |
+| Head-to-head rivalry | B1, B2, B3, E7 |
 
 ## Format mix
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3 |
-| Duel (1v1 / bracket) | B1, B2, B3 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10 |
+| Duel (1v1 / bracket) | B1, B2, B3, E7 |
 | Team | C1, C2, C3 |
 
 ## MVP selection & shipping order
@@ -269,8 +284,10 @@ that the engine tunes based on the current session standings (see `scoring-syste
 The catalog ships **incrementally** (see `backlog.md`). We do **not** build all of it up front.
 
 - **MVP (Phase 0)** — 3 individual, latency-tolerant games to validate the engine and scoring:
-  **A1 Quick reaction, A2 Button masher, A3 Trivia** (Simon A4 as an alternate).
-- **Phase 1** — grow individual variety: A4 Simon, D1 Balloon Chicken, A6 Bug smash, A10 Timing.
+  **A1 Quick reaction, A2 Button masher, E1 Color Trap**. **A3 Trivia** and **D1 Balloon Chicken** are
+  the immediate fast-follows (still P0-tier; see `minigame-ideas.md`).
+- **Phase 1** — grow individual variety (P1 tier): A4 Simon, A6 Bug smash, A10 Timing, and the rest of
+  the P1 group in `minigame-ideas.md`.
 - **Phase 2** — introduce formats: C1 Tug of War (team), B2 Sink the Fleet (duel, turn-based, low
   latency — validates the bracket flow without real-time netcode).
 - **Phase 5** — real-time-netcode-heavy games (B1 Pong, B3 Sumo, A9 Pixel Dash, A8 Snake, A7 Pixel rain)

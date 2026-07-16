@@ -1,7 +1,7 @@
 # Scoring and ranking system — Pixel Party
 
-- **Version**: 0.1 (draft)
-- **Date**: 2026-07-16
+- **Version**: 0.2 (draft)
+- **Date**: 2026-07-17
 
 Defines how each mini-game's result turns into points, how points accumulate over the session, and how
 the final ranking is resolved. Inspired by *Mario Party*: what matters is not winning a single mini-game
@@ -25,7 +25,7 @@ but the **accumulation across the session**.
 ## 2. Points per mini-game (position-based award)
 
 Each mini-game produces a **player ranking** (1st, 2nd, 3rd…). The engine translates position into
-points using an award table. For a room of up to 8 players:
+points using an award table. Default table for a room of up to **10 players** (the max, PRD FR-1.3):
 
 | Position | Points |
 |----------|--------|
@@ -35,13 +35,16 @@ points using an award table. For a room of up to 8 players:
 | 4th | 4 |
 | 5th | 3 |
 | 6th | 2 |
-| 7th | 1 |
-| 8th | 0 |
+| 7th | 2 |
+| 8th | 1 |
+| 9th | 1 |
+| 10th | 0 |
 
 Notes:
 - The table is **configurable**; the engine only needs "position → points".
-- Scales to any number of players: with N players, the first N rows are used.
-- Deliberate design: strong reward for 1st, but a compressed tail to allow comebacks.
+- Scales to any number of players: with N players, the first N rows are used (covers the 4–10 range).
+- Deliberate design: strong reward for 1st, but a **compressed, flat tail** (deliberate ties in the
+  lower half) so trailing players stay within comeback range and only last place scores 0.
 
 ### 2.1 Ties within a mini-game
 If two players tie for a position, they **receive the average** of the points for the positions they
@@ -150,7 +153,7 @@ alive until the end.
 
 | Parameter | Default | Notes |
 |-----------|---------|-------|
-| Position award table | 10/7/5/4/3/2/1/0 | Adjustable |
+| Position award table | 10/7/5/4/3/2/2/1/1/0 | Adjustable; covers up to 10 players |
 | Rounds per session | 4 (TBD, PRD §12) | |
 | Bonuses | Disabled in MVP | Speed, double final round, stars |
 | Handicap / catch-up | Disabled in MVP | Mechanical (in-game) + scoring; capped |

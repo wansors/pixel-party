@@ -1,7 +1,7 @@
 # Backlog — Pixel Party
 
-- **Version**: 0.1 (draft)
-- **Date**: 2026-07-16
+- **Version**: 0.2 (draft)
+- **Date**: 2026-07-17
 
 Phased product backlog. The philosophy is **start with a minimal MVP and grow incrementally** — build
 the smallest thing that is fun end-to-end, then add features (more mini-games, handicap, post-match
@@ -34,13 +34,14 @@ ranking. Latency-tolerant games only; no teams/duels/handicap yet.
 - [ ] Create room (code) + join by code/link (HTTP `/api` + WS upgrade with server-resolved identity).
 - [ ] Lobby: player list, ready state, host role, host starts session.
 - [ ] WS transport (`Bun.serve`) + intent registry + hand-written shape validator.
-- [ ] Session engine: sequence N rounds, cycle intro → play → results (random selection).
+- [ ] Session engine: sequence N rounds (fixed default count; host-configurable in Phase 1), cycle
+      intro → play → results (random selection).
 - [ ] Basic reconnection (rejoin ongoing session, restore scoreboard).
 
 ### Mini-games (3, individual, latency-tolerant)
 - [ ] Quick reaction ("Go!") — A1.
 - [ ] Button masher — A2.
-- [ ] Lightning quiz (Trivia) — A3.  *(alt: Simon A4)*
+- [ ] Color Trap (Stroop) — E1.  *(fast-follows: A3 Trivia, D1 Balloon Chicken)*
 
 ### Scoring
 - [ ] Position → points table, cumulative scoreboard after each round.
