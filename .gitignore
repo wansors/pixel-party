@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Bun
+.bun/
+bun.lockb
+
+# Build output
+dist/
+build/
+out/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Test / coverage
+coverage/
