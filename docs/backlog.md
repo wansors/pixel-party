@@ -51,6 +51,12 @@ ranking. Latency-tolerant games only; no teams/duels/handicap yet.
 - [ ] Phaser scenes for the 3 mini-games; `GameSocketService` + `ServerMsgRouter`; `runOutsideAngular`.
 - [ ] Responsive mobile (portrait) + desktop.
 
+### Look & feel (retro arcade — see `art-direction.md`)
+- [ ] Establish the shared theme: palette (`theme.ts`-style), self-hosted pixel font, arcade window frame.
+- [ ] Anonymous player identity: unique color + preset pixel avatar ("monigote") + name (typed/auto).
+- [ ] Scoreboard & final ranking as a classic arcade high-score table.
+- [ ] **No database** — everything in-memory; nothing persisted when a room closes.
+
 ---
 
 ## Phase 1 — More individual games & robustness
@@ -125,6 +131,8 @@ Deferred until the netcode/sync layer is proven (higher latency sensitivity).
 ---
 
 ## Phase 6 — Accounts, history & progression
+
+> This is the **first phase that introduces a database**. Phases 0–5 are fully in-memory/ephemeral.
 
 - [ ] `bun:sqlite` persistence layer (raw SQL, migrations, seed) — follow utopia conventions.
 - [ ] Optional accounts (lightweight); persistent session history & lifetime stats.

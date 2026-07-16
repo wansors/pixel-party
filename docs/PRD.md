@@ -137,7 +137,9 @@ outcomes. See `minigame-catalog.md` §H and `scoring-system.md`.
 - FR-1.5 Host role with configuration and start permissions; automatic transfer if the host leaves.
 
 ### FR-2 — Players
-- FR-2.1 Lightweight onboarding with no registration: nickname + avatar/color.
+- FR-2.1 **Anonymous players, no registration**: each player gets a **unique color** (per room), a
+  **pixel avatar ("monigote")** picked from a preset set, and a **name** (typed, or auto-generated if
+  blank). Color + avatar + name identify the player everywhere. See `art-direction.md` §6.
 - FR-2.2 "Ready/not ready" status in the lobby.
 - FR-2.3 Reconnection: if a player drops, they can rejoin the ongoing session keeping their points.
 - FR-2.4 Kick by the host.
@@ -184,6 +186,9 @@ outcomes. See `minigame-catalog.md` §H and `scoring-system.md`.
 - **NFR-8 Accessibility**: adequate contrast, touch target sizes, alternatives where feasible.
 - **NFR-9 Internationalization**: text prepared for ES/EN from the design (i18n architecture).
 - **NFR-10 Observability**: logging of room events and latency/error metrics.
+- **NFR-11 Visual identity**: consistent **retro classic-arcade pixel-art** look across the web shell,
+  HUD, and mini-games (self-hosted assets, CSP-safe), without compromising readability/accessibility.
+  See `art-direction.md`.
 
 ---
 
@@ -212,7 +217,7 @@ outcomes. See `minigame-catalog.md` §H and `scoring-system.md`.
 | Client shell | Angular 20 (`@angular/build`) — all DOM/UI |
 | Game rendering | Phaser 3 — mini-game canvas only |
 | State authority | Server-authoritative + deterministic (seeded `Random`, `Clock`) |
-| Persistence | In-memory ephemeral rooms; optional `bun:sqlite` for history (later phase) |
+| Persistence | **No DB in Phase 1** — all in-memory/ephemeral; `bun:sqlite` later-phase only |
 
 The main advantage of Bun + TypeScript is sharing the data model and validation logic between client and
 server. See [`technical-architecture.md`](technical-architecture.md) for the full mapping and the
@@ -295,8 +300,10 @@ deliberately minimal; formats, handicap, and analysis come in later phases.
 1. Default number of rounds per session and target total duration.
 2. Random-only mini-game selection in MVP, or also manual by the host?
 3. Room code length/format.
-4. Persist history in MVP (`bun:sqlite`), or strictly ephemeral?
-5. Scaling strategy (single-instance in MVP, or multi-instance with a backplane later?).
-6. Art direction (pixel art consistent with the "Pixel Party" name).
+4. Scaling strategy (single-instance in MVP, or multi-instance with a backplane later?).
+
+Resolved:
+- **Persistence** — no DB in Phase 1; strictly in-memory/ephemeral (see §8, `technical-architecture.md` §7).
+- **Art direction** — retro classic-arcade pixel-art identity (see `art-direction.md`).
 
 > Stack is decided (§8). Remaining technical open points are tracked in `technical-architecture.md` §10.

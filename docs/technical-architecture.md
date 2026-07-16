@@ -24,7 +24,7 @@ domain changes (rooms / sessions / mini-games / scoring instead of an MMORPG wor
 | Client shell | **Angular 20** (standalone components, `@angular/build`) — all DOM/UI |
 | Game rendering | **Phaser 3** — mini-game canvas only, decoupled from Angular |
 | Shared contracts | `packages/shared` (`@pp/shared`): protocol + catalog data, consumed by both apps |
-| Persistence | **`bun:sqlite`** (raw SQL) — **optional in MVP**; rooms are in-memory/ephemeral |
+| Persistence | **None in Phase 1** — everything in-memory/ephemeral. `bun:sqlite` is a **later-phase** add-on only |
 | Lint/format | **Biome** (100 cols, single quotes, semicolons as-needed) |
 | Tests | **`bun test`** (server/shared) + **Karma/Jasmine** (client) |
 | CI | GitHub Actions: determinism → lint → typecheck → test |
@@ -129,7 +129,7 @@ nothing about Bun, WebSocket, or SQLite.
 | `Random` (domain) | `SeededRandom` | `next(): number` 0..1, mulberry32 — deterministic mini-game seeds |
 | `IdGenerator` | crypto-based | player ids, room codes |
 | `LiveRoomRegistry` | `LiveRooms` | in-memory authoritative rooms/sessions (structural port) |
-| `SessionRepository` | `SqliteSessionRepository` | **optional/future** — persist session history |
+| `SessionRepository` | `SqliteSessionRepository` | **not in Phase 1** — future only, for session history |
 
 ### Wiring
 Single **composition root** (`composition-root.ts`), no DI framework: reads config, (optionally) opens
@@ -247,11 +247,15 @@ engine changes.
 
 ## 7. Persistence
 
-- **MVP**: rooms and sessions are **in-memory and ephemeral** (`LiveRooms`). No database required to
-  play a session. This is the main divergence from utopia (which persists a durable world).
-- **Optional / future**: `bun:sqlite` (raw SQL, forward-only `migrations/*.sql`, `migrate.ts`,
-  idempotent seed) with one `Sqlite*Repository` per aggregate, for **session history / stats** (FR-6.6)
-  and, later, accounts. Follow utopia's persistence conventions verbatim when added.
+- **Phase 1: no database at all.** Rooms, sessions, players, and scores live **only in memory**
+  (`LiveRooms`). When a room closes (session ends or inactivity timeout), everything is discarded —
+  nothing is saved. Players are anonymous (color + pixel avatar + name; see `art-direction.md` §6), so
+  there is no account or profile to persist. This is the main divergence from utopia (which persists a
+  durable world), and it keeps the MVP simple: no schema, no migrations, no `bun:sqlite`.
+- **Later phase only**: introduce `bun:sqlite` (raw SQL, forward-only `migrations/*.sql`, `migrate.ts`,
+  idempotent seed) with one `Sqlite*Repository` per aggregate, for **session history / stats** (FR-6.6),
+  the post-match analysis persistence (backlog Phase 4), and eventually optional accounts. Follow
+  utopia's persistence conventions verbatim when added.
 
 ---
 
@@ -298,6 +302,6 @@ Intentional differences given Pixel Party's nature:
    the full Angular shell (recommendation: keep Angular 20 for parity with the reference).
 2. Room-code format/length and collision handling.
 3. TICK_HZ and snapshot throttle defaults for real-time mini-games (start 15 Hz / snapshot every 3).
-4. Whether to introduce `bun:sqlite` in v1 for basic history or stay strictly in-memory.
+4. ~~Whether to introduce `bun:sqlite` in v1~~ — **decided: no DB in Phase 1, strictly in-memory.**
 5. Scaling: single-instance for MVP; a Redis pub/sub backplane if multi-instance is needed later
    (utopia is single-instance).
