@@ -8,8 +8,12 @@ for a session-wide ranking. See [`README.md`](README.md).
 
 ## Current phase
 
-**Documentation**, not development. Functional documentation lives in `docs/` (PRD, mini-game catalog,
-scoring system).
+**Documentation**, not development. All documentation lives in `docs/`:
+- `PRD.md` — product requirements.
+- `minigame-catalog.md` — mini-game catalog (grows over time).
+- `scoring-system.md` — scoring, ranking, handicap.
+- `technical-architecture.md` — stack & architecture (mirrors `../utopia-offline`).
+- `backlog.md` — phased roadmap (MVP first, then incremental epics).
 
 ## Project conventions
 
@@ -18,13 +22,20 @@ scoring system).
 - All documents we create go under `docs/`.
 - Code, comments, commits, and technical names: English.
 
-## Tech stack
+## Tech stack (decided)
 
-- **Runtime**: Bun (confirmed).
-- Real-time with low latency; the server is the authority for state.
-- The rest of the stack (front rendering, real-time and other libraries) is being finalized from a
-  **reference project** provided by the author (an existing HTML game with reusable libraries).
-- Until that decision is closed, do not assume a default stack beyond Bun. PRD §8 tracks the open points.
+Mirrors the reference project **`../utopia-offline`** — same architecture and conventions. Full
+blueprint in `docs/technical-architecture.md`.
+
+- **Bun** workspaces monorepo, **TypeScript** (`strict`, `noEmit`).
+- **Hexagonal** server (domain / application / infrastructure); server-authoritative + deterministic
+  (seeded `Random`, `Clock` ports; the domain never calls `Math.random`/`Date.now`).
+- **Bun-native WebSockets** (topic pub/sub); wire contracts in `@pp/shared` as discriminated unions with
+  a **hand-written** shape validator (**no Zod**).
+- **Angular 20** shell (all DOM/UI) + **Phaser 3** (mini-game canvas only), kept decoupled.
+- **`bun:sqlite`** raw SQL — optional; MVP rooms are in-memory/ephemeral.
+- **Biome** (100 cols, single quotes, semicolons as-needed); `bun test` + Karma for client.
+- Mini-games are **pluggable modules** (common contract); the session engine stays game-agnostic.
 
 ## Key constraints (from the PRD)
 

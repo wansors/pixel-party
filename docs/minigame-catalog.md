@@ -237,17 +237,17 @@ that the engine tunes based on the current session standings (see `scoring-syste
 | Duel (1v1 / bracket) | B1, B2, B3 |
 | Team | C1, C2, C3 |
 
-## Suggested MVP selection
+## MVP selection & shipping order
 
-Start with latency-tolerant, low/medium-complexity games that still cover the three formats and set the
-competitive tone:
-- **Individual**: A1 Quick reaction, A2 Button masher, A3 Trivia, A4 Simon, D1 Balloon Chicken.
-- **Team**: C1 Tug of War (simple, high banter, low latency).
-- **Duel**: B2 Sink the Fleet (turn-based, low latency — validates the bracket flow without real-time
-  netcode).
+The catalog ships **incrementally** (see `backlog.md`). We do **not** build all of it up front.
 
-Defer real-time-netcode-heavy games (B1 Pong, B3 Sumo, A9 Pixel Dash) until the engine and sync layer
-are proven.
+- **MVP (Phase 0)** — 3 individual, latency-tolerant games to validate the engine and scoring:
+  **A1 Quick reaction, A2 Button masher, A3 Trivia** (Simon A4 as an alternate).
+- **Phase 1** — grow individual variety: A4 Simon, D1 Balloon Chicken, A6 Bug smash, A10 Timing.
+- **Phase 2** — introduce formats: C1 Tug of War (team), B2 Sink the Fleet (duel, turn-based, low
+  latency — validates the bracket flow without real-time netcode).
+- **Phase 5** — real-time-netcode-heavy games (B1 Pong, B3 Sumo, A9 Pixel Dash, A8 Snake, A7 Pixel rain)
+  once the sync layer is proven.
 
 ## Cross-cutting design considerations
 

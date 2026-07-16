@@ -189,10 +189,10 @@ outcomes. See `minigame-catalog.md` §H and `scoring-system.md`.
 
 ## 8. Technical considerations
 
-> **Runtime is confirmed: Bun.** The remaining stack pieces (front rendering, real-time library, and
-> other dependencies) are being finalized from a **reference project** provided by the author — an
-> existing HTML game with reusable libraries. This section frames the needs and open points; it will be
-> updated to a concrete decision once the reference project is reviewed.
+> **Stack decided.** Pixel Party mirrors the architecture of the reference project `utopia-offline`:
+> **Bun** monorepo, **TypeScript**, **hexagonal** server, **Bun-native WebSockets**, **Angular 20 +
+> Phaser 3** client, optional **`bun:sqlite`**, **Biome**, server-authoritative + deterministic core.
+> Full blueprint in [`technical-architecture.md`](technical-architecture.md). This section is a summary.
 
 ### 8.1 Key technical needs
 - **Bidirectional real-time** communication (WebSockets) with low latency.
@@ -200,20 +200,23 @@ outcomes. See `minigame-catalog.md` §H and `scoring-system.md`.
 - Frontend game rendering (**Canvas 2D**, WebGL as an option for heavier graphics).
 - Ephemeral in-memory rooms; minimal persistence (optional, for history).
 
-### 8.2 Stack direction
+### 8.2 Stack (decided — mirrors `utopia-offline`)
 
-| Area | Direction |
-|------|-----------|
-| Runtime | Bun (confirmed) |
-| Language | TypeScript (shared between client and server where possible) |
-| Real time | WebSockets (specific library TBD from reference project) |
-| Frontend rendering | Canvas 2D (engine/library TBD from reference project) |
-| State authority | Server |
-| Persistence | In-memory rooms; optional store for history (future) |
+| Area | Choice |
+|------|--------|
+| Runtime | Bun (workspaces monorepo) |
+| Language | TypeScript (shared model/validation via `@pp/shared`) |
+| Server | Hexagonal (domain / application / infrastructure) |
+| Real time | Bun-native WebSockets (topic pub/sub) — no ws/socket.io |
+| Wire validation | Hand-written discriminated unions + shape validator (no Zod) |
+| Client shell | Angular 20 (`@angular/build`) — all DOM/UI |
+| Game rendering | Phaser 3 — mini-game canvas only |
+| State authority | Server-authoritative + deterministic (seeded `Random`, `Clock`) |
+| Persistence | In-memory ephemeral rooms; optional `bun:sqlite` for history (later phase) |
 
-The main advantage of the Bun + TypeScript direction is sharing the data model and validation logic
-between client and server, reducing friction for a real-time web game. **Open point**: confirm the exact
-front rendering and real-time libraries once the reference project is available (see §12).
+The main advantage of Bun + TypeScript is sharing the data model and validation logic between client and
+server. See [`technical-architecture.md`](technical-architecture.md) for the full mapping and the
+mini-game plugin contract.
 
 ### 8.3 Mini-game contract (conceptual draft)
 Each mini-game should implement a common contract to be pluggable into the engine:
@@ -240,25 +243,26 @@ mini-games can be added without modifying the core.
 
 ## 9. Scope — MVP vs future
 
-### MVP (v1)
+The scope is delivered **incrementally by phases** — see `backlog.md` for the full roadmap. The MVP is
+deliberately minimal; formats, handicap, and analysis come in later phases.
+
+### MVP (v1 — Phase 0)
 - Create/join a room by code (4–10 players); lobby with player list.
 - Host configures number of rounds; random mini-game selection.
-- **A handful of mini-games covering all three formats** (individual, one team, one duel) — see the
-  catalog's suggested MVP selection.
+- **3 individual, latency-tolerant mini-games** (e.g., Quick reaction, Button masher, Trivia).
 - Full session cycle: rounds → results → final ranking.
-- Position-based scoring, team/duel result distribution, and session ranking with tiebreakers.
-- Basic handicap/catch-up (can ship toggled off, tuned later).
+- Position-based scoring and session ranking with tiebreakers.
 - Basic reconnection.
 - Responsive mobile + desktop.
 
-### Out of MVP (future phases)
-- User accounts, history, and persistent statistics.
-- Team / cooperative modes.
-- Advanced avatar customization, emotes, in-room chat.
-- Public matchmaking (open rooms / quick matches with strangers).
-- Manual mini-game selection/editor by the host.
-- More mini-games, seasons, and achievements.
-- Audio/music and sound effects.
+### Out of MVP (later phases — see `backlog.md`)
+- More mini-games (the catalog grows wave by wave).
+- **Team and duel formats** (Phase 2) with team/duel result distribution.
+- **Handicap / catch-up** (Phase 3).
+- **Post-match analysis & player radar/pentagon** (Brain Training style — per-axis score profile, Phase 4).
+- **Real-time action mini-games** once the netcode is proven (Phase 5).
+- User accounts, persistent history, statistics, achievements, seasons (Phase 6).
+- Avatars, emotes, in-room chat, audio, public matchmaking, i18n (Phase 7).
 
 ---
 
@@ -288,10 +292,11 @@ mini-games can be added without modifying the core.
 
 ## 12. Open questions / pending decisions
 
-1. **Front rendering and real-time libraries** — confirm from the reference project (§8.2).
-2. Default number of rounds per session and target total duration.
-3. Random-only mini-game selection in MVP, or also manual by the host?
-4. Room code length/format.
-5. Persist history in MVP, or strictly ephemeral?
-6. Scaling strategy (single-instance in MVP, or multi-instance with a backplane from the start?).
-7. Art direction (pixel art consistent with the "Pixel Party" name).
+1. Default number of rounds per session and target total duration.
+2. Random-only mini-game selection in MVP, or also manual by the host?
+3. Room code length/format.
+4. Persist history in MVP (`bun:sqlite`), or strictly ephemeral?
+5. Scaling strategy (single-instance in MVP, or multi-instance with a backplane later?).
+6. Art direction (pixel art consistent with the "Pixel Party" name).
+
+> Stack is decided (§8). Remaining technical open points are tracked in `technical-architecture.md` §10.

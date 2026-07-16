@@ -12,15 +12,18 @@ session-wide ranking.
 | Document | Description |
 |----------|-------------|
 | [`docs/PRD.md`](docs/PRD.md) | Product Requirements Document: vision, goals, personas, flows, requirements, and scope. |
-| [`docs/minigame-catalog.md`](docs/minigame-catalog.md) | Initial mini-game catalog with mechanics, rules, win condition, and scoring. |
-| [`docs/scoring-system.md`](docs/scoring-system.md) | Scoring across mini-games, session ranking, and tiebreakers. |
+| [`docs/minigame-catalog.md`](docs/minigame-catalog.md) | Mini-game catalog with mechanics, rules, win condition, and scoring (grows over time). |
+| [`docs/scoring-system.md`](docs/scoring-system.md) | Scoring across mini-games, session ranking, tiebreakers, and handicap. |
+| [`docs/technical-architecture.md`](docs/technical-architecture.md) | Stack & architecture — mirrors the `utopia-offline` reference project. |
+| [`docs/backlog.md`](docs/backlog.md) | Phased roadmap: minimal MVP first, then incremental epics. |
 
 ## Concept in one line
 
 Enter a room with a code, wait in the lobby for your group, play N short mini-games in a row, and crown
 whoever accumulated the most points.
 
-## Tech (in definition)
+## Tech
 
-Runtime: **Bun**. Real-time, server-authoritative state. Full technical stack is being finalized from a
-reference project — see PRD §8.
+**Bun** monorepo · **TypeScript** · **hexagonal** server · **Bun-native WebSockets** · **Angular 20 +
+Phaser 3** client · optional **`bun:sqlite`** · **Biome**. Server-authoritative and deterministic,
+mirroring the `utopia-offline` reference project. See [`docs/technical-architecture.md`](docs/technical-architecture.md).
