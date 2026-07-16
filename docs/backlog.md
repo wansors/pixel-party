@@ -145,15 +145,19 @@ Deferred until the netcode/sync layer is proven (higher latency sensitivity).
 
 ## Mini-game catalog growth
 
-The catalog (`minigame-catalog.md`) is a living list. Rough shipping order:
+The catalog (`minigame-catalog.md`) is a living list; the **prioritized ranking** lives in
+`minigame-ideas.md` (~30 games scored on fun, healthy competition, effort, latency). Shipping order
+follows the priority tiers there:
 
-| Wave | Mini-games | Phase |
-|------|-----------|-------|
-| MVP | Quick reaction, Button masher, Trivia | 0 |
-| +1 | Simon, Balloon Chicken, Bug smash, Timing | 1 |
-| +2 | Tug of War, Bomb Relay, Sink the Fleet | 2 |
-| +3 | Pixel Hoops, Match, Fleet Battle | 1–2 |
-| +action | Pong, Sumo, Pixel Dash, Snake, Pixel rain, Fruit Catch | 5 |
+| Wave | Tier | Mini-games (id) | Phase |
+|------|------|-----------------|-------|
+| MVP | P0 | Quick reaction (A1), Button masher (A2), Color Trap (E1), Balloon Chicken (D1), Trivia (A3) — ship 3, rest close behind | 0 |
+| +1 | P1 | Simon (A4), Higher/Lower (E5), Quick Math (E2), Odd One Out (E3), Number Rush (E4), Bug smash (A6), Timing (A10), Memory Flash (E8), Pixel Hoops (A5) | 1 |
+| +2 | P2 | Tug of War (C1), Sink the Fleet (B2), Match (A11), Bomb Relay (C2), Quick Draw Duel (E7), Pixel Beat (E6), Fruit Catch (D2), Fleet Battle (C3) | 2 |
+| +action | P3 | Pong (B1), Sumo (B3), Pixel Dash (A9), Snake (A8), Maze Sprint (E9), Pixel rain (A7), Line Clear (E10), Roulette (D3) | 5 |
+
+> P0 group is 5 games ranked; the MVP ships the top 3 (A1, A2, E1) with D1/A3 as fast-follows. See
+> `minigame-ideas.md` for the full ranked table and rationale.
 
 ---
 

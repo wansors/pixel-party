@@ -11,6 +11,7 @@ for a session-wide ranking. See [`README.md`](README.md).
 **Documentation**, not development. All documentation lives in `docs/`:
 - `PRD.md` — product requirements.
 - `minigame-catalog.md` — mini-game catalog (grows over time).
+- `minigame-ideas.md` — ~30 mini-game ideas ranked by priority.
 - `scoring-system.md` — scoring, ranking, handicap.
 - `technical-architecture.md` — stack & architecture (mirrors `../utopia-offline`).
 - `backlog.md` — phased roadmap (MVP first, then incremental epics).

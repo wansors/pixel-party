@@ -200,6 +200,33 @@ Initial mini-game catalog. Each one is designed for the **each player on their o
 
 ---
 
+## E. More ideas (lightweight specs)
+
+Additional candidates, kept as short specs until scheduled. Full cards written when picked up. See
+`minigame-ideas.md` for the prioritized ranking.
+
+- **E1. Color Trap (Stroop)** — the word "RED" printed in blue ink; tap the **ink color**, not the word.
+  FFA · tap · fast rounds · low effort · low latency · banter 💥💥💥. Brain-teaser, very funny under time
+  pressure.
+- **E2. Quick Math** — fast arithmetic; answer as many as possible before the timer.
+  FFA · tap · 30 s · low effort · low latency · banter 💥💥.
+- **E3. Odd One Out** — spot the single different pixel/tile in a grid; grid grows each round.
+  FFA · tap · up to 45 s · low effort · low latency · banter 💥💥.
+- **E4. Number Rush (Schulte grid)** — tap numbers 1→N in order as fast as possible.
+  FFA · tap · 20–30 s · low effort · low latency · banter 💥💥.
+- **E5. Higher or Lower** — guess if the next pixel card is higher/lower; streak = points, one wrong ends
+  it. FFA · tap · 20 s · low effort · low latency · banter 💥💥💥 (nerve).
+- **E6. Pixel Beat** — tap to the rhythm; hit the beats on time.
+  FFA · tap · ~40 s · medium effort · low/medium latency · banter 💥💥.
+- **E7. Quick Draw Duel** — western reaction shootout: draw first when "FIRE!" flashes, 1v1.
+  Duel · tap · ~15 s/match · low effort · medium latency · banter 💥💥💥.
+- **E8. Memory Flash** — a burst of pixels flashes; answer how many of a target appeared.
+  FFA · tap · 25 s · low effort · low latency · banter 💥💥.
+- **E9. Maze Sprint** — navigate a small maze to the exit fastest (identical maze for all).
+  FFA · drag/keyboard · up to 45 s · medium effort · medium latency · banter 💥💥.
+- **E10. Line Clear Sprint** — Tetris-like: clear N lines fastest.
+  FFA · tap/drag · up to 60 s · high effort · low latency · banter 💥.
+
 ## H. Handicap / catch-up (per mini-game hooks)
 
 To keep sessions competitive and full of comebacks, mini-games can expose optional **handicap hooks**
