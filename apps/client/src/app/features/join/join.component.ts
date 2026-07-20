@@ -2,46 +2,107 @@ import { HttpClient } from '@angular/common/http'
 import { Component, inject, signal } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { Router } from '@angular/router'
+import { AVATARS, type AvatarId, PLAYER_COLORS } from '@pp/shared'
 import { firstValueFrom } from 'rxjs'
 import { environment } from '../../../environments/environment'
+import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
 
-// Entry point: create a fresh room or enter an existing code, pick a name, then navigate to the room.
+// Entry point: pick a name + pixel avatar + color, then create a fresh room or enter an existing code.
+// Identity (name/color/avatar) travels to the room via query params.
 @Component({
   selector: 'app-join',
-  imports: [FormsModule],
+  imports: [FormsModule, PixelAvatarComponent],
   template: `
     <main class="join">
-      <h1>Pixel Party</h1>
-      <input class="name" [(ngModel)]="name" placeholder="Your name" maxlength="16" />
-      <button type="button" class="primary" (click)="createRoom()">Create room</button>
-      <div class="enter">
-        <input [(ngModel)]="code" placeholder="ROOM CODE" maxlength="6" />
-        <button type="button" (click)="joinRoom()">Join</button>
+      <div class="arcade-window cabinet">
+        <div class="arcade-titlebar">★ Pixel Party ★</div>
+        <div class="body">
+          <div class="me">
+            <app-pixel-avatar [avatar]="avatar()" [color]="color()" [size]="72" />
+          </div>
+
+          <input class="name" [(ngModel)]="name" placeholder="YOUR NAME" maxlength="16" />
+
+          <div class="picker">
+            <span class="label">Avatar</span>
+            <div class="row">
+              @for (a of avatars; track a) {
+                <button
+                  type="button"
+                  class="swatch"
+                  [class.sel]="a === avatar()"
+                  (click)="avatar.set(a)"
+                >
+                  <app-pixel-avatar [avatar]="a" [color]="color()" [size]="28" />
+                </button>
+              }
+            </div>
+          </div>
+
+          <div class="picker">
+            <span class="label">Color</span>
+            <div class="row">
+              @for (c of colors; track c) {
+                <button
+                  type="button"
+                  class="chip"
+                  [class.sel]="c === color()"
+                  [style.background]="c"
+                  (click)="color.set(c)"
+                  [attr.aria-label]="c"
+                ></button>
+              }
+            </div>
+          </div>
+
+          <button type="button" class="arcade-btn primary" (click)="createRoom()">Create room</button>
+          <div class="enter">
+            <input [(ngModel)]="code" placeholder="ROOM CODE" maxlength="6" />
+            <button type="button" class="arcade-btn" (click)="joinRoom()">Join</button>
+          </div>
+
+          @if (message()) {
+            <p class="msg">{{ message() }}</p>
+          }
+        </div>
       </div>
-      @if (message()) {
-        <p class="msg">{{ message() }}</p>
-      }
     </main>
   `,
   styles: `
-    .join { display: grid; gap: 1rem; place-content: center; height: 100vh; text-align: center;
-      font-family: monospace; }
-    h1 { color: #ffd166; letter-spacing: 0.15em; }
-    input { text-align: center; padding: 0.6rem; font-family: monospace; background: #17212a;
-      color: #e6edf3; border: 1px solid #33475a; border-radius: 4px; }
+    .join { display: grid; place-content: center; min-height: 100vh; padding: 1rem; }
+    .cabinet { width: min(92vw, 380px); }
+    .body { display: grid; gap: 0.9rem; padding: 1.1rem; }
+    .me { display: grid; place-content: center; }
+    .me app-pixel-avatar { filter: drop-shadow(0 4px 0 rgba(0,0,0,0.35)); }
+    input { text-align: center; padding: 0.6rem; font-family: var(--font-pixel); font-size: 0.8rem;
+      background: var(--c-bg); color: var(--c-text); border: 3px solid var(--c-frame);
+      border-radius: 2px; }
+    input::placeholder { color: var(--c-dim); }
+    .picker { display: grid; gap: 0.4rem; }
+    .label { font-size: 0.7rem; color: var(--c-dim); text-transform: uppercase; letter-spacing: 0.1em; }
+    .row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .swatch { padding: 0.25rem; background: var(--c-bg); border: 3px solid var(--c-frame);
+      border-radius: 2px; cursor: pointer; line-height: 0; }
+    .swatch.sel { border-color: var(--c-amber); }
+    .chip { width: 1.7rem; height: 1.7rem; border: 3px solid var(--c-frame); border-radius: 2px;
+      cursor: pointer; }
+    .chip.sel { border-color: var(--c-text); transform: scale(1.1); }
     .enter { display: flex; gap: 0.5rem; }
-    .enter input { text-transform: uppercase; }
-    button { padding: 0.6rem 1rem; font-family: monospace; background: #22303c; color: #e6edf3;
-      border: 1px solid #33475a; border-radius: 4px; cursor: pointer; }
-    button.primary { background: #06d6a0; color: #05231b; border-color: #06d6a0; }
-    .msg { color: #ef476f; }
+    .enter input { flex: 1; text-transform: uppercase; }
+    .msg { margin: 0; color: var(--c-red); font-size: 0.75rem; text-align: center; }
   `,
 })
 export class JoinComponent {
   private readonly http = inject(HttpClient)
   private readonly router = inject(Router)
+
+  readonly avatars = AVATARS
+  readonly colors = PLAYER_COLORS
+
   name = ''
   code = ''
+  readonly avatar = signal<AvatarId>(AVATARS[0])
+  readonly color = signal<string>(PLAYER_COLORS[0])
   readonly message = signal('')
 
   async createRoom(): Promise<void> {
@@ -74,6 +135,8 @@ export class JoinComponent {
 
   private enter(code: string): void {
     const name = this.name.trim()
-    this.router.navigate(['/room', code], { queryParams: name ? { name } : {} })
+    this.router.navigate(['/room', code], {
+      queryParams: { avatar: this.avatar(), color: this.color(), ...(name ? { name } : {}) },
+    })
   }
 }

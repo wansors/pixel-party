@@ -1,7 +1,32 @@
-// Global styles. Retro classic-arcade pixel-art identity lands here + per-feature styles
-// (see docs/art-direction.md). Pixel-art canvas must never be smoothed when upscaled.
+// Global styles — retro classic-arcade pixel-art identity (see docs/art-direction.md).
+// Palette mirrors packages/shared/src/theme.ts (PALETTE); keep the two in sync.
+
+// Self-hosted pixel font (CSP-safe, no external CDN). Drop the binary at the path below to enable it;
+// until then the chunky monospace fallback stack keeps the arcade vibe. See art-direction §3.
+// @font-face {
+//   font-family: 'PixelArcade';
+//   src: url('/assets/fonts/press-start-2p.woff2') format('woff2');
+//   font-display: swap;
+// }
+
 :root {
   color-scheme: dark;
+
+  --c-bg: #10121c;
+  --c-panel: #1b1e2e;
+  --c-panel-alt: #252a40;
+  --c-frame: #3a3f66;
+  --c-frame-lit: #5b62a6;
+  --c-text: #eef1f7;
+  --c-dim: #7b88a8;
+  --c-magenta: #ff3e7f;
+  --c-cyan: #29d3f2;
+  --c-lime: #8be94b;
+  --c-amber: #ffcf4b;
+  --c-orange: #ff7b3d;
+  --c-red: #ff5252;
+
+  --font-pixel: 'PixelArcade', 'Courier New', ui-monospace, monospace;
 }
 
 * {
@@ -13,11 +38,109 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: #11181f;
-  color: #e6edf3;
-  font-family: system-ui, sans-serif;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-pixel);
+  // A subtle checkerboard "cabinet" backdrop, drawn with gradients (no external assets).
+  background-image:
+    radial-gradient(circle at 50% -20%, rgba(91, 98, 166, 0.25), transparent 60%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.015) 0 2px, transparent 2px 4px);
 }
 
-canvas {
+canvas,
+img {
   image-rendering: pixelated;
+}
+
+// ── Arcade window frame ─────────────────────────────────────────────────────
+// A shared "sheet": thick pixel border + a title bar. Reused across features.
+.arcade-window {
+  background: var(--c-panel);
+  border: 3px solid var(--c-frame-lit);
+  box-shadow:
+    0 0 0 3px var(--c-bg),
+    0 0 0 6px var(--c-frame),
+    0 10px 0 6px rgba(0, 0, 0, 0.35);
+  border-radius: 2px;
+}
+
+.arcade-titlebar {
+  background: var(--c-frame);
+  color: var(--c-amber);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  border-bottom: 3px solid var(--c-frame-lit);
+}
+
+// ── Chunky arcade buttons ───────────────────────────────────────────────────
+.arcade-btn {
+  font-family: var(--font-pixel);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.7rem 1rem;
+  color: var(--c-text);
+  background: var(--c-panel-alt);
+  border: 3px solid var(--c-frame-lit);
+  border-radius: 2px;
+  cursor: pointer;
+  box-shadow: 0 4px 0 0 var(--c-frame);
+  transition: none;
+
+  &:hover:not(:disabled) {
+    background: var(--c-frame);
+  }
+  // Pressed = offset down, no soft easing (art-direction §4).
+  &:active:not(:disabled) {
+    transform: translateY(4px);
+    box-shadow: 0 0 0 0 var(--c-frame);
+  }
+  &.primary {
+    background: var(--c-lime);
+    color: #05231b;
+    border-color: var(--c-lime);
+    box-shadow: 0 4px 0 0 #4c9a2a;
+  }
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+}
+
+// ── Blink (leader row, "PRESS START") ───────────────────────────────────────
+@keyframes arcade-blink {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  61%,
+  100% {
+    opacity: 0.25;
+  }
+}
+.blink {
+  animation: arcade-blink 1s steps(1, end) infinite;
+}
+
+// ── Optional CRT scanline overlay ───────────────────────────────────────────
+// Off by default; enable with <html data-crt="on">. Never shown under reduced-motion.
+body[data-crt='on']::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 3px);
+  mix-blend-mode: multiply;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blink {
+    animation: none;
+  }
+  body[data-crt='on']::after {
+    display: none;
+  }
 }

@@ -8,13 +8,14 @@ for a session-wide ranking. See [`README.md`](README.md).
 
 ## Current phase
 
-**Phase 0 — MVP in progress** (development started 2026-07-20). The stack is scaffolded and the MVP is
-playable end-to-end. Run it with `bun run dev` (see `README.md`). Live now: rooms + lobby (ready/host),
-host game selector + round count, server-authoritative session engine (intro countdown → play →
-result → final), scoring/scoreboard/final ranking, and **5 mini-games** (`button-masher`,
-`reaction-duel`, `color-trap`, `trivia`, `balloon-chicken`). Pending in Phase 0: session
-reconnect/rejoin, CI workflow, retro arcade look & feel. See `docs/backlog.md` → *Current status* for
-the authoritative checklist.
+**Phase 0 — MVP essentially complete** (development started 2026-07-20). The stack is scaffolded and the
+MVP is playable end-to-end. Run it with `bun run dev` (see `README.md`). Live now: rooms + lobby
+(ready/host), host game selector + round count, server-authoritative session engine (intro countdown →
+play → result → final), scoring/scoreboard/final ranking, **5 mini-games** (`button-masher`,
+`reaction-duel`, `color-trap`, `trivia`, `balloon-chicken`), **mid-session reconnect/rejoin**, **GitHub
+Actions CI**, and the **retro arcade look & feel** (palette theme, arcade frame, pixel-art avatars,
+high-score tables). Remaining polish: self-hosted pixel-font binary (scaffold ready) + per-breakpoint
+responsive tuning. See `docs/backlog.md` → *Current status* for the authoritative checklist.
 
 Documentation lives in `docs/`:
 - `PRD.md` — product requirements.

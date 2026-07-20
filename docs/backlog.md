@@ -13,18 +13,21 @@ analysis…) phase by phase. Nothing is built "just in case".
 client :4200; see [`../README.md`](../README.md)). What works today:
 
 - Bun monorepo, hexagonal server, `@pp/shared` contracts, Biome + TS strict + determinism gate +
-  `bun test` (38 passing). *CI workflow is the only Foundation item still pending.*
+  `bun test` (40 passing) + **GitHub Actions CI**. *Foundation complete.*
 - Rooms (create/join over `/api` + WS), lobby with ready state + host role, **host game selector +
   round count**, server-authoritative **session engine** (intro countdown → play → per-round result →
   final), position→points scoring with tie-averaging, cumulative scoreboard + final ranking.
 - **All 5 P0-tier mini-games**: Quick reaction (A1, `reaction-duel`), Button masher (A2,
   `button-masher`), Color Trap (E1, `color-trap`), Lightning Quiz (A3, `trivia`) and Balloon Chicken
   (D1, `balloon-chicken`). Each is a pluggable domain module + Phaser scene.
-- Angular shell (join → lobby → intro countdown → round canvas → scoreboard → final) with reconnect
-  backoff in the socket service.
+- Angular shell (join → lobby → intro countdown → round canvas → scoreboard → final) with socket
+  reconnect backoff **and mid-session rejoin** (REJOIN reclaims a seat, scores survive, state replayed).
+- **Retro arcade look & feel**: shared palette theme (`theme.ts` + CSS vars), arcade window frame +
+  chunky buttons, pixel-art avatars (self-hosted SVG sprites) with a join-screen picker, high-score
+  scoreboard/final ranking, optional CRT overlay.
 
-Nearest next steps: session **reconnect/rejoin** (restore scoreboard), CI workflow, and the retro
-arcade look & feel (pixel font, arcade frame, high-score table).
+Phase 0 is essentially complete. Remaining polish: drop in the self-hosted pixel-font woff2 (scaffold
+ready) and per-breakpoint responsive tuning. Next up is Phase 1 (more games + robustness).
 
 ## How this backlog works
 
@@ -44,8 +47,9 @@ ranking. Latency-tolerant games only; no teams/duels/handicap yet.
 
 ### Foundation
 - [x] Bun workspaces monorepo skeleton (`apps/*`, `packages/*`), `bunfig.toml`, `tsconfig.base.json`.
-- [~] Biome + TS strict + `bun test` + determinism script + CI (see `technical-architecture.md` §8).
-      *Done except CI: `scripts/check-determinism.sh` + `scripts/test-server.sh` exist; GitHub Actions pending.*
+- [x] Biome + TS strict + `bun test` + determinism script + CI (see `technical-architecture.md` §8).
+      *`scripts/check-determinism.sh` + `scripts/test-server.sh` + `.github/workflows/ci.yml` (server/shared
+      + headless-Chrome client jobs).*
 - [x] `@pp/shared` protocol skeleton (`PROTOCOL_VERSION`, `ClientMsg`, `ServerMsg`, core DTOs).
 - [x] Server hexagonal skeleton + `composition-root.ts` + `config.ts` + `index.ts`.
 - [x] `LiveRooms` in-memory authoritative store; `Clock`, `Random`, `IdGenerator` ports + adapters.
@@ -56,8 +60,9 @@ ranking. Latency-tolerant games only; no teams/duels/handicap yet.
 - [x] WS transport (`Bun.serve`) + intent dispatch + hand-written shape validator (`validate.ts`).
 - [x] Session engine (`SessionEngine`/`SessionManager` + `simulationLoop`): sequence N rounds, cycle
       intro → play → results. *Host-configurable line-up + rounds already in (ahead of the Phase 1 plan).*
-- [ ] Basic reconnection (rejoin ongoing session, restore scoreboard). *Socket-level reconnect backoff
-      exists; session rejoin/scoreboard restore not yet.*
+- [x] Basic reconnection (rejoin ongoing session, restore scoreboard). *REJOIN intent reclaims a seat
+      (id persisted in sessionStorage → survives reload); disconnected seats stay in the roster so scores
+      survive; `SessionEngine.resumeMessages()` replays the current state to the reconnecting socket.*
 
 ### Mini-games (individual, latency-tolerant) — all 5 P0-tier games shipped
 - [x] Quick reaction ("Go!") — A1 (`reaction-duel`, seeded green-light delay via the Random port).
@@ -82,10 +87,14 @@ ranking. Latency-tolerant games only; no teams/duels/handicap yet.
 - [x] `bun run dev` one-command launcher (`scripts/dev.sh`); dev commands pre-approved in `.claude/settings.json`.
 
 ### Look & feel (retro arcade — see `art-direction.md`)
-- [ ] Establish the shared theme: palette (`theme.ts`-style), self-hosted pixel font, arcade window frame.
-- [~] Anonymous player identity: unique color + preset pixel avatar ("monigote") + name (typed/auto).
-      *Name + auto color/avatar label exist; no pixel-art avatar or picker yet.*
-- [ ] Scoreboard & final ranking as a classic arcade high-score table. *Functional list, not arcade-styled.*
+- [~] Establish the shared theme: palette (`@pp/shared` `theme.ts` + mirrored CSS vars), arcade window
+      frame + chunky buttons, optional CRT scanline overlay (reduced-motion aware). *Self-hosted pixel
+      font: `@font-face` scaffold + CSS var in place; drop the woff2 at
+      `assets/fonts/press-start-2p.woff2` to enable it (chunky monospace fallback until then).*
+- [x] Anonymous player identity: unique color + preset pixel avatar ("monigote") + name (typed/auto).
+      *Join screen picks avatar + color + name; avatars are self-hosted SVG pixel sprites (`PixelAvatarComponent`).*
+- [x] Scoreboard & final ranking as a classic arcade high-score table. *Avatar + color + name rows,
+      blinking leader, "NEW HIGH SCORE" flourish.*
 - [x] **No database** — everything in-memory; nothing persisted when a room closes.
 
 ---

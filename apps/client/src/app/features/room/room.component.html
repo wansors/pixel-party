@@ -1,8 +1,8 @@
 <main class="room">
   <header>
-    <span class="code">Room {{ code() }}</span>
+    <span class="code">▸ Room {{ code() }}</span>
     @if (reconnecting()) {
-      <span class="reconnect">Reconnecting…</span>
+      <span class="reconnect blink">Reconnecting…</span>
     }
   </header>
 
@@ -12,72 +12,76 @@
 
   @switch (view()) {
     @case ('connecting') {
-      <p class="center">Connecting…</p>
+      <p class="center blink">Connecting…</p>
     }
 
     @case ('lobby') {
-      <section class="lobby">
-        <h2>Lobby</h2>
-        <ul class="players">
-          @for (p of players(); track p.id) {
-            <li>
-              <span class="dot" [style.background]="p.color"></span>
-              <span>{{ p.name }}</span>
-              @if (p.id === hostId()) {
-                <span class="tag">host</span>
-              }
-              @if (p.ready) {
-                <span class="ready">ready</span>
-              }
-            </li>
-          }
-        </ul>
-
-        <div class="games">
-          <h3>Games</h3>
-          <ul>
-            @for (g of availableGames; track g.id) {
-              <li>
-                <label [class.disabled]="!isHost()">
-                  <input
-                    type="checkbox"
-                    [checked]="isSelected(g.id)"
-                    [disabled]="!isHost()"
-                    (change)="toggleGame(g.id)"
-                  />
-                  <span class="gname">{{ g.name }}</span>
-                  <span class="blurb">{{ g.blurb }}</span>
-                </label>
+      <section class="lobby arcade-window">
+        <div class="arcade-titlebar">Lobby — {{ players().length }} player(s)</div>
+        <div class="pad">
+          <ul class="players">
+            @for (p of players(); track p.id) {
+              <li [class.off]="!p.connected">
+                <app-pixel-avatar [avatar]="$any(p.avatar)" [color]="p.color" [size]="28" />
+                <span class="pname" [style.color]="p.color">{{ p.name }}</span>
+                @if (p.id === hostId()) {
+                  <span class="tag">host</span>
+                }
+                @if (!p.connected) {
+                  <span class="tag off">off</span>
+                } @else if (p.ready) {
+                  <span class="ready">ready</span>
+                }
               </li>
             }
           </ul>
-          <label class="rounds">
-            Rounds:
-            <input
-              type="number"
-              min="1"
-              max="20"
-              [value]="rounds()"
-              [disabled]="!isHost()"
-              (change)="setRounds($any($event.target).value)"
-            />
-          </label>
-        </div>
 
-        <div class="actions">
-          <button type="button" (click)="toggleReady()">
-            {{ myReady ? 'Not ready' : "I'm ready" }}
-          </button>
-          @if (isHost()) {
-            <button
-              type="button"
-              class="primary"
-              [disabled]="selectedGameIds().length === 0"
-              (click)="start()"
-            >
-              Start session
+          <div class="games">
+            <h3>Games</h3>
+            <ul>
+              @for (g of availableGames; track g.id) {
+                <li>
+                  <label [class.disabled]="!isHost()">
+                    <input
+                      type="checkbox"
+                      [checked]="isSelected(g.id)"
+                      [disabled]="!isHost()"
+                      (change)="toggleGame(g.id)"
+                    />
+                    <span class="gname">{{ g.name }}</span>
+                    <span class="blurb">{{ g.blurb }}</span>
+                  </label>
+                </li>
+              }
+            </ul>
+            <label class="rounds">
+              Rounds:
+              <input
+                type="number"
+                min="1"
+                max="20"
+                [value]="rounds()"
+                [disabled]="!isHost()"
+                (change)="setRounds($any($event.target).value)"
+              />
+            </label>
+          </div>
+
+          <div class="actions">
+            <button type="button" class="arcade-btn" (click)="toggleReady()">
+              {{ myReady ? 'Not ready' : "I'm ready" }}
             </button>
-          }
+            @if (isHost()) {
+              <button
+                type="button"
+                class="arcade-btn primary"
+                [disabled]="selectedGameIds().length === 0"
+                (click)="start()"
+              >
+                Start
+              </button>
+            }
+          </div>
         </div>
       </section>
     }
@@ -89,7 +93,7 @@
         @if (countdown() !== null) {
           <p class="count">{{ countdown() }}</p>
         } @else {
-          <p>Go!</p>
+          <p class="count go">GO!</p>
         }
       </section>
     }
@@ -101,33 +105,54 @@
     }
 
     @case ('scoreboard') {
-      <section class="scoreboard">
-        <h2>Scoreboard</h2>
-        <ol>
-          @for (s of scoreboard(); track s.playerId) {
-            <li [class.me]="s.playerId === selfId()">
-              <span class="rank">{{ s.rank }}</span>
-              <span class="name">{{ playerName(s.playerId) }}</span>
-              <span class="pts">{{ s.points }}</span>
-            </li>
-          }
-        </ol>
-        <p class="hint">Next round starting…</p>
+      <section class="board arcade-window">
+        <div class="arcade-titlebar">High Scores</div>
+        <div class="pad">
+          <ol class="highscore">
+            @for (s of scoreboard(); track s.playerId) {
+              <li [class.me]="s.playerId === selfId()" [class.lead]="s.rank === 1">
+                <span class="rank">{{ s.rank }}</span>
+                <app-pixel-avatar
+                  [avatar]="playerAvatar(s.playerId)"
+                  [color]="playerColor(s.playerId)"
+                  [size]="24"
+                />
+                <span class="name" [style.color]="playerColor(s.playerId)">{{
+                  playerName(s.playerId)
+                }}</span>
+                <span class="pts">{{ s.points }}</span>
+              </li>
+            }
+          </ol>
+          <p class="hint blink">Next round starting…</p>
+        </div>
       </section>
     }
 
     @case ('final') {
-      <section class="final">
-        <h2>Final ranking</h2>
-        <ol>
-          @for (s of final(); track s.playerId) {
-            <li [class.me]="s.playerId === selfId()">
-              <span class="rank">{{ s.rank }}</span>
-              <span class="name">{{ playerName(s.playerId) }}</span>
-              <span class="pts">{{ s.points }}</span>
-            </li>
+      <section class="board arcade-window">
+        <div class="arcade-titlebar">★ Final Ranking ★</div>
+        <div class="pad">
+          <ol class="highscore">
+            @for (s of final(); track s.playerId) {
+              <li [class.me]="s.playerId === selfId()" [class.lead]="s.rank === 1">
+                <span class="rank">{{ s.rank === 1 ? '1ST' : s.rank }}</span>
+                <app-pixel-avatar
+                  [avatar]="playerAvatar(s.playerId)"
+                  [color]="playerColor(s.playerId)"
+                  [size]="24"
+                />
+                <span class="name" [style.color]="playerColor(s.playerId)">{{
+                  playerName(s.playerId)
+                }}</span>
+                <span class="pts">{{ s.points }}</span>
+              </li>
+            }
+          </ol>
+          @if (final().length) {
+            <p class="winner blink">NEW HIGH SCORE — {{ playerName(final()[0].playerId) }}!</p>
           }
-        </ol>
+        </div>
       </section>
     }
   }

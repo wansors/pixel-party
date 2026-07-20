@@ -27,7 +27,7 @@ export function gameConfig(parent: string): Phaser.Types.Core.GameConfig {
     scale: { mode: Phaser.Scale.RESIZE, width: w, height: h },
     parent,
     pixelArt: true,
-    backgroundColor: '#11181f',
+    backgroundColor: '#10121c',
     scene: [],
   }
 }

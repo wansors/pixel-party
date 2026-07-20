@@ -2,29 +2,22 @@ import { Component, DestroyRef, NgZone, type OnInit, inject, signal } from '@ang
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
 import {
+  AVATARS,
+  type AvatarId,
   MINIGAMES,
   type MiniGameId,
   type MiniGameMeta,
+  PLAYER_COLORS,
   type PlayerDto,
   type ScoreEntryDto,
   type ServerMsg,
 } from '@pp/shared'
 import { GameClient } from '../../../game/GameClient'
 import { GameSocketService } from '../../core/net/game-socket.service'
+import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
 
 type View = 'connecting' | 'lobby' | 'intro' | 'round' | 'scoreboard' | 'final'
 
-const COLORS = [
-  '#e63946',
-  '#457b9d',
-  '#2a9d8f',
-  '#e9c46a',
-  '#f4a261',
-  '#8e7dbe',
-  '#06d6a0',
-  '#ef476f',
-]
-const AVATARS = ['cat', 'dog', 'fox', 'owl', 'frog', 'bear']
 const pick = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)] as T
 
 // Single feature component driving the whole room lifecycle from server messages: lobby -> intro ->
@@ -32,7 +25,7 @@ const pick = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length
 // by GameClient (Phaser), booted inside runOutsideAngular so its rAF never drives change detection.
 @Component({
   selector: 'app-room',
-  imports: [],
+  imports: [PixelAvatarComponent],
   templateUrl: './room.component.html',
   styleUrl: './room.component.scss',
 })
@@ -68,8 +61,8 @@ export class RoomComponent implements OnInit {
   private defaultConfigSent = false
   private countdownTimer?: ReturnType<typeof setInterval>
   private name = ''
-  private color = pick(COLORS)
-  private avatar = pick(AVATARS)
+  private color: string = pick(PLAYER_COLORS)
+  private avatar: AvatarId = pick(AVATARS)
 
   get myReady(): boolean {
     return this.players().find((p) => p.id === this.selfId())?.ready ?? false
@@ -81,7 +74,13 @@ export class RoomComponent implements OnInit {
 
   ngOnInit(): void {
     const code = (this.route.snapshot.paramMap.get('code') ?? '').toUpperCase()
-    this.name = this.route.snapshot.queryParamMap.get('name')?.trim() || `Player-${pick(AVATARS)}`
+    const q = this.route.snapshot.queryParamMap
+    this.name = q.get('name')?.trim() || `Player-${pick(AVATARS)}`
+    const qColor = q.get('color')
+    if (qColor && PLAYER_COLORS.includes(qColor)) this.color = qColor
+    const qAvatar = q.get('avatar')
+    if (qAvatar && (AVATARS as readonly string[]).includes(qAvatar))
+      this.avatar = qAvatar as AvatarId
     if (!code) {
       this.router.navigate(['/'])
       return
@@ -242,5 +241,13 @@ export class RoomComponent implements OnInit {
 
   playerName(id: string): string {
     return this.players().find((p) => p.id === id)?.name ?? id.slice(0, 6)
+  }
+
+  playerColor(id: string): string {
+    return this.players().find((p) => p.id === id)?.color ?? '#7b88a8'
+  }
+
+  playerAvatar(id: string): AvatarId {
+    return (this.players().find((p) => p.id === id)?.avatar as AvatarId) ?? 'cat'
   }
 }

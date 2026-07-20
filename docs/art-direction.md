@@ -29,8 +29,19 @@ shared visual language so all screens and mini-games read as one coherent system
 - **Accessibility**: never rely on color alone — pair player color with the player's pixel avatar and
   name everywhere; keep text/background contrast high (see §7).
 
-> The exact palette hex values are a task for the first UI pass; document them once and treat them as the
-> single source of truth (a `theme.ts`-style palette, mirroring the reference project's `theme.ts`).
+> **Implemented palette** — the single source of truth is `packages/shared/src/theme.ts` (`PALETTE` as
+> `0xRRGGBB` for Phaser); the Angular shell mirrors it as CSS custom properties in `styles.scss`.
+>
+> | Token | Hex | Use |
+> |-------|-----|-----|
+> | `bg` | `#10121c` | deep near-black background |
+> | `panel` / `panelAlt` | `#1b1e2e` / `#252a40` | window fills, rows |
+> | `frame` / `frameLit` | `#3a3f66` / `#5b62a6` | arcade window borders |
+> | `text` / `dim` | `#eef1f7` / `#7b88a8` | body / muted text |
+> | `magenta` `cyan` `lime` `amber` `orange` `red` | `#ff3e7f` `#29d3f2` `#8be94b` `#ffcf4b` `#ff7b3d` `#ff5252` | accents |
+>
+> **Player colors** (`PLAYER_COLORS`, unique per room, paired with avatar + name): magenta, cyan, lime,
+> amber, orange, purple `#b06bff`, teal `#4be3c3`, red, blue `#5b8cff`, pink `#f062d0`.
 
 ## 3. Typography
 
