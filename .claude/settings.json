@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun install*)",
+      "Bash(bun run *)",
+      "Bash(bunx tsc *)",
+      "Bash(bunx ng *)",
+      "Bash(bash scripts/dev.sh)",
+      "Bash(bash scripts/dev.sh *)",
+      "Bash(bash scripts/check-determinism.sh)",
+      "Bash(bash scripts/test-server.sh)"
+    ]
+  }
+}

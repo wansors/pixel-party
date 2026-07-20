@@ -1,0 +1,25 @@
+{
+  "name": "pixel-party",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "bash scripts/dev.sh",
+    "dev:server": "NODE_ENV=development bun run --watch apps/server/src/index.ts",
+    "start:server": "bun run apps/server/src/index.ts",
+    "dev:client": "bun run --filter client start",
+    "build:client": "bun run --filter client build",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "lint:determinism": "bash scripts/check-determinism.sh",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit -p apps/server/tsconfig.test.json && tsc --noEmit -p packages/shared && tsc --noEmit -p apps/client/tsconfig.app.json",
+    "test": "bash scripts/test-server.sh",
+    "test:client": "bun run --filter client test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4",
+    "@types/bun": "latest",
+    "typescript": "^5.6.0"
+  }
+}

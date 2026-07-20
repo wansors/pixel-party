@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./out-tsc/spec",
+    "types": ["jasmine"],
+    "baseUrl": ".",
+    "paths": {
+      "@pp/shared": ["../../packages/shared/src/index.ts"],
+      "@pp/*": ["../../packages/*/src"],
+      "phaser": ["src/testing/phaser-stub.ts"]
+    }
+  },
+  "include": ["src/**/*.d.ts", "src/**/*.spec.ts"]
+}

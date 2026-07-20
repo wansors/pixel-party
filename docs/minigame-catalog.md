@@ -1,7 +1,7 @@
 # Mini-game catalog — Pixel Party
 
-- **Version**: 0.3 (draft)
-- **Date**: 2026-07-17
+- **Version**: 0.4 (draft)
+- **Date**: 2026-07-20
 
 Initial mini-game catalog. Each one is designed for the **each player on their own device** model (PRD
 §4) and returns a **normalized result** to the engine (ranking or orderable score, §8.3).
@@ -32,11 +32,14 @@ Initial mini-game catalog. Each one is designed for the **each player on their o
 ⭐ marks the **MVP** mini-games (A1, A2, E1) — the 3 that ship in Phase 0 for their balance of fun,
 latency tolerance, and dev cost. A3 Trivia and D1 Balloon Chicken are the immediate fast-follows.
 
+✅ = **implemented** (as of 2026-07-20): the full P0 group — A1 (`reaction-duel`), A2 (`button-masher`),
+E1 (`color-trap`), A3 (`trivia`) and D1 (`balloon-chicken`).
+
 ---
 
 ## A. Individual — Free-for-all
 
-### A1. ⭐ Quick reaction ("Go!")
+### A1. ⭐ ✅ Quick reaction ("Go!") — implemented (`reaction-duel`)
 - **Concept**: the screen is red; at a random moment it turns green. First to tap wins. Tapping early is
   penalized.
 - **Type**: FFA · **Input**: tap · **Duration**: 15–30 s (several rounds) · **Banter**: 💥💥
@@ -45,14 +48,14 @@ latency tolerance, and dev cost. A3 Trivia and D1 Balloon Chicken are the immedi
 - **Win condition**: lowest accumulated reaction time. · **Result**: ranking by total time (lower wins).
 - **Latency**: low (timestamp vs. server clock). · **Complexity**: low.
 
-### A2. ⭐ Frantic tap ("Button masher")
+### A2. ⭐ ✅ Frantic tap ("Button masher") — implemented (`button-masher`)
 - **Concept**: tap as many times as you can in a fixed time.
 - **Type**: FFA · **Input**: repeated tap · **Duration**: 10 s · **Banter**: 💥💥
 - **Rules**: 10 s of free tapping; valid taps counted (server rate-limit anti-macro).
 - **Win condition**: highest tap count. · **Result**: ranking by count (higher wins).
 - **Latency**: low (aggregate count sent). · **Complexity**: low.
 
-### A3. Lightning quiz ("Trivia") — *MVP fast-follow*
+### A3. ✅ Lightning quiz ("Trivia") — implemented (`trivia`)
 - **Concept**: multiple-choice questions; rewards correctness and speed.
 - **Type**: FFA · **Input**: tap on option · **Duration**: 45–60 s (5–8 questions) · **Banter**: 💥💥
 - **Rules**: per-question time limit (~8 s). Points for correct answer + speed bonus.
@@ -177,7 +180,7 @@ latency tolerance, and dev cost. A3 Trivia and D1 Balloon Chicken are the immedi
 
 ## D. Chaos / party (banter-first)
 
-### D1. Balloon Chicken ("Nerve") — *MVP fast-follow*
+### D1. ✅ Balloon Chicken ("Nerve") — implemented (`balloon-chicken`)
 - **Concept**: pump a pixel balloon for points — but it bursts at a random threshold. Cash out before it
   pops or lose it all. Pure nerve, maximum trash talk.
 - **Type**: FFA · **Input**: tap to pump, tap to cash out · **Duration**: ~20 s · **Banter**: 💥💥💥
@@ -206,8 +209,7 @@ latency tolerance, and dev cost. A3 Trivia and D1 Balloon Chicken are the immedi
 Additional candidates, kept as short specs until scheduled. Full cards written when picked up. See
 `minigame-ideas.md` for the prioritized ranking.
 
-- **E1. ⭐ Color Trap (Stroop)** *(MVP — full card below)* — see the promoted card at the end of this
-  section.
+- **E1. ⭐ ✅ Color Trap (Stroop)** — implemented (`color-trap`); *full card below*.
 - **E2. Quick Math** — fast arithmetic; answer as many as possible before the timer.
   FFA · tap · 30 s · low effort · low latency · banter 💥💥.
 - **E3. Odd One Out** — spot the single different pixel/tile in a grid; grid grows each round.
@@ -227,7 +229,7 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
 - **E10. Line Clear Sprint** — Tetris-like: clear N lines fastest.
   FFA · tap/drag · up to 60 s · high effort · low latency · banter 💥.
 
-### E1 (full card). ⭐ Color Trap ("Stroop") — *MVP*
+### E1 (full card). ⭐ ✅ Color Trap ("Stroop") — implemented (`color-trap`)
 - **Concept**: a color word (e.g., "RED") is shown in a mismatched ink color (e.g., blue). Tap the
   button matching the **ink color**, not the word it spells. The brain-fight is the joke.
 - **Type**: FFA · **Input**: tap · **Duration**: 20–30 s (several fast rounds) · **Banter**: 💥💥💥

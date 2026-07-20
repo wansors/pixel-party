@@ -298,10 +298,12 @@ Intentional differences given Pixel Party's nature:
 
 ## 10. Open technical questions
 
-1. Confirm `@angular/build` (Angular 20) vs a lighter Phaser-only client if some mini-games ship before
-   the full Angular shell (recommendation: keep Angular 20 for parity with the reference).
-2. Room-code format/length and collision handling.
-3. TICK_HZ and snapshot throttle defaults for real-time mini-games (start 15 Hz / snapshot every 3).
+1. ~~Confirm `@angular/build` (Angular 20) vs a lighter Phaser-only client~~ — **decided/implemented:
+   Angular 20 shell + Phaser 3, decoupled (`GameClient`), for parity with the reference.**
+2. ~~Room-code format/length and collision handling~~ — **implemented: 4-char code from an unambiguous
+   alphabet (no 0/O/1/I), regenerated on collision in `LiveRooms` (`ROOM_CODE_LEN` env, default 4).**
+3. ~~TICK_HZ and snapshot throttle defaults~~ — **implemented: `TICK_HZ` 20, snapshot every 3 ticks
+   (`SNAPSHOT_EVERY_N_TICKS`), intro 3 s / result 5 s in the session config (composition-root).**
 4. ~~Whether to introduce `bun:sqlite` in v1~~ — **decided: no DB in Phase 1, strictly in-memory.**
 5. Scaling: single-instance for MVP; a Redis pub/sub backplane if multi-instance is needed later
    (utopia is single-instance).

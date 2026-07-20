@@ -8,14 +8,42 @@ for a session-wide ranking. See [`README.md`](README.md).
 
 ## Current phase
 
-**Documentation**, not development. All documentation lives in `docs/`:
+**Phase 0 — MVP in progress** (development started 2026-07-20). The stack is scaffolded and the MVP is
+playable end-to-end. Run it with `bun run dev` (see `README.md`). Live now: rooms + lobby (ready/host),
+host game selector + round count, server-authoritative session engine (intro countdown → play →
+result → final), scoring/scoreboard/final ranking, and **5 mini-games** (`button-masher`,
+`reaction-duel`, `color-trap`, `trivia`, `balloon-chicken`). Pending in Phase 0: session
+reconnect/rejoin, CI workflow, retro arcade look & feel. See `docs/backlog.md` → *Current status* for
+the authoritative checklist.
+
+Documentation lives in `docs/`:
 - `PRD.md` — product requirements.
 - `minigame-catalog.md` — mini-game catalog (grows over time).
 - `minigame-ideas.md` — ~30 mini-game ideas ranked by priority.
 - `scoring-system.md` — scoring, ranking, handicap.
 - `technical-architecture.md` — stack & architecture (mirrors `../utopia-offline`).
 - `art-direction.md` — retro classic-arcade pixel-art visual identity.
-- `backlog.md` — phased roadmap (MVP first, then incremental epics).
+- `backlog.md` — phased roadmap (MVP first, then incremental epics); tracks implementation status.
+
+## Code layout (implemented)
+
+- `apps/server` — hexagonal: `domain/` (entities `Room`/`Player`, `minigames/` pluggable contract +
+  `buttonMasher`/`reactionDuel`/`colorTrap`/`trivia`/`balloonChicken` + `registry`, `services/scoring`,
+  `ports/Random`), `application/`
+  (`session/SessionEngine`+`SessionManager`, `use-cases/`, `ports/`), `infrastructure/`
+  (`driving/ws/GameSocket`+`validate`+`simulationLoop`, `driving/http`, `driven/{time,random,id}`,
+  `live/LiveRooms`), `composition-root.ts`, `config.ts`, `index.ts`.
+- `packages/shared` — `protocol.ts` (wire unions + `PROTOCOL_VERSION`), `catalog/minigames`, `games/`
+  (per-game wire snapshot/input types).
+- `apps/client` — Angular 20 shell; `features/{join,room}` (RoomComponent drives all phases);
+  `core/net/game-socket.service`; `game/` (Phaser, framework-agnostic): `GameClient`,
+  `serverMsgRouter`, `RoundState`,
+  `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,BalloonChickenScene}`.
+
+### Adding a mini-game
+One domain module (`domain/minigames/<id>.ts` implementing `MiniGame`) + registry entry + shared wire
+types in `packages/shared/src/games/` + one Phaser scene (key === mini-game id) + a `MINIGAMES` catalog
+entry. The session engine and wire contract don't change.
 
 ## Project conventions
 

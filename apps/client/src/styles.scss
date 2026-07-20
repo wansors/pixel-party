@@ -1,0 +1,23 @@
+// Global styles. Retro classic-arcade pixel-art identity lands here + per-feature styles
+// (see docs/art-direction.md). Pixel-art canvas must never be smoothed when upscaled.
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #11181f;
+  color: #e6edf3;
+  font-family: system-ui, sans-serif;
+}
+
+canvas {
+  image-rendering: pixelated;
+}

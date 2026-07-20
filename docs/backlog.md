@@ -1,11 +1,30 @@
 # Backlog — Pixel Party
 
-- **Version**: 0.2 (draft)
-- **Date**: 2026-07-17
+- **Version**: 0.3 (draft)
+- **Date**: 2026-07-20
 
 Phased product backlog. The philosophy is **start with a minimal MVP and grow incrementally** — build
 the smallest thing that is fun end-to-end, then add features (more mini-games, handicap, post-match
 analysis…) phase by phase. Nothing is built "just in case".
+
+## Current status (2026-07-20)
+
+**MVP is playable end-to-end.** The full stack is scaffolded and runnable (`bun run dev` → server :3000 +
+client :4200; see [`../README.md`](../README.md)). What works today:
+
+- Bun monorepo, hexagonal server, `@pp/shared` contracts, Biome + TS strict + determinism gate +
+  `bun test` (38 passing). *CI workflow is the only Foundation item still pending.*
+- Rooms (create/join over `/api` + WS), lobby with ready state + host role, **host game selector +
+  round count**, server-authoritative **session engine** (intro countdown → play → per-round result →
+  final), position→points scoring with tie-averaging, cumulative scoreboard + final ranking.
+- **All 5 P0-tier mini-games**: Quick reaction (A1, `reaction-duel`), Button masher (A2,
+  `button-masher`), Color Trap (E1, `color-trap`), Lightning Quiz (A3, `trivia`) and Balloon Chicken
+  (D1, `balloon-chicken`). Each is a pluggable domain module + Phaser scene.
+- Angular shell (join → lobby → intro countdown → round canvas → scoreboard → final) with reconnect
+  backoff in the socket service.
+
+Nearest next steps: session **reconnect/rejoin** (restore scoreboard), CI workflow, and the retro
+arcade look & feel (pixel font, arcade frame, high-score table).
 
 ## How this backlog works
 
@@ -24,46 +43,58 @@ Goal: a group of 4–10 players can play a full session of **3 individual mini-g
 ranking. Latency-tolerant games only; no teams/duels/handicap yet.
 
 ### Foundation
-- [ ] Bun workspaces monorepo skeleton (`apps/*`, `packages/*`), `bunfig.toml`, `tsconfig.base.json`.
-- [ ] Biome + TS strict + `bun test` + determinism script + CI (see `technical-architecture.md` §8).
-- [ ] `@pp/shared` protocol skeleton (`PROTOCOL_VERSION`, `ClientMsg`, `ServerMsg`, core DTOs).
-- [ ] Server hexagonal skeleton + `composition-root.ts` + `config.ts` + `index.ts`.
-- [ ] `LiveRooms` in-memory authoritative store; `Clock`, `Random`, `IdGenerator` ports + adapters.
+- [x] Bun workspaces monorepo skeleton (`apps/*`, `packages/*`), `bunfig.toml`, `tsconfig.base.json`.
+- [~] Biome + TS strict + `bun test` + determinism script + CI (see `technical-architecture.md` §8).
+      *Done except CI: `scripts/check-determinism.sh` + `scripts/test-server.sh` exist; GitHub Actions pending.*
+- [x] `@pp/shared` protocol skeleton (`PROTOCOL_VERSION`, `ClientMsg`, `ServerMsg`, core DTOs).
+- [x] Server hexagonal skeleton + `composition-root.ts` + `config.ts` + `index.ts`.
+- [x] `LiveRooms` in-memory authoritative store; `Clock`, `Random`, `IdGenerator` ports + adapters.
 
 ### Rooms & session
-- [ ] Create room (code) + join by code/link (HTTP `/api` + WS upgrade with server-resolved identity).
-- [ ] Lobby: player list, ready state, host role, host starts session.
-- [ ] WS transport (`Bun.serve`) + intent registry + hand-written shape validator.
-- [ ] Session engine: sequence N rounds (fixed default count; host-configurable in Phase 1), cycle
-      intro → play → results (random selection).
-- [ ] Basic reconnection (rejoin ongoing session, restore scoreboard).
+- [x] Create room (code) + join by code/link (HTTP `/api` + WS upgrade with server-resolved identity).
+- [x] Lobby: player list, ready state, host role, host starts session.
+- [x] WS transport (`Bun.serve`) + intent dispatch + hand-written shape validator (`validate.ts`).
+- [x] Session engine (`SessionEngine`/`SessionManager` + `simulationLoop`): sequence N rounds, cycle
+      intro → play → results. *Host-configurable line-up + rounds already in (ahead of the Phase 1 plan).*
+- [ ] Basic reconnection (rejoin ongoing session, restore scoreboard). *Socket-level reconnect backoff
+      exists; session rejoin/scoreboard restore not yet.*
 
-### Mini-games (3, individual, latency-tolerant)
-- [ ] Quick reaction ("Go!") — A1.
-- [ ] Button masher — A2.
-- [ ] Color Trap (Stroop) — E1.  *(fast-follows: A3 Trivia, D1 Balloon Chicken)*
+### Mini-games (individual, latency-tolerant) — all 5 P0-tier games shipped
+- [x] Quick reaction ("Go!") — A1 (`reaction-duel`, seeded green-light delay via the Random port).
+- [x] Button masher — A2 (`button-masher`, real-time tick).
+- [x] Color Trap (Stroop) — E1 (`color-trap`, seeded word/ink sequence; tap the ink color).
+- [x] Lightning Quiz (Trivia) — A3 (`trivia`, seeded question subset; correct + speed bonus). *fast-follow shipped.*
+- [x] Balloon Chicken (Nerve) — D1 (`balloon-chicken`, hidden seeded burst threshold; pump vs. cash out). *fast-follow shipped.*
 
 ### Scoring
-- [ ] Position → points table, cumulative scoreboard after each round.
-- [ ] Final ranking + tiebreakers.
+- [x] Position → points table (`DEFAULT_AWARD_TABLE`) with tie-averaging, cumulative scoreboard per round.
+- [x] Final ranking + tiebreakers. *Dense ranks + averaged ties; richer tiebreakers can come later.*
 
 ### Client
-- [ ] Angular 20 shell: join, lobby, round intro, results, final ranking.
-- [ ] Phaser scenes for the 3 mini-games; `GameSocketService` + `ServerMsgRouter`; `runOutsideAngular`.
-- [ ] Responsive mobile (portrait) + desktop.
+- [x] Angular 20 shell: join, lobby, round intro, results, final ranking (single `RoomComponent`).
+- [x] Phaser scenes for the mini-games; `GameSocketService` + `ServerMsgRouter`; `runOutsideAngular`.
+      *All 5 scenes done; GameClient switches scene by `minigameId`.*
+- [~] Responsive mobile (portrait) + desktop. *`Scale.RESIZE` + basic CSS; not yet tuned per breakpoint.*
+
+### Extras done this phase (beyond the original plan)
+- [x] Host **game selector** + round-count config in the lobby (`HOST_CONFIG`).
+- [x] **Countdown (3-2-1)** before each round (intro phase).
+- [x] `bun run dev` one-command launcher (`scripts/dev.sh`); dev commands pre-approved in `.claude/settings.json`.
 
 ### Look & feel (retro arcade — see `art-direction.md`)
 - [ ] Establish the shared theme: palette (`theme.ts`-style), self-hosted pixel font, arcade window frame.
-- [ ] Anonymous player identity: unique color + preset pixel avatar ("monigote") + name (typed/auto).
-- [ ] Scoreboard & final ranking as a classic arcade high-score table.
-- [ ] **No database** — everything in-memory; nothing persisted when a room closes.
+- [~] Anonymous player identity: unique color + preset pixel avatar ("monigote") + name (typed/auto).
+      *Name + auto color/avatar label exist; no pixel-art avatar or picker yet.*
+- [ ] Scoreboard & final ranking as a classic arcade high-score table. *Functional list, not arcade-styled.*
+- [x] **No database** — everything in-memory; nothing persisted when a room closes.
 
 ---
 
 ## Phase 1 — More individual games & robustness
 
 - [ ] Grow catalog to ~6 individual games: Simon (A4), Balloon Chicken (D1), Bug smash (A6), Timing (A10).
-- [ ] Host config: number of rounds, no-repeat within a session.
+- [~] Host config: number of rounds, no-repeat within a session. *Rounds + game selection done in Phase 0;
+      no-repeat-within-a-session still pending.*
 - [ ] Reconnection hardening, host transfer on disconnect, kick player, room inactivity timeout.
 - [ ] Observability: structured logging of room events + latency/error metrics.
 
@@ -160,7 +191,7 @@ follows the priority tiers there:
 
 | Wave | Tier | Mini-games (id) | Phase |
 |------|------|-----------------|-------|
-| MVP | P0 | Quick reaction (A1), Button masher (A2), Color Trap (E1), Balloon Chicken (D1), Trivia (A3) — ship 3, rest close behind | 0 |
+| MVP | P0 | Quick reaction (A1 ✅), Button masher (A2 ✅), Color Trap (E1 ✅), Trivia (A3 ✅), Balloon Chicken (D1 ✅) — all 5 shipped | 0 |
 | +1 | P1 | Simon (A4), Higher/Lower (E5), Quick Math (E2), Odd One Out (E3), Number Rush (E4), Bug smash (A6), Timing (A10), Memory Flash (E8), Pixel Hoops (A5) | 1 |
 | +2 | P2 | Tug of War (C1), Sink the Fleet (B2), Match (A11), Bomb Relay (C2), Quick Draw Duel (E7), Pixel Beat (E6), Fruit Catch (D2), Fleet Battle (C3) | 2 |
 | +action | P3 | Pong (B1), Sumo (B3), Pixel Dash (A9), Snake (A8), Maze Sprint (E9), Pixel rain (A7), Line Clear (E10), Roulette (D3) | 5 |

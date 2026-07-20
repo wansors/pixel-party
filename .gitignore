@@ -25,5 +25,16 @@ logs/
 .vscode/
 *.swp
 
+# Claude Code (machine-local settings only; shared settings.json is tracked)
+.claude/settings.local.json
+
 # Test / coverage
 coverage/
+
+# Angular
+.angular/
+apps/client/.angular/
+
+# SQLite (later-phase only)
+*.sqlite
+*.sqlite-*
