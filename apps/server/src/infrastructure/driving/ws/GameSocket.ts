@@ -110,6 +110,36 @@ export function startGameServer(deps: GameSocketDeps) {
     if (room) broadcastLobby(room)
   }
 
+  // REJOIN reclaims an existing seat after a socket drop: re-attach the id, mark it connected, then
+  // replay the current session state to this one socket so its screen is restored.
+  const handleRejoin = (
+    ws: ServerWebSocket<SocketData>,
+    msg: Extract<ClientMsg, { type: 'REJOIN' }>,
+  ): void => {
+    if (ws.data.playerId) return
+    const room = deps.rooms.get(ws.data.roomCode)
+    const player = room?.get(msg.playerId)
+    if (!room || !player) {
+      // Seat is gone (e.g. dropped from the lobby). Tell the client so it can fall back to a fresh JOIN.
+      send(ws, { type: 'ACK', intent: 'REJOIN', ok: false, reason: 'unknown_player' })
+      return
+    }
+    ws.data.playerId = player.id
+    ws.data.isHost = room.isHost(player.id)
+    player.setConnected(true)
+    ws.subscribe(roomTopic(ws.data.roomCode))
+    ws.subscribe(playerTopic(player.id))
+    send(ws, {
+      type: 'WELCOME',
+      protocolVersion: PROTOCOL_VERSION,
+      playerId: player.id,
+      roomCode: ws.data.roomCode,
+      isHost: ws.data.isHost,
+    })
+    broadcastLobby(room)
+    for (const m of manager.resumeMessages(room.code)) send(ws, m)
+  }
+
   const handleSetReady = (
     ws: ServerWebSocket<SocketData>,
     msg: Extract<ClientMsg, { type: 'SET_READY' }>,
@@ -165,6 +195,9 @@ export function startGameServer(deps: GameSocketDeps) {
       case 'JOIN':
         handleJoin(ws, msg)
         break
+      case 'REJOIN':
+        handleRejoin(ws, msg)
+        break
       case 'SET_READY':
         handleSetReady(ws, msg)
         break
@@ -193,6 +226,19 @@ export function startGameServer(deps: GameSocketDeps) {
   const teardown = (ws: ServerWebSocket<SocketData>): void => {
     const room = deps.rooms.get(ws.data.roomCode)
     if (!room || !ws.data.playerId) return
+    const player = room.get(ws.data.playerId)
+    // During a live session keep the seat (and its score) so the player can rejoin; only mark it
+    // disconnected. Tear the room down once nobody is left connected.
+    if (manager.isRunning(room.code) && player) {
+      player.setConnected(false)
+      if (!room.hasConnectedPlayers) {
+        manager.stop(room.code)
+        deps.rooms.remove(room.code)
+        return
+      }
+      broadcastLobby(room)
+      return
+    }
     room.remove(ws.data.playerId)
     if (room.isEmpty) {
       manager.stop(room.code)

@@ -102,4 +102,39 @@ describe('SessionEngine', () => {
     expect(intros[1]?.type === 'ROUND_INTRO' && intros[1].minigameId).toBe('reaction-duel')
     expect(captured.some((m) => m.type === 'FINAL_RANKING')).toBe(true)
   })
+
+  test('resumeMessages rebuilds the live round for a reconnecting socket', () => {
+    const room = roomWith('a', 'b')
+    let t = 0
+    const clock: Clock = { now: () => t }
+    const engine = new SessionEngine(room, { toRoom: () => {} }, clock, noRandom, CONFIG)
+    engine.start()
+    t += CONFIG.introMs
+    engine.tick() // intro -> playing
+    t += 1000 / CONFIG.tickHz
+    engine.onInput('a', { kind: 'mash' })
+    engine.tick()
+
+    const msgs = engine.resumeMessages()
+    const types = msgs.map((m) => m.type)
+    expect(types).toContain('SCOREBOARD')
+    expect(types).toContain('ROUND_INTRO')
+    expect(types).toContain('ROUND_STATE')
+  })
+
+  test('resumeMessages returns the final ranking once the session is over', () => {
+    const room = roomWith('a', 'b')
+    let t = 0
+    const clock: Clock = { now: () => t }
+    const engine = new SessionEngine(room, { toRoom: () => {} }, clock, noRandom, CONFIG)
+    engine.start()
+    for (let i = 0; i < 400 && !engine.isFinished; i++) {
+      t += 1000 / CONFIG.tickHz
+      engine.onInput('a', { kind: 'mash' })
+      engine.tick()
+    }
+    const msgs = engine.resumeMessages()
+    expect(msgs).toHaveLength(1)
+    expect(msgs[0]?.type).toBe('FINAL_RANKING')
+  })
 })

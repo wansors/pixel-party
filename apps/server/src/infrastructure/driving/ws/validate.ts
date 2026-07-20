@@ -20,6 +20,7 @@ const isStrArray = (v: unknown): v is string[] => Array.isArray(v) && v.every(is
 // future ClientMsg variant FAILS typecheck until a validator is added here.
 const VALIDATORS = {
   JOIN: (m) => isStr(m.name) && isStr(m.color) && isStr(m.avatar),
+  REJOIN: (m) => isStr(m.playerId),
   SET_READY: (m) => isBool(m.ready),
   HOST_CONFIG: (m) => isStrArray(m.minigameIds) && isNum(m.rounds),
   START_SESSION: () => true,

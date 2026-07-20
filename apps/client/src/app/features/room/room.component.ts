@@ -65,7 +65,6 @@ export class RoomComponent implements OnInit {
 
   private game?: GameClient
   private currentGame?: MiniGameId
-  private joined = false
   private defaultConfigSent = false
   private countdownTimer?: ReturnType<typeof setInterval>
   private name = ''
@@ -74,6 +73,10 @@ export class RoomComponent implements OnInit {
 
   get myReady(): boolean {
     return this.players().find((p) => p.id === this.selfId())?.ready ?? false
+  }
+
+  private pidKey(): string {
+    return `pp:pid:${this.code()}`
   }
 
   ngOnInit(): void {
@@ -85,11 +88,15 @@ export class RoomComponent implements OnInit {
     }
     this.code.set(code)
 
+    // A seat id persisted from an earlier connection lets a page reload / socket drop rejoin in place.
+    const storedId = sessionStorage.getItem(this.pidKey())
+    if (storedId) this.net.restoreIdentity(storedId)
+
     this.net.connected$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((up) => {
-      if (up && !this.joined) {
-        this.joined = true
-        this.net.send({ type: 'JOIN', name: this.name, color: this.color, avatar: this.avatar })
-      }
+      if (!up) return
+      // With a known id this is a reconnect → reclaim the seat; otherwise it is a first-time join.
+      if (this.net.playerId) this.net.send({ type: 'REJOIN', playerId: this.net.playerId })
+      else this.net.send({ type: 'JOIN', name: this.name, color: this.color, avatar: this.avatar })
     })
     this.net.reconnecting$
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -109,6 +116,8 @@ export class RoomComponent implements OnInit {
       case 'WELCOME':
         this.selfId.set(msg.playerId)
         this.isHost.set(msg.isHost)
+        sessionStorage.setItem(this.pidKey(), msg.playerId)
+        if (this.game) this.game.state.selfId = msg.playerId
         break
       case 'LOBBY_STATE':
         this.players.set(msg.players)
@@ -148,6 +157,13 @@ export class RoomComponent implements OnInit {
         this.message.set(`Join rejected: ${msg.reason}`)
         break
       case 'ACK':
+        // A refused REJOIN means the seat is gone — clear it and join fresh.
+        if (msg.intent === 'REJOIN' && !msg.ok) {
+          sessionStorage.removeItem(this.pidKey())
+          this.net.resetIdentity()
+          this.net.send({ type: 'JOIN', name: this.name, color: this.color, avatar: this.avatar })
+          break
+        }
         if (!msg.ok) this.message.set(`${msg.intent} rejected: ${msg.reason ?? ''}`)
         break
       case 'ERROR':

@@ -28,6 +28,16 @@ export class GameSocketService {
     return this._playerId
   }
 
+  // Seed a known id (from sessionStorage) so the first frame after connect is a REJOIN, not a JOIN.
+  restoreIdentity(playerId: string): void {
+    this._playerId = playerId
+  }
+
+  // Drop the identity so the next connect re-JOINs fresh (used when a REJOIN is refused).
+  resetIdentity(): void {
+    this._playerId = undefined
+  }
+
   get isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN
   }

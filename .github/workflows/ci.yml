@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: server + shared
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      # Order mirrors docs/technical-architecture.md §8: determinism -> lint -> typecheck -> test.
+      - run: bun run lint:determinism
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run test
+
+  client:
+    name: client (browser)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      # ubuntu-latest ships Google Chrome; point Karma's ChromeHeadless launcher at it.
+      - name: Run client specs (headless)
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: bun run --filter client test -- --watch=false --browsers=ChromeHeadless

@@ -1,3 +1,4 @@
+import type { ServerMsg } from '@pp/shared'
 import type { Room } from '../../domain/entities/Room'
 import type { PlayerId } from '../../domain/minigames/MiniGame'
 import type { Random } from '../../domain/ports/Random'
@@ -32,6 +33,11 @@ export class SessionManager {
 
   input(roomCode: string, playerId: PlayerId, input: unknown): void {
     this.engines.get(roomCode)?.onInput(playerId, input)
+  }
+
+  // State-restore messages for a reconnecting socket; empty if no session is running for that room.
+  resumeMessages(roomCode: string): ServerMsg[] {
+    return this.engines.get(roomCode)?.resumeMessages() ?? []
   }
 
   stop(roomCode: string): void {

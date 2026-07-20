@@ -1,4 +1,4 @@
-import type { MiniGameId, ScoreEntryDto, ServerMsg } from '@pp/shared'
+import type { MiniGameId, RoundResultDto, ScoreEntryDto, ServerMsg } from '@pp/shared'
 import { MINIGAMES_BY_ID } from '@pp/shared'
 import type { Room } from '../../domain/entities/Room'
 import type { MiniGame, PlayerId } from '../../domain/minigames/MiniGame'
@@ -30,6 +30,8 @@ export class SessionEngine {
   private game?: MiniGame<unknown, unknown>
   private gameState: unknown
   private tickCount = 0
+  // Last published round result, kept so a reconnecting client can be shown the scoreboard it missed.
+  private lastResult?: RoundResultDto
   private readonly cumulative = new Map<PlayerId, number>()
   // Players are snapshotted at round start so a mid-round leave/join can't reshape the result.
   private roundPlayers: PlayerId[] = []
@@ -144,15 +146,12 @@ export class SessionEngine {
     for (const [playerId, pts] of roundPoints) {
       this.cumulative.set(playerId, (this.cumulative.get(playerId) ?? 0) + pts)
     }
-    this.publish({
-      type: 'ROUND_RESULT',
-      round: this.roundIndex + 1,
-      result: {
-        minigameId: id,
-        placements: result.placements,
-        scores: toScoreEntries(roundPoints),
-      },
-    })
+    this.lastResult = {
+      minigameId: id,
+      placements: result.placements,
+      scores: toScoreEntries(roundPoints),
+    }
+    this.publish({ type: 'ROUND_RESULT', round: this.roundIndex + 1, result: this.lastResult })
     this.publish({ type: 'SCOREBOARD', scores: toScoreEntries(this.cumulative) })
     this.room.setPhase('scoreboard')
     this.phase = 'result'
@@ -168,6 +167,49 @@ export class SessionEngine {
     this.phase = 'final'
     this.room.setPhase('final')
     this.publish({ type: 'FINAL_RANKING', scores: toScoreEntries(this.cumulative) })
+  }
+
+  // Ordered messages that rebuild the current session view for a single reconnecting socket. Mirrors
+  // what the client would have received live, so its normal message handlers restore the right screen.
+  resumeMessages(): ServerMsg[] {
+    const now = this.clock.now()
+    const scoreboard: ServerMsg = { type: 'SCOREBOARD', scores: toScoreEntries(this.cumulative) }
+    const id = this.sequence[this.roundIndex] as MiniGameId
+    const meta = MINIGAMES_BY_ID.get(id)
+    const roundIntro = (startsInMs: number): ServerMsg => ({
+      type: 'ROUND_INTRO',
+      round: this.roundIndex + 1,
+      totalRounds: this.sequence.length,
+      minigameId: id,
+      format: meta?.format ?? 'ffa',
+      startsInMs,
+    })
+    switch (this.phase) {
+      case 'intro':
+        return [scoreboard, roundIntro(Math.max(0, this.phaseEndsAt - now))]
+      case 'playing': {
+        const msgs: ServerMsg[] = [scoreboard, roundIntro(0)]
+        if (this.game) {
+          msgs.push({
+            type: 'ROUND_STATE',
+            round: this.roundIndex + 1,
+            tick: this.tickCount,
+            state: this.game.snapshot ? this.game.snapshot(this.gameState, now) : this.gameState,
+          })
+        }
+        return msgs
+      }
+      case 'result': {
+        const msgs: ServerMsg[] = []
+        if (this.lastResult) {
+          msgs.push({ type: 'ROUND_RESULT', round: this.roundIndex + 1, result: this.lastResult })
+        }
+        msgs.push(scoreboard)
+        return msgs
+      }
+      case 'final':
+        return [{ type: 'FINAL_RANKING', scores: toScoreEntries(this.cumulative) }]
+    }
   }
 
   private publish(msg: ServerMsg): void {

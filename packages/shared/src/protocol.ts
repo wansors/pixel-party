@@ -45,6 +45,9 @@ export interface RoundResultDto {
 export type ClientMsg =
   // Announce presence after the socket opens (name/color/avatar chosen on the join screen).
   | { type: 'JOIN'; name: string; color: string; avatar: string }
+  // Reclaim an existing seat after a socket drop (transient reconnect or page reload). Carries the
+  // previously minted playerId; the server re-attaches it and replays the current session state.
+  | { type: 'REJOIN'; playerId: string }
   | { type: 'SET_READY'; ready: boolean }
   // Host-only: configure the session (which games, how many rounds). Ignored from non-hosts.
   | { type: 'HOST_CONFIG'; minigameIds: MiniGameId[]; rounds: number }

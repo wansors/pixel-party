@@ -37,6 +37,11 @@ export class Room {
   get isEmpty(): boolean {
     return this.players.size === 0
   }
+  // During a live session, disconnected seats stay in the roster (so scores survive a reconnect); the
+  // room is only torn down once nobody is connected.
+  get hasConnectedPlayers(): boolean {
+    return this.list().some((p) => p.connected)
+  }
 
   list(): Player[] {
     return [...this.players.values()]
