@@ -102,7 +102,9 @@ export class BugSmash implements MiniGame<BugSmashState, BugSmashInput> {
       ranks[id] = rank
       prev = v
     })
-    return { placements: sorted, ranks }
+    const stats: Record<PlayerId, string> = {}
+    for (const id of state.players) stats[id] = `${state.scores.get(id) ?? 0} pts`
+    return { placements: sorted, ranks, stats }
   }
 
   snapshot(state: BugSmashState, now: number): BugSmashSnapshot {

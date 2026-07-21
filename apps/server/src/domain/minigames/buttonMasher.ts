@@ -55,7 +55,9 @@ export class ButtonMasher implements MiniGame<ButtonMasherState, ButtonMasherInp
       ranks[id] = rank
       prevCount = count
     })
-    return { placements, ranks }
+    const stats: Record<PlayerId, string> = {}
+    for (const [id, count] of state.counts) stats[id] = `${count} taps`
+    return { placements, ranks, stats }
   }
 
   snapshot(state: ButtonMasherState, now: number): ButtonMasherSnapshot {

@@ -97,7 +97,10 @@ export class PixelHoops implements MiniGame<PixelHoopsState, PixelHoopsInput> {
       ranks[id] = rank
       prev = { s, m }
     })
-    return { placements: sorted, ranks }
+    const stats: Record<PlayerId, string> = {}
+    for (const id of state.players)
+      stats[id] = `${state.score.get(id) ?? 0} pts · x${state.maxCombo.get(id) ?? 0}`
+    return { placements: sorted, ranks, stats }
   }
 
   snapshot(state: PixelHoopsState, now: number): PixelHoopsSnapshot {

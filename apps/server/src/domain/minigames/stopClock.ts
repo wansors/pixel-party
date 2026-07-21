@@ -77,7 +77,9 @@ export class StopClock implements MiniGame<StopClockState, StopClockInput> {
       ranks[id] = rank
       prev = e
     })
-    return { placements: sorted, ranks }
+    const stats: Record<PlayerId, string> = {}
+    for (const id of state.players) stats[id] = `${(state.totalError.get(id) ?? 0).toFixed(2)} off`
+    return { placements: sorted, ranks, stats }
   }
 
   snapshot(state: StopClockState, now: number): StopClockSnapshot {

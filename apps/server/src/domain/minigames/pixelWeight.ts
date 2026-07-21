@@ -113,7 +113,9 @@ export class PixelWeight implements MiniGame<PixelWeightState, PixelWeightInput>
       ranks[id] = rank
       prev = { s, t }
     })
-    return { placements: sorted, ranks }
+    const stats: Record<PlayerId, string> = {}
+    for (const id of state.players) stats[id] = `${state.score.get(id) ?? 0} pts`
+    return { placements: sorted, ranks, stats }
   }
 
   snapshot(state: PixelWeightState, now: number): PixelWeightSnapshot {

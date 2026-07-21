@@ -134,7 +134,9 @@ export class Trivia implements MiniGame<TriviaState, TriviaInput> {
       ranks[id] = rank
       prev = p
     })
-    return { placements: sorted, ranks }
+    const stats: Record<PlayerId, string> = {}
+    for (const id of state.players) stats[id] = `${state.points.get(id) ?? 0} pts`
+    return { placements: sorted, ranks, stats }
   }
 
   snapshot(state: TriviaState, now: number): TriviaSnapshot {

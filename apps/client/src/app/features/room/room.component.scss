@@ -237,7 +237,7 @@ header {
 
   li {
     display: grid;
-    grid-template-columns: 2.5rem auto 1fr auto;
+    grid-template-columns: 2.5rem auto 1fr auto auto;
     align-items: center;
     gap: 0.6rem;
     padding: 0.45rem 0.5rem;
@@ -252,6 +252,12 @@ header {
       font-weight: 700;
       overflow: hidden;
       text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .stat {
+      color: var(--c-dim);
+      font-size: 0.72rem;
+      font-variant-numeric: tabular-nums;
       white-space: nowrap;
     }
     .pts {
@@ -292,7 +298,7 @@ header {
     padding: 0.75rem;
   }
   .highscore li {
-    grid-template-columns: 2rem auto 1fr auto;
+    grid-template-columns: 2rem auto 1fr auto auto;
     gap: 0.4rem;
     padding: 0.4rem 0.25rem;
   }

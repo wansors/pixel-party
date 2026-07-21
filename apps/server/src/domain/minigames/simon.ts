@@ -86,7 +86,9 @@ export class Simon implements MiniGame<SimonState, SimonInput> {
       ranks[id] = rank
       prev = { c, t }
     })
-    return { placements: sorted, ranks }
+    const stats: Record<PlayerId, string> = {}
+    for (const id of state.players) stats[id] = `level ${completed(id)}`
+    return { placements: sorted, ranks, stats }
   }
 
   snapshot(state: SimonState, now: number): SimonSnapshot {

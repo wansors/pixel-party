@@ -67,7 +67,13 @@ export class ReactionDuel implements MiniGame<ReactionState, ReactionInput> {
     })
     const loserRank = reactors.length
     for (const id of losers) ranks[id] = loserRank
-    return { placements, ranks }
+    const stats: Record<PlayerId, string> = {}
+    for (const id of state.players) {
+      if (state.falseStarts.has(id)) stats[id] = 'false start'
+      else if (state.reactions.has(id)) stats[id] = `${state.reactions.get(id)} ms`
+      else stats[id] = 'no tap'
+    }
+    return { placements, ranks, stats }
   }
 
   snapshot(state: ReactionState, now: number): ReactionSnapshot {

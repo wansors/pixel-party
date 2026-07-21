@@ -123,7 +123,11 @@ ranking. Latency-tolerant games only; no teams/duels/handicap yet.
       points, from `ROUND_RESULT`) then `scoreboard` (cumulative) — each with its own duration
       (`SessionConfig.roundResultMs` / `scoreboardMs`, default 4 s + 4 s). New client `round-result` view;
       reconnect (`resumeMessages`) handles both sub-phases. Replaces the old single `resultMs` where
-      `ROUND_RESULT` folded straight into the cumulative board and the round winner was never shown.*
+      `ROUND_RESULT` folded straight into the cumulative board and the round winner was never shown.
+      Extended 2026-07-22: the round-result rows now also show a per-player, game-specific performance
+      detail (reaction ms, correct answers, taps, streak, level, banked points…) via an optional
+      `stats: Record<playerId, string>` on `NormalizedResult` → `RoundResultDto`. Purely presentational;
+      it never feeds scoring.*
 
 *Depends on: Phase 0.*
 

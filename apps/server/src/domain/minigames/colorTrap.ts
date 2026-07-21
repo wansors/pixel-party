@@ -104,7 +104,9 @@ export class ColorTrap implements MiniGame<ColorTrapState, ColorTrapInput> {
       ranks[id] = rank
       prev = { c, t }
     })
-    return { placements: sorted, ranks }
+    const stats: Record<PlayerId, string> = {}
+    for (const id of state.players) stats[id] = `${state.correct.get(id) ?? 0} correct`
+    return { placements: sorted, ranks, stats }
   }
 
   snapshot(state: ColorTrapState, now: number): ColorTrapSnapshot {

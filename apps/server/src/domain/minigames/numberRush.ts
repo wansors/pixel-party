@@ -85,7 +85,13 @@ export class NumberRush implements MiniGame<NumberRushState, NumberRushInput> {
       ranks[id] = rank
       prev = { c, f }
     })
-    return { placements: sorted, ranks }
+    const stats: Record<PlayerId, string> = {}
+    for (const id of state.players) {
+      const f = state.finishedMs.get(id)
+      stats[id] =
+        f !== undefined ? `${(f / 1000).toFixed(1)}s` : `${cleared(id)}/${state.grid.length}`
+    }
+    return { placements: sorted, ranks, stats }
   }
 
   snapshot(state: NumberRushState, now: number): NumberRushSnapshot {

@@ -9,6 +9,9 @@ export interface NormalizedResult {
   placements: PlayerId[]
   // Optional explicit rank per player for tie handling (equal rank = tie). Defaults to index order.
   ranks?: Record<PlayerId, number>
+  // Optional per-player performance detail for the round-result screen (e.g. "142 ms", "5 correct").
+  // Game-specific and purely presentational — it never feeds scoring.
+  stats?: Record<PlayerId, string>
 }
 
 export interface MiniGameInitCtx {

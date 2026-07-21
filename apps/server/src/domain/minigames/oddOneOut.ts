@@ -99,7 +99,9 @@ export class OddOneOut implements MiniGame<OddOneOutState, OddOneOutInput> {
       ranks[id] = rank
       prev = { l, t }
     })
-    return { placements: sorted, ranks }
+    const stats: Record<PlayerId, string> = {}
+    for (const id of state.players) stats[id] = `level ${state.level.get(id) ?? 0}`
+    return { placements: sorted, ranks, stats }
   }
 
   snapshot(state: OddOneOutState, now: number): OddOneOutSnapshot {

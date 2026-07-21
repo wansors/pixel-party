@@ -122,7 +122,10 @@ export class QuickMath implements MiniGame<QuickMathState, QuickMathInput> {
       ranks[id] = rank
       prev = { c, w }
     })
-    return { placements: sorted, ranks }
+    const stats: Record<PlayerId, string> = {}
+    for (const id of state.players)
+      stats[id] = `${state.correct.get(id) ?? 0} right · ${state.wrong.get(id) ?? 0} wrong`
+    return { placements: sorted, ranks, stats }
   }
 
   snapshot(state: QuickMathState, now: number): QuickMathSnapshot {

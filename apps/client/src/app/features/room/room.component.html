@@ -137,6 +137,9 @@
                 <span class="name" [style.color]="playerColor(s.playerId)">{{
                   playerName(s.playerId)
                 }}</span>
+                @if (roundStat(s.playerId); as stat) {
+                  <span class="stat">{{ stat }}</span>
+                }
                 <span class="pts">+{{ s.points }}</span>
               </li>
             }

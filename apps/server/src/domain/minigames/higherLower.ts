@@ -100,7 +100,9 @@ export class HigherLower implements MiniGame<HigherLowerState, HigherLowerInput>
       ranks[id] = rank
       prev = { s, t }
     })
-    return { placements: sorted, ranks }
+    const stats: Record<PlayerId, string> = {}
+    for (const id of state.players) stats[id] = `streak ${streak(id)}`
+    return { placements: sorted, ranks, stats }
   }
 
   snapshot(state: HigherLowerState, now: number): HigherLowerSnapshot {

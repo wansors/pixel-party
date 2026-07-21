@@ -156,6 +156,7 @@ export class SessionEngine {
       minigameId: id,
       placements: result.placements,
       scores: toScoreEntries(roundPoints),
+      stats: result.stats,
     }
     // Reveal the round's own outcome first; the cumulative scoreboard follows after its own dwell.
     this.publish({ type: 'ROUND_RESULT', round: this.roundIndex + 1, result: this.lastResult })

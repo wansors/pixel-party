@@ -299,4 +299,9 @@ export class RoomComponent implements OnInit {
   roundWinnerId(): string | null {
     return this.roundResult()?.result.placements[0] ?? null
   }
+
+  // Game-specific performance detail for a player on the round-result screen (e.g. "142 ms").
+  roundStat(id: string): string {
+    return this.roundResult()?.result.stats?.[id] ?? ''
+  }
 }

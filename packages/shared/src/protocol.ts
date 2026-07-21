@@ -35,6 +35,9 @@ export interface RoundResultDto {
   // playerIds in finishing order (index 0 = 1st). Ties are represented by equal ranks in `scores`.
   placements: string[]
   scores: ScoreEntryDto[]
+  // Optional per-player performance detail for the round-result screen (e.g. "142 ms", "5 correct",
+  // "streak 7"). Game-specific and purely presentational — it never feeds scoring. Keyed by playerId.
+  stats?: Record<string, string>
 }
 
 // ---------------------------------------------------------------------------------------------------

@@ -90,7 +90,11 @@ export class BalloonChicken implements MiniGame<BalloonChickenState, BalloonChic
       ranks[id] = rank
       prev = v
     })
-    return { placements: sorted, ranks }
+    const stats: Record<PlayerId, string> = {}
+    for (const [id, p] of state.players) {
+      stats[id] = p.status === 'burst' ? 'burst' : `${p.pumps * POINTS_PER_PUMP} banked`
+    }
+    return { placements: sorted, ranks, stats }
   }
 
   snapshot(state: BalloonChickenState, now: number): BalloonChickenSnapshot {
