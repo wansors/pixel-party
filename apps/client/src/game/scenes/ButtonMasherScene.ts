@@ -1,6 +1,7 @@
 import type { ButtonMasherSnapshot, ClientMsg } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
+import type { Sfx } from '../Sfx'
 
 // Button Masher canvas. Scene key === the mini-game id so GameClient can start it by id. Reads
 // authoritative snapshots from RoundState and sends one MINIGAME_INPUT per press.
@@ -12,6 +13,7 @@ export class ButtonMasherScene extends Phaser.Scene {
   constructor(
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
+    private readonly sfx: Sfx,
   ) {
     super('button-masher')
   }
@@ -53,6 +55,7 @@ export class ButtonMasherScene extends Phaser.Scene {
   }
 
   private mash(): void {
+    this.sfx.click()
     this.send({ type: 'MINIGAME_INPUT', input: { kind: 'mash' } })
   }
 

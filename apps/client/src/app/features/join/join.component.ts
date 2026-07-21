@@ -1,21 +1,24 @@
 import { HttpClient } from '@angular/common/http'
 import { Component, inject, signal } from '@angular/core'
 import { FormsModule } from '@angular/forms'
-import { Router } from '@angular/router'
+import { ActivatedRoute, Router } from '@angular/router'
 import { AVATARS, type AvatarId, PLAYER_COLORS } from '@pp/shared'
 import { firstValueFrom } from 'rxjs'
 import { environment } from '../../../environments/environment'
+import { AudioService } from '../../core/audio/audio.service'
+import { AudioControlsComponent } from '../../shared/audio-controls.component'
 import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
 
 // Entry point: pick a name + pixel avatar + color, then create a fresh room or enter an existing code.
 // Identity (name/color/avatar) travels to the room via query params.
 @Component({
   selector: 'app-join',
-  imports: [FormsModule, PixelAvatarComponent],
+  imports: [FormsModule, PixelAvatarComponent, AudioControlsComponent],
   template: `
     <main class="join">
+      <div class="sound"><app-audio-controls /></div>
       <div class="arcade-window cabinet">
-        <div class="arcade-titlebar">★ Pixel Party ★</div>
+        <div class="arcade-titlebar">* PIXEL PARTY *</div>
         <div class="body">
           <div class="me">
             <app-pixel-avatar [avatar]="avatar()" [color]="color()" [size]="72" />
@@ -70,6 +73,7 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
   `,
   styles: `
     .join { display: grid; place-content: center; min-height: 100vh; padding: 1rem; }
+    .sound { position: fixed; top: 0.75rem; right: 0.75rem; z-index: 10; }
     .cabinet { width: min(92vw, 380px); }
     .body { display: grid; gap: 0.9rem; padding: 1.1rem; }
     .me { display: grid; place-content: center; }
@@ -96,11 +100,16 @@ export class JoinComponent {
   private readonly http = inject(HttpClient)
   private readonly router = inject(Router)
 
+  constructor() {
+    inject(AudioService).ensureMusic()
+  }
+
   readonly avatars = AVATARS
   readonly colors = PLAYER_COLORS
 
   name = ''
-  code = ''
+  // Invite links (/?code=XXXX) land here with the room pre-filled; the player still picks identity.
+  code = inject(ActivatedRoute).snapshot.queryParamMap.get('code')?.toUpperCase() ?? ''
   readonly avatar = signal<AvatarId>(AVATARS[0])
   readonly color = signal<string>(PLAYER_COLORS[0])
   readonly message = signal('')

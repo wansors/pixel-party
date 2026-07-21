@@ -1,6 +1,7 @@
 import type { ClientMsg, TriviaSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
+import type { Sfx } from '../Sfx'
 
 const CHOICE_COLORS = [0xe63946, 0x3a7bd5, 0x2a9d3f, 0xf4c20d]
 
@@ -13,15 +14,23 @@ export class TriviaScene extends Phaser.Scene {
   private status?: Phaser.GameObjects.Text
   private choiceBtns: Phaser.GameObjects.Rectangle[] = []
   private choiceLabels: Phaser.GameObjects.Text[] = []
+  private lastScore = 0
+  private lastIndex = -1
+  private answeredIndex = -1
 
   constructor(
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
+    private readonly sfx: Sfx,
   ) {
     super('trivia')
   }
 
   create(): void {
+    // Scene instances survive stop/start across rounds — reset per-round SFX trackers here.
+    this.lastScore = 0
+    this.lastIndex = -1
+    this.answeredIndex = -1
     const { width, height } = this.scale
     const cx = width / 2
     this.progress = this.add
@@ -71,6 +80,8 @@ export class TriviaScene extends Phaser.Scene {
     if (!snap || snap.question === null || choice >= snap.choices.length) return
     const selfId = this.state.selfId ?? ''
     if (snap.answeredCurrent.includes(selfId)) return
+    this.sfx.click()
+    this.answeredIndex = snap.index
     this.send({ type: 'MINIGAME_INPUT', input: { kind: 'answer', question: snap.index, choice } })
   }
 
@@ -78,6 +89,22 @@ export class TriviaScene extends Phaser.Scene {
     const snap = this.state.state as TriviaSnapshot | null
     if (!snap) return
     const selfId = this.state.selfId ?? ''
+
+    // The correct answer never rides the live snapshot, so right/wrong is inferred at reveal: a score
+    // bump means correct; the question advancing with our answer locked and no bump means wrong.
+    const myScore = snap.scores[selfId] ?? 0
+    if (myScore > this.lastScore) this.sfx.correct()
+    if (snap.index !== this.lastIndex) {
+      if (
+        this.lastIndex >= 0 &&
+        this.answeredIndex === this.lastIndex &&
+        myScore === this.lastScore
+      )
+        this.sfx.wrong()
+      this.lastIndex = snap.index
+    }
+    this.lastScore = myScore
+
     this.progress?.setText(`Q ${Math.min(snap.index + 1, snap.total)} / ${snap.total}`)
     this.timer?.setText(`${Math.ceil(snap.questionRemainingMs / 1000)}s`)
     this.question?.setText(snap.question ?? 'Get ready…')

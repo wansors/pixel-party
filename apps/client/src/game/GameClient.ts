@@ -1,6 +1,7 @@
 import type { ClientMsg, MiniGameId, ServerMsg } from '@pp/shared'
 import Phaser from 'phaser'
 import { RoundState } from './RoundState'
+import type { Sfx } from './Sfx'
 import { BalloonChickenScene } from './scenes/BalloonChickenScene'
 import { ButtonMasherScene } from './scenes/ButtonMasherScene'
 import { ColorTrapScene } from './scenes/ColorTrapScene'
@@ -54,17 +55,21 @@ export class GameClient {
       this.state.state = msg.state
     })
 
-  constructor(private readonly send: (msg: ClientMsg) => void) {}
+  constructor(
+    private readonly send: (msg: ClientMsg) => void,
+    private readonly sfx: Sfx,
+  ) {}
 
   boot(parent: string): void {
     if (this.game) return
     this.game = new Phaser.Game(gameConfig(parent))
     // Register scenes inactive; the round starts the right one by id.
-    this.game.scene.add('button-masher', new ButtonMasherScene(this.send, this.state), false)
-    this.game.scene.add('reaction-duel', new ReactionScene(this.send, this.state), false)
-    this.game.scene.add('color-trap', new ColorTrapScene(this.send, this.state), false)
-    this.game.scene.add('trivia', new TriviaScene(this.send, this.state), false)
-    this.game.scene.add('balloon-chicken', new BalloonChickenScene(this.send, this.state), false)
+    const deps = [this.send, this.state, this.sfx] as const
+    this.game.scene.add('button-masher', new ButtonMasherScene(...deps), false)
+    this.game.scene.add('reaction-duel', new ReactionScene(...deps), false)
+    this.game.scene.add('color-trap', new ColorTrapScene(...deps), false)
+    this.game.scene.add('trivia', new TriviaScene(...deps), false)
+    this.game.scene.add('balloon-chicken', new BalloonChickenScene(...deps), false)
   }
 
   // Switch the active scene to the round's mini-game (no-op if already active).
@@ -75,6 +80,10 @@ export class GameClient {
     }
     this.game.scene.start(id)
     this.activeScene = id
+  }
+
+  refresh(): void {
+    this.game?.scale.refresh()
   }
 
   handle(msg: ServerMsg): void {

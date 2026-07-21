@@ -1,13 +1,13 @@
 // Global styles — retro classic-arcade pixel-art identity (see docs/art-direction.md).
 // Palette mirrors packages/shared/src/theme.ts (PALETTE); keep the two in sync.
 
-// Self-hosted pixel font (CSP-safe, no external CDN). Drop the binary at the path below to enable it;
-// until then the chunky monospace fallback stack keeps the arcade vibe. See art-direction §3.
-// @font-face {
-//   font-family: 'PixelArcade';
-//   src: url('/assets/fonts/press-start-2p.woff2') format('woff2');
-//   font-display: swap;
-// }
+// Self-hosted pixel font (CSP-safe, bundled from public/ — no external CDN). "Press Start 2P" (OFL).
+// See art-direction §3. The monospace stack stays as a fallback while the woff2 loads.
+@font-face {
+  font-family: 'PixelArcade';
+  src: url('/fonts/press-start-2p.woff2') format('woff2');
+  font-display: swap;
+}
 
 :root {
   color-scheme: dark;
@@ -31,6 +31,22 @@
 
 * {
   box-sizing: border-box;
+}
+
+// Responsive base: everything is rem-based, so scaling the root scales the whole arcade UI per
+// breakpoint. Press Start 2P is a wide face — mobile portrait gets a smaller base so lines fit.
+html {
+  font-size: 16px;
+}
+@media (max-width: 600px) {
+  html {
+    font-size: 14px;
+  }
+}
+@media (max-width: 380px) {
+  html {
+    font-size: 12.5px;
+  }
 }
 
 html,
@@ -88,6 +104,8 @@ img {
   cursor: pointer;
   box-shadow: 0 4px 0 0 var(--c-frame);
   transition: none;
+  // Comfortable touch target on phones despite the chunky styling (art-direction §8).
+  min-height: 44px;
 
   &:hover:not(:disabled) {
     background: var(--c-frame);

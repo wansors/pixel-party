@@ -1,6 +1,7 @@
 import { COLOR_TRAP_COLORS, type ClientMsg, type ColorTrapSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
+import type { Sfx } from '../Sfx'
 
 const css = (hex: number): string => `#${hex.toString(16).padStart(6, '0')}`
 
@@ -18,6 +19,7 @@ export class ColorTrapScene extends Phaser.Scene {
   constructor(
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
+    private readonly sfx: Sfx,
   ) {
     super('color-trap')
   }
@@ -65,6 +67,9 @@ export class ColorTrapScene extends Phaser.Scene {
     if (!snap || snap.ink === null) return
     const selfId = this.state.selfId ?? ''
     if (snap.answeredCurrent.includes(selfId)) return
+    // The ink index is already in the snapshot, so right/wrong feedback can be instant and local.
+    if (color === snap.ink) this.sfx.correct()
+    else this.sfx.wrong()
     this.send({ type: 'MINIGAME_INPUT', input: { kind: 'answer', prompt: snap.index, color } })
   }
 

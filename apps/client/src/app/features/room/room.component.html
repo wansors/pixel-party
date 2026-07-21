@@ -1,24 +1,36 @@
 <main class="room">
   <header>
-    <span class="code">▸ Room {{ code() }}</span>
+    <span class="code">ROOM {{ code() }}</span>
     @if (reconnecting()) {
-      <span class="reconnect blink">Reconnecting…</span>
+      <span class="reconnect blink">Reconnecting...</span>
     }
+    <app-audio-controls />
   </header>
 
   @if (message()) {
     <p class="msg">{{ message() }}</p>
   }
 
+  <!-- Kept out of the @switch: the Phaser canvas must survive scoreboard/intro views. -->
+  <section class="round" [class.active]="view() === 'round'">
+    <div id="game-container"></div>
+  </section>
+
   @switch (view()) {
     @case ('connecting') {
-      <p class="center blink">Connecting…</p>
+      <p class="center blink">Connecting...</p>
     }
 
     @case ('lobby') {
       <section class="lobby arcade-window">
-        <div class="arcade-titlebar">Lobby — {{ players().length }} player(s)</div>
+        <div class="arcade-titlebar">Lobby - {{ players().length }} player(s)</div>
         <div class="pad">
+          <div class="invite">
+            <span class="url">{{ inviteUrl }}</span>
+            <button type="button" class="arcade-btn" (click)="copyInvite()">
+              {{ copied() ? 'Copied!' : 'Copy link' }}
+            </button>
+          </div>
           <ul class="players">
             @for (p of players(); track p.id) {
               <li [class.off]="!p.connected">
@@ -98,12 +110,6 @@
       </section>
     }
 
-    @case ('round') {
-      <section class="round">
-        <div id="game-container"></div>
-      </section>
-    }
-
     @case ('scoreboard') {
       <section class="board arcade-window">
         <div class="arcade-titlebar">High Scores</div>
@@ -124,14 +130,14 @@
               </li>
             }
           </ol>
-          <p class="hint blink">Next round starting…</p>
+          <p class="hint blink">Next round starting...</p>
         </div>
       </section>
     }
 
     @case ('final') {
       <section class="board arcade-window">
-        <div class="arcade-titlebar">★ Final Ranking ★</div>
+        <div class="arcade-titlebar">* FINAL RANKING *</div>
         <div class="pad">
           <ol class="highscore">
             @for (s of final(); track s.playerId) {
@@ -150,7 +156,7 @@
             }
           </ol>
           @if (final().length) {
-            <p class="winner blink">NEW HIGH SCORE — {{ playerName(final()[0].playerId) }}!</p>
+            <p class="winner blink">NEW HIGH SCORE - {{ playerName(final()[0].playerId) }}!</p>
           }
         </div>
       </section>

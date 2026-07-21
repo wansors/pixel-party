@@ -1,21 +1,28 @@
 import type { ClientMsg, ReactionSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
+import type { Sfx } from '../Sfx'
 
 // Reaction Duel canvas. Red screen -> green screen; tap after green. Scene key === mini-game id.
 export class ReactionScene extends Phaser.Scene {
   private bg?: Phaser.GameObjects.Rectangle
   private title?: Phaser.GameObjects.Text
   private status?: Phaser.GameObjects.Text
+  private wasGreen = false
+  private resolved = false
 
   constructor(
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
+    private readonly sfx: Sfx,
   ) {
     super('reaction-duel')
   }
 
   create(): void {
+    // Scene instances survive stop/start across rounds — reset per-round SFX trackers here.
+    this.wasGreen = false
+    this.resolved = false
     const { width, height } = this.scale
     const cx = width / 2
     this.bg = this.add.rectangle(cx, height / 2, width, height, 0x8b1e2d).setOrigin(0.5)
@@ -49,14 +56,26 @@ export class ReactionScene extends Phaser.Scene {
     const selfId = this.state.selfId ?? ''
     const green = snap.light === 'green'
     this.bg?.setFillStyle(green ? 0x1a7f4b : 0x8b1e2d)
+    if (green && !this.wasGreen) {
+      this.wasGreen = true
+      this.sfx.go()
+    }
 
     if (snap.falseStarts.includes(selfId)) {
+      if (!this.resolved) {
+        this.resolved = true
+        this.sfx.wrong()
+      }
       this.title?.setText('TOO EARLY')
       this.status?.setText('False start — you are out this round')
       return
     }
     const mine = snap.reactions[selfId]
     if (typeof mine === 'number') {
+      if (!this.resolved) {
+        this.resolved = true
+        this.sfx.correct()
+      }
       this.title?.setText(`${mine} ms`)
       this.status?.setText('Nice reaction!')
       return

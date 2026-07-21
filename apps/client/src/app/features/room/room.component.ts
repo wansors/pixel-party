@@ -13,7 +13,9 @@ import {
   type ServerMsg,
 } from '@pp/shared'
 import { GameClient } from '../../../game/GameClient'
+import { AudioService } from '../../core/audio/audio.service'
 import { GameSocketService } from '../../core/net/game-socket.service'
+import { AudioControlsComponent } from '../../shared/audio-controls.component'
 import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
 
 type View = 'connecting' | 'lobby' | 'intro' | 'round' | 'scoreboard' | 'final'
@@ -25,12 +27,13 @@ const pick = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length
 // by GameClient (Phaser), booted inside runOutsideAngular so its rAF never drives change detection.
 @Component({
   selector: 'app-room',
-  imports: [PixelAvatarComponent],
+  imports: [PixelAvatarComponent, AudioControlsComponent],
   templateUrl: './room.component.html',
   styleUrl: './room.component.scss',
 })
 export class RoomComponent implements OnInit {
   private readonly net = inject(GameSocketService)
+  private readonly audio = inject(AudioService)
   private readonly route = inject(ActivatedRoute)
   private readonly router = inject(Router)
   private readonly zone = inject(NgZone)
@@ -51,6 +54,7 @@ export class RoomComponent implements OnInit {
   readonly selectedGameIds = signal<MiniGameId[]>([])
   readonly rounds = signal(0)
 
+  readonly copied = signal(false)
   readonly intro = signal<{ round: number; total: number; game: string } | null>(null)
   readonly countdown = signal<number | null>(null)
   readonly scoreboard = signal<ScoreEntryDto[]>([])
@@ -86,6 +90,7 @@ export class RoomComponent implements OnInit {
       return
     }
     this.code.set(code)
+    this.audio.ensureMusic()
 
     // A seat id persisted from an earlier connection lets a page reload / socket drop rejoin in place.
     const storedId = sessionStorage.getItem(this.pidKey())
@@ -133,13 +138,18 @@ export class RoomComponent implements OnInit {
         this.startCountdown(msg.startsInMs)
         this.view.set('intro')
         break
-      case 'ROUND_STATE':
+      case 'ROUND_STATE': {
         this.clearCountdown()
-        if (this.view() !== 'round') this.view.set('round')
+        const entering = this.view() !== 'round'
+        if (entering) this.view.set('round')
         this.ensureGame()
         if (this.currentGame) this.game?.startRound(this.currentGame)
+        // The container was display:none until this view change; RESIZE mode only reacts to window
+        // resizes, so force a measure once the section is visible again.
+        if (entering) this.zone.runOutsideAngular(() => setTimeout(() => this.game?.refresh(), 0))
         this.game?.handle(msg)
         break
+      }
       case 'ROUND_RESULT':
         this.view.set('scoreboard')
         break
@@ -176,7 +186,7 @@ export class RoomComponent implements OnInit {
   // Boot Phaser lazily once the round container is in the DOM, outside the Angular zone.
   private ensureGame(): void {
     if (this.game) return
-    this.game = new GameClient((m) => this.net.send(m))
+    this.game = new GameClient((m) => this.net.send(m), this.audio.sfx)
     if (this.selfId()) this.game.state.selfId = this.selfId()
     this.zone.runOutsideAngular(() => {
       setTimeout(() => this.game?.boot('game-container'), 0)
@@ -187,10 +197,15 @@ export class RoomComponent implements OnInit {
     this.clearCountdown()
     let n = Math.max(1, Math.ceil(startsInMs / 1000))
     this.countdown.set(n)
+    this.audio.sfx.tick()
     this.countdownTimer = setInterval(() => {
       n -= 1
       this.countdown.set(n > 0 ? n : null)
-      if (n <= 0) this.clearCountdown()
+      if (n > 0) this.audio.sfx.tick()
+      else {
+        this.audio.sfx.go()
+        this.clearCountdown()
+      }
     }, 1000)
   }
 
@@ -225,6 +240,28 @@ export class RoomComponent implements OnInit {
     if (!this.isHost()) return
     const n = Math.max(1, Math.min(20, Number(value) || 1))
     this.net.send({ type: 'HOST_CONFIG', minigameIds: this.selectedGameIds(), rounds: n })
+  }
+
+  get inviteUrl(): string {
+    return `${location.origin}/?code=${this.code()}`
+  }
+
+  // Clipboard API needs a secure context (localhost qualifies, plain LAN IPs don't) — fall back to
+  // the legacy execCommand path so copying also works when the host opened the app via its LAN IP.
+  async copyInvite(): Promise<void> {
+    const url = this.inviteUrl
+    try {
+      await navigator.clipboard.writeText(url)
+    } catch {
+      const ta = document.createElement('textarea')
+      ta.value = url
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      ta.remove()
+    }
+    this.copied.set(true)
+    setTimeout(() => this.copied.set(false), 2000)
   }
 
   toggleReady(): void {

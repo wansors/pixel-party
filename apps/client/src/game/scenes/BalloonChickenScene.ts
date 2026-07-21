@@ -1,6 +1,7 @@
 import type { BalloonChickenSnapshot, ClientMsg } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
+import type { Sfx } from '../Sfx'
 
 // Balloon Chicken canvas. Tap PUMP to inflate for points; tap CASH OUT to bank before it bursts. Scene
 // key === mini-game id. The burst threshold is server-side, so the client just renders the snapshot.
@@ -13,15 +14,19 @@ export class BalloonChickenScene extends Phaser.Scene {
   private pumpLabel?: Phaser.GameObjects.Text
   private cashBtn?: Phaser.GameObjects.Rectangle
   private cashLabel?: Phaser.GameObjects.Text
+  private lastStatus = 'pumping'
 
   constructor(
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
+    private readonly sfx: Sfx,
   ) {
     super('balloon-chicken')
   }
 
   create(): void {
+    // Scene instances survive stop/start across rounds — reset per-round SFX trackers here.
+    this.lastStatus = 'pumping'
     const { width, height } = this.scale
     const cx = width / 2
     this.timer = this.add
@@ -73,6 +78,7 @@ export class BalloonChickenScene extends Phaser.Scene {
     const snap = this.state.state as BalloonChickenSnapshot | null
     const self = snap?.players[this.state.selfId ?? '']
     if (!self || self.status !== 'pumping') return
+    this.sfx.click()
     this.send({ type: 'MINIGAME_INPUT', input: { kind } })
   }
 
@@ -84,6 +90,11 @@ export class BalloonChickenScene extends Phaser.Scene {
     this.timer?.setText(`${Math.ceil(snap.remainingMs / 1000)}s`)
 
     if (self) {
+      if (self.status !== this.lastStatus) {
+        if (self.status === 'burst') this.sfx.pop()
+        if (self.status === 'cashed') this.sfx.coin()
+        this.lastStatus = self.status
+      }
       const alive = self.status === 'pumping'
       const radius = 20 + self.pumps * 6
       this.balloon?.setRadius(radius)

@@ -1,4 +1,5 @@
 .room {
+  position: relative; // anchor for the parked (inactive) round section
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -11,6 +12,8 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   font-size: 0.75rem;
 
   .code {
@@ -47,6 +50,31 @@ header {
 }
 .pad {
   padding: 1rem;
+}
+
+// ── Invite link ─────────────────────────────────────────────────────────────
+.invite {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--c-bg);
+  border: 3px solid var(--c-frame);
+
+  .url {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--c-cyan);
+    font-size: 0.65rem;
+  }
+  .arcade-btn {
+    flex-shrink: 0;
+    font-size: 0.65rem;
+  }
 }
 
 // ── Lobby roster ────────────────────────────────────────────────────────────
@@ -142,14 +170,18 @@ header {
 }
 
 // ── Intro / countdown ───────────────────────────────────────────────────────
+.intro h2 {
+  font-size: clamp(1rem, 4vw, 1.4rem);
+  margin: 0;
+}
 .intro .game {
   color: var(--c-cyan);
-  font-size: 1.2rem;
+  font-size: clamp(0.85rem, 3.5vw, 1.2rem);
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
 .intro .count {
-  font-size: 5rem;
+  font-size: clamp(3rem, 18vw, 6rem);
   color: var(--c-amber);
   margin: 0;
   text-shadow: 0 6px 0 rgba(0, 0, 0, 0.35);
@@ -158,8 +190,17 @@ header {
   }
 }
 
+// Kept in the DOM across views so the Phaser canvas survives scoreboard/intro phases. When inactive
+// it is parked invisible-but-measurable (NOT display:none): Phaser's RESIZE scale manager must always
+// see real parent bounds, or a refresh while hidden would collapse the canvas to 0x0.
 .round {
   flex: 1;
+  &:not(.active) {
+    position: absolute;
+    inset: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
   #game-container {
     width: 100%;
     height: 100%;
@@ -219,4 +260,28 @@ header {
   text-align: center;
   font-size: 0.8rem;
   margin: 0.75rem 0 0;
+}
+
+// ── Narrow portrait tuning ──────────────────────────────────────────────────
+@media (max-width: 420px) {
+  .room {
+    padding: 0.5rem;
+  }
+  .pad {
+    padding: 0.75rem;
+  }
+  .highscore li {
+    grid-template-columns: 2rem auto 1fr auto;
+    gap: 0.4rem;
+    padding: 0.4rem 0.25rem;
+  }
+  .games .blurb {
+    display: none; // names + checkboxes stay; blurbs are noise on a phone
+  }
+  .actions {
+    flex-direction: column;
+  }
+  .actions .arcade-btn {
+    width: 100%;
+  }
 }
