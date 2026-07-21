@@ -21,7 +21,7 @@ export interface PlayerDto {
 }
 
 // The room lifecycle phase drives which UI/scene is active.
-export type RoomPhase = 'lobby' | 'round-intro' | 'round' | 'scoreboard' | 'final'
+export type RoomPhase = 'lobby' | 'round-intro' | 'round' | 'round-result' | 'scoreboard' | 'final'
 
 export interface ScoreEntryDto {
   playerId: string

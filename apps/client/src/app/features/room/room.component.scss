@@ -208,6 +208,27 @@ header {
   }
 }
 
+// ── Round result (round MVP) ────────────────────────────────────────────────
+.round-winner {
+  display: grid;
+  justify-items: center;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid var(--c-panel-alt);
+
+  .label {
+    color: var(--c-dim);
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+  }
+  .wname {
+    font-size: 1.1rem;
+    font-weight: 700;
+    text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+  }
+}
+
 // ── High-score table ────────────────────────────────────────────────────────
 .highscore {
   list-style: none;

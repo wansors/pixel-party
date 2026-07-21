@@ -110,6 +110,42 @@
       </section>
     }
 
+    @case ('round-result') {
+      <section class="board arcade-window">
+        <div class="arcade-titlebar">{{ gameName(roundResult()?.result?.minigameId ?? '') }}</div>
+        <div class="pad">
+          @if (roundWinnerId(); as wid) {
+            <div class="round-winner">
+              <span class="label">ROUND WINNER</span>
+              <app-pixel-avatar
+                [avatar]="playerAvatar(wid)"
+                [color]="playerColor(wid)"
+                [size]="48"
+              />
+              <span class="wname" [style.color]="playerColor(wid)">{{ playerName(wid) }}</span>
+            </div>
+          }
+          <ol class="highscore">
+            @for (s of roundResult()?.result?.scores ?? []; track s.playerId) {
+              <li [class.me]="s.playerId === selfId()" [class.lead]="s.rank === 1">
+                <span class="rank">{{ s.rank }}</span>
+                <app-pixel-avatar
+                  [avatar]="playerAvatar(s.playerId)"
+                  [color]="playerColor(s.playerId)"
+                  [size]="24"
+                />
+                <span class="name" [style.color]="playerColor(s.playerId)">{{
+                  playerName(s.playerId)
+                }}</span>
+                <span class="pts">+{{ s.points }}</span>
+              </li>
+            }
+          </ol>
+          <p class="hint blink">Totals coming up...</p>
+        </div>
+      </section>
+    }
+
     @case ('scoreboard') {
       <section class="board arcade-window">
         <div class="arcade-titlebar">High Scores</div>

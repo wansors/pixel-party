@@ -114,12 +114,12 @@ ranking. Latency-tolerant games only; no teams/duels/handicap yet.
       no-repeat-within-a-session still pending.*
 - [ ] Reconnection hardening, host transfer on disconnect, kick player, room inactivity timeout.
 - [ ] Observability: structured logging of room events + latency/error metrics.
-- [ ] **Per-round result screen ("round MVP")**: after each mini-game, before the cumulative scoreboard,
-      show who won *that* mini-game (this-round placements + round points, already carried in
-      `ROUND_RESULT`) — highlight the round winner, ideally with the runners-up. Today `ROUND_RESULT`
-      folds straight into the cumulative `SCOREBOARD` view, so the round's own outcome is never surfaced
-      and the transition feels too fast. Give the reveal its own dwell time (tune `SessionConfig.resultMs`
-      / add an explicit result phase) so players can actually see it before the next round.
+- [x] **Per-round result screen ("round MVP")**. *Done 2026-07-21: the engine's post-round phase is now
+      two dwell steps — `round-result` (highlights who won THIS mini-game: winner banner + per-round
+      points, from `ROUND_RESULT`) then `scoreboard` (cumulative) — each with its own duration
+      (`SessionConfig.roundResultMs` / `scoreboardMs`, default 4 s + 4 s). New client `round-result` view;
+      reconnect (`resumeMessages`) handles both sub-phases. Replaces the old single `resultMs` where
+      `ROUND_RESULT` folded straight into the cumulative board and the round winner was never shown.*
 
 *Depends on: Phase 0.*
 

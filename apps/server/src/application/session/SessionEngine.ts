@@ -10,14 +10,17 @@ import type { Publisher } from '../ports/Publisher'
 
 export interface SessionConfig {
   introMs: number
-  resultMs: number
+  // The post-round reveal is two dwell steps: first the round's own result (who won THIS mini-game),
+  // then the cumulative scoreboard — each shown long enough to read before the next round.
+  roundResultMs: number
+  scoreboardMs: number
   tickHz: number
   snapshotEveryNTicks: number
   defaultDurationMs: number
   baseSeed: number
 }
 
-type Phase = 'intro' | 'playing' | 'result' | 'final'
+type Phase = 'intro' | 'playing' | 'roundResult' | 'scoreboard' | 'final'
 
 // Per-room session state machine. Deterministic by construction: time arrives via the Clock port and
 // randomness via the Random port, so a session is reproducible from (seed, input timeline). The engine
@@ -71,7 +74,10 @@ export class SessionEngine {
       case 'playing':
         this.tickPlaying(now)
         return
-      case 'result':
+      case 'roundResult':
+        if (now >= this.phaseEndsAt) this.beginScoreboard(now)
+        return
+      case 'scoreboard':
         if (now >= this.phaseEndsAt) this.advance(now)
         return
       case 'final':
@@ -151,11 +157,18 @@ export class SessionEngine {
       placements: result.placements,
       scores: toScoreEntries(roundPoints),
     }
+    // Reveal the round's own outcome first; the cumulative scoreboard follows after its own dwell.
     this.publish({ type: 'ROUND_RESULT', round: this.roundIndex + 1, result: this.lastResult })
+    this.room.setPhase('round-result')
+    this.phase = 'roundResult'
+    this.phaseEndsAt = now + this.config.roundResultMs
+  }
+
+  private beginScoreboard(now: number): void {
     this.publish({ type: 'SCOREBOARD', scores: toScoreEntries(this.cumulative) })
     this.room.setPhase('scoreboard')
-    this.phase = 'result'
-    this.phaseEndsAt = now + this.config.resultMs
+    this.phase = 'scoreboard'
+    this.phaseEndsAt = now + this.config.scoreboardMs
   }
 
   private advance(now: number): void {
@@ -199,7 +212,17 @@ export class SessionEngine {
         }
         return msgs
       }
-      case 'result': {
+      case 'roundResult': {
+        // Still on the round-result reveal: replay only that; the cumulative scoreboard broadcasts to
+        // the room when this phase advances.
+        const msgs: ServerMsg[] = []
+        if (this.lastResult) {
+          msgs.push({ type: 'ROUND_RESULT', round: this.roundIndex + 1, result: this.lastResult })
+        }
+        return msgs
+      }
+      case 'scoreboard': {
+        // Replay the round result then the cumulative scoreboard so the client lands on the latter.
         const msgs: ServerMsg[] = []
         if (this.lastResult) {
           msgs.push({ type: 'ROUND_RESULT', round: this.roundIndex + 1, result: this.lastResult })

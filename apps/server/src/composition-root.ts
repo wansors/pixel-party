@@ -21,7 +21,8 @@ export function bootstrap() {
 
   const sessionConfig: SessionConfig = {
     introMs: 3000,
-    resultMs: 5000,
+    roundResultMs: 4000,
+    scoreboardMs: 4000,
     tickHz: config.tickHz,
     snapshotEveryNTicks: config.snapshotEveryNTicks,
     defaultDurationMs: 10_000,

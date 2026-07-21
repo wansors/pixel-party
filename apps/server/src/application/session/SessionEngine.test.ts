@@ -9,7 +9,8 @@ import { type SessionConfig, SessionEngine } from './SessionEngine'
 
 const CONFIG: SessionConfig = {
   introMs: 100,
-  resultMs: 100,
+  roundResultMs: 100,
+  scoreboardMs: 100,
   tickHz: 10,
   snapshotEveryNTicks: 1,
   defaultDurationMs: 500,
@@ -51,6 +52,14 @@ describe('SessionEngine', () => {
     expect(types.has('ROUND_RESULT')).toBe(true)
     expect(types.has('SCOREBOARD')).toBe(true)
     expect(types.has('FINAL_RANKING')).toBe(true)
+  })
+
+  test('reveals the round result before the cumulative scoreboard', () => {
+    const msgs = playSession(roomWith('a', 'b'))
+    const roundResult = msgs.findIndex((m) => m.type === 'ROUND_RESULT')
+    const scoreboard = msgs.findIndex((m) => m.type === 'SCOREBOARD')
+    expect(roundResult).toBeGreaterThanOrEqual(0)
+    expect(scoreboard).toBeGreaterThan(roundResult)
   })
 
   test('the only masher wins the round and the final ranking', () => {

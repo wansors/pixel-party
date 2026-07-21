@@ -9,6 +9,7 @@ import {
   type MiniGameMeta,
   PLAYER_COLORS,
   type PlayerDto,
+  type RoundResultDto,
   type ScoreEntryDto,
   type ServerMsg,
 } from '@pp/shared'
@@ -18,7 +19,7 @@ import { GameSocketService } from '../../core/net/game-socket.service'
 import { AudioControlsComponent } from '../../shared/audio-controls.component'
 import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
 
-type View = 'connecting' | 'lobby' | 'intro' | 'round' | 'scoreboard' | 'final'
+type View = 'connecting' | 'lobby' | 'intro' | 'round' | 'round-result' | 'scoreboard' | 'final'
 
 const pick = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)] as T
 
@@ -57,6 +58,7 @@ export class RoomComponent implements OnInit {
   readonly copied = signal(false)
   readonly intro = signal<{ round: number; total: number; game: string } | null>(null)
   readonly countdown = signal<number | null>(null)
+  readonly roundResult = signal<{ round: number; result: RoundResultDto } | null>(null)
   readonly scoreboard = signal<ScoreEntryDto[]>([])
   readonly final = signal<ScoreEntryDto[]>([])
 
@@ -151,10 +153,15 @@ export class RoomComponent implements OnInit {
         break
       }
       case 'ROUND_RESULT':
-        this.view.set('scoreboard')
+        this.roundResult.set({ round: msg.round, result: msg.result })
+        this.view.set('round-result')
+        this.audio.sfx.coin()
         break
       case 'SCOREBOARD':
         this.scoreboard.set(msg.scores)
+        // The cumulative board follows the round-result reveal; don't clobber intro/round/final on a
+        // reconnect, where SCOREBOARD is only seeding scores.
+        if (this.view() === 'round-result') this.view.set('scoreboard')
         break
       case 'FINAL_RANKING':
         this.final.set(msg.scores)
@@ -286,5 +293,10 @@ export class RoomComponent implements OnInit {
 
   playerAvatar(id: string): AvatarId {
     return (this.players().find((p) => p.id === id)?.avatar as AvatarId) ?? 'cat'
+  }
+
+  // Winner of the just-finished round = first in the placement ordering (empty if nobody scored).
+  roundWinnerId(): string | null {
+    return this.roundResult()?.result.placements[0] ?? null
   }
 }
