@@ -94,6 +94,30 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     durationSec: 22,
     blurb: 'Guess if the next card is higher or lower. One miss ends your run.',
   },
+  {
+    id: 'bug-smash',
+    name: 'Bug Smash',
+    format: 'ffa',
+    realtime: true,
+    durationSec: 30,
+    blurb: 'Smash the bugs, dodge the bombs. Fastest hands win.',
+  },
+  {
+    id: 'stop-clock',
+    name: 'Stop the Clock',
+    format: 'ffa',
+    realtime: true,
+    durationSec: 25,
+    blurb: 'Stop the needle as close to the target as you can. Three tries.',
+  },
+  {
+    id: 'memory-flash',
+    name: 'Memory Flash',
+    format: 'ffa',
+    realtime: true,
+    durationSec: 40,
+    blurb: 'Count the flash — how many of the target colour did you see?',
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

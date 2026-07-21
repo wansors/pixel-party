@@ -1,13 +1,16 @@
 import type { MiniGameId } from '@pp/shared'
 import type { MiniGame } from './MiniGame'
 import { BalloonChicken } from './balloonChicken'
+import { BugSmash } from './bugSmash'
 import { ButtonMasher } from './buttonMasher'
 import { ColorTrap } from './colorTrap'
 import { HigherLower } from './higherLower'
+import { MemoryFlash } from './memoryFlash'
 import { NumberRush } from './numberRush'
 import { OddOneOut } from './oddOneOut'
 import { QuickMath } from './quickMath'
 import { ReactionDuel } from './reactionDuel'
+import { StopClock } from './stopClock'
 import { Trivia } from './trivia'
 
 // Mini-game registry: id -> factory. The session engine is agnostic — it looks up a factory by id and
@@ -22,6 +25,9 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'quick-math': () => new QuickMath() as unknown as MiniGame<unknown, unknown>,
   'odd-one-out': () => new OddOneOut() as unknown as MiniGame<unknown, unknown>,
   'higher-lower': () => new HigherLower() as unknown as MiniGame<unknown, unknown>,
+  'bug-smash': () => new BugSmash() as unknown as MiniGame<unknown, unknown>,
+  'stop-clock': () => new StopClock() as unknown as MiniGame<unknown, unknown>,
+  'memory-flash': () => new MemoryFlash() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

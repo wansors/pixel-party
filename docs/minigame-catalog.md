@@ -33,9 +33,10 @@ Initial mini-game catalog. Each one is designed for the **each player on their o
 latency tolerance, and dev cost. A3 Trivia and D1 Balloon Chicken are the immediate fast-follows.
 
 ✅ = **implemented**: the full P0 group — A1 (`reaction-duel`), A2 (`button-masher`), E1 (`color-trap`),
-A3 (`trivia`) and D1 (`balloon-chicken`) — plus (as of 2026-07-21) the first P1 wave: E4 Number Rush
-(`number-rush`), E2 Quick Math (`quick-math`), E3 Odd One Out (`odd-one-out`) and E5 Higher or Lower
-(`higher-lower`).
+A3 (`trivia`) and D1 (`balloon-chicken`) — plus (as of 2026-07-21) the P1 wave: E4 Number Rush
+(`number-rush`), E2 Quick Math (`quick-math`), E3 Odd One Out (`odd-one-out`), E5 Higher or Lower
+(`higher-lower`), A6 Bug smash (`bug-smash`), A10 Stop the clock (`stop-clock`) and E8 Memory Flash
+(`memory-flash`). **12 mini-games total.**
 
 ---
 
@@ -79,7 +80,7 @@ A3 (`trivia`) and D1 (`balloon-chicken`) — plus (as of 2026-07-21) the first P
 - **Win condition**: most points. · **Result**: ranking by baskets/combo.
 - **Latency**: low/medium (client sim, server validates final score). · **Complexity**: medium.
 
-### A6. Bug smash ("Whack-a-mole")
+### A6. ✅ Bug smash ("Whack-a-mole") — implemented (`bug-smash`)
 - **Concept**: pixel bugs pop out of holes; smash them before they hide. Some bugs penalize.
 - **Type**: FFA · **Input**: tap · **Duration**: 30 s · **Banter**: 💥💥
 - **Rules**: identical spawn sequence (common seed). Good bugs +, bomb bugs −.
@@ -107,7 +108,7 @@ A3 (`trivia`) and D1 (`balloon-chicken`) — plus (as of 2026-07-21) the first P
 - **Win condition**: fastest finish. · **Result**: ranking by finish time.
 - **Latency**: medium (client sim + server validation). · **Complexity**: medium/high.
 
-### A10. Stop the clock ("Timing")
+### A10. ✅ Stop the clock ("Timing") — implemented (`stop-clock`)
 - **Concept**: a fast-moving bar/needle; stop it as close to the target as possible.
 - **Type**: FFA · **Input**: tap · **Duration**: 20–30 s (3 attempts) · **Banter**: 💥💥
 - **Rules**: 3 attempts; summed distance to target. Lower = better.
@@ -229,7 +230,8 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
   FFA · tap · ~40 s · medium effort · low/medium latency · banter 💥💥.
 - **E7. Quick Draw Duel** — western reaction shootout: draw first when "FIRE!" flashes, 1v1.
   Duel · tap · ~15 s/match · low effort · medium latency · banter 💥💥💥.
-- **E8. Memory Flash** — a burst of pixels flashes; answer how many of a target appeared.
+- **E8. ✅ Memory Flash** — a burst of pixels flashes; answer how many of a target appeared. *Implemented
+  (`memory-flash`): seeded board sequence, self-paced; client flashes then asks; server owns the counts.*
   FFA · tap · 25 s · low effort · low latency · banter 💥💥.
 - **E9. Maze Sprint** — navigate a small maze to the exit fastest (identical maze for all).
   FFA · drag/keyboard · up to 45 s · medium effort · medium latency · banter 💥💥.
