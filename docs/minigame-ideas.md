@@ -59,6 +59,13 @@ Tiers: **P0** MVP core · **P1** early expansion (high fun, low effort) · **P2*
 | 28 | Pixel rain (Dodge) — A7 | FFA | 3 | 4 | Med | Med | **P3** | Survival dodger; elimination can idle players. |
 | 29 | Line Clear Sprint — E10 | FFA | 3 | 4 | High | Low | **P3** | Tetris-like; highest build effort. |
 | 30 | Pixel Roulette (Luck) — D3 | FFA | 3 | 2 | Low | Low | **P3** | Cheap but pure luck → use sparingly, low priority. |
+| 31 | Pixel Split ("cut in half") — E11 | FFA | 4 | 4 | Low/Med | Low | **P1** | Novel, funny "so close!" moments; server owns pixel counts → fair & cheap. |
+| 32 | Pixel Weight ("guess the weight") — E12 | FFA | 3 | 4 | Low | Low | **P1** | Estimation game, very cheap; the Balance variant adds a duel-ish twist. |
+| 33 | Quick Tetris — E13 | FFA | 4 | 4 | High | Low | **P3** | Compact Tetris sprint (variant of E10); high build effort → deferred with the action wave. |
+| 34 | Sudoku Race — E14 | FFA | 3 | 4 | Med/High | Low | **P2** | Same seeded grid for all; first-to-solve or most-correct-cells. Fair & server-validatable; medium effort (grid UI + validation). |
+
+> Rows 31–34 added 2026-07-21 (requested). E11/E12 are low-effort P1 fast-follows; E13 rides with the
+> P3 action wave alongside E10 Line Clear Sprint; E14 Sudoku Race sits in P2 (puzzle, medium effort).
 
 ---
 

@@ -5,6 +5,10 @@ import type { Sfx } from './Sfx'
 import { BalloonChickenScene } from './scenes/BalloonChickenScene'
 import { ButtonMasherScene } from './scenes/ButtonMasherScene'
 import { ColorTrapScene } from './scenes/ColorTrapScene'
+import { HigherLowerScene } from './scenes/HigherLowerScene'
+import { NumberRushScene } from './scenes/NumberRushScene'
+import { OddOneOutScene } from './scenes/OddOneOutScene'
+import { QuickMathScene } from './scenes/QuickMathScene'
 import { ReactionScene } from './scenes/ReactionScene'
 import { TriviaScene } from './scenes/TriviaScene'
 import { ServerMsgRouter } from './serverMsgRouter'
@@ -16,6 +20,10 @@ const SCENE_IDS: MiniGameId[] = [
   'color-trap',
   'trivia',
   'balloon-chicken',
+  'number-rush',
+  'quick-math',
+  'odd-one-out',
+  'higher-lower',
 ]
 
 // Pure Phaser config factory — testable without `new Phaser.Game` (which needs a DOM/canvas). Scenes
@@ -70,6 +78,10 @@ export class GameClient {
     this.game.scene.add('color-trap', new ColorTrapScene(...deps), false)
     this.game.scene.add('trivia', new TriviaScene(...deps), false)
     this.game.scene.add('balloon-chicken', new BalloonChickenScene(...deps), false)
+    this.game.scene.add('number-rush', new NumberRushScene(...deps), false)
+    this.game.scene.add('quick-math', new QuickMathScene(...deps), false)
+    this.game.scene.add('odd-one-out', new OddOneOutScene(...deps), false)
+    this.game.scene.add('higher-lower', new HigherLowerScene(...deps), false)
   }
 
   // Switch the active scene to the round's mini-game (no-op if already active).

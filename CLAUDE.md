@@ -11,11 +11,13 @@ for a session-wide ranking. See [`README.md`](README.md).
 **Phase 0 — MVP essentially complete** (development started 2026-07-20). The stack is scaffolded and the
 MVP is playable end-to-end. Run it with `bun run dev` (see `README.md`). Live now: rooms + lobby
 (ready/host), host game selector + round count, server-authoritative session engine (intro countdown →
-play → result → final), scoring/scoreboard/final ranking, **5 mini-games** (`button-masher`,
-`reaction-duel`, `color-trap`, `trivia`, `balloon-chicken`), **mid-session reconnect/rejoin**, **GitHub
-Actions CI**, and the **retro arcade look & feel** (palette theme, arcade frame, pixel-art avatars,
-high-score tables). Remaining polish: self-hosted pixel-font binary (scaffold ready) + per-breakpoint
-responsive tuning. See `docs/backlog.md` → *Current status* for the authoritative checklist.
+play → result → final), scoring/scoreboard/final ranking, **9 mini-games** (`button-masher`,
+`reaction-duel`, `color-trap`, `trivia`, `balloon-chicken`, `number-rush`, `quick-math`, `odd-one-out`,
+`higher-lower`), **mid-session reconnect/rejoin**, **audio** (background music + synthesized 8-bit SFX +
+volume sliders), **GitHub Actions CI**, and the **retro arcade look & feel** (palette theme, arcade
+frame, pixel-art avatars, high-score tables). Remaining polish: self-hosted pixel-font binary (scaffold
+ready) + per-breakpoint responsive tuning. See `docs/backlog.md` → *Current status* for the
+authoritative checklist.
 
 Documentation lives in `docs/`:
 - `PRD.md` — product requirements.
@@ -29,7 +31,8 @@ Documentation lives in `docs/`:
 ## Code layout (implemented)
 
 - `apps/server` — hexagonal: `domain/` (entities `Room`/`Player`, `minigames/` pluggable contract +
-  `buttonMasher`/`reactionDuel`/`colorTrap`/`trivia`/`balloonChicken` + `registry`, `services/scoring`,
+  `buttonMasher`/`reactionDuel`/`colorTrap`/`trivia`/`balloonChicken`/`numberRush`/`quickMath`/`oddOneOut`/`higherLower`
+  + `registry`, `services/scoring`,
   `ports/Random`), `application/`
   (`session/SessionEngine`+`SessionManager`, `use-cases/`, `ports/`), `infrastructure/`
   (`driving/ws/GameSocket`+`validate`+`simulationLoop`, `driving/http`, `driven/{time,random,id}`,
@@ -39,7 +42,7 @@ Documentation lives in `docs/`:
 - `apps/client` — Angular 20 shell; `features/{join,room}` (RoomComponent drives all phases);
   `core/net/game-socket.service`; `game/` (Phaser, framework-agnostic): `GameClient`,
   `serverMsgRouter`, `RoundState`,
-  `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,BalloonChickenScene}`.
+  `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,BalloonChickenScene,NumberRushScene,QuickMathScene,OddOneOutScene,HigherLowerScene}`.
 
 ### Adding a mini-game
 One domain module (`domain/minigames/<id>.ts` implementing `MiniGame`) + registry entry + shared wire

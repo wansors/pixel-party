@@ -3,6 +3,10 @@ import type { MiniGame } from './MiniGame'
 import { BalloonChicken } from './balloonChicken'
 import { ButtonMasher } from './buttonMasher'
 import { ColorTrap } from './colorTrap'
+import { HigherLower } from './higherLower'
+import { NumberRush } from './numberRush'
+import { OddOneOut } from './oddOneOut'
+import { QuickMath } from './quickMath'
 import { ReactionDuel } from './reactionDuel'
 import { Trivia } from './trivia'
 
@@ -14,6 +18,10 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'color-trap': () => new ColorTrap() as unknown as MiniGame<unknown, unknown>,
   trivia: () => new Trivia() as unknown as MiniGame<unknown, unknown>,
   'balloon-chicken': () => new BalloonChicken() as unknown as MiniGame<unknown, unknown>,
+  'number-rush': () => new NumberRush() as unknown as MiniGame<unknown, unknown>,
+  'quick-math': () => new QuickMath() as unknown as MiniGame<unknown, unknown>,
+  'odd-one-out': () => new OddOneOut() as unknown as MiniGame<unknown, unknown>,
+  'higher-lower': () => new HigherLower() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

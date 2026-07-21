@@ -62,6 +62,38 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     durationSec: 20,
     blurb: 'Pump for points, but cash out before it bursts — or lose it all.',
   },
+  {
+    id: 'number-rush',
+    name: 'Number Rush',
+    format: 'ffa',
+    realtime: true,
+    durationSec: 40,
+    blurb: 'Tap the numbers 1 to 25 in order as fast as you can.',
+  },
+  {
+    id: 'quick-math',
+    name: 'Quick Math',
+    format: 'ffa',
+    realtime: true,
+    durationSec: 30,
+    blurb: 'Solve as many sums as you can before the timer runs out.',
+  },
+  {
+    id: 'odd-one-out',
+    name: 'Odd One Out',
+    format: 'ffa',
+    realtime: true,
+    durationSec: 40,
+    blurb: 'Spot the one tile that stands out. The grid keeps growing.',
+  },
+  {
+    id: 'higher-lower',
+    name: 'Higher or Lower',
+    format: 'ffa',
+    realtime: true,
+    durationSec: 22,
+    blurb: 'Guess if the next card is higher or lower. One miss ends your run.',
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

@@ -7,19 +7,25 @@ Phased product backlog. The philosophy is **start with a minimal MVP and grow in
 the smallest thing that is fun end-to-end, then add features (more mini-games, handicap, post-match
 analysis…) phase by phase. Nothing is built "just in case".
 
-## Current status (2026-07-20)
+## Current status (2026-07-21)
 
-**MVP is playable end-to-end.** The full stack is scaffolded and runnable (`bun run dev` → server :3000 +
-client :4200; see [`../README.md`](../README.md)). What works today:
+**MVP is playable end-to-end, now with 9 mini-games + audio.** The full stack is scaffolded and runnable
+(`bun run dev` → server :3000 + client :4200, LAN-accessible; see [`../README.md`](../README.md)). What
+works today:
 
 - Bun monorepo, hexagonal server, `@pp/shared` contracts, Biome + TS strict + determinism gate +
   `bun test` (40 passing) + **GitHub Actions CI**. *Foundation complete.*
 - Rooms (create/join over `/api` + WS), lobby with ready state + host role, **host game selector +
   round count**, server-authoritative **session engine** (intro countdown → play → per-round result →
   final), position→points scoring with tie-averaging, cumulative scoreboard + final ranking.
-- **All 5 P0-tier mini-games**: Quick reaction (A1, `reaction-duel`), Button masher (A2,
-  `button-masher`), Color Trap (E1, `color-trap`), Lightning Quiz (A3, `trivia`) and Balloon Chicken
-  (D1, `balloon-chicken`). Each is a pluggable domain module + Phaser scene.
+- **9 mini-games** — the 5 P0-tier: Quick reaction (A1, `reaction-duel`), Button masher (A2,
+  `button-masher`), Color Trap (E1, `color-trap`), Lightning Quiz (A3, `trivia`), Balloon Chicken
+  (D1, `balloon-chicken`); plus the first **P1 wave** (2026-07-21): Number Rush (E4, `number-rush`),
+  Quick Math (E2, `quick-math`), Odd One Out (E3, `odd-one-out`), Higher or Lower (E5, `higher-lower`).
+  Each is a pluggable domain module + Phaser scene.
+- **Audio** (Phase 7 pulled forward): looping background music + synthesized 8-bit SFX (click,
+  correct/wrong, coin, pop, countdown) across UI and every mini-game; in-app music/SFX volume sliders
+  persisted per device. *WebAudio-synthesized SFX (no asset binaries); music is a self-hosted mp3.*
 - Angular shell (join → lobby → intro countdown → round canvas → scoreboard → final) with socket
   reconnect backoff **and mid-session rejoin** (REJOIN reclaims a seat, scores survive, state replayed).
 - **Retro arcade look & feel**: shared palette theme (`theme.ts` + CSS vars), arcade window frame +
@@ -101,11 +107,19 @@ ranking. Latency-tolerant games only; no teams/duels/handicap yet.
 
 ## Phase 1 — More individual games & robustness
 
-- [ ] Grow catalog to ~6 individual games: Simon (A4), Balloon Chicken (D1), Bug smash (A6), Timing (A10).
+- [~] Grow the individual-game catalog. *Shipped 2026-07-21: Number Rush (E4), Quick Math (E2), Odd One
+      Out (E3), Higher or Lower (E5). Still open from the P1 wave: Simon (A4), Bug smash (A6), Timing
+      (A10), Memory Flash (E8), Pixel Hoops (A5).*
 - [~] Host config: number of rounds, no-repeat within a session. *Rounds + game selection done in Phase 0;
       no-repeat-within-a-session still pending.*
 - [ ] Reconnection hardening, host transfer on disconnect, kick player, room inactivity timeout.
 - [ ] Observability: structured logging of room events + latency/error metrics.
+- [ ] **Per-round result screen ("round MVP")**: after each mini-game, before the cumulative scoreboard,
+      show who won *that* mini-game (this-round placements + round points, already carried in
+      `ROUND_RESULT`) — highlight the round winner, ideally with the runners-up. Today `ROUND_RESULT`
+      folds straight into the cumulative `SCOREBOARD` view, so the round's own outcome is never surfaced
+      and the transition feels too fast. Give the reveal its own dwell time (tune `SessionConfig.resultMs`
+      / add an explicit result phase) so players can actually see it before the next round.
 
 *Depends on: Phase 0.*
 
@@ -201,7 +215,7 @@ follows the priority tiers there:
 | Wave | Tier | Mini-games (id) | Phase |
 |------|------|-----------------|-------|
 | MVP | P0 | Quick reaction (A1 ✅), Button masher (A2 ✅), Color Trap (E1 ✅), Trivia (A3 ✅), Balloon Chicken (D1 ✅) — all 5 shipped | 0 |
-| +1 | P1 | Simon (A4), Higher/Lower (E5), Quick Math (E2), Odd One Out (E3), Number Rush (E4), Bug smash (A6), Timing (A10), Memory Flash (E8), Pixel Hoops (A5) | 1 |
+| +1 | P1 | Number Rush (E4 ✅), Quick Math (E2 ✅), Odd One Out (E3 ✅), Higher/Lower (E5 ✅), Simon (A4), Bug smash (A6), Timing (A10), Memory Flash (E8), Pixel Hoops (A5), Pixel Split (E11), Pixel Weight (E12) | 1 |
 | +2 | P2 | Tug of War (C1), Sink the Fleet (B2), Match (A11), Bomb Relay (C2), Quick Draw Duel (E7), Pixel Beat (E6), Fruit Catch (D2), Fleet Battle (C3) | 2 |
 | +action | P3 | Pong (B1), Sumo (B3), Pixel Dash (A9), Snake (A8), Maze Sprint (E9), Pixel rain (A7), Line Clear (E10), Roulette (D3) | 5 |
 
@@ -212,6 +226,14 @@ follows the priority tiers there:
 
 ## Icebox / ideas (unscheduled)
 
+- [ ] **Pixel Split ("cut in half")** — E11: place a cut line so both halves of a pixel object (banana,
+      car, animal…) hold the same number of filled pixels; closest split wins. *P1 fast-follow.*
+- [ ] **Pixel Weight ("guess the weight")** — E12: guess how many filled pixels an object has; + a
+      Balance variant (pick the heavier / add pixels to balance a scale). *P1 fast-follow.*
+- [ ] **Quick Tetris** — E13: short, fast Tetris sprint (compact variant of E10 Line Clear Sprint);
+      identical seeded piece sequence, clear the most lines in a short window. *P3, rides the action wave.*
+- [ ] **Sudoku Race** — E14: everyone solves the same seeded Sudoku (small/quick grid); winner is
+      first-to-solve, else most correct cells placed (server validates each cell). *P2, puzzle.*
 - [ ] Manual mini-game selection/editor by the host.
 - [ ] Spectator mode.
 - [ ] Custom trivia packs.

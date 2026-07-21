@@ -32,8 +32,10 @@ Initial mini-game catalog. Each one is designed for the **each player on their o
 ⭐ marks the **MVP** mini-games (A1, A2, E1) — the 3 that ship in Phase 0 for their balance of fun,
 latency tolerance, and dev cost. A3 Trivia and D1 Balloon Chicken are the immediate fast-follows.
 
-✅ = **implemented** (as of 2026-07-20): the full P0 group — A1 (`reaction-duel`), A2 (`button-masher`),
-E1 (`color-trap`), A3 (`trivia`) and D1 (`balloon-chicken`).
+✅ = **implemented**: the full P0 group — A1 (`reaction-duel`), A2 (`button-masher`), E1 (`color-trap`),
+A3 (`trivia`) and D1 (`balloon-chicken`) — plus (as of 2026-07-21) the first P1 wave: E4 Number Rush
+(`number-rush`), E2 Quick Math (`quick-math`), E3 Odd One Out (`odd-one-out`) and E5 Higher or Lower
+(`higher-lower`).
 
 ---
 
@@ -210,14 +212,19 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
 `minigame-ideas.md` for the prioritized ranking.
 
 - **E1. ⭐ ✅ Color Trap (Stroop)** — implemented (`color-trap`); *full card below*.
-- **E2. Quick Math** — fast arithmetic; answer as many as possible before the timer.
-  FFA · tap · 30 s · low effort · low latency · banter 💥💥.
-- **E3. Odd One Out** — spot the single different pixel/tile in a grid; grid grows each round.
+- **E2. ✅ Quick Math** — fast arithmetic; answer as many as possible before the timer. *Implemented
+  (`quick-math`): seeded question pool (+ − ×), self-paced, ranked by correct count (tiebreak fewer
+  wrong).* FFA · tap · 30 s · low effort · low latency · banter 💥💥.
+- **E3. ✅ Odd One Out** — spot the single different pixel/tile in a grid; grid grows each round.
+  *Implemented (`odd-one-out`): seeded board sequence, grid grows + brightness gap shrinks per level;
+  the odd tile differs in brightness (not hue alone) for accessibility; ranked by level reached.*
   FFA · tap · up to 45 s · low effort · low latency · banter 💥💥.
-- **E4. Number Rush (Schulte grid)** — tap numbers 1→N in order as fast as possible.
-  FFA · tap · 20–30 s · low effort · low latency · banter 💥💥.
-- **E5. Higher or Lower** — guess if the next pixel card is higher/lower; streak = points, one wrong ends
-  it. FFA · tap · 20 s · low effort · low latency · banter 💥💥💥 (nerve).
+- **E4. ✅ Number Rush (Schulte grid)** — tap numbers 1→N in order as fast as possible. *Implemented
+  (`number-rush`): one shared seeded 5×5 layout, self-paced; ranked by numbers cleared, finishers by
+  time.* FFA · tap · 20–30 s · low effort · low latency · banter 💥💥.
+- **E5. ✅ Higher or Lower** — guess if the next pixel card is higher/lower; streak = points, one wrong
+  ends it. *Implemented (`higher-lower`): one shared seeded deck; server owns upcoming cards (never
+  revealed early); ranked by streak.* FFA · tap · 20 s · low effort · low latency · banter 💥💥💥 (nerve).
 - **E6. Pixel Beat** — tap to the rhythm; hit the beats on time.
   FFA · tap · ~40 s · medium effort · low/medium latency · banter 💥💥.
 - **E7. Quick Draw Duel** — western reaction shootout: draw first when "FIRE!" flashes, 1v1.
@@ -228,6 +235,21 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
   FFA · drag/keyboard · up to 45 s · medium effort · medium latency · banter 💥💥.
 - **E10. Line Clear Sprint** — Tetris-like: clear N lines fastest.
   FFA · tap/drag · up to 60 s · high effort · low latency · banter 💥.
+- **E11. Pixel Split ("cut in half")** — a pixel-art object (banana, car, animal…) is shown; drag/place a
+  cut line (or point) so both halves hold the **same number of filled pixels**. Closest split wins.
+  Same seeded object set for everyone; server owns the true pixel counts and scores the error.
+  FFA · drag · ~20 s (several objects) · low/medium effort · low latency · banter 💥💥.
+- **E12. Pixel Weight ("guess the weight")** — a pixel-art object flashes; guess **how many filled
+  pixels** it has (its "weight"). Closest guess scores; several rounds. Variant **Pixel Balance**: two
+  objects on a scale — pick the heavier, or add pixels to the lighter side to balance. Seeded objects;
+  server owns the counts. FFA · tap/slider · ~25 s · low effort · low latency · banter 💥💥.
+- **E13. Quick Tetris** — a short, fast Tetris sprint (compact variant of **E10**): identical seeded
+  piece sequence for all; clear as many lines as possible in a fixed short window (or reach N lines
+  fastest). FFA · tap/drag · ~45 s · high effort · low latency · banter 💥💥.
+- **E14. Sudoku Race** — everyone solves the **same seeded** Sudoku (likely a smaller/quick grid such as
+  4×4 or 6×6 to fit a party round). Winner is whoever completes it first; if nobody finishes in time,
+  rank by **most correct cells placed** (server validates each cell, so a wrong entry never counts).
+  FFA · tap (cell + number) · ~60–90 s · medium/high effort · low latency · banter 💥💥.
 
 ### E1 (full card). ⭐ ✅ Color Trap ("Stroop") — implemented (`color-trap`)
 - **Concept**: a color word (e.g., "RED") is shown in a mismatched ink color (e.g., blue). Tap the
