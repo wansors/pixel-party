@@ -1,0 +1,128 @@
+import type { ClientMsg, SimonSnapshot } from '@pp/shared'
+import Phaser from 'phaser'
+import type { RoundState } from '../RoundState'
+import type { Sfx } from '../Sfx'
+
+const PAD_COLORS = [0xe63946, 0x3a7bd5, 0x2a9d3f, 0xf4c20d]
+const PLAY_ON_MS = 420
+const PLAY_GAP_MS = 180
+
+// Simon (sequence memory) canvas. When the player's sequence grows it plays the pads back (input
+// locked), then lets the player repeat them. Scene key === mini-game id.
+export class SimonScene extends Phaser.Scene {
+  private info?: Phaser.GameObjects.Text
+  private timer?: Phaser.GameObjects.Text
+  private status?: Phaser.GameObjects.Text
+  private pads: Phaser.GameObjects.Rectangle[] = []
+  // Playback state.
+  private shownLen = -1
+  private playing = false
+  private playStart = 0
+  private lastTapAt = 0
+  private wasAlive = true
+
+  constructor(
+    private readonly send: (msg: ClientMsg) => void,
+    private readonly state: RoundState,
+    private readonly sfx: Sfx,
+  ) {
+    super('simon')
+  }
+
+  create(): void {
+    this.pads = []
+    this.shownLen = -1
+    this.playing = false
+    this.wasAlive = true
+    const { width, height } = this.scale
+    const cx = width / 2
+    this.info = this.add
+      .text(cx, height * 0.08, '', { fontFamily: 'monospace', fontSize: '20px', color: '#9fb3c8' })
+      .setOrigin(0.5)
+    this.timer = this.add
+      .text(cx, height * 0.14, '', { fontFamily: 'monospace', fontSize: '22px', color: '#06d6a0' })
+      .setOrigin(0.5)
+    this.status = this.add
+      .text(cx, height * 0.2, '', { fontFamily: 'monospace', fontSize: '22px', color: '#e6edf3' })
+      .setOrigin(0.5)
+
+    // Four pads in a 2x2 block.
+    const area = Math.min(width * 0.8, height * 0.55)
+    const gap = area * 0.06
+    const size = (area - gap) / 2
+    const startX = cx - size - gap / 2 + size / 2
+    const startY = height * 0.6 - size - gap / 2 + size / 2
+    for (let i = 0; i < 4; i++) {
+      const col = i % 2
+      const row = Math.floor(i / 2)
+      const x = startX + col * (size + gap)
+      const y = startY + row * (size + gap)
+      const pad = this.add
+        .rectangle(x, y, size, size, PAD_COLORS[i])
+        .setStrokeStyle(4, 0x11181f)
+        .setAlpha(0.4)
+        .setInteractive({ useHandCursor: true })
+      pad.on('pointerdown', () => this.tap(i))
+      this.pads.push(pad)
+    }
+  }
+
+  private tap(pad: number): void {
+    const snap = this.state.state as SimonSnapshot | null
+    const me = snap?.players[this.state.selfId ?? '']
+    if (!snap || !me || !me.alive || this.playing) return
+    if (this.time.now - this.lastTapAt < 120) return // debounce double taps
+    this.lastTapAt = this.time.now
+    this.flash(pad, 200)
+    this.sfx.click()
+    this.send({ type: 'MINIGAME_INPUT', input: { kind: 'pad', pad } })
+  }
+
+  private flash(pad: number, ms: number): void {
+    const rect = this.pads[pad]
+    if (!rect) return
+    rect.setAlpha(1)
+    this.time.delayedCall(ms, () => rect.setAlpha(this.playing ? 0.4 : 0.4))
+  }
+
+  override update(): void {
+    const snap = this.state.state as SimonSnapshot | null
+    if (!snap) return
+    const me = snap.players[this.state.selfId ?? '']
+    this.timer?.setText(`${Math.ceil(snap.remainingMs / 1000)}s`)
+    this.info?.setText(`Level ${snap.scores[this.state.selfId ?? ''] ?? 0}`)
+    if (!me) return
+
+    // A longer sequence means the player advanced a level → play the new sequence back.
+    if (me.seq.length !== this.shownLen && me.alive) {
+      this.shownLen = me.seq.length
+      this.playing = true
+      this.playStart = this.time.now
+    }
+
+    if (!me.alive) {
+      this.status?.setText('OUT — hang tight').setColor('#e63946')
+      if (this.wasAlive) {
+        this.sfx.wrong()
+        this.wasAlive = false
+      }
+      for (const p of this.pads) p.setAlpha(0.4)
+      return
+    }
+
+    if (this.playing) {
+      const seq = (this.state.state as SimonSnapshot).players[this.state.selfId ?? '']?.seq ?? []
+      const elapsed = this.time.now - this.playStart
+      const slot = PLAY_ON_MS + PLAY_GAP_MS
+      const idx = Math.floor(elapsed / slot)
+      this.status?.setText('Watch...').setColor('#ffd166')
+      this.pads.forEach((p, i) => {
+        const lit = idx < seq.length && seq[idx] === i && elapsed % slot < PLAY_ON_MS
+        p.setAlpha(lit ? 1 : 0.4)
+      })
+      if (idx >= seq.length) this.playing = false
+    } else {
+      this.status?.setText('Repeat!').setColor('#06d6a0')
+    }
+  }
+}

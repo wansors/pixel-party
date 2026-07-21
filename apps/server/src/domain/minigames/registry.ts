@@ -8,8 +8,10 @@ import { HigherLower } from './higherLower'
 import { MemoryFlash } from './memoryFlash'
 import { NumberRush } from './numberRush'
 import { OddOneOut } from './oddOneOut'
+import { PixelHoops } from './pixelHoops'
 import { QuickMath } from './quickMath'
 import { ReactionDuel } from './reactionDuel'
+import { Simon } from './simon'
 import { StopClock } from './stopClock'
 import { Trivia } from './trivia'
 
@@ -28,6 +30,8 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'bug-smash': () => new BugSmash() as unknown as MiniGame<unknown, unknown>,
   'stop-clock': () => new StopClock() as unknown as MiniGame<unknown, unknown>,
   'memory-flash': () => new MemoryFlash() as unknown as MiniGame<unknown, unknown>,
+  simon: () => new Simon() as unknown as MiniGame<unknown, unknown>,
+  'pixel-hoops': () => new PixelHoops() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

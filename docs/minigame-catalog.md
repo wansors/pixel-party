@@ -35,8 +35,9 @@ latency tolerance, and dev cost. A3 Trivia and D1 Balloon Chicken are the immedi
 ✅ = **implemented**: the full P0 group — A1 (`reaction-duel`), A2 (`button-masher`), E1 (`color-trap`),
 A3 (`trivia`) and D1 (`balloon-chicken`) — plus (as of 2026-07-21) the P1 wave: E4 Number Rush
 (`number-rush`), E2 Quick Math (`quick-math`), E3 Odd One Out (`odd-one-out`), E5 Higher or Lower
-(`higher-lower`), A6 Bug smash (`bug-smash`), A10 Stop the clock (`stop-clock`) and E8 Memory Flash
-(`memory-flash`). **12 mini-games total.**
+(`higher-lower`), A6 Bug smash (`bug-smash`), A10 Stop the clock (`stop-clock`), E8 Memory Flash
+(`memory-flash`), A4 Simon (`simon`) and A5 Pixel Hoops (`pixel-hoops`). **14 mini-games total** — the
+full P1 wave is shipped.
 
 ---
 
@@ -65,14 +66,14 @@ A3 (`trivia`) and D1 (`balloon-chicken`) — plus (as of 2026-07-21) the P1 wave
 - **Win condition**: highest total score. · **Result**: ranking by points.
 - **Latency**: low. · **Complexity**: medium (question bank + i18n).
 
-### A4. Sequence memory ("Simon")
+### A4. ✅ Sequence memory ("Simon") — implemented (`simon`)
 - **Concept**: repeat a growing sequence of colors/sounds.
 - **Type**: FFA · **Input**: tap · **Duration**: up to ~60 s · **Banter**: 💥
 - **Rules**: everyone sees the same growing sequence; a mistake eliminates you; furthest survives.
 - **Win condition**: longest sequence reached (tiebreak by time). · **Result**: ranking by level.
 - **Latency**: low. · **Complexity**: low/medium.
 
-### A5. Pixel Hoops ("Basketball")
+### A5. ✅ Pixel Hoops ("Basketball") — implemented (`pixel-hoops`)
 - **Concept**: arcade free-throw shooting — swipe/tap to set power and angle and sink as many baskets as
   possible; the hoop moves as it heats up.
 - **Type**: FFA · **Input**: drag (aim + power) · **Duration**: 30 s · **Banter**: 💥💥💥

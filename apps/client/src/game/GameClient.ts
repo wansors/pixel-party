@@ -10,8 +10,10 @@ import { HigherLowerScene } from './scenes/HigherLowerScene'
 import { MemoryFlashScene } from './scenes/MemoryFlashScene'
 import { NumberRushScene } from './scenes/NumberRushScene'
 import { OddOneOutScene } from './scenes/OddOneOutScene'
+import { PixelHoopsScene } from './scenes/PixelHoopsScene'
 import { QuickMathScene } from './scenes/QuickMathScene'
 import { ReactionScene } from './scenes/ReactionScene'
+import { SimonScene } from './scenes/SimonScene'
 import { StopClockScene } from './scenes/StopClockScene'
 import { TriviaScene } from './scenes/TriviaScene'
 import { ServerMsgRouter } from './serverMsgRouter'
@@ -30,6 +32,8 @@ const SCENE_IDS: MiniGameId[] = [
   'bug-smash',
   'stop-clock',
   'memory-flash',
+  'simon',
+  'pixel-hoops',
 ]
 
 // Pure Phaser config factory — testable without `new Phaser.Game` (which needs a DOM/canvas). Scenes
@@ -91,6 +95,8 @@ export class GameClient {
     this.game.scene.add('bug-smash', new BugSmashScene(...deps), false)
     this.game.scene.add('stop-clock', new StopClockScene(...deps), false)
     this.game.scene.add('memory-flash', new MemoryFlashScene(...deps), false)
+    this.game.scene.add('simon', new SimonScene(...deps), false)
+    this.game.scene.add('pixel-hoops', new PixelHoopsScene(...deps), false)
   }
 
   // Switch the active scene to the round's mini-game (no-op if already active).

@@ -118,6 +118,22 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     durationSec: 40,
     blurb: 'Count the flash — how many of the target colour did you see?',
   },
+  {
+    id: 'simon',
+    name: 'Simon',
+    format: 'ffa',
+    realtime: true,
+    durationSec: 60,
+    blurb: 'Watch the sequence, then repeat it. It grows every round.',
+  },
+  {
+    id: 'pixel-hoops',
+    name: 'Pixel Hoops',
+    format: 'ffa',
+    realtime: true,
+    durationSec: 30,
+    blurb: 'Charge and release to sink the basket. Chain them for combos.',
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(
