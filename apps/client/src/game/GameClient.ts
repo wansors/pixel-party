@@ -11,6 +11,8 @@ import { MemoryFlashScene } from './scenes/MemoryFlashScene'
 import { NumberRushScene } from './scenes/NumberRushScene'
 import { OddOneOutScene } from './scenes/OddOneOutScene'
 import { PixelHoopsScene } from './scenes/PixelHoopsScene'
+import { PixelSplitScene } from './scenes/PixelSplitScene'
+import { PixelWeightScene } from './scenes/PixelWeightScene'
 import { QuickMathScene } from './scenes/QuickMathScene'
 import { ReactionScene } from './scenes/ReactionScene'
 import { SimonScene } from './scenes/SimonScene'
@@ -34,6 +36,8 @@ const SCENE_IDS: MiniGameId[] = [
   'memory-flash',
   'simon',
   'pixel-hoops',
+  'pixel-weight',
+  'pixel-split',
 ]
 
 // Pure Phaser config factory — testable without `new Phaser.Game` (which needs a DOM/canvas). Scenes
@@ -97,6 +101,8 @@ export class GameClient {
     this.game.scene.add('memory-flash', new MemoryFlashScene(...deps), false)
     this.game.scene.add('simon', new SimonScene(...deps), false)
     this.game.scene.add('pixel-hoops', new PixelHoopsScene(...deps), false)
+    this.game.scene.add('pixel-weight', new PixelWeightScene(...deps), false)
+    this.game.scene.add('pixel-split', new PixelSplitScene(...deps), false)
   }
 
   // Switch the active scene to the round's mini-game (no-op if already active).

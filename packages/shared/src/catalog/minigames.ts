@@ -134,6 +134,22 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     durationSec: 30,
     blurb: 'Charge and release to sink the basket. Chain them for combos.',
   },
+  {
+    id: 'pixel-weight',
+    name: 'Pixel Weight',
+    format: 'ffa',
+    realtime: true,
+    durationSec: 40,
+    blurb: 'A pixel object flashes — guess how many pixels it is made of.',
+  },
+  {
+    id: 'pixel-split',
+    name: 'Pixel Split',
+    format: 'ffa',
+    realtime: true,
+    durationSec: 40,
+    blurb: 'Cut the object in two halves with the same number of pixels.',
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

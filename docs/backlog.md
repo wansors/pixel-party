@@ -7,9 +7,9 @@ Phased product backlog. The philosophy is **start with a minimal MVP and grow in
 the smallest thing that is fun end-to-end, then add features (more mini-games, handicap, post-match
 analysis…) phase by phase. Nothing is built "just in case".
 
-## Current status (2026-07-21)
+## Current status (2026-07-22)
 
-**MVP is playable end-to-end, now with 14 mini-games + audio.** The full stack is scaffolded and runnable
+**MVP is playable end-to-end, now with 16 mini-games + audio.** The full stack is scaffolded and runnable
 (`bun run dev` → server :3000 + client :4200, LAN-accessible; see [`../README.md`](../README.md)). What
 works today:
 
@@ -18,12 +18,14 @@ works today:
 - Rooms (create/join over `/api` + WS), lobby with ready state + host role, **host game selector +
   round count**, server-authoritative **session engine** (intro countdown → play → per-round result →
   final), position→points scoring with tie-averaging, cumulative scoreboard + final ranking.
-- **14 mini-games** — the 5 P0-tier: Quick reaction (A1, `reaction-duel`), Button masher (A2,
+- **16 mini-games** — the 5 P0-tier: Quick reaction (A1, `reaction-duel`), Button masher (A2,
   `button-masher`), Color Trap (E1, `color-trap`), Lightning Quiz (A3, `trivia`), Balloon Chicken
-  (D1, `balloon-chicken`); plus the complete **P1 wave** (2026-07-21): Number Rush (E4, `number-rush`),
+  (D1, `balloon-chicken`); the complete **P1 wave** (2026-07-21): Number Rush (E4, `number-rush`),
   Quick Math (E2, `quick-math`), Odd One Out (E3, `odd-one-out`), Higher or Lower (E5, `higher-lower`),
   Bug Smash (A6, `bug-smash`), Stop the Clock (A10, `stop-clock`), Memory Flash (E8, `memory-flash`),
-  Simon (A4, `simon`), Pixel Hoops (A5, `pixel-hoops`). Each is a pluggable domain module + Phaser scene.
+  Simon (A4, `simon`), Pixel Hoops (A5, `pixel-hoops`); plus the two P1 fast-follows (2026-07-22):
+  Pixel Weight (E12, `pixel-weight`), Pixel Split (E11, `pixel-split`). Each is a pluggable domain
+  module + Phaser scene.
 - **Audio** (Phase 7 pulled forward): looping background music + synthesized 8-bit SFX (click,
   correct/wrong, coin, pop, countdown) across UI and every mini-game; in-app music/SFX volume sliders
   persisted per device. *WebAudio-synthesized SFX (no asset binaries); music is a self-hosted mp3.*
@@ -110,7 +112,8 @@ ranking. Latency-tolerant games only; no teams/duels/handicap yet.
 
 - [x] Grow the individual-game catalog — **full P1 wave shipped 2026-07-21**: Number Rush (E4), Quick
       Math (E2), Odd One Out (E3), Higher or Lower (E5), Bug Smash (A6), Stop the Clock (A10), Memory
-      Flash (E8), Simon (A4), Pixel Hoops (A5). 14 mini-games total.
+      Flash (E8), Simon (A4), Pixel Hoops (A5); plus the P1 fast-follows Pixel Weight (E12) and Pixel
+      Split (E11) on 2026-07-22. **16 mini-games total.**
 - [~] Host config: number of rounds, no-repeat within a session. *Rounds + game selection done in Phase 0;
       no-repeat-within-a-session still pending.*
 - [ ] Reconnection hardening, host transfer on disconnect, kick player, room inactivity timeout.
@@ -216,7 +219,7 @@ follows the priority tiers there:
 | Wave | Tier | Mini-games (id) | Phase |
 |------|------|-----------------|-------|
 | MVP | P0 | Quick reaction (A1 ✅), Button masher (A2 ✅), Color Trap (E1 ✅), Trivia (A3 ✅), Balloon Chicken (D1 ✅) — all 5 shipped | 0 |
-| +1 | P1 | Number Rush (E4 ✅), Quick Math (E2 ✅), Odd One Out (E3 ✅), Higher/Lower (E5 ✅), Bug smash (A6 ✅), Timing (A10 ✅), Memory Flash (E8 ✅), Simon (A4 ✅), Pixel Hoops (A5 ✅) — **P1 wave complete**; new ideas Pixel Split (E11), Pixel Weight (E12) queued | 1 |
+| +1 | P1 | Number Rush (E4 ✅), Quick Math (E2 ✅), Odd One Out (E3 ✅), Higher/Lower (E5 ✅), Bug smash (A6 ✅), Timing (A10 ✅), Memory Flash (E8 ✅), Simon (A4 ✅), Pixel Hoops (A5 ✅), Pixel Weight (E12 ✅), Pixel Split (E11 ✅) — **P1 wave + fast-follows complete** | 1 |
 | +2 | P2 | Tug of War (C1), Sink the Fleet (B2), Match (A11), Bomb Relay (C2), Quick Draw Duel (E7), Pixel Beat (E6), Fruit Catch (D2), Fleet Battle (C3) | 2 |
 | +action | P3 | Pong (B1), Sumo (B3), Pixel Dash (A9), Snake (A8), Maze Sprint (E9), Pixel rain (A7), Line Clear (E10), Roulette (D3) | 5 |
 
@@ -227,10 +230,12 @@ follows the priority tiers there:
 
 ## Icebox / ideas (unscheduled)
 
-- [ ] **Pixel Split ("cut in half")** — E11: place a cut line so both halves of a pixel object (banana,
-      car, animal…) hold the same number of filled pixels; closest split wins. *P1 fast-follow.*
-- [ ] **Pixel Weight ("guess the weight")** — E12: guess how many filled pixels an object has; + a
-      Balance variant (pick the heavier / add pixels to balance a scale). *P1 fast-follow.*
+- [x] **Pixel Split ("cut in half")** — E11 (`pixel-split`, shipped 2026-07-22): drag a vertical cut so
+      both halves of a seeded pixel object hold the same number of filled pixels; scored against the best
+      achievable split. Server owns the per-column counts.
+- [x] **Pixel Weight ("guess the weight")** — E12 (`pixel-weight`, shipped 2026-07-22): a pixel object
+      flashes, then guess its filled-pixel count on a slider; points scale with closeness. Server owns
+      the counts. *Balance variant not built.*
 - [ ] **Quick Tetris** — E13: short, fast Tetris sprint (compact variant of E10 Line Clear Sprint);
       identical seeded piece sequence, clear the most lines in a short window. *P3, rides the action wave.*
 - [ ] **Sudoku Race** — E14: everyone solves the same seeded Sudoku (small/quick grid); winner is

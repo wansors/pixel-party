@@ -36,8 +36,9 @@ latency tolerance, and dev cost. A3 Trivia and D1 Balloon Chicken are the immedi
 A3 (`trivia`) and D1 (`balloon-chicken`) — plus (as of 2026-07-21) the P1 wave: E4 Number Rush
 (`number-rush`), E2 Quick Math (`quick-math`), E3 Odd One Out (`odd-one-out`), E5 Higher or Lower
 (`higher-lower`), A6 Bug smash (`bug-smash`), A10 Stop the clock (`stop-clock`), E8 Memory Flash
-(`memory-flash`), A4 Simon (`simon`) and A5 Pixel Hoops (`pixel-hoops`). **14 mini-games total** — the
-full P1 wave is shipped.
+(`memory-flash`), A4 Simon (`simon`) and A5 Pixel Hoops (`pixel-hoops`); plus the P1 fast-follows E12
+Pixel Weight (`pixel-weight`) and E11 Pixel Split (`pixel-split`). **16 mini-games total** — the full
+P1 wave + fast-follows are shipped.
 
 ---
 
@@ -238,14 +239,15 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
   FFA · drag/keyboard · up to 45 s · medium effort · medium latency · banter 💥💥.
 - **E10. Line Clear Sprint** — Tetris-like: clear N lines fastest.
   FFA · tap/drag · up to 60 s · high effort · low latency · banter 💥.
-- **E11. Pixel Split ("cut in half")** — a pixel-art object (banana, car, animal…) is shown; drag/place a
-  cut line (or point) so both halves hold the **same number of filled pixels**. Closest split wins.
-  Same seeded object set for everyone; server owns the true pixel counts and scores the error.
-  FFA · drag · ~20 s (several objects) · low/medium effort · low latency · banter 💥💥.
-- **E12. Pixel Weight ("guess the weight")** — a pixel-art object flashes; guess **how many filled
-  pixels** it has (its "weight"). Closest guess scores; several rounds. Variant **Pixel Balance**: two
-  objects on a scale — pick the heavier, or add pixels to the lighter side to balance. Seeded objects;
-  server owns the counts. FFA · tap/slider · ~25 s · low effort · low latency · banter 💥💥.
+- **E11. ✅ Pixel Split ("cut in half")** — implemented (`pixel-split`): a seeded pixel-art object is
+  shown; drag a vertical cut so both halves hold the **same number of filled pixels**. Scored against
+  the best split the object allows (odd counts can't split perfectly), so the optimal cut always scores
+  full points. Same seeded object set for everyone; server owns the per-column counts and scores the
+  cut. FFA · drag · ~40 s (several objects) · low/medium effort · low latency · banter 💥💥.
+- **E12. ✅ Pixel Weight ("guess the weight")** — implemented (`pixel-weight`): a pixel-art object
+  flashes briefly, then hides; guess **how many filled pixels** it had on a slider. Points scale with
+  closeness (`max(0, 10 − |error|)`); several objects. Seeded objects; server owns the counts. *Pixel
+  Balance variant not built.* FFA · slider · ~40 s · low effort · low latency · banter 💥💥.
 - **E13. Quick Tetris** — a short, fast Tetris sprint (compact variant of **E10**): identical seeded
   piece sequence for all; clear as many lines as possible in a fixed short window (or reach N lines
   fastest). FFA · tap/drag · ~45 s · high effort · low latency · banter 💥💥.

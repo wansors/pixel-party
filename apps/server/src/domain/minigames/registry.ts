@@ -9,6 +9,8 @@ import { MemoryFlash } from './memoryFlash'
 import { NumberRush } from './numberRush'
 import { OddOneOut } from './oddOneOut'
 import { PixelHoops } from './pixelHoops'
+import { PixelSplit } from './pixelSplit'
+import { PixelWeight } from './pixelWeight'
 import { QuickMath } from './quickMath'
 import { ReactionDuel } from './reactionDuel'
 import { Simon } from './simon'
@@ -32,6 +34,8 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'memory-flash': () => new MemoryFlash() as unknown as MiniGame<unknown, unknown>,
   simon: () => new Simon() as unknown as MiniGame<unknown, unknown>,
   'pixel-hoops': () => new PixelHoops() as unknown as MiniGame<unknown, unknown>,
+  'pixel-weight': () => new PixelWeight() as unknown as MiniGame<unknown, unknown>,
+  'pixel-split': () => new PixelSplit() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)
