@@ -2,32 +2,45 @@ import { HttpClient } from '@angular/common/http'
 import { Component, inject, signal } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { ActivatedRoute, Router } from '@angular/router'
+import { TranslocoPipe, TranslocoService } from '@jsverse/transloco'
 import { AVATARS, type AvatarId, PLAYER_COLORS } from '@pp/shared'
 import { firstValueFrom } from 'rxjs'
 import { environment } from '../../../environments/environment'
 import { AudioService } from '../../core/audio/audio.service'
 import { AudioControlsComponent } from '../../shared/audio-controls.component'
+import { LanguageToggleComponent } from '../../shared/language-toggle.component'
 import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
 
 // Entry point: pick a name + pixel avatar + color, then create a fresh room or enter an existing code.
 // Identity (name/color/avatar) travels to the room via query params.
 @Component({
   selector: 'app-join',
-  imports: [FormsModule, PixelAvatarComponent, AudioControlsComponent],
+  imports: [
+    FormsModule,
+    PixelAvatarComponent,
+    AudioControlsComponent,
+    LanguageToggleComponent,
+    TranslocoPipe,
+  ],
   template: `
     <main class="join">
-      <div class="sound"><app-audio-controls /></div>
+      <div class="sound"><app-language-toggle /><app-audio-controls /></div>
       <div class="arcade-window cabinet">
-        <div class="arcade-titlebar">* PIXEL PARTY *</div>
+        <div class="arcade-titlebar">{{ 'join.title' | transloco }}</div>
         <div class="body">
           <div class="me">
             <app-pixel-avatar [avatar]="avatar()" [color]="color()" [size]="72" />
           </div>
 
-          <input class="name" [(ngModel)]="name" placeholder="YOUR NAME" maxlength="16" />
+          <input
+            class="name"
+            [(ngModel)]="name"
+            [placeholder]="'join.yourName' | transloco"
+            maxlength="16"
+          />
 
           <div class="picker">
-            <span class="label">Avatar</span>
+            <span class="label">{{ 'join.avatar' | transloco }}</span>
             <div class="row">
               @for (a of avatars; track a) {
                 <button
@@ -43,7 +56,7 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
           </div>
 
           <div class="picker">
-            <span class="label">Color</span>
+            <span class="label">{{ 'join.color' | transloco }}</span>
             <div class="row">
               @for (c of colors; track c) {
                 <button
@@ -58,10 +71,14 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
             </div>
           </div>
 
-          <button type="button" class="arcade-btn primary" (click)="createRoom()">Create room</button>
+          <button type="button" class="arcade-btn primary" (click)="createRoom()">
+            {{ 'join.createRoom' | transloco }}
+          </button>
           <div class="enter">
-            <input [(ngModel)]="code" placeholder="ROOM CODE" maxlength="6" />
-            <button type="button" class="arcade-btn" (click)="joinRoom()">Join</button>
+            <input [(ngModel)]="code" [placeholder]="'join.roomCode' | transloco" maxlength="6" />
+            <button type="button" class="arcade-btn" (click)="joinRoom()">
+              {{ 'join.join' | transloco }}
+            </button>
           </div>
 
           @if (message()) {
@@ -99,6 +116,7 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
 export class JoinComponent {
   private readonly http = inject(HttpClient)
   private readonly router = inject(Router)
+  private readonly transloco = inject(TranslocoService)
 
   constructor() {
     inject(AudioService).ensureMusic()
@@ -121,7 +139,7 @@ export class JoinComponent {
       )
       this.enter(res.code)
     } catch {
-      this.message.set('Could not reach the server')
+      this.message.set(this.transloco.translate('join.cantReach'))
     }
   }
 
@@ -133,12 +151,12 @@ export class JoinComponent {
         this.http.get<{ exists: boolean }>(`${environment.apiUrl}/api/rooms/${code}`),
       )
       if (!res.exists) {
-        this.message.set(`Room ${code} not found`)
+        this.message.set(this.transloco.translate('join.roomNotFound', { code }))
         return
       }
       this.enter(code)
     } catch {
-      this.message.set('Could not reach the server')
+      this.message.set(this.transloco.translate('join.cantReach'))
     }
   }
 

@@ -1,0 +1,211 @@
+{
+  "common": {
+    "copyLink": "Copy link",
+    "copied": "Copied!"
+  },
+  "lang": {
+    "en": "EN",
+    "es": "ES"
+  },
+  "audio": {
+    "snd": "SND",
+    "music": "Music",
+    "sfx": "SFX"
+  },
+  "join": {
+    "title": "* PIXEL PARTY *",
+    "yourName": "YOUR NAME",
+    "avatar": "Avatar",
+    "color": "Color",
+    "createRoom": "Create room",
+    "roomCode": "ROOM CODE",
+    "join": "Join",
+    "cantReach": "Could not reach the server",
+    "roomNotFound": "Room {{code}} not found"
+  },
+  "room": {
+    "code": "ROOM",
+    "reconnecting": "Reconnecting...",
+    "connecting": "Connecting...",
+    "lobby": {
+      "title": "Lobby",
+      "players": "player(s)",
+      "host": "host",
+      "off": "off",
+      "ready": "ready",
+      "games": "Games",
+      "rounds": "Rounds:",
+      "notReady": "Not ready",
+      "imReady": "I'm ready",
+      "start": "Start"
+    },
+    "intro": {
+      "round": "Round",
+      "go": "GO!"
+    },
+    "result": {
+      "roundWinner": "ROUND WINNER",
+      "totals": "Totals coming up..."
+    },
+    "scoreboard": {
+      "title": "High Scores",
+      "nextRound": "Next round starting..."
+    },
+    "final": {
+      "title": "* FINAL RANKING *",
+      "first": "1ST",
+      "newHighScore": "NEW HIGH SCORE"
+    },
+    "joinRejected": "Join rejected: {{reason}}",
+    "intentRejected": "{{intent}} rejected: {{reason}}"
+  },
+  "reason": {
+    "room_not_found": "Room not found",
+    "room_full": "Room is full",
+    "session_in_progress": "Session already in progress",
+    "name_taken": "That name is taken"
+  },
+  "catalog": {
+    "minigame": {
+      "reaction-duel": {
+        "name": "Reaction Duel",
+        "blurb": "Tap the instant the light turns green. Too early and you are out."
+      },
+      "button-masher": {
+        "name": "Button Masher",
+        "blurb": "Mash as fast as you can before the timer runs out."
+      },
+      "color-trap": {
+        "name": "Color Trap",
+        "blurb": "Tap the INK color of the word, not what it spells. Mind the trap."
+      },
+      "trivia": {
+        "name": "Lightning Quiz",
+        "blurb": "Answer fast — correct answers score, and speed earns a bonus."
+      },
+      "balloon-chicken": {
+        "name": "Balloon Chicken",
+        "blurb": "Pump for points, but cash out before it bursts — or lose it all."
+      },
+      "number-rush": {
+        "name": "Number Rush",
+        "blurb": "Tap the numbers 1 to 25 in order as fast as you can."
+      },
+      "quick-math": {
+        "name": "Quick Math",
+        "blurb": "Solve as many sums as you can before the timer runs out."
+      },
+      "odd-one-out": {
+        "name": "Odd One Out",
+        "blurb": "Spot the one tile that stands out. The grid keeps growing."
+      },
+      "higher-lower": {
+        "name": "Higher or Lower",
+        "blurb": "Guess if the next card is higher or lower. One miss ends your run."
+      },
+      "bug-smash": {
+        "name": "Bug Smash",
+        "blurb": "Smash the bugs, dodge the bombs. Fastest hands win."
+      },
+      "stop-clock": {
+        "name": "Stop the Clock",
+        "blurb": "Stop the needle as close to the target as you can. Three tries."
+      },
+      "memory-flash": {
+        "name": "Memory Flash",
+        "blurb": "Count the flash — how many of the target colour did you see?"
+      },
+      "simon": {
+        "name": "Simon",
+        "blurb": "Watch the sequence, then repeat it. It grows every round."
+      },
+      "pixel-hoops": {
+        "name": "Pixel Hoops",
+        "blurb": "Charge and release to sink the basket. Chain them for combos."
+      },
+      "pixel-weight": {
+        "name": "Pixel Weight",
+        "blurb": "A pixel object flashes — guess how many pixels it is made of."
+      },
+      "pixel-split": {
+        "name": "Pixel Split",
+        "blurb": "Cut the object in two halves with the same number of pixels."
+      }
+    }
+  },
+  "game": {
+    "common": {
+      "done": "Done!",
+      "correct": "correct",
+      "pts": "pts"
+    },
+    "reaction": {
+      "instruction": "Tap when the screen turns green",
+      "wait": "WAIT…",
+      "tap": "TAP!",
+      "tooEarly": "TOO EARLY",
+      "falseStart": "False start — you are out this round",
+      "nice": "Nice reaction!",
+      "ms": "{{ms}} ms"
+    },
+    "buttonMasher": {
+      "getReady": "Get ready…",
+      "go": "Go go go!",
+      "done": "DONE!"
+    },
+    "colorTrap": {
+      "tapInk": "Tap the ink color"
+    },
+    "trivia": {
+      "question": "Q {{index}} / {{total}}"
+    },
+    "balloon": {
+      "pop": "POP!",
+      "banked": "{{points}} banked"
+    },
+    "numberRush": {
+      "find": "Find {{n}}",
+      "done": "DONE"
+    },
+    "oddOneOut": {
+      "level": "Level {{n}}"
+    },
+    "higherLower": {
+      "prompt": "Higher or lower than this?",
+      "streak": "Streak: {{n}}",
+      "out": "Run over — sit tight"
+    },
+    "bugSmash": {
+      "smash": "Smash the bugs!"
+    },
+    "stopClock": {
+      "prompt": "Stop on the green target!",
+      "done": "All tries used — hang tight"
+    },
+    "memoryFlash": {
+      "memorize": "Memorize!",
+      "howMany": "How many {{color}}?"
+    },
+    "simon": {
+      "watch": "Watch...",
+      "repeat": "Repeat!",
+      "level": "Level {{n}}",
+      "out": "OUT — hang tight"
+    },
+    "pixelHoops": {
+      "hint": "Hold to charge, release to shoot",
+      "swish": "SWISH! x{{combo}}",
+      "miss": "MISS",
+      "combo": "{{score}} pts   combo {{combo}}"
+    },
+    "pixelWeight": {
+      "weigh": "Weigh the {{object}}!",
+      "howMany": "How many pixels?",
+      "guess": "GUESS"
+    },
+    "pixelSplit": {
+      "prompt": "Split it evenly",
+      "cut": "CUT"
+    }
+  }
+}

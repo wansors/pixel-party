@@ -1,9 +1,10 @@
 <main class="room">
   <header>
-    <span class="code">ROOM {{ code() }}</span>
+    <span class="code">{{ 'room.code' | transloco }} {{ code() }}</span>
     @if (reconnecting()) {
-      <span class="reconnect blink">Reconnecting...</span>
+      <span class="reconnect blink">{{ 'room.reconnecting' | transloco }}</span>
     }
+    <app-language-toggle />
     <app-audio-controls />
   </header>
 
@@ -18,17 +19,20 @@
 
   @switch (view()) {
     @case ('connecting') {
-      <p class="center blink">Connecting...</p>
+      <p class="center blink">{{ 'room.connecting' | transloco }}</p>
     }
 
     @case ('lobby') {
       <section class="lobby arcade-window">
-        <div class="arcade-titlebar">Lobby - {{ players().length }} player(s)</div>
+        <div class="arcade-titlebar">
+          {{ 'room.lobby.title' | transloco }} — {{ players().length }}
+          {{ 'room.lobby.players' | transloco }}
+        </div>
         <div class="pad">
           <div class="invite">
             <span class="url">{{ inviteUrl }}</span>
             <button type="button" class="arcade-btn" (click)="copyInvite()">
-              {{ copied() ? 'Copied!' : 'Copy link' }}
+              {{ (copied() ? 'common.copied' : 'common.copyLink') | transloco }}
             </button>
           </div>
           <ul class="players">
@@ -37,19 +41,19 @@
                 <app-pixel-avatar [avatar]="$any(p.avatar)" [color]="p.color" [size]="28" />
                 <span class="pname" [style.color]="p.color">{{ p.name }}</span>
                 @if (p.id === hostId()) {
-                  <span class="tag">host</span>
+                  <span class="tag">{{ 'room.lobby.host' | transloco }}</span>
                 }
                 @if (!p.connected) {
-                  <span class="tag off">off</span>
+                  <span class="tag off">{{ 'room.lobby.off' | transloco }}</span>
                 } @else if (p.ready) {
-                  <span class="ready">ready</span>
+                  <span class="ready">{{ 'room.lobby.ready' | transloco }}</span>
                 }
               </li>
             }
           </ul>
 
           <div class="games">
-            <h3>Games</h3>
+            <h3>{{ 'room.lobby.games' | transloco }}</h3>
             <ul>
               @for (g of availableGames; track g.id) {
                 <li>
@@ -60,14 +64,14 @@
                       [disabled]="!isHost()"
                       (change)="toggleGame(g.id)"
                     />
-                    <span class="gname">{{ g.name }}</span>
-                    <span class="blurb">{{ g.blurb }}</span>
+                    <span class="gname">{{ catalog.minigameName(g.id) }}</span>
+                    <span class="blurb">{{ catalog.minigameBlurb(g.id) }}</span>
                   </label>
                 </li>
               }
             </ul>
             <label class="rounds">
-              Rounds:
+              {{ 'room.lobby.rounds' | transloco }}
               <input
                 type="number"
                 min="1"
@@ -81,7 +85,7 @@
 
           <div class="actions">
             <button type="button" class="arcade-btn" (click)="toggleReady()">
-              {{ myReady ? 'Not ready' : "I'm ready" }}
+              {{ (myReady ? 'room.lobby.notReady' : 'room.lobby.imReady') | transloco }}
             </button>
             @if (isHost()) {
               <button
@@ -90,7 +94,7 @@
                 [disabled]="selectedGameIds().length === 0"
                 (click)="start()"
               >
-                Start
+                {{ 'room.lobby.start' | transloco }}
               </button>
             }
           </div>
@@ -100,12 +104,12 @@
 
     @case ('intro') {
       <section class="center intro">
-        <h2>Round {{ intro()?.round }} / {{ intro()?.total }}</h2>
+        <h2>{{ 'room.intro.round' | transloco }} {{ intro()?.round }} / {{ intro()?.total }}</h2>
         <p class="game">{{ gameName(intro()?.game ?? '') }}</p>
         @if (countdown() !== null) {
           <p class="count">{{ countdown() }}</p>
         } @else {
-          <p class="count go">GO!</p>
+          <p class="count go">{{ 'room.intro.go' | transloco }}</p>
         }
       </section>
     }
@@ -116,7 +120,7 @@
         <div class="pad">
           @if (roundWinnerId(); as wid) {
             <div class="round-winner">
-              <span class="label">ROUND WINNER</span>
+              <span class="label">{{ 'room.result.roundWinner' | transloco }}</span>
               <app-pixel-avatar
                 [avatar]="playerAvatar(wid)"
                 [color]="playerColor(wid)"
@@ -144,14 +148,14 @@
               </li>
             }
           </ol>
-          <p class="hint blink">Totals coming up...</p>
+          <p class="hint blink">{{ 'room.result.totals' | transloco }}</p>
         </div>
       </section>
     }
 
     @case ('scoreboard') {
       <section class="board arcade-window">
-        <div class="arcade-titlebar">High Scores</div>
+        <div class="arcade-titlebar">{{ 'room.scoreboard.title' | transloco }}</div>
         <div class="pad">
           <ol class="highscore">
             @for (s of scoreboard(); track s.playerId) {
@@ -169,19 +173,19 @@
               </li>
             }
           </ol>
-          <p class="hint blink">Next round starting...</p>
+          <p class="hint blink">{{ 'room.scoreboard.nextRound' | transloco }}</p>
         </div>
       </section>
     }
 
     @case ('final') {
       <section class="board arcade-window">
-        <div class="arcade-titlebar">* FINAL RANKING *</div>
+        <div class="arcade-titlebar">{{ 'room.final.title' | transloco }}</div>
         <div class="pad">
           <ol class="highscore">
             @for (s of final(); track s.playerId) {
               <li [class.me]="s.playerId === selfId()" [class.lead]="s.rank === 1">
-                <span class="rank">{{ s.rank === 1 ? '1ST' : s.rank }}</span>
+                <span class="rank">{{ s.rank === 1 ? ('room.final.first' | transloco) : s.rank }}</span>
                 <app-pixel-avatar
                   [avatar]="playerAvatar(s.playerId)"
                   [color]="playerColor(s.playerId)"
@@ -195,7 +199,9 @@
             }
           </ol>
           @if (final().length) {
-            <p class="winner blink">NEW HIGH SCORE - {{ playerName(final()[0].playerId) }}!</p>
+            <p class="winner blink">
+              {{ 'room.final.newHighScore' | transloco }} - {{ playerName(final()[0].playerId) }}!
+            </p>
           }
         </div>
       </section>

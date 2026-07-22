@@ -1,0 +1,211 @@
+{
+  "common": {
+    "copyLink": "Copiar enlace",
+    "copied": "¡Copiado!"
+  },
+  "lang": {
+    "en": "EN",
+    "es": "ES"
+  },
+  "audio": {
+    "snd": "SON",
+    "music": "Música",
+    "sfx": "Efectos"
+  },
+  "join": {
+    "title": "* PIXEL PARTY *",
+    "yourName": "TU NOMBRE",
+    "avatar": "Avatar",
+    "color": "Color",
+    "createRoom": "Crear sala",
+    "roomCode": "CÓDIGO",
+    "join": "Entrar",
+    "cantReach": "No se pudo conectar con el servidor",
+    "roomNotFound": "Sala {{code}} no encontrada"
+  },
+  "room": {
+    "code": "SALA",
+    "reconnecting": "Reconectando...",
+    "connecting": "Conectando...",
+    "lobby": {
+      "title": "Sala de espera",
+      "players": "jugador(es)",
+      "host": "anfitrión",
+      "off": "desc.",
+      "ready": "listo",
+      "games": "Juegos",
+      "rounds": "Rondas:",
+      "notReady": "No listo",
+      "imReady": "Estoy listo",
+      "start": "Empezar"
+    },
+    "intro": {
+      "round": "Ronda",
+      "go": "¡YA!"
+    },
+    "result": {
+      "roundWinner": "GANADOR DE RONDA",
+      "totals": "Totales enseguida..."
+    },
+    "scoreboard": {
+      "title": "Puntuaciones",
+      "nextRound": "Empieza la siguiente ronda..."
+    },
+    "final": {
+      "title": "* CLASIFICACIÓN FINAL *",
+      "first": "1º",
+      "newHighScore": "¡NUEVO RÉCORD!"
+    },
+    "joinRejected": "Entrada rechazada: {{reason}}",
+    "intentRejected": "{{intent}} rechazado: {{reason}}"
+  },
+  "reason": {
+    "room_not_found": "Sala no encontrada",
+    "room_full": "La sala está llena",
+    "session_in_progress": "La partida ya está en curso",
+    "name_taken": "Ese nombre ya está en uso"
+  },
+  "catalog": {
+    "minigame": {
+      "reaction-duel": {
+        "name": "Duelo de Reflejos",
+        "blurb": "Toca en cuanto la luz se ponga verde. Si te precipitas, quedas fuera."
+      },
+      "button-masher": {
+        "name": "Machaca Botones",
+        "blurb": "Machaca lo más rápido que puedas antes de que acabe el tiempo."
+      },
+      "color-trap": {
+        "name": "Trampa de Color",
+        "blurb": "Toca el color de la TINTA de la palabra, no lo que dice. Cuidado con la trampa."
+      },
+      "trivia": {
+        "name": "Quiz Relámpago",
+        "blurb": "Responde rápido: acertar puntúa y la velocidad da bonus."
+      },
+      "balloon-chicken": {
+        "name": "Globo Gallina",
+        "blurb": "Infla para sumar, pero retírate antes de que explote… o lo pierdes todo."
+      },
+      "number-rush": {
+        "name": "Fiebre Numérica",
+        "blurb": "Toca los números del 1 al 25 en orden lo más rápido que puedas."
+      },
+      "quick-math": {
+        "name": "Cálculo Rápido",
+        "blurb": "Resuelve todas las cuentas que puedas antes de que acabe el tiempo."
+      },
+      "odd-one-out": {
+        "name": "El Intruso",
+        "blurb": "Encuentra la casilla que desentona. La cuadrícula no para de crecer."
+      },
+      "higher-lower": {
+        "name": "Mayor o Menor",
+        "blurb": "Adivina si la siguiente carta es mayor o menor. Un fallo y se acabó."
+      },
+      "bug-smash": {
+        "name": "Aplasta Bichos",
+        "blurb": "Aplasta los bichos, esquiva las bombas. Ganan las manos más rápidas."
+      },
+      "stop-clock": {
+        "name": "Para el Reloj",
+        "blurb": "Detén la aguja lo más cerca del objetivo que puedas. Tres intentos."
+      },
+      "memory-flash": {
+        "name": "Destello de Memoria",
+        "blurb": "Cuenta el destello: ¿cuántos del color objetivo viste?"
+      },
+      "simon": {
+        "name": "Simón",
+        "blurb": "Observa la secuencia y repítela. Crece en cada ronda."
+      },
+      "pixel-hoops": {
+        "name": "Pixel Canasta",
+        "blurb": "Carga y suelta para encestar. Encadena canastas para hacer combos."
+      },
+      "pixel-weight": {
+        "name": "Pixel Peso",
+        "blurb": "Un objeto de píxeles parpadea: adivina de cuántos píxeles está hecho."
+      },
+      "pixel-split": {
+        "name": "Pixel Corte",
+        "blurb": "Corta el objeto en dos mitades con el mismo número de píxeles."
+      }
+    }
+  },
+  "game": {
+    "common": {
+      "done": "¡Hecho!",
+      "correct": "aciertos",
+      "pts": "pts"
+    },
+    "reaction": {
+      "instruction": "Toca cuando la pantalla se ponga verde",
+      "wait": "ESPERA…",
+      "tap": "¡TOCA!",
+      "tooEarly": "DEMASIADO PRONTO",
+      "falseStart": "Te precipitaste — fuera esta ronda",
+      "nice": "¡Buen reflejo!",
+      "ms": "{{ms}} ms"
+    },
+    "buttonMasher": {
+      "getReady": "Prepárate…",
+      "go": "¡Dale, dale!",
+      "done": "¡FIN!"
+    },
+    "colorTrap": {
+      "tapInk": "Toca el color de la tinta"
+    },
+    "trivia": {
+      "question": "P {{index}} / {{total}}"
+    },
+    "balloon": {
+      "pop": "¡PUM!",
+      "banked": "{{points}} guardados"
+    },
+    "numberRush": {
+      "find": "Busca {{n}}",
+      "done": "¡FIN!"
+    },
+    "oddOneOut": {
+      "level": "Nivel {{n}}"
+    },
+    "higherLower": {
+      "prompt": "¿Mayor o menor que esta?",
+      "streak": "Racha: {{n}}",
+      "out": "Se acabó — espera"
+    },
+    "bugSmash": {
+      "smash": "¡Aplasta los bichos!"
+    },
+    "stopClock": {
+      "prompt": "¡Para en el objetivo verde!",
+      "done": "Sin intentos — espera"
+    },
+    "memoryFlash": {
+      "memorize": "¡Memoriza!",
+      "howMany": "¿Cuántos {{color}}?"
+    },
+    "simon": {
+      "watch": "Observa...",
+      "repeat": "¡Repite!",
+      "level": "Nivel {{n}}",
+      "out": "FUERA — espera"
+    },
+    "pixelHoops": {
+      "hint": "Mantén para cargar, suelta para lanzar",
+      "swish": "¡CANASTA! x{{combo}}",
+      "miss": "FALLO",
+      "combo": "{{score}} pts   combo {{combo}}"
+    },
+    "pixelWeight": {
+      "weigh": "¡Pesa el {{object}}!",
+      "howMany": "¿Cuántos píxeles?",
+      "guess": "ADIVINA"
+    },
+    "pixelSplit": {
+      "prompt": "Divídelo por igual",
+      "cut": "CORTAR"
+    }
+  }
+}

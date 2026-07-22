@@ -1,6 +1,7 @@
 import { Component, DestroyRef, NgZone, type OnInit, inject, signal } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
+import { TranslocoPipe, TranslocoService } from '@jsverse/transloco'
 import {
   AVATARS,
   type AvatarId,
@@ -15,8 +16,10 @@ import {
 } from '@pp/shared'
 import { GameClient } from '../../../game/GameClient'
 import { AudioService } from '../../core/audio/audio.service'
+import { CatalogI18nService } from '../../core/i18n/catalog-i18n.service'
 import { GameSocketService } from '../../core/net/game-socket.service'
 import { AudioControlsComponent } from '../../shared/audio-controls.component'
+import { LanguageToggleComponent } from '../../shared/language-toggle.component'
 import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
 
 type View = 'connecting' | 'lobby' | 'intro' | 'round' | 'round-result' | 'scoreboard' | 'final'
@@ -28,7 +31,7 @@ const pick = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length
 // by GameClient (Phaser), booted inside runOutsideAngular so its rAF never drives change detection.
 @Component({
   selector: 'app-room',
-  imports: [PixelAvatarComponent, AudioControlsComponent],
+  imports: [PixelAvatarComponent, AudioControlsComponent, LanguageToggleComponent, TranslocoPipe],
   templateUrl: './room.component.html',
   styleUrl: './room.component.scss',
 })
@@ -39,6 +42,8 @@ export class RoomComponent implements OnInit {
   private readonly router = inject(Router)
   private readonly zone = inject(NgZone)
   private readonly destroyRef = inject(DestroyRef)
+  private readonly transloco = inject(TranslocoService)
+  readonly catalog = inject(CatalogI18nService)
 
   readonly availableGames: readonly MiniGameMeta[] = MINIGAMES
 
@@ -170,7 +175,11 @@ export class RoomComponent implements OnInit {
         this.game = undefined
         break
       case 'JOIN_REJECTED':
-        this.message.set(`Join rejected: ${msg.reason}`)
+        this.message.set(
+          this.transloco.translate('room.joinRejected', {
+            reason: this.transloco.translate(`reason.${msg.reason}`),
+          }),
+        )
         break
       case 'ACK':
         // A refused REJOIN means the seat is gone — clear it and join fresh.
@@ -180,7 +189,13 @@ export class RoomComponent implements OnInit {
           this.net.send({ type: 'JOIN', name: this.name, color: this.color, avatar: this.avatar })
           break
         }
-        if (!msg.ok) this.message.set(`${msg.intent} rejected: ${msg.reason ?? ''}`)
+        if (!msg.ok)
+          this.message.set(
+            this.transloco.translate('room.intentRejected', {
+              intent: msg.intent,
+              reason: msg.reason ?? '',
+            }),
+          )
         break
       case 'ERROR':
         this.message.set(msg.reason)
@@ -280,7 +295,7 @@ export class RoomComponent implements OnInit {
   }
 
   gameName(id: string): string {
-    return this.availableGames.find((g) => g.id === id)?.name ?? id
+    return this.catalog.minigameName(id)
   }
 
   playerName(id: string): string {

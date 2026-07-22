@@ -1,16 +1,20 @@
 import { Component, inject, signal } from '@angular/core'
+import { TranslocoPipe } from '@jsverse/transloco'
 import { AudioService } from '../core/audio/audio.service'
 
 // Compact sound settings: a SND button toggling a popover with music / SFX volume sliders.
 @Component({
   selector: 'app-audio-controls',
+  imports: [TranslocoPipe],
   template: `
     <div class="audio">
-      <button type="button" class="arcade-btn snd" (click)="open.set(!open())">SND</button>
+      <button type="button" class="arcade-btn snd" (click)="open.set(!open())">
+        {{ 'audio.snd' | transloco }}
+      </button>
       @if (open()) {
         <div class="panel arcade-window">
           <label>
-            <span>Music</span>
+            <span>{{ 'audio.music' | transloco }}</span>
             <input
               type="range"
               min="0"
@@ -20,7 +24,7 @@ import { AudioService } from '../core/audio/audio.service'
             />
           </label>
           <label>
-            <span>SFX</span>
+            <span>{{ 'audio.sfx' | transloco }}</span>
             <input
               type="range"
               min="0"
