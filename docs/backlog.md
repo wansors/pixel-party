@@ -208,9 +208,13 @@ Deferred until the netcode/sync layer is proven (higher latency sensitivity).
 ## Phase 7 — Polish & social
 
 - [ ] Avatars/customization, emotes, in-room chat.
-- [ ] Audio: music + SFX.
+- [x] Audio: music + SFX. *Pulled forward to Phase 0.*
 - [ ] Public matchmaking (open rooms / quick match).
-- [ ] i18n ES/EN across the UI.
+- [x] **i18n ES/EN across the UI** — done 2026-07-22 (pulled forward). Transloco (mirrors
+      `../utopia-offline`): static bundled `assets/i18n/{en,es}.json`, `LanguageService` (signal +
+      `pp_lang`, default EN), `CatalogI18nService` (mini-game names/blurbs, English fallback), runtime
+      EN|ES toggle. Covers the full Angular shell + all 16 Phaser scenes (scenes get a `Translate` fn via
+      `GameClient`). Trivia questions and Color-Trap word content stay server/shared English for now.
 
 ---
 

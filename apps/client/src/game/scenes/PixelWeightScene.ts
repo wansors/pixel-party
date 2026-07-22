@@ -2,6 +2,7 @@ import type { ClientMsg, PixelWeightObject, PixelWeightSnapshot } from '@pp/shar
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
+import type { Translate } from '../i18n'
 
 // Pixel Weight canvas. A pixel-art object flashes for flashMs, then hides; drag the slider (or use
 // -/+) to estimate how many pixels it had and submit. Scene key === mini-game id.
@@ -29,6 +30,7 @@ export class PixelWeightScene extends Phaser.Scene {
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
     private readonly sfx: Sfx,
+    private readonly t: Translate,
   ) {
     super('pixel-weight')
   }
@@ -96,7 +98,7 @@ export class PixelWeightScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
     this.submitBtn.on('pointerdown', () => this.submit())
     this.submitLabel = this.add
-      .text(cx, height * 0.84, 'GUESS', {
+      .text(cx, height * 0.84, this.t('game.pixelWeight.guess'), {
         fontFamily: 'monospace',
         fontSize: '26px',
         color: '#e6edf3',
@@ -163,7 +165,7 @@ export class PixelWeightScene extends Phaser.Scene {
     this.lastScore = myScore
 
     this.timer?.setText(`${Math.ceil(snap.remainingMs / 1000)}s`)
-    this.score?.setText(`${myScore} pts`)
+    this.score?.setText(this.t('game.common.pts', { n: myScore }))
 
     const controls = [
       this.track,
@@ -175,7 +177,7 @@ export class PixelWeightScene extends Phaser.Scene {
       this.plusBtn,
     ]
     if (!obj) {
-      this.prompt?.setText('Done!')
+      this.prompt?.setText(this.t('game.common.done'))
       for (const p of this.pixels) p.setVisible(false)
       for (const c of controls) c?.setVisible(false)
       return
@@ -186,7 +188,11 @@ export class PixelWeightScene extends Phaser.Scene {
     for (const p of this.pixels) p.setVisible(flashing)
     for (const c of controls) c?.setVisible(!flashing)
     this.prompt
-      ?.setText(flashing ? `Weigh the ${obj.name}!` : 'How many pixels?')
+      ?.setText(
+        flashing
+          ? this.t('game.pixelWeight.weigh', { object: obj.name })
+          : this.t('game.pixelWeight.howMany'),
+      )
       .setColor(flashing ? '#e6edf3' : '#ffd166')
 
     // Keep the knob + label in sync with the guess.

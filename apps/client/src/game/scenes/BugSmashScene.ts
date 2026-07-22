@@ -2,6 +2,7 @@ import type { BugSmashSnapshot, ClientMsg } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
+import type { Translate } from '../i18n'
 
 // Bug Smash (whack-a-mole) canvas. Renders a grid of holes; live bugs/bombs from the shared snapshot
 // pop up, and tapping a hole smashes whatever is there. A bug just smashed by this player is hidden
@@ -18,6 +19,7 @@ export class BugSmashScene extends Phaser.Scene {
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
     private readonly sfx: Sfx,
+    private readonly t: Translate,
   ) {
     super('bug-smash')
   }
@@ -78,7 +80,7 @@ export class BugSmashScene extends Phaser.Scene {
     if (!this.built) this.build(snap)
     const selfId = this.state.selfId ?? ''
     this.timer?.setText(`${Math.ceil(snap.remainingMs / 1000)}s`)
-    this.score?.setText(`${snap.scores[selfId] ?? 0} pts`)
+    this.score?.setText(this.t('game.common.pts', { n: snap.scores[selfId] ?? 0 }))
     // Reset all faces, then show the live bug per hole (skipping ones this player already smashed).
     for (const m of this.markers) m.face.setVisible(false)
     for (const b of snap.live) {

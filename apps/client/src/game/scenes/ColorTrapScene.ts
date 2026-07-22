@@ -2,6 +2,7 @@ import { COLOR_TRAP_COLORS, type ClientMsg, type ColorTrapSnapshot } from '@pp/s
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
+import type { Translate } from '../i18n'
 
 const css = (hex: number): string => `#${hex.toString(16).padStart(6, '0')}`
 
@@ -20,6 +21,7 @@ export class ColorTrapScene extends Phaser.Scene {
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
     private readonly sfx: Sfx,
+    private readonly t: Translate,
   ) {
     super('color-trap')
   }
@@ -37,7 +39,7 @@ export class ColorTrapScene extends Phaser.Scene {
       .text(cx, height * 0.5, '', { fontFamily: 'monospace', fontSize: '24px', color: '#06d6a0' })
       .setOrigin(0.5)
     this.status = this.add
-      .text(cx, height * 0.58, 'Tap the INK color — not the word', {
+      .text(cx, height * 0.58, this.t('game.colorTrap.instruction'), {
         fontFamily: 'monospace',
         fontSize: '16px',
         color: '#5b6b7b',
@@ -90,9 +92,7 @@ export class ColorTrapScene extends Phaser.Scene {
 
     const locked = snap.answeredCurrent.includes(selfId)
     if (snap.index !== this.lastAnswered) this.lastAnswered = locked ? snap.index : -1
-    this.status?.setText(
-      locked ? 'Locked in — wait for the next one' : 'Tap the INK color — not the word',
-    )
+    this.status?.setText(this.t(locked ? 'game.colorTrap.locked' : 'game.colorTrap.instruction'))
     for (const b of this.buttons) b.setAlpha(locked ? 0.4 : 1)
   }
 }

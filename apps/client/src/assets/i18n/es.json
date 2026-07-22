@@ -136,61 +136,67 @@
   "game": {
     "common": {
       "done": "¡Hecho!",
-      "correct": "aciertos",
-      "pts": "pts"
+      "correct": "{{n}} aciertos",
+      "pts": "{{n}} pts",
+      "level": "Nivel {{n}}",
+      "you": "tú"
     },
     "reaction": {
-      "instruction": "Toca cuando la pantalla se ponga verde",
       "wait": "ESPERA…",
+      "instruction": "Toca cuando la pantalla se ponga verde",
       "tap": "¡TOCA!",
+      "go": "¡Dale, dale!",
       "tooEarly": "DEMASIADO PRONTO",
       "falseStart": "Te precipitaste — fuera esta ronda",
       "nice": "¡Buen reflejo!",
       "ms": "{{ms}} ms"
     },
     "buttonMasher": {
-      "getReady": "Prepárate…",
-      "go": "¡Dale, dale!",
-      "done": "¡FIN!"
+      "mash": "¡MACHACA!",
+      "hint": "Toca / pulsa ESPACIO lo más rápido que puedas"
     },
     "colorTrap": {
-      "tapInk": "Toca el color de la tinta"
+      "instruction": "Toca el color de la TINTA, no la palabra",
+      "locked": "Bloqueado — espera al siguiente"
     },
     "trivia": {
-      "question": "P {{index}} / {{total}}"
+      "progress": "P {{index}} / {{total}}",
+      "getReady": "Prepárate…",
+      "locked": "Respuesta bloqueada — espera"
     },
     "balloon": {
+      "pump": "INFLAR",
+      "cashOut": "RETIRAR",
       "pop": "¡PUM!",
-      "banked": "{{points}} guardados"
+      "cashed": "GUARDADO",
+      "bust": "REVENTÓ"
     },
     "numberRush": {
-      "find": "Busca {{n}}",
-      "done": "¡FIN!"
-    },
-    "oddOneOut": {
-      "level": "Nivel {{n}}"
+      "done": "¡FIN!",
+      "find": "Busca {{n}}"
     },
     "higherLower": {
-      "prompt": "¿Mayor o menor que esta?",
+      "higher": "▲ MAYOR",
+      "lower": "▼ MENOR",
       "streak": "Racha: {{n}}",
+      "prompt": "¿Mayor o menor que esta?",
       "out": "Se acabó — espera"
     },
-    "bugSmash": {
-      "smash": "¡Aplasta los bichos!"
-    },
     "stopClock": {
+      "stop": "PARAR",
+      "doneBtn": "FIN",
+      "info": "Intento {{n}}/{{total}}   err {{err}}",
       "prompt": "¡Para en el objetivo verde!",
       "done": "Sin intentos — espera"
-    },
-    "memoryFlash": {
-      "memorize": "¡Memoriza!",
-      "howMany": "¿Cuántos {{color}}?"
     },
     "simon": {
       "watch": "Observa...",
       "repeat": "¡Repite!",
-      "level": "Nivel {{n}}",
       "out": "FUERA — espera"
+    },
+    "memoryFlash": {
+      "memorize": "¡Memoriza!",
+      "howMany": "¿Cuántos {{color}}?"
     },
     "pixelHoops": {
       "hint": "Mantén para cargar, suelta para lanzar",

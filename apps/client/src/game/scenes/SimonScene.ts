@@ -2,6 +2,7 @@ import type { ClientMsg, SimonSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
+import type { Translate } from '../i18n'
 
 const PAD_COLORS = [0xe63946, 0x3a7bd5, 0x2a9d3f, 0xf4c20d]
 const PLAY_ON_MS = 420
@@ -25,6 +26,7 @@ export class SimonScene extends Phaser.Scene {
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
     private readonly sfx: Sfx,
+    private readonly t: Translate,
   ) {
     super('simon')
   }
@@ -90,7 +92,9 @@ export class SimonScene extends Phaser.Scene {
     if (!snap) return
     const me = snap.players[this.state.selfId ?? '']
     this.timer?.setText(`${Math.ceil(snap.remainingMs / 1000)}s`)
-    this.info?.setText(`Level ${snap.scores[this.state.selfId ?? ''] ?? 0}`)
+    this.info?.setText(
+      this.t('game.common.level', { n: snap.scores[this.state.selfId ?? ''] ?? 0 }),
+    )
     if (!me) return
 
     // A longer sequence means the player advanced a level → play the new sequence back.
@@ -101,7 +105,7 @@ export class SimonScene extends Phaser.Scene {
     }
 
     if (!me.alive) {
-      this.status?.setText('OUT — hang tight').setColor('#e63946')
+      this.status?.setText(this.t('game.simon.out')).setColor('#e63946')
       if (this.wasAlive) {
         this.sfx.wrong()
         this.wasAlive = false
@@ -115,14 +119,14 @@ export class SimonScene extends Phaser.Scene {
       const elapsed = this.time.now - this.playStart
       const slot = PLAY_ON_MS + PLAY_GAP_MS
       const idx = Math.floor(elapsed / slot)
-      this.status?.setText('Watch...').setColor('#ffd166')
+      this.status?.setText(this.t('game.simon.watch')).setColor('#ffd166')
       this.pads.forEach((p, i) => {
         const lit = idx < seq.length && seq[idx] === i && elapsed % slot < PLAY_ON_MS
         p.setAlpha(lit ? 1 : 0.4)
       })
       if (idx >= seq.length) this.playing = false
     } else {
-      this.status?.setText('Repeat!').setColor('#06d6a0')
+      this.status?.setText(this.t('game.simon.repeat')).setColor('#06d6a0')
     }
   }
 }

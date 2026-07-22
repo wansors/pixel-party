@@ -2,6 +2,7 @@ import type { ClientMsg, PixelSplitObject, PixelSplitSnapshot } from '@pp/shared
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
+import type { Translate } from '../i18n'
 
 // Pixel Split canvas. The object stays visible; drag the vertical cut line to a column boundary so both
 // halves hold the same number of pixels, then submit. Counts are never shown — it's a visual judgment.
@@ -27,6 +28,7 @@ export class PixelSplitScene extends Phaser.Scene {
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
     private readonly sfx: Sfx,
+    private readonly t: Translate,
   ) {
     super('pixel-split')
   }
@@ -45,7 +47,7 @@ export class PixelSplitScene extends Phaser.Scene {
       .text(cx, height * 0.12, '', { fontFamily: 'monospace', fontSize: '16px', color: '#9fb3c8' })
       .setOrigin(0.5)
     this.prompt = this.add
-      .text(cx, height * 0.19, 'Split it evenly', {
+      .text(cx, height * 0.19, this.t('game.pixelSplit.prompt'), {
         fontFamily: 'monospace',
         fontSize: '22px',
         color: '#e6edf3',
@@ -66,7 +68,7 @@ export class PixelSplitScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
     this.submitBtn.on('pointerdown', () => this.submit())
     this.submitLabel = this.add
-      .text(cx, height * 0.86, 'CUT', {
+      .text(cx, height * 0.86, this.t('game.pixelSplit.cut'), {
         fontFamily: 'monospace',
         fontSize: '26px',
         color: '#e6edf3',
@@ -126,10 +128,10 @@ export class PixelSplitScene extends Phaser.Scene {
     this.lastScore = myScore
 
     this.timer?.setText(`${Math.ceil(snap.remainingMs / 1000)}s`)
-    this.score?.setText(`${myScore} pts`)
+    this.score?.setText(this.t('game.common.pts', { n: myScore }))
 
     if (!obj) {
-      this.prompt?.setText('Done!')
+      this.prompt?.setText(this.t('game.common.done'))
       for (const p of this.pixels) p.setVisible(false)
       this.cutLine?.setVisible(false)
       this.submitBtn?.setVisible(false)

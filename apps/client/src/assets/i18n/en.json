@@ -136,61 +136,67 @@
   "game": {
     "common": {
       "done": "Done!",
-      "correct": "correct",
-      "pts": "pts"
+      "correct": "{{n}} correct",
+      "pts": "{{n}} pts",
+      "level": "Level {{n}}",
+      "you": "you"
     },
     "reaction": {
-      "instruction": "Tap when the screen turns green",
       "wait": "WAIT…",
+      "instruction": "Tap when the screen turns green",
       "tap": "TAP!",
+      "go": "Go go go!",
       "tooEarly": "TOO EARLY",
       "falseStart": "False start — you are out this round",
       "nice": "Nice reaction!",
       "ms": "{{ms}} ms"
     },
     "buttonMasher": {
-      "getReady": "Get ready…",
-      "go": "Go go go!",
-      "done": "DONE!"
+      "mash": "MASH!",
+      "hint": "Tap / press SPACE as fast as you can"
     },
     "colorTrap": {
-      "tapInk": "Tap the ink color"
+      "instruction": "Tap the INK color — not the word",
+      "locked": "Locked in — wait for the next one"
     },
     "trivia": {
-      "question": "Q {{index}} / {{total}}"
+      "progress": "Q {{index}} / {{total}}",
+      "getReady": "Get ready…",
+      "locked": "Answer locked — hang tight"
     },
     "balloon": {
+      "pump": "PUMP",
+      "cashOut": "CASH OUT",
       "pop": "POP!",
-      "banked": "{{points}} banked"
+      "cashed": "CASHED",
+      "bust": "BUST"
     },
     "numberRush": {
-      "find": "Find {{n}}",
-      "done": "DONE"
-    },
-    "oddOneOut": {
-      "level": "Level {{n}}"
+      "done": "DONE!",
+      "find": "Find {{n}}"
     },
     "higherLower": {
-      "prompt": "Higher or lower than this?",
+      "higher": "▲ HIGHER",
+      "lower": "▼ LOWER",
       "streak": "Streak: {{n}}",
+      "prompt": "Higher or lower than this?",
       "out": "Run over — sit tight"
     },
-    "bugSmash": {
-      "smash": "Smash the bugs!"
-    },
     "stopClock": {
+      "stop": "STOP",
+      "doneBtn": "DONE",
+      "info": "Try {{n}}/{{total}}   err {{err}}",
       "prompt": "Stop on the green target!",
       "done": "All tries used — hang tight"
-    },
-    "memoryFlash": {
-      "memorize": "Memorize!",
-      "howMany": "How many {{color}}?"
     },
     "simon": {
       "watch": "Watch...",
       "repeat": "Repeat!",
-      "level": "Level {{n}}",
       "out": "OUT — hang tight"
+    },
+    "memoryFlash": {
+      "memorize": "Memorize!",
+      "howMany": "How many {{color}}?"
     },
     "pixelHoops": {
       "hint": "Hold to charge, release to shoot",

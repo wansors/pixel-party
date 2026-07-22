@@ -2,6 +2,7 @@ import type { ButtonMasherSnapshot, ClientMsg } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
+import type { Translate } from '../i18n'
 
 // Button Masher canvas. Scene key === the mini-game id so GameClient can start it by id. Reads
 // authoritative snapshots from RoundState and sends one MINIGAME_INPUT per press.
@@ -14,6 +15,7 @@ export class ButtonMasherScene extends Phaser.Scene {
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
     private readonly sfx: Sfx,
+    private readonly t: Translate,
   ) {
     super('button-masher')
   }
@@ -22,7 +24,7 @@ export class ButtonMasherScene extends Phaser.Scene {
     const { width, height } = this.scale
     const cx = width / 2
     this.add
-      .text(cx, height * 0.14, 'MASH!', {
+      .text(cx, height * 0.14, this.t('game.buttonMasher.mash'), {
         fontFamily: 'monospace',
         fontSize: '48px',
         color: '#ffd166',
@@ -43,7 +45,7 @@ export class ButtonMasherScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0)
     this.add
-      .text(cx, height * 0.9, 'Tap / press SPACE as fast as you can', {
+      .text(cx, height * 0.9, this.t('game.buttonMasher.hint'), {
         fontFamily: 'monospace',
         fontSize: '16px',
         color: '#5b6b7b',
@@ -63,13 +65,14 @@ export class ButtonMasherScene extends Phaser.Scene {
     const snap = this.state.state as ButtonMasherSnapshot | null
     if (!snap || typeof snap.remainingMs !== 'number') return
     const selfId = this.state.selfId ?? ''
+    const you = this.t('game.common.you')
     this.countText?.setText(String(snap.counts[selfId] ?? 0))
     this.timer?.setText(`${Math.ceil(snap.remainingMs / 1000)}s`)
     this.board?.setText(
       Object.entries(snap.counts)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
-        .map(([id, n], i) => `${i + 1}. ${id === selfId ? 'you' : id.slice(0, 6)} — ${n}`)
+        .map(([id, n], i) => `${i + 1}. ${id === selfId ? you : id.slice(0, 6)} — ${n}`)
         .join('\n'),
     )
   }

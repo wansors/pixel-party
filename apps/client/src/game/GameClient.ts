@@ -2,6 +2,7 @@ import type { ClientMsg, MiniGameId, ServerMsg } from '@pp/shared'
 import Phaser from 'phaser'
 import { RoundState } from './RoundState'
 import type { Sfx } from './Sfx'
+import type { Translate } from './i18n'
 import { BalloonChickenScene } from './scenes/BalloonChickenScene'
 import { BugSmashScene } from './scenes/BugSmashScene'
 import { ButtonMasherScene } from './scenes/ButtonMasherScene'
@@ -80,13 +81,14 @@ export class GameClient {
   constructor(
     private readonly send: (msg: ClientMsg) => void,
     private readonly sfx: Sfx,
+    private readonly t: Translate,
   ) {}
 
   boot(parent: string): void {
     if (this.game) return
     this.game = new Phaser.Game(gameConfig(parent))
     // Register scenes inactive; the round starts the right one by id.
-    const deps = [this.send, this.state, this.sfx] as const
+    const deps = [this.send, this.state, this.sfx, this.t] as const
     this.game.scene.add('button-masher', new ButtonMasherScene(...deps), false)
     this.game.scene.add('reaction-duel', new ReactionScene(...deps), false)
     this.game.scene.add('color-trap', new ColorTrapScene(...deps), false)

@@ -208,7 +208,11 @@ export class RoomComponent implements OnInit {
   // Boot Phaser lazily once the round container is in the DOM, outside the Angular zone.
   private ensureGame(): void {
     if (this.game) return
-    this.game = new GameClient((m) => this.net.send(m), this.audio.sfx)
+    this.game = new GameClient(
+      (m) => this.net.send(m),
+      this.audio.sfx,
+      (k, p) => this.transloco.translate(k, p),
+    )
     if (this.selfId()) this.game.state.selfId = this.selfId()
     this.zone.runOutsideAngular(() => {
       setTimeout(() => this.game?.boot('game-container'), 0)

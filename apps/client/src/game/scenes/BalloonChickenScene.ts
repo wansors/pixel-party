@@ -2,6 +2,7 @@ import type { BalloonChickenSnapshot, ClientMsg } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
+import type { Translate } from '../i18n'
 
 // Balloon Chicken canvas. Tap PUMP to inflate for points; tap CASH OUT to bank before it bursts. Scene
 // key === mini-game id. The burst threshold is server-side, so the client just renders the snapshot.
@@ -20,6 +21,7 @@ export class BalloonChickenScene extends Phaser.Scene {
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
     private readonly sfx: Sfx,
+    private readonly t: Translate,
   ) {
     super('balloon-chicken')
   }
@@ -51,7 +53,7 @@ export class BalloonChickenScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
     this.pumpBtn.on('pointerdown', () => this.act('pump'))
     this.pumpLabel = this.add
-      .text(cx - width * 0.2, height * 0.88, 'PUMP', {
+      .text(cx - width * 0.2, height * 0.88, this.t('game.balloon.pump'), {
         fontFamily: 'monospace',
         fontSize: '24px',
         color: '#0b0f14',
@@ -64,7 +66,7 @@ export class BalloonChickenScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
     this.cashBtn.on('pointerdown', () => this.act('cashout'))
     this.cashLabel = this.add
-      .text(cx + width * 0.2, height * 0.88, 'CASH OUT', {
+      .text(cx + width * 0.2, height * 0.88, this.t('game.balloon.cashOut'), {
         fontFamily: 'monospace',
         fontSize: '20px',
         color: '#0b0f14',
@@ -87,6 +89,7 @@ export class BalloonChickenScene extends Phaser.Scene {
     if (!snap) return
     const selfId = this.state.selfId ?? ''
     const self = snap.players[selfId]
+    const you = this.t('game.common.you')
     this.timer?.setText(`${Math.ceil(snap.remainingMs / 1000)}s`)
 
     if (self) {
@@ -100,7 +103,7 @@ export class BalloonChickenScene extends Phaser.Scene {
       this.balloon?.setRadius(radius)
       if (self.status === 'burst') {
         this.balloon?.setFillStyle(0x3a3a3a)
-        this.banked?.setText('POP!')
+        this.banked?.setText(this.t('game.balloon.pop'))
       } else {
         this.balloon?.setFillStyle(alive ? 0xe63946 : 0x2a9d3f)
         this.banked?.setText(
@@ -110,7 +113,13 @@ export class BalloonChickenScene extends Phaser.Scene {
       this.pumpBtn?.setAlpha(alive ? 1 : 0.3)
       this.cashBtn?.setAlpha(alive ? 1 : 0.3)
       this.pumpLabel?.setText(
-        self.status === 'cashed' ? 'CASHED' : self.status === 'burst' ? 'BUST' : 'PUMP',
+        this.t(
+          self.status === 'cashed'
+            ? 'game.balloon.cashed'
+            : self.status === 'burst'
+              ? 'game.balloon.bust'
+              : 'game.balloon.pump',
+        ),
       )
     }
 
@@ -128,8 +137,13 @@ export class BalloonChickenScene extends Phaser.Scene {
         .slice(0, 6)
         .map(([id, v], i) => {
           const p = snap.players[id]
-          const tag = p.status === 'burst' ? ' BUST' : p.status === 'cashed' ? ' $' : ''
-          return `${i + 1}. ${id === selfId ? 'you' : id.slice(0, 6)} — ${v}${tag}`
+          const tag =
+            p.status === 'burst'
+              ? ` ${this.t('game.balloon.bust')}`
+              : p.status === 'cashed'
+                ? ' $'
+                : ''
+          return `${i + 1}. ${id === selfId ? you : id.slice(0, 6)} — ${v}${tag}`
         })
         .join('\n'),
     )

@@ -16,6 +16,7 @@ play → per-round result → cumulative scoreboard → final), scoring/scoreboa
 `number-rush`, `quick-math`, `odd-one-out`, `higher-lower`, `bug-smash`, `stop-clock`, `memory-flash`,
 `simon`, `pixel-hoops`, `pixel-weight`, `pixel-split`),
 **mid-session reconnect/rejoin**, **audio** (background music + synthesized 8-bit SFX + volume sliders),
+**i18n (EN/ES)** (Transloco, runtime toggle, all UI + Phaser scenes translated),
 **GitHub Actions CI**, and the **retro arcade look & feel** (palette theme, arcade
 frame, pixel-art avatars, high-score tables). Remaining polish: self-hosted pixel-font binary (scaffold
 ready) + per-breakpoint responsive tuning. See `docs/backlog.md` → *Current status* for the
@@ -69,6 +70,10 @@ blueprint in `docs/technical-architecture.md`.
 - **Bun-native WebSockets** (topic pub/sub); wire contracts in `@pp/shared` as discriminated unions with
   a **hand-written** shape validator (**no Zod**).
 - **Angular 20** shell (all DOM/UI) + **Phaser 3** (mini-game canvas only), kept decoupled.
+- **i18n**: **Transloco** (`@jsverse/transloco`), EN/ES, mirroring `../utopia-offline` — static bundled
+  loader (`assets/i18n/{en,es}.json`), `LanguageService` (signal + localStorage `pp_lang`, default EN),
+  `CatalogI18nService` for mini-game names/blurbs (English fallback to `@pp/shared` meta), runtime
+  EN|ES toggle. Phaser scenes receive a `Translate` fn injected via `GameClient` (framework-agnostic).
 - **No database in Phase 1** — rooms, sessions, players and scores are in-memory/ephemeral; nothing is
   persisted when a room closes. Players are anonymous (unique color + preset pixel avatar + name).
   `bun:sqlite` is a later-phase add-on only (Phase 6).

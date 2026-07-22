@@ -2,6 +2,7 @@ import type { ClientMsg, MemoryFlashBoard, MemoryFlashSnapshot } from '@pp/share
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
+import type { Translate } from '../i18n'
 
 const css = (hex: number): string => `#${hex.toString(16).padStart(6, '0')}`
 
@@ -23,6 +24,7 @@ export class MemoryFlashScene extends Phaser.Scene {
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
     private readonly sfx: Sfx,
+    private readonly t: Translate,
   ) {
     super('memory-flash')
   }
@@ -115,10 +117,10 @@ export class MemoryFlashScene extends Phaser.Scene {
     this.lastLevel = lvl
 
     this.timer?.setText(`${Math.ceil(snap.remainingMs / 1000)}s`)
-    this.score?.setText(`${myScore} correct`)
+    this.score?.setText(this.t('game.common.correct', { n: myScore }))
 
     if (!board) {
-      this.prompt?.setText('Done!')
+      this.prompt?.setText(this.t('game.common.done'))
       for (const p of this.pixels) p.setVisible(false)
       for (const b of this.choiceBtns) b.setVisible(false)
       for (const l of this.choiceLabels) l.setVisible(false)
@@ -133,7 +135,11 @@ export class MemoryFlashScene extends Phaser.Scene {
       l.setVisible(!flashing && i < board.choices.length).setText(String(board.choices[i] ?? '')),
     )
     this.prompt
-      ?.setText(flashing ? 'Memorize!' : `How many ${board.targetName}?`)
+      ?.setText(
+        flashing
+          ? this.t('game.memoryFlash.memorize')
+          : this.t('game.memoryFlash.howMany', { color: board.targetName }),
+      )
       .setColor(flashing ? '#e6edf3' : css(board.targetColor))
   }
 }

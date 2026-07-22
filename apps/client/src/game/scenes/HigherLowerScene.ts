@@ -2,6 +2,7 @@ import type { ClientMsg, HigherLowerSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
+import type { Translate } from '../i18n'
 
 // Higher or Lower canvas. Shows this player's current card + HIGHER / LOWER buttons; a correct guess
 // extends the streak, a miss locks the run. Scene key === mini-game id.
@@ -22,6 +23,7 @@ export class HigherLowerScene extends Phaser.Scene {
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
     private readonly sfx: Sfx,
+    private readonly t: Translate,
   ) {
     super('higher-lower')
   }
@@ -56,7 +58,7 @@ export class HigherLowerScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
     this.higherBtn.on('pointerdown', () => this.guess('higher'))
     this.higherLabel = this.add
-      .text(cx - bw / 2 - width * 0.02, by, '▲ HIGHER', {
+      .text(cx - bw / 2 - width * 0.02, by, this.t('game.higherLower.higher'), {
         fontFamily: 'monospace',
         fontSize: '22px',
         color: '#0b0f14',
@@ -69,7 +71,7 @@ export class HigherLowerScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
     this.lowerBtn.on('pointerdown', () => this.guess('lower'))
     this.lowerLabel = this.add
-      .text(cx + bw / 2 + width * 0.02, by, '▼ LOWER', {
+      .text(cx + bw / 2 + width * 0.02, by, this.t('game.higherLower.lower'), {
         fontFamily: 'monospace',
         fontSize: '22px',
         color: '#0b0f14',
@@ -92,7 +94,7 @@ export class HigherLowerScene extends Phaser.Scene {
     const card = snap.cards[selfId]
     const myStreak = snap.scores[selfId] ?? 0
     this.timer?.setText(`${Math.ceil(snap.remainingMs / 1000)}s`)
-    this.streak?.setText(`Streak: ${myStreak}`)
+    this.streak?.setText(this.t('game.higherLower.streak', { n: myStreak }))
     if (!card) return
 
     // A growing streak = a correct guess; the alive -> dead transition = a miss.
@@ -106,7 +108,7 @@ export class HigherLowerScene extends Phaser.Scene {
     this.card?.setText(String(card.current))
     const alive = card.alive
     this.cardBox?.setStrokeStyle(4, alive ? 0xffffff : 0x8b1e2d)
-    this.status?.setText(alive ? 'Higher or lower than this?' : 'Run over — sit tight')
+    this.status?.setText(this.t(alive ? 'game.higherLower.prompt' : 'game.higherLower.out'))
     this.higherBtn?.setAlpha(alive ? 1 : 0.3)
     this.lowerBtn?.setAlpha(alive ? 1 : 0.3)
   }

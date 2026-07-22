@@ -2,6 +2,7 @@ import type { ClientMsg, TriviaSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
+import type { Translate } from '../i18n'
 
 const CHOICE_COLORS = [0xe63946, 0x3a7bd5, 0x2a9d3f, 0xf4c20d]
 
@@ -22,6 +23,7 @@ export class TriviaScene extends Phaser.Scene {
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
     private readonly sfx: Sfx,
+    private readonly t: Translate,
   ) {
     super('trivia')
   }
@@ -105,12 +107,21 @@ export class TriviaScene extends Phaser.Scene {
     }
     this.lastScore = myScore
 
-    this.progress?.setText(`Q ${Math.min(snap.index + 1, snap.total)} / ${snap.total}`)
+    this.progress?.setText(
+      this.t('game.trivia.progress', {
+        index: Math.min(snap.index + 1, snap.total),
+        total: snap.total,
+      }),
+    )
     this.timer?.setText(`${Math.ceil(snap.questionRemainingMs / 1000)}s`)
-    this.question?.setText(snap.question ?? 'Get ready…')
+    this.question?.setText(snap.question ?? this.t('game.trivia.getReady'))
 
     const locked = snap.answeredCurrent.includes(selfId)
-    this.status?.setText(locked ? 'Answer locked — hang tight' : `${snap.scores[selfId] ?? 0} pts`)
+    this.status?.setText(
+      locked
+        ? this.t('game.trivia.locked')
+        : this.t('game.common.pts', { n: snap.scores[selfId] ?? 0 }),
+    )
     this.choiceBtns.forEach((rect, i) => {
       const has = i < snap.choices.length && snap.question !== null
       rect.setVisible(has).setAlpha(locked ? 0.4 : 1)

@@ -2,6 +2,7 @@ import type { ClientMsg, PixelHoopsSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
+import type { Translate } from '../i18n'
 
 const CHARGE_MS = 1200
 const TOLERANCE = 0.12
@@ -31,6 +32,7 @@ export class PixelHoopsScene extends Phaser.Scene {
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
     private readonly sfx: Sfx,
+    private readonly t: Translate,
   ) {
     super('pixel-hoops')
   }
@@ -68,7 +70,7 @@ export class PixelHoopsScene extends Phaser.Scene {
       .setOrigin(0.5, 1)
 
     this.status = this.add
-      .text(cx, height * 0.7, 'Hold to charge, release to shoot', {
+      .text(cx, height * 0.7, this.t('game.pixelHoops.hint'), {
         fontFamily: 'monospace',
         fontSize: '18px',
         color: '#5b6b7b',
@@ -119,16 +121,16 @@ export class PixelHoopsScene extends Phaser.Scene {
     // Make/miss inferred from the score delta as the shot index advances.
     if (myScore > this.lastScore) {
       this.sfx.coin()
-      this.status?.setText(`SWISH! x${combo}`).setColor('#06d6a0')
+      this.status?.setText(this.t('game.pixelHoops.swish', { combo })).setColor('#06d6a0')
     } else if (this.lastIndex >= 0 && idx > this.lastIndex) {
       this.sfx.wrong()
-      this.status?.setText('MISS').setColor('#e63946')
+      this.status?.setText(this.t('game.pixelHoops.miss')).setColor('#e63946')
     }
     this.lastScore = myScore
     this.lastIndex = idx
 
     this.timer?.setText(`${Math.ceil(snap.remainingMs / 1000)}s`)
-    this.score?.setText(`${myScore} pts   combo ${combo}`)
+    this.score?.setText(this.t('game.pixelHoops.combo', { score: myScore, combo }))
 
     const target = shot?.distance ?? 0
     // Hoop height + target band track the required power.
@@ -139,6 +141,6 @@ export class PixelHoopsScene extends Phaser.Scene {
     const p = this.charging ? this.power() : 0
     this.meterFill?.setSize((this.meterBg?.width ?? 20) - 8, p * this.meterH)
 
-    if (!shot) this.status?.setText('Done!').setColor('#9fb3c8')
+    if (!shot) this.status?.setText(this.t('game.common.done')).setColor('#9fb3c8')
   }
 }

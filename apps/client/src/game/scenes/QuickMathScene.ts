@@ -2,6 +2,7 @@ import type { ClientMsg, QuickMathSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
+import type { Translate } from '../i18n'
 
 const CHOICE_COLORS = [0xe63946, 0x3a7bd5, 0x2a9d3f, 0xf4c20d]
 
@@ -20,6 +21,7 @@ export class QuickMathScene extends Phaser.Scene {
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
     private readonly sfx: Sfx,
+    private readonly t: Translate,
   ) {
     super('quick-math')
   }
@@ -93,8 +95,8 @@ export class QuickMathScene extends Phaser.Scene {
     this.lastIndex = idx
 
     this.timer?.setText(`${Math.ceil(snap.remainingMs / 1000)}s`)
-    this.score?.setText(`${snap.scores[selfId] ?? 0} correct`)
-    this.question?.setText(prompt ? prompt.text : 'Done!')
+    this.score?.setText(this.t('game.common.correct', { n: snap.scores[selfId] ?? 0 }))
+    this.question?.setText(prompt ? prompt.text : this.t('game.common.done'))
     this.choiceBtns.forEach((rect, i) => {
       const has = prompt !== null && i < prompt.choices.length
       rect.setVisible(has)

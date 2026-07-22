@@ -3,6 +3,7 @@ import type { ClientMsg } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
+import type { Translate } from '../i18n'
 
 // Odd One Out canvas. Renders this player's current board (a grid of tiles, one slightly brighter);
 // tap the odd tile to advance. The grid is rebuilt whenever the player reaches a new level. Scene key
@@ -17,6 +18,7 @@ export class OddOneOutScene extends Phaser.Scene {
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
     private readonly sfx: Sfx,
+    private readonly t: Translate,
   ) {
     super('odd-one-out')
   }
@@ -72,7 +74,7 @@ export class OddOneOutScene extends Phaser.Scene {
     const selfId = this.state.selfId ?? ''
     const board = snap.boards[selfId] ?? null
     this.timer?.setText(`${Math.ceil(snap.remainingMs / 1000)}s`)
-    this.score?.setText(`Level ${(snap.scores[selfId] ?? 0) + 1}`)
+    this.score?.setText(this.t('game.common.level', { n: (snap.scores[selfId] ?? 0) + 1 }))
     if (board && board.level !== this.drawnLevel) this.draw(board)
   }
 }

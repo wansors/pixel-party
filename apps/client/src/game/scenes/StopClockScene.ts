@@ -2,6 +2,7 @@ import type { ClientMsg, StopClockSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
+import type { Translate } from '../i18n'
 
 const PERIOD_MS = 1500
 
@@ -24,6 +25,7 @@ export class StopClockScene extends Phaser.Scene {
     private readonly send: (msg: ClientMsg) => void,
     private readonly state: RoundState,
     private readonly sfx: Sfx,
+    private readonly t: Translate,
   ) {
     super('stop-clock')
   }
@@ -57,7 +59,7 @@ export class StopClockScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
     this.button.on('pointerdown', () => this.stop())
     this.buttonLabel = this.add
-      .text(cx, height * 0.82, 'STOP', {
+      .text(cx, height * 0.82, this.t('game.stopClock.stop'), {
         fontFamily: 'monospace',
         fontSize: '28px',
         color: '#0b0f14',
@@ -90,14 +92,18 @@ export class StopClockScene extends Phaser.Scene {
     const done = attempt >= snap.attempts
     this.timer?.setText(`${Math.ceil(snap.remainingMs / 1000)}s`)
     this.info?.setText(
-      `Try ${Math.min(attempt + 1, snap.attempts)}/${snap.attempts}   err ${(snap.totalError[selfId] ?? 0).toFixed(2)}`,
+      this.t('game.stopClock.info', {
+        n: Math.min(attempt + 1, snap.attempts),
+        total: snap.attempts,
+        err: (snap.totalError[selfId] ?? 0).toFixed(2),
+      }),
     )
 
     const target = snap.targets[Math.min(attempt, snap.targets.length - 1)] ?? 0.5
     this.targetMark?.setX(this.barLeft + target * this.barWidth)
     if (!done) this.needle?.setX(this.barLeft + this.needlePos() * this.barWidth)
-    this.status?.setText(done ? 'All tries used — hang tight' : 'Stop on the green target!')
+    this.status?.setText(this.t(done ? 'game.stopClock.done' : 'game.stopClock.prompt'))
     this.button?.setAlpha(done ? 0.3 : 1)
-    this.buttonLabel?.setText(done ? 'DONE' : 'STOP')
+    this.buttonLabel?.setText(this.t(done ? 'game.stopClock.doneBtn' : 'game.stopClock.stop'))
   }
 }
