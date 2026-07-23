@@ -144,6 +144,10 @@
       "tug-of-war": {
         "name": "Tug of War",
         "blurb": "Two teams, one rope. Mash together to pull the marker to your side."
+      },
+      "sink-the-fleet": {
+        "name": "Sink the Fleet",
+        "blurb": "Head-to-head Battleship. Take turns firing to sink your rival before they sink you."
       }
     }
   },
@@ -232,6 +236,17 @@
       "hint": "Tap / press SPACE to pull the rope your way",
       "team": "Your team",
       "spectator": "No team — watching this round"
+    },
+    "sinkTheFleet": {
+      "yourTurn": "YOUR TURN — fire!",
+      "waitTurn": "Rival's turn...",
+      "target": "Enemy waters",
+      "yourFleet": "Your fleet",
+      "won": "FLEET SUNK — YOU WIN!",
+      "lost": "Your fleet is gone...",
+      "draw": "Time up — draw",
+      "bye": "No rival this round — free win",
+      "hint": "Tap a cell in enemy waters to fire on your turn"
     }
   }
 }

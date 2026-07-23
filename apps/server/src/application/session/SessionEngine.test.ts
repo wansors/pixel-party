@@ -190,6 +190,36 @@ describe('SessionEngine', () => {
     expect(final.scores.find((s) => s.playerId === 'c')?.points).toBe(7)
   })
 
+  test('duel round runs and produces per-player scores (no team summary)', () => {
+    const room = Room.create('DUEL', 10)
+    room.add(Player.create({ id: 'a', name: 'a', color: '#fff', avatar: 'x' }))
+    room.add(Player.create({ id: 'b', name: 'b', color: '#fff', avatar: 'x' }))
+    room.configure(['sink-the-fleet'], 1)
+
+    let t = 0
+    const clock: Clock = { now: () => t }
+    const captured: ServerMsg[] = []
+    const engine = new SessionEngine(
+      room,
+      { toRoom: (_c, m) => captured.push(m) },
+      clock,
+      noRandom,
+      CONFIG,
+    )
+    engine.start()
+    // No inputs: the duel resolves at the time cap. Enough ticks to clear the 60s round window.
+    for (let i = 0; i < 1400 && !engine.isFinished; i++) {
+      t += 1000 / CONFIG.tickHz
+      engine.tick()
+    }
+
+    const rr = captured.find((m) => m.type === 'ROUND_RESULT')
+    if (rr?.type !== 'ROUND_RESULT') throw new Error('no round result')
+    expect(rr.result.teams).toBeUndefined()
+    expect(rr.result.scores).toHaveLength(2)
+    expect(captured.some((m) => m.type === 'FINAL_RANKING')).toBe(true)
+  })
+
   test('resumeMessages rebuilds the live round for a reconnecting socket', () => {
     const room = roomWith('a', 'b')
     let t = 0

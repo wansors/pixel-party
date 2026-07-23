@@ -144,6 +144,10 @@
       "tug-of-war": {
         "name": "Sogatira",
         "blurb": "Dos equipos, una cuerda. Machacad juntos para llevar la marca a vuestro lado."
+      },
+      "sink-the-fleet": {
+        "name": "Hunde la Flota",
+        "blurb": "Batalla naval cara a cara. Disparad por turnos y hunde a tu rival antes de que te hunda."
       }
     }
   },
@@ -232,6 +236,17 @@
       "hint": "Toca / pulsa ESPACIO para tirar de la cuerda hacia tu lado",
       "team": "Tu equipo",
       "spectator": "Sin equipo — miras esta ronda"
+    },
+    "sinkTheFleet": {
+      "yourTurn": "TU TURNO — ¡dispara!",
+      "waitTurn": "Turno del rival...",
+      "target": "Aguas enemigas",
+      "yourFleet": "Tu flota",
+      "won": "¡FLOTA HUNDIDA — GANAS!",
+      "lost": "Tu flota ha caído...",
+      "draw": "Tiempo agotado — empate",
+      "bye": "Sin rival esta ronda — victoria directa",
+      "hint": "Toca una celda en aguas enemigas para disparar en tu turno"
     }
   }
 }

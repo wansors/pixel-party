@@ -14,6 +14,7 @@ import { PixelWeight } from './pixelWeight'
 import { QuickMath } from './quickMath'
 import { ReactionDuel } from './reactionDuel'
 import { Simon } from './simon'
+import { SinkTheFleet } from './sinkTheFleet'
 import { StopClock } from './stopClock'
 import { Trivia } from './trivia'
 import { TugOfWar } from './tugOfWar'
@@ -38,6 +39,7 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'pixel-weight': () => new PixelWeight() as unknown as MiniGame<unknown, unknown>,
   'pixel-split': () => new PixelSplit() as unknown as MiniGame<unknown, unknown>,
   'tug-of-war': () => new TugOfWar() as unknown as MiniGame<unknown, unknown>,
+  'sink-the-fleet': () => new SinkTheFleet() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

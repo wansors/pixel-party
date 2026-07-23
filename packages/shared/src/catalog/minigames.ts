@@ -158,6 +158,14 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     durationSec: 15,
     blurb: 'Two teams, one rope. Mash together to pull the marker to your side.',
   },
+  {
+    id: 'sink-the-fleet',
+    name: 'Sink the Fleet',
+    format: 'duel',
+    realtime: true,
+    durationSec: 60,
+    blurb: 'Head-to-head Battleship. Take turns firing to sink your rival before they sink you.',
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

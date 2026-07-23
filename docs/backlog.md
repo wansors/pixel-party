@@ -38,10 +38,10 @@ works today:
 **Phase 0 and Phase 1 are complete** (closed out 2026-07-23): the pixel font is bundled, responsive
 tuning is done, and the Phase 1 robustness work landed — no-repeat game selection, host transfer
 (auto-on-disconnect + manual) + kick, room inactivity reaper, and observability (structured JSON logs +
-`/api/metrics`). **Phase 2 is in progress**: the teams vertical slice shipped (2 fixed teams + balanced
-seeded assignment + host move/shuffle + team scoring distribution + the first team game, Tug of War),
-bringing the catalog to **17 mini-games**. Still open in Phase 2: duels (bracket/pairing + Sink the
-Fleet) and Bomb Relay.
+`/api/metrics`). **Phase 2 is in progress**: the teams slice shipped (2 fixed teams + balanced seeded
+assignment + host move/shuffle + team scoring distribution + Tug of War) and the duels slice shipped
+(seeded simultaneous 1v1 pairing + win/loss aggregation + Sink the Fleet Battleship), bringing the
+catalog to **18 mini-games**. Still open in Phase 2: Bomb Relay (C2).
 
 ## How this backlog works
 
@@ -155,7 +155,8 @@ ranking. Latency-tolerant games only; no teams/duels/handicap yet.
 
 ## Phase 2 — Formats: teams & duels
 
-**In progress** — the teams vertical slice landed 2026-07-23 (Tug of War, end-to-end + playable).
+**In progress** — teams (Tug of War) and duels (Sink the Fleet) slices landed 2026-07-23, both
+end-to-end + playable. Remaining: Bomb Relay (C2).
 
 - [x] Team assignment service (random / host-set) + team scoring distribution. *Done 2026-07-23: two
       fixed teams (`red`/`blue`, `@pp/shared` `TEAMS`). `balancedTeams` (domain service) does a seeded
@@ -166,11 +167,19 @@ ranking. Latency-tolerant games only; no teams/duels/handicap yet.
       (tie = averaged team positions). Team membership is snapshotted per round and fed to the game via
       `MiniGameInitCtx.teams`; `RoundResultDto.teams` + `LOBBY_STATE.usesTeams` + `PlayerDto.team` carry
       it on the wire; lobby shows team badges + a "TEAM RED WINS" round banner.*
-- [ ] Duel bracket + pairing service; map bracket ordering → placements.
+- [x] Duel pairing service; map results → placements. *Done 2026-07-23: `pairPlayers` (domain service)
+      does a seeded simultaneous 1v1 pairing (odd roster → one bye = free win); wins/losses aggregate
+      into a round ranking (winners share rank 0, losers rank 1) that feeds the standard position table.
+      Chose simultaneous 1v1 over a single-elimination bracket — it keeps everyone playing every round
+      (party model) and maps to one round with no idle eliminated players.*
 - [~] Team games: Tug of War (C1), Bomb Relay (C2). *Tug of War (`tug-of-war`) shipped 2026-07-23:
       real-time team mash; each team's progress is average pulls-per-member (fair for uneven teams);
       win by a decisive per-capita lead or by leading at the timer. Bomb Relay (C2) still pending.*
-- [ ] Duel games (turn-based, low latency): Sink the Fleet (B2).
+- [x] Duel games (turn-based, low latency): Sink the Fleet (B2). *Done 2026-07-23 (`sink-the-fleet`):
+      simultaneous 1v1 Battleship on a 5×5 board (fleet [3,2,2]); fleets are auto-placed and never sent
+      on the wire (only shot hit/miss results are, so nothing exploitable leaks — no per-player channel
+      needed); turn-based firing with a 5 s per-turn timeout so a staller can't freeze their opponent;
+      a duel ends on a full sink, else it's decided on hits at the 60 s cap (tie = draw).*
 
 *Depends on: Phase 0 (scoring normalization §2.2 of `scoring-system.md`).*
 
@@ -260,7 +269,7 @@ follows the priority tiers there:
 |------|------|-----------------|-------|
 | MVP | P0 | Quick reaction (A1 ✅), Button masher (A2 ✅), Color Trap (E1 ✅), Trivia (A3 ✅), Balloon Chicken (D1 ✅) — all 5 shipped | 0 |
 | +1 | P1 | Number Rush (E4 ✅), Quick Math (E2 ✅), Odd One Out (E3 ✅), Higher/Lower (E5 ✅), Bug smash (A6 ✅), Timing (A10 ✅), Memory Flash (E8 ✅), Simon (A4 ✅), Pixel Hoops (A5 ✅), Pixel Weight (E12 ✅), Pixel Split (E11 ✅) — **P1 wave + fast-follows complete** | 1 |
-| +2 | P2 | Tug of War (C1 ✅), Sink the Fleet (B2), Match (A11), Bomb Relay (C2), Quick Draw Duel (E7), Pixel Beat (E6), Fruit Catch (D2), Fleet Battle (C3) | 2 |
+| +2 | P2 | Tug of War (C1 ✅), Sink the Fleet (B2 ✅), Match (A11), Bomb Relay (C2), Quick Draw Duel (E7), Pixel Beat (E6), Fruit Catch (D2), Fleet Battle (C3) | 2 |
 | +action | P3 | Pong (B1), Sumo (B3), Pixel Dash (A9), Snake (A8), Maze Sprint (E9), Pixel rain (A7), Line Clear (E10), Roulette (D3) | 5 |
 
 > P0 group is 5 games ranked; the MVP ships the top 3 (A1, A2, E1) with D1/A3 as fast-follows. See

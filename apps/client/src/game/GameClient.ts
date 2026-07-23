@@ -17,6 +17,7 @@ import { PixelWeightScene } from './scenes/PixelWeightScene'
 import { QuickMathScene } from './scenes/QuickMathScene'
 import { ReactionScene } from './scenes/ReactionScene'
 import { SimonScene } from './scenes/SimonScene'
+import { SinkTheFleetScene } from './scenes/SinkTheFleetScene'
 import { StopClockScene } from './scenes/StopClockScene'
 import { TriviaScene } from './scenes/TriviaScene'
 import { TugOfWarScene } from './scenes/TugOfWarScene'
@@ -41,6 +42,7 @@ const SCENE_IDS: MiniGameId[] = [
   'pixel-weight',
   'pixel-split',
   'tug-of-war',
+  'sink-the-fleet',
 ]
 
 // Pure Phaser config factory — testable without `new Phaser.Game` (which needs a DOM/canvas). Scenes
@@ -108,6 +110,7 @@ export class GameClient {
     this.game.scene.add('pixel-weight', new PixelWeightScene(...deps), false)
     this.game.scene.add('pixel-split', new PixelSplitScene(...deps), false)
     this.game.scene.add('tug-of-war', new TugOfWarScene(...deps), false)
+    this.game.scene.add('sink-the-fleet', new SinkTheFleetScene(...deps), false)
   }
 
   // Switch the active scene to the round's mini-game (no-op if already active).
