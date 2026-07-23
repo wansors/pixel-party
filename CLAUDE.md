@@ -8,19 +8,20 @@ for a session-wide ranking. See [`README.md`](README.md).
 
 ## Current phase
 
-**Phase 0 — MVP essentially complete** (development started 2026-07-20). The stack is scaffolded and the
-MVP is playable end-to-end. Run it with `bun run dev` (see `README.md`). Live now: rooms + lobby
-(ready/host), host game selector + round count, server-authoritative session engine (intro countdown →
-play → per-round result → cumulative scoreboard → final), scoring/scoreboard/final ranking,
+**Phases 0 & 1 complete** (development started 2026-07-20; closed out 2026-07-23). The stack is
+scaffolded and the game is playable end-to-end. Run it with `bun run dev` (see `README.md`). Live now:
+rooms + lobby (ready/host), host game selector + round count, server-authoritative session engine (intro
+countdown → play → per-round result → cumulative scoreboard → final), scoring/scoreboard/final ranking,
 **16 mini-games** (`button-masher`, `reaction-duel`, `color-trap`, `trivia`, `balloon-chicken`,
 `number-rush`, `quick-math`, `odd-one-out`, `higher-lower`, `bug-smash`, `stop-clock`, `memory-flash`,
-`simon`, `pixel-hoops`, `pixel-weight`, `pixel-split`),
-**mid-session reconnect/rejoin**, **audio** (background music + synthesized 8-bit SFX + volume sliders),
+`simon`, `pixel-hoops`, `pixel-weight`, `pixel-split`) with **no-repeat seeded line-ups**,
+**mid-session reconnect/rejoin** + **host transfer (auto-on-disconnect + manual) / kick / idle-room
+reaper**, **observability** (structured JSON logs + `GET /api/metrics`),
+**audio** (background music + synthesized 8-bit SFX + volume sliders),
 **i18n (EN/ES)** (Transloco, runtime toggle, all UI + Phaser scenes translated),
-**GitHub Actions CI**, and the **retro arcade look & feel** (palette theme, arcade
-frame, pixel-art avatars, high-score tables). Remaining polish: self-hosted pixel-font binary (scaffold
-ready) + per-breakpoint responsive tuning. See `docs/backlog.md` → *Current status* for the
-authoritative checklist.
+**GitHub Actions CI**, the self-hosted pixel font + per-breakpoint responsive tuning, and the
+**retro arcade look & feel** (palette theme, arcade frame, pixel-art avatars, high-score tables). Next
+up is Phase 2 (teams & duels). See `docs/backlog.md` → *Current status* for the authoritative checklist.
 
 Documentation lives in `docs/`:
 - `PRD.md` — product requirements.

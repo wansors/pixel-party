@@ -12,6 +12,9 @@ import { config } from '../../../config'
 import type { Player } from '../../../domain/entities/Player'
 import type { Room } from '../../../domain/entities/Room'
 import type { Random } from '../../../domain/ports/Random'
+import { reapIdleRooms } from '../../live/roomSweeper'
+import type { Logger } from '../../observability/logger'
+import type { Metrics } from '../../observability/metrics'
 import { handleHttp } from '../http/httpRoutes'
 import { buildSimulationLoop } from './simulationLoop'
 import { isValidClientMsg } from './validate'
@@ -35,6 +38,9 @@ export interface GameSocketDeps {
   clock: Clock
   random: Random
   sessionConfig: SessionConfig
+  logger: Logger
+  metrics: Metrics
+  roomIdleTimeoutSec: number
   port?: number
 }
 
@@ -78,6 +84,13 @@ export function startGameServer(deps: GameSocketDeps) {
     server.publish(roomTopic(room.code), JSON.stringify(lobbyState(room)))
   }
 
+  // Counters plus live gauges the counters can't hold (active rooms, running sessions).
+  const metricsSnapshot = (): Record<string, number> => ({
+    ...deps.metrics.snapshot(),
+    active_rooms: deps.rooms.list().length,
+    running_sessions: manager.runningCount,
+  })
+
   // JOIN mints identity: run the use case, attach the resolved id/host flag, subscribe, then WELCOME.
   const handleJoin = (
     ws: ServerWebSocket<SocketData>,
@@ -92,6 +105,7 @@ export function startGameServer(deps: GameSocketDeps) {
     })
     if (!result.ok) {
       send(ws, { type: 'JOIN_REJECTED', reason: result.reason })
+      deps.logger.info('join_rejected', { room: ws.data.roomCode, reason: result.reason })
       ws.close()
       return
     }
@@ -99,6 +113,12 @@ export function startGameServer(deps: GameSocketDeps) {
     ws.data.isHost = result.isHost
     ws.subscribe(roomTopic(ws.data.roomCode))
     ws.subscribe(playerTopic(result.playerId))
+    deps.metrics.inc('players_joined')
+    deps.logger.info('player_joined', {
+      room: ws.data.roomCode,
+      playerId: result.playerId,
+      host: result.isHost,
+    })
     send(ws, {
       type: 'WELCOME',
       protocolVersion: PROTOCOL_VERSION,
@@ -129,6 +149,8 @@ export function startGameServer(deps: GameSocketDeps) {
     player.setConnected(true)
     ws.subscribe(roomTopic(ws.data.roomCode))
     ws.subscribe(playerTopic(player.id))
+    deps.metrics.inc('rejoins')
+    deps.logger.info('player_rejoined', { room: ws.data.roomCode, playerId: player.id })
     send(ws, {
       type: 'WELCOME',
       protocolVersion: PROTOCOL_VERSION,
@@ -160,9 +182,11 @@ export function startGameServer(deps: GameSocketDeps) {
       send(ws, { type: 'ACK', intent: 'HOST_CONFIG', ok: false, reason: 'not_host' })
       return
     }
-    // Domain refinement at the boundary: keep only known games and clamp the round count.
-    const ids = msg.minigameIds.filter((id) => MINIGAMES_BY_ID.has(id))
-    const rounds = Math.max(1, Math.min(20, Math.floor(msg.rounds) || 1))
+    // Domain refinement at the boundary: keep only known distinct games and clamp the round count. With
+    // no-repeat sessions a game never plays twice, so rounds is capped at the number of distinct games.
+    const ids = [...new Set(msg.minigameIds.filter((id) => MINIGAMES_BY_ID.has(id)))]
+    const cap = ids.length > 0 ? Math.min(20, ids.length) : 20
+    const rounds = Math.max(1, Math.min(cap, Math.floor(msg.rounds) || 1))
     room.configure(ids, rounds)
     broadcastLobby(room)
   }
@@ -179,7 +203,66 @@ export function startGameServer(deps: GameSocketDeps) {
     }
     // The engine drives the round loop and sets the room phase; it publishes ROUND_INTRO immediately.
     manager.start(room)
+    deps.metrics.inc('sessions_started')
+    deps.logger.info('session_started', {
+      room: room.code,
+      games: [...room.minigameIds],
+      rounds: room.rounds,
+      players: room.list().length,
+    })
     send(ws, { type: 'ACK', intent: 'START_SESSION', ok: true })
+  }
+
+  const handleTransferHost = (
+    ws: ServerWebSocket<SocketData>,
+    msg: Extract<ClientMsg, { type: 'TRANSFER_HOST' }>,
+  ): void => {
+    const room = deps.rooms.get(ws.data.roomCode)
+    if (!room || !ws.data.playerId || !room.isHost(ws.data.playerId)) {
+      send(ws, { type: 'ACK', intent: 'TRANSFER_HOST', ok: false, reason: 'not_host' })
+      return
+    }
+    if (!room.transferHost(msg.playerId)) {
+      send(ws, { type: 'ACK', intent: 'TRANSFER_HOST', ok: false, reason: 'unknown_player' })
+      return
+    }
+    deps.metrics.inc('host_transfers')
+    deps.logger.info('host_transferred', {
+      room: room.code,
+      from: ws.data.playerId,
+      to: msg.playerId,
+    })
+    broadcastLobby(room)
+  }
+
+  const handleKick = (
+    ws: ServerWebSocket<SocketData>,
+    msg: Extract<ClientMsg, { type: 'KICK_PLAYER' }>,
+  ): void => {
+    const room = deps.rooms.get(ws.data.roomCode)
+    if (!room || !ws.data.playerId || !room.isHost(ws.data.playerId)) {
+      send(ws, { type: 'ACK', intent: 'KICK_PLAYER', ok: false, reason: 'not_host' })
+      return
+    }
+    if (msg.playerId === ws.data.playerId || !room.get(msg.playerId)) {
+      send(ws, { type: 'ACK', intent: 'KICK_PLAYER', ok: false, reason: 'unknown_player' })
+      return
+    }
+    // Notify the kicked seat over its own topic (it may still be listening), then drop it from the
+    // roster. Their client returns to the entry screen; if they re-enter the code they can rejoin —
+    // this is a "remove now", not a ban (no accounts/ban list in Phase 1).
+    server.publish(
+      playerTopic(msg.playerId),
+      JSON.stringify({ type: 'KICKED' } satisfies ServerMsg),
+    )
+    room.remove(msg.playerId)
+    deps.metrics.inc('kicks')
+    deps.logger.info('player_kicked', {
+      room: room.code,
+      by: ws.data.playerId,
+      playerId: msg.playerId,
+    })
+    broadcastLobby(room)
   }
 
   const handleMinigameInput = (
@@ -191,6 +274,9 @@ export function startGameServer(deps: GameSocketDeps) {
   }
 
   const dispatch = (ws: ServerWebSocket<SocketData>, msg: ClientMsg): void => {
+    // Any inbound intent keeps the room alive against the idle sweeper.
+    deps.rooms.get(ws.data.roomCode)?.touch(deps.clock.now())
+    deps.metrics.inc('messages')
     switch (msg.type) {
       case 'JOIN':
         handleJoin(ws, msg)
@@ -203,6 +289,12 @@ export function startGameServer(deps: GameSocketDeps) {
         break
       case 'HOST_CONFIG':
         handleHostConfig(ws, msg)
+        break
+      case 'TRANSFER_HOST':
+        handleTransferHost(ws, msg)
+        break
+      case 'KICK_PLAYER':
+        handleKick(ws, msg)
         break
       case 'START_SESSION':
         handleStartSession(ws)
@@ -227,6 +319,7 @@ export function startGameServer(deps: GameSocketDeps) {
     const room = deps.rooms.get(ws.data.roomCode)
     if (!room || !ws.data.playerId) return
     const player = room.get(ws.data.playerId)
+    deps.metrics.inc('disconnects')
     // During a live session keep the seat (and its score) so the player can rejoin; only mark it
     // disconnected. Tear the room down once nobody is left connected.
     if (manager.isRunning(room.code) && player) {
@@ -234,15 +327,22 @@ export function startGameServer(deps: GameSocketDeps) {
       if (!room.hasConnectedPlayers) {
         manager.stop(room.code)
         deps.rooms.remove(room.code)
+        deps.logger.info('room_closed', { room: room.code, reason: 'all_disconnected' })
         return
       }
+      // If the host is the one that dropped, hand the role to a still-connected member.
+      const newHost = room.reassignHostIfDisconnected()
+      if (newHost)
+        deps.logger.info('host_transferred', { room: room.code, to: newHost, reason: 'disconnect' })
       broadcastLobby(room)
       return
     }
     room.remove(ws.data.playerId)
+    deps.logger.info('player_left', { room: room.code, playerId: ws.data.playerId })
     if (room.isEmpty) {
       manager.stop(room.code)
       deps.rooms.remove(room.code)
+      deps.logger.info('room_closed', { room: room.code, reason: 'empty' })
       return
     }
     broadcastLobby(room)
@@ -254,7 +354,7 @@ export function startGameServer(deps: GameSocketDeps) {
       const url = new URL(req.url)
 
       if (url.pathname.startsWith('/api')) {
-        return handleHttp(req, deps)
+        return handleHttp(req, { ...deps, metricsSnapshot })
       }
 
       if (url.pathname === '/ws') {
@@ -285,10 +385,12 @@ export function startGameServer(deps: GameSocketDeps) {
         try {
           parsed = JSON.parse(typeof raw === 'string' ? raw : raw.toString())
         } catch {
+          deps.metrics.inc('errors')
           send(ws, { type: 'ERROR', reason: 'malformed message' })
           return
         }
         if (!isValidClientMsg(parsed)) {
+          deps.metrics.inc('errors')
           send(ws, { type: 'ERROR', reason: 'malformed message' })
           return
         }
@@ -308,9 +410,33 @@ export function startGameServer(deps: GameSocketDeps) {
   manager = new SessionManager(publisher, deps.clock, deps.random, deps.sessionConfig)
   const loop = buildSimulationLoop(manager, deps.sessionConfig.tickHz)
 
+  // Idle-room reaper: sweep on a coarse interval (min of the idle window and 60 s) so abandoned lobbies
+  // and never-joined rooms don't leak in the in-memory store. Notifies any lingering listener, then
+  // drops the room.
+  const idleMs = deps.roomIdleTimeoutSec * 1000
+  const sweepTimer = setInterval(
+    () => {
+      const reaped = reapIdleRooms({
+        rooms: deps.rooms,
+        manager,
+        now: deps.clock.now(),
+        idleMs,
+        onReap: (code) => {
+          server.publish(roomTopic(code), JSON.stringify({ type: 'ERROR', reason: 'room_closed' }))
+          deps.logger.info('room_reaped', { room: code })
+        },
+      })
+      if (reaped.length) deps.metrics.inc('rooms_reaped', reaped.length)
+    },
+    Math.min(idleMs, 60_000),
+  )
+
   return Object.assign(server, {
     // Exposed for a clean shutdown (tests / signal handling).
-    stopLoop: () => loop.stop(),
+    stopLoop: () => {
+      loop.stop()
+      clearInterval(sweepTimer)
+    },
   })
 }
 

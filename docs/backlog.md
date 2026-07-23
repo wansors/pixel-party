@@ -1,13 +1,13 @@
 # Backlog — Pixel Party
 
-- **Version**: 0.3 (draft)
-- **Date**: 2026-07-20
+- **Version**: 0.4 (draft)
+- **Date**: 2026-07-23
 
 Phased product backlog. The philosophy is **start with a minimal MVP and grow incrementally** — build
 the smallest thing that is fun end-to-end, then add features (more mini-games, handicap, post-match
 analysis…) phase by phase. Nothing is built "just in case".
 
-## Current status (2026-07-22)
+## Current status (2026-07-23)
 
 **MVP is playable end-to-end, now with 16 mini-games + audio.** The full stack is scaffolded and runnable
 (`bun run dev` → server :3000 + client :4200, LAN-accessible; see [`../README.md`](../README.md)). What
@@ -35,8 +35,10 @@ works today:
   chunky buttons, pixel-art avatars (self-hosted SVG sprites) with a join-screen picker, high-score
   scoreboard/final ranking, optional CRT overlay.
 
-Phase 0 is essentially complete. Remaining polish: drop in the self-hosted pixel-font woff2 (scaffold
-ready) and per-breakpoint responsive tuning. Next up is Phase 1 (more games + robustness).
+**Phase 0 and Phase 1 are now complete** (closed out 2026-07-23): the pixel font is bundled, responsive
+tuning is done, and the Phase 1 robustness work landed — no-repeat game selection, host transfer
+(auto-on-disconnect + manual) + kick, room inactivity reaper, and observability (structured JSON logs +
+`/api/metrics`). Next up is Phase 2 (teams & duels).
 
 ## How this backlog works
 
@@ -88,7 +90,10 @@ ranking. Latency-tolerant games only; no teams/duels/handicap yet.
 - [x] Angular 20 shell: join, lobby, round intro, results, final ranking (single `RoomComponent`).
 - [x] Phaser scenes for the mini-games; `GameSocketService` + `ServerMsgRouter`; `runOutsideAngular`.
       *All 5 scenes done; GameClient switches scene by `minigameId`.*
-- [~] Responsive mobile (portrait) + desktop. *`Scale.RESIZE` + basic CSS; not yet tuned per breakpoint.*
+- [x] Responsive mobile (portrait) + desktop. *`Scale.RESIZE` + rem-based scaling tuned per breakpoint
+      (900/600/380 root-font steps + a landscape/short-height rule); lobby roster wraps its host controls
+      on narrow widths; body never scrolls horizontally; the round canvas claims the vertical space on
+      landscape phones.*
 
 ### Extras done this phase (beyond the original plan)
 - [x] Host **game selector** + round-count config in the lobby (`HOST_CONFIG`).
@@ -96,10 +101,10 @@ ranking. Latency-tolerant games only; no teams/duels/handicap yet.
 - [x] `bun run dev` one-command launcher (`scripts/dev.sh`); dev commands pre-approved in `.claude/settings.json`.
 
 ### Look & feel (retro arcade — see `art-direction.md`)
-- [~] Establish the shared theme: palette (`@pp/shared` `theme.ts` + mirrored CSS vars), arcade window
+- [x] Establish the shared theme: palette (`@pp/shared` `theme.ts` + mirrored CSS vars), arcade window
       frame + chunky buttons, optional CRT scanline overlay (reduced-motion aware). *Self-hosted pixel
-      font: `@font-face` scaffold + CSS var in place; drop the woff2 at
-      `assets/fonts/press-start-2p.woff2` to enable it (chunky monospace fallback until then).*
+      font live: `press-start-2p.woff2` (OFL, CSP-safe) is bundled at `public/fonts/` and wired via
+      `@font-face` + `--font-pixel` (Courier New monospace fallback while it loads).*
 - [x] Anonymous player identity: unique color + preset pixel avatar ("monigote") + name (typed/auto).
       *Join screen picks avatar + color + name; avatars are self-hosted SVG pixel sprites (`PixelAvatarComponent`).*
 - [x] Scoreboard & final ranking as a classic arcade high-score table. *Avatar + color + name rows,
@@ -114,10 +119,22 @@ ranking. Latency-tolerant games only; no teams/duels/handicap yet.
       Math (E2), Odd One Out (E3), Higher or Lower (E5), Bug Smash (A6), Stop the Clock (A10), Memory
       Flash (E8), Simon (A4), Pixel Hoops (A5); plus the P1 fast-follows Pixel Weight (E12) and Pixel
       Split (E11) on 2026-07-22. **16 mini-games total.**
-- [~] Host config: number of rounds, no-repeat within a session. *Rounds + game selection done in Phase 0;
-      no-repeat-within-a-session still pending.*
-- [ ] Reconnection hardening, host transfer on disconnect, kick player, room inactivity timeout.
-- [ ] Observability: structured logging of room events + latency/error metrics.
+- [x] Host config: number of rounds, no-repeat within a session. *Done 2026-07-23: the session engine
+      builds each line-up by seeded-shuffling the distinct pool and capping rounds at the number of
+      distinct games (a game never plays twice in a session). `HOST_CONFIG` dedupes + clamps rounds to
+      the game count so the lobby shows the real number; the rounds input `max` follows the selection.*
+- [x] Reconnection hardening, host transfer on disconnect, kick player, room inactivity timeout.
+      *Done 2026-07-23: host auto-transfers to the first still-connected member when the host drops
+      mid-session (`Room.reassignHostIfDisconnected`); new host-only `TRANSFER_HOST` / `KICK_PLAYER`
+      intents + lobby roster controls (kicked clients get a `KICKED` msg → bounce to the entry screen);
+      idle-room reaper (`roomSweeper` off a 60 s interval) drops abandoned/never-joined rooms after
+      `ROOM_IDLE_TIMEOUT_SEC` (default 15 min), which was previously a wired-but-dead config knob.*
+- [x] Observability: structured logging of room events + error metrics. *Done 2026-07-23: JSON logger
+      (`observability/logger`) emits one line per lifecycle event (room/session created, join/rejoin,
+      left/disconnected, host_transferred, kicked, reaped); in-memory counters (`observability/metrics`)
+      + live gauges exposed at `GET /api/metrics` (rooms_created, players_joined, rejoins, disconnects,
+      kicks, host_transfers, sessions_started, messages, errors, rooms_reaped, active_rooms,
+      running_sessions).*
 - [x] **Per-round result screen ("round MVP")**. *Done 2026-07-21: the engine's post-round phase is now
       two dwell steps — `round-result` (highlights who won THIS mini-game: winner banner + per-round
       points, from `ROUND_RESULT`) then `scoreboard` (cumulative) — each with its own duration

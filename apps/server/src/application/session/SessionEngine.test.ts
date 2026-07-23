@@ -81,7 +81,7 @@ describe('SessionEngine', () => {
     expect(room.phase).toBe('final')
   })
 
-  test('plays a multi-game sequence in order and finishes', () => {
+  test('plays a multi-game sequence with no repeats and finishes', () => {
     const room = Room.create('SEQ', 10)
     room.add(Player.create({ id: 'a', name: 'a', color: '#fff', avatar: 'x' }))
     room.add(Player.create({ id: 'b', name: 'b', color: '#fff', avatar: 'x' }))
@@ -105,11 +105,42 @@ describe('SessionEngine', () => {
       engine.tick()
     }
 
-    const intros = captured.filter((m) => m.type === 'ROUND_INTRO')
-    expect(intros.length).toBe(2)
-    expect(intros[0]?.type === 'ROUND_INTRO' && intros[0].minigameId).toBe('button-masher')
-    expect(intros[1]?.type === 'ROUND_INTRO' && intros[1].minigameId).toBe('reaction-duel')
+    const ids = captured.flatMap((m) => (m.type === 'ROUND_INTRO' ? [m.minigameId] : []))
+    expect(ids.length).toBe(2)
+    // Both configured games appear exactly once (order is seeded-shuffled, so not asserted).
+    expect(new Set(ids)).toEqual(new Set(['button-masher', 'reaction-duel']))
     expect(captured.some((m) => m.type === 'FINAL_RANKING')).toBe(true)
+  })
+
+  test('caps rounds at the number of distinct games (no-repeat)', () => {
+    const room = Room.create('CAP', 10)
+    room.add(Player.create({ id: 'a', name: 'a', color: '#fff', avatar: 'x' }))
+    // Two distinct games but five rounds requested — a no-repeat session plays only two.
+    room.configure(['button-masher', 'reaction-duel'], 5)
+
+    let t = 0
+    const clock: Clock = { now: () => t }
+    const captured: ServerMsg[] = []
+    const engine = new SessionEngine(
+      room,
+      { toRoom: (_c, m) => captured.push(m) },
+      clock,
+      noRandom,
+      CONFIG,
+    )
+    engine.start()
+    for (let i = 0; i < 1600 && !engine.isFinished; i++) {
+      t += 1000 / CONFIG.tickHz
+      engine.onInput('a', { kind: 'mash' })
+      engine.onInput('a', { kind: 'tap' })
+      engine.tick()
+    }
+
+    const ids = captured.flatMap((m) => (m.type === 'ROUND_INTRO' ? [m.minigameId] : []))
+    expect(ids.length).toBe(2)
+    expect(new Set(ids).size).toBe(2)
+    const intro = captured.find((m) => m.type === 'ROUND_INTRO')
+    expect(intro?.type === 'ROUND_INTRO' && intro.totalRounds).toBe(2)
   })
 
   test('resumeMessages rebuilds the live round for a reconnecting socket', () => {

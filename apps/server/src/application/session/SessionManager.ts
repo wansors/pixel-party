@@ -23,6 +23,10 @@ export class SessionManager {
     return this.engines.has(roomCode)
   }
 
+  get runningCount(): number {
+    return this.engines.size
+  }
+
   start(room: Room): boolean {
     if (this.engines.has(room.code)) return false
     const engine = new SessionEngine(room, this.publisher, this.clock, this.random, this.config)

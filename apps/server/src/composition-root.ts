@@ -7,6 +7,8 @@ import { SeededRandom } from './infrastructure/driven/random/SeededRandom'
 import { SystemClock } from './infrastructure/driven/time/SystemClock'
 import { startGameServer } from './infrastructure/driving/ws/GameSocket'
 import { LiveRooms } from './infrastructure/live/LiveRooms'
+import { createLogger } from './infrastructure/observability/logger'
+import { createMetrics } from './infrastructure/observability/metrics'
 
 // The single wiring point: build the concrete adapters and every use case, then start the server.
 // No DI framework; no database in Phase 1 (LiveRooms is the authoritative in-memory store).
@@ -14,7 +16,9 @@ export function bootstrap() {
   const clock = new SystemClock()
   const random = new SeededRandom(config.seed)
   const ids = new CryptoIdGenerator()
-  const rooms = new LiveRooms(ids, config.roomCodeLen, config.roomMaxPlayers)
+  const logger = createLogger()
+  const metrics = createMetrics()
+  const rooms = new LiveRooms(ids, config.roomCodeLen, config.roomMaxPlayers, clock)
 
   const createRoom = new CreateRoomUseCase(rooms)
   const joinRoom = new JoinRoomUseCase(rooms, ids)
@@ -36,8 +40,11 @@ export function bootstrap() {
     clock,
     random,
     sessionConfig,
+    logger,
+    metrics,
+    roomIdleTimeoutSec: config.roomIdleTimeoutSec,
   })
 
-  console.log(`[server] pixel-party listening on http://localhost:${server.port}`)
+  logger.info('server_listening', { url: `http://localhost:${server.port}` })
   return server
 }

@@ -1,10 +1,16 @@
 import type { LiveRoomRegistry } from '../../../application/ports/LiveRoomRegistry'
 import type { CreateRoomUseCase } from '../../../application/use-cases/CreateRoomUseCase'
 import { config } from '../../../config'
+import type { Logger } from '../../observability/logger'
+import type { Metrics } from '../../observability/metrics'
 
 export interface HttpDeps {
   createRoom: CreateRoomUseCase
   rooms: LiveRoomRegistry
+  logger?: Logger
+  metrics?: Metrics
+  // Counters + live gauges, assembled by the WS server (which holds the session manager).
+  metricsSnapshot?: () => Record<string, number>
 }
 
 const cors = (origin: string | null): Record<string, string> => {
@@ -35,8 +41,14 @@ export async function handleHttp(req: Request, deps: HttpDeps): Promise<Response
 
   if (url.pathname === '/api/health') return json({ ok: true }, 200, origin)
 
+  if (url.pathname === '/api/metrics' && req.method === 'GET') {
+    return json(deps.metricsSnapshot?.() ?? {}, 200, origin)
+  }
+
   if (url.pathname === '/api/rooms' && req.method === 'POST') {
     const { code } = deps.createRoom.execute()
+    deps.metrics?.inc('rooms_created')
+    deps.logger?.info('room_created', { code })
     return json({ code }, 201, origin)
   }
 

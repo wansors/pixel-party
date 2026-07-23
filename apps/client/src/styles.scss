@@ -38,6 +38,11 @@
 html {
   font-size: 16px;
 }
+@media (max-width: 900px) {
+  html {
+    font-size: 15px;
+  }
+}
 @media (max-width: 600px) {
   html {
     font-size: 14px;
@@ -47,6 +52,17 @@ html {
   html {
     font-size: 12.5px;
   }
+}
+// Wide/short (landscape phones, short laptops): the round canvas should claim the vertical space the
+// tall-layout min-height would otherwise starve it of.
+@media (orientation: landscape) and (max-height: 520px) {
+  html {
+    font-size: 13px;
+  }
+}
+// Never let the arcade chrome force a horizontal scrollbar on any breakpoint.
+body {
+  overflow-x: hidden;
 }
 
 html,

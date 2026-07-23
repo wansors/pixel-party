@@ -174,6 +174,14 @@ export class RoomComponent implements OnInit {
         this.game?.destroy()
         this.game = undefined
         break
+      case 'KICKED':
+        // Host removed this seat: drop the stored id so we don't try to reclaim it, then bounce to the
+        // entry screen with a flag the join view surfaces.
+        sessionStorage.removeItem(this.pidKey())
+        this.net.resetIdentity()
+        this.net.disconnect()
+        this.router.navigate(['/'], { queryParams: { kicked: 1 } })
+        break
       case 'JOIN_REJECTED':
         this.message.set(
           this.transloco.translate('room.joinRejected', {
@@ -296,6 +304,16 @@ export class RoomComponent implements OnInit {
 
   start(): void {
     this.net.send({ type: 'START_SESSION' })
+  }
+
+  makeHost(id: string): void {
+    if (!this.isHost() || id === this.selfId()) return
+    this.net.send({ type: 'TRANSFER_HOST', playerId: id })
+  }
+
+  kick(id: string): void {
+    if (!this.isHost() || id === this.selfId()) return
+    this.net.send({ type: 'KICK_PLAYER', playerId: id })
   }
 
   gameName(id: string): string {

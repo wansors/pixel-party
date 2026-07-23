@@ -54,6 +54,10 @@ export type ClientMsg =
   | { type: 'SET_READY'; ready: boolean }
   // Host-only: configure the session (which games, how many rounds). Ignored from non-hosts.
   | { type: 'HOST_CONFIG'; minigameIds: MiniGameId[]; rounds: number }
+  // Host-only: hand the host role to another member.
+  | { type: 'TRANSFER_HOST'; playerId: string }
+  // Host-only: remove another member from the room.
+  | { type: 'KICK_PLAYER'; playerId: string }
   // Host-only: begin the session.
   | { type: 'START_SESSION' }
   // Per-frame/round input for the active mini-game. Opaque payload validated by the active game.
@@ -106,6 +110,8 @@ export type ServerMsg =
   // Generic per-intent acknowledgement (ok/reject with a stable machine reason).
   | { type: 'ACK'; intent: ClientMsgType; ok: boolean; reason?: string }
   | { type: 'JOIN_REJECTED'; reason: JoinRejectReason }
+  // This client's seat was removed by the host — it should leave the room and return to the entry screen.
+  | { type: 'KICKED' }
   | { type: 'ERROR'; reason: string }
 
 export type ServerMsgType = ServerMsg['type']

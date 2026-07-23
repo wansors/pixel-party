@@ -21,7 +21,8 @@
     "roomCode": "ROOM CODE",
     "join": "Join",
     "cantReach": "Could not reach the server",
-    "roomNotFound": "Room {{code}} not found"
+    "roomNotFound": "Room {{code}} not found",
+    "kicked": "You were removed from the room by the host"
   },
   "room": {
     "code": "ROOM",
@@ -37,7 +38,9 @@
       "rounds": "Rounds:",
       "notReady": "Not ready",
       "imReady": "I'm ready",
-      "start": "Start"
+      "start": "Start",
+      "makeHost": "Make host",
+      "kick": "Kick"
     },
     "intro": {
       "round": "Round",

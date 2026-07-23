@@ -21,7 +21,8 @@
     "roomCode": "CÓDIGO",
     "join": "Entrar",
     "cantReach": "No se pudo conectar con el servidor",
-    "roomNotFound": "Sala {{code}} no encontrada"
+    "roomNotFound": "Sala {{code}} no encontrada",
+    "kicked": "El anfitrión te ha expulsado de la sala"
   },
   "room": {
     "code": "SALA",
@@ -37,7 +38,9 @@
       "rounds": "Rondas:",
       "notReady": "No listo",
       "imReady": "Estoy listo",
-      "start": "Empezar"
+      "start": "Empezar",
+      "makeHost": "Hacer anfitrión",
+      "kick": "Expulsar"
     },
     "intro": {
       "round": "Ronda",

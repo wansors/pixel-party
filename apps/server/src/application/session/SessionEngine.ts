@@ -52,11 +52,26 @@ export class SessionEngine {
   }
 
   start(): void {
-    const pool = this.room.minigameIds.length ? [...this.room.minigameIds] : ['button-masher']
-    const count = this.room.rounds > 0 ? this.room.rounds : pool.length
-    this.sequence = Array.from({ length: count }, (_, i) => pool[i % pool.length] as MiniGameId)
+    // No-repeat within a session: draw distinct games from the pool in a seeded-random order and cap
+    // the round count at the number of distinct games (a game never plays twice in one session).
+    const pool = this.room.minigameIds.length
+      ? [...new Set(this.room.minigameIds)]
+      : ['button-masher']
+    const order = this.shuffle(pool)
+    const requested = this.room.rounds > 0 ? this.room.rounds : order.length
+    this.sequence = order.slice(0, Math.min(requested, order.length)) as MiniGameId[]
     this.roundIndex = 0
     this.beginIntro(this.clock.now())
+  }
+
+  // Fisher-Yates via the Random port — deterministic given the RNG stream (same as the game rolls).
+  private shuffle(items: readonly string[]): string[] {
+    const a = [...items]
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(this.random.next() * (i + 1))
+      ;[a[i], a[j]] = [a[j] as string, a[i] as string]
+    }
+    return a
   }
 
   onInput(playerId: PlayerId, input: unknown): void {

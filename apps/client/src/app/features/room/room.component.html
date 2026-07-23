@@ -48,6 +48,28 @@
                 } @else if (p.ready) {
                   <span class="ready">{{ 'room.lobby.ready' | transloco }}</span>
                 }
+                @if (isHost() && p.id !== selfId()) {
+                  <span class="host-actions">
+                    @if (p.id !== hostId()) {
+                      <button
+                        type="button"
+                        class="mini"
+                        [title]="'room.lobby.makeHost' | transloco"
+                        (click)="makeHost(p.id)"
+                      >
+                        {{ 'room.lobby.makeHost' | transloco }}
+                      </button>
+                    }
+                    <button
+                      type="button"
+                      class="mini danger"
+                      [title]="'room.lobby.kick' | transloco"
+                      (click)="kick(p.id)"
+                    >
+                      {{ 'room.lobby.kick' | transloco }}
+                    </button>
+                  </span>
+                }
               </li>
             }
           </ul>
@@ -75,7 +97,7 @@
               <input
                 type="number"
                 min="1"
-                max="20"
+                [max]="selectedGameIds().length || 1"
                 [value]="rounds()"
                 [disabled]="!isHost()"
                 (change)="setRounds($any($event.target).value)"

@@ -109,6 +109,39 @@ header {
     color: var(--c-lime);
     font-size: 0.7rem;
   }
+  // Host-only per-row controls (make host / kick). Pushed to the right; the ready tag, when present,
+  // already claims margin-left:auto, so guard the gap with a small margin instead.
+  .host-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 0.3rem;
+  }
+  .ready + .host-actions {
+    margin-left: 0.4rem;
+  }
+  .mini {
+    font-family: var(--font-pixel);
+    font-size: 0.55rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.25rem 0.4rem;
+    color: var(--c-text);
+    background: var(--c-panel-alt);
+    border: 2px solid var(--c-frame-lit);
+    border-radius: 2px;
+    cursor: pointer;
+    &:hover {
+      background: var(--c-frame);
+    }
+    &.danger {
+      border-color: var(--c-red);
+      color: var(--c-red);
+    }
+    &.danger:hover {
+      background: var(--c-red);
+      color: var(--c-bg);
+    }
+  }
 }
 
 .games {
@@ -310,5 +343,25 @@ header {
   }
   .actions .arcade-btn {
     width: 100%;
+  }
+  // The roster row gains host controls + tags on a narrow screen — let it wrap instead of overflowing.
+  .players li {
+    flex-wrap: wrap;
+  }
+  .players .host-actions {
+    // Once wrapped, sit the controls on their own line under the name, aligned right.
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
+}
+
+// ── Wide/short (landscape phones, short laptops) ─────────────────────────────
+// Give the live round canvas the vertical room the tall-layout min-height would otherwise starve.
+@media (orientation: landscape) and (max-height: 520px) {
+  .round #game-container {
+    min-height: 78vh;
+  }
+  .intro .count {
+    font-size: clamp(2.5rem, 22vh, 5rem);
   }
 }

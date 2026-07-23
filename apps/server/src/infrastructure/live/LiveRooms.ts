@@ -1,3 +1,4 @@
+import type { Clock } from '../../application/ports/Clock'
 import type { IdGenerator } from '../../application/ports/IdGenerator'
 import type { LiveRoomRegistry } from '../../application/ports/LiveRoomRegistry'
 import { Room } from '../../domain/entities/Room'
@@ -11,6 +12,7 @@ export class LiveRooms implements LiveRoomRegistry {
     private readonly ids: IdGenerator,
     private readonly codeLen: number,
     private readonly maxPlayers: number,
+    private readonly clock: Clock,
   ) {}
 
   create(): Room {
@@ -18,6 +20,8 @@ export class LiveRooms implements LiveRoomRegistry {
     let code = this.ids.roomCode(this.codeLen)
     while (this.rooms.has(code)) code = this.ids.roomCode(this.codeLen)
     const room = Room.create(code, this.maxPlayers)
+    // Seed activity at creation so a room that is never joined ages toward the idle sweeper.
+    room.touch(this.clock.now())
     this.rooms.set(code, room)
     return room
   }

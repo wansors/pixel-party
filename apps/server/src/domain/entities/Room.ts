@@ -9,6 +9,9 @@ export class Room {
   private _phase: RoomPhase = 'lobby'
   private _minigameIds: MiniGameId[] = []
   private _rounds = 0
+  // Wall-clock ms of the last meaningful activity (set by the adapter via the Clock port). The idle
+  // sweeper reaps rooms that go quiet for too long — abandoned lobbies and never-joined rooms.
+  private _lastActivityAt = 0
 
   private constructor(
     readonly code: string,
@@ -30,6 +33,9 @@ export class Room {
   }
   get rounds(): number {
     return this._rounds
+  }
+  get lastActivityAt(): number {
+    return this._lastActivityAt
   }
   get isFull(): boolean {
     return this.players.size >= this.maxPlayers
@@ -69,6 +75,29 @@ export class Room {
 
   isHost(playerId: string): boolean {
     return this._hostId === playerId
+  }
+
+  // Manual host handoff (host-only intent). Returns true only if the target is a member and host moved.
+  transferHost(playerId: string): boolean {
+    if (!this.players.has(playerId) || this._hostId === playerId) return false
+    this._hostId = playerId
+    return true
+  }
+
+  // Hand host to the first still-connected member when the current host is gone or disconnected (its
+  // seat is kept mid-session, but it must not stay host while absent). Returns the new host id if it
+  // changed, else null.
+  reassignHostIfDisconnected(): string | null {
+    const current = this._hostId ? this.players.get(this._hostId) : undefined
+    if (current?.connected) return null
+    const next = this.list().find((p) => p.connected)?.id ?? null
+    if (next === this._hostId) return null
+    this._hostId = next
+    return next
+  }
+
+  touch(now: number): void {
+    this._lastActivityAt = now
   }
 
   configure(minigameIds: MiniGameId[], rounds: number): void {

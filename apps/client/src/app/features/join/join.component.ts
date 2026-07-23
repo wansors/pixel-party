@@ -118,8 +118,13 @@ export class JoinComponent {
   private readonly router = inject(Router)
   private readonly transloco = inject(TranslocoService)
 
+  private readonly route = inject(ActivatedRoute)
+
   constructor() {
     inject(AudioService).ensureMusic()
+    // Bounced back here by the host removing our seat: explain why we landed on the entry screen.
+    if (this.route.snapshot.queryParamMap.get('kicked'))
+      this.message.set(this.transloco.translate('join.kicked'))
   }
 
   readonly avatars = AVATARS
@@ -127,7 +132,7 @@ export class JoinComponent {
 
   name = ''
   // Invite links (/?code=XXXX) land here with the room pre-filled; the player still picks identity.
-  code = inject(ActivatedRoute).snapshot.queryParamMap.get('code')?.toUpperCase() ?? ''
+  code = this.route.snapshot.queryParamMap.get('code')?.toUpperCase() ?? ''
   readonly avatar = signal<AvatarId>(AVATARS[0])
   readonly color = signal<string>(PLAYER_COLORS[0])
   readonly message = signal('')
