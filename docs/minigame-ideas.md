@@ -63,9 +63,12 @@ Tiers: **P0** MVP core · **P1** early expansion (high fun, low effort) · **P2*
 | 32 | Pixel Weight ("guess the weight") — E12 | FFA | 3 | 4 | Low | Low | **P1** | Estimation game, very cheap; the Balance variant adds a duel-ish twist. |
 | 33 | Quick Tetris — E13 | FFA | 4 | 4 | High | Low | **P3** | Compact Tetris sprint (variant of E10); high build effort → deferred with the action wave. |
 | 34 | Sudoku Race — E14 | FFA | 3 | 4 | Med/High | Low | **P2** | Same seeded grid for all; first-to-solve or most-correct-cells. Fair & server-validatable; medium effort (grid UI + validation). |
+| 35 | Bubble Pop (Bust-a-Move) — E15 | FFA | 4 | 4 | High | Low | **P3** | Recognizable bubble-shooter; same seeded board for all → fair & no idle time. High build effort (aim physics + hex-grid snap + cluster flood-fill) rides the P3 puzzle/action wave. |
 
 > Rows 31–34 added 2026-07-21 (requested). E11/E12 are low-effort P1 fast-follows; E13 rides with the
 > P3 action wave alongside E10 Line Clear Sprint; E14 Sudoku Race sits in P2 (puzzle, medium effort).
+> Row 35 added 2026-07-23 (requested): E15 Bubble Pop is latency-tolerant (self-paced on a common seed)
+> but high build effort → P3 with the puzzle/action wave (alongside E10/E13).
 
 ---
 

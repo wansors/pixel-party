@@ -12,20 +12,29 @@ for a session-wide ranking. See [`README.md`](README.md).
 scaffolded and the game is playable end-to-end. Run it with `bun run dev` (see `README.md`). Live now:
 rooms + lobby (ready/host), host game selector + round count, server-authoritative session engine (intro
 countdown → play → per-round result → cumulative scoreboard → final), scoring/scoreboard/final ranking,
-**Phases 0–2 complete** (Phase 2 closed out 2026-07-23). **19 mini-games** — 16 FFA (`button-masher`,
-`reaction-duel`, `color-trap`, `trivia`, `balloon-chicken`, `number-rush`, `quick-math`, `odd-one-out`,
-`higher-lower`, `bug-smash`, `stop-clock`, `memory-flash`, `simon`, `pixel-hoops`, `pixel-weight`,
-`pixel-split`) + 2 team (`tug-of-war`, `bomb-relay`) + 1 duel (`sink-the-fleet`) — with **no-repeat
+**Phases 0–5 complete** (Phase 3 handicap partial; 2026-07-23). **28 mini-games** — 23 FFA
+(`button-masher`, `reaction-duel`, `color-trap`, `trivia`, `balloon-chicken`, `number-rush`,
+`quick-math`, `odd-one-out`, `higher-lower`, `bug-smash`, `stop-clock`, `memory-flash`, `simon`,
+`pixel-hoops`, `pixel-weight`, `pixel-split`, `fruit-catch`, `pixel-rain`, `pixel-dash`, `snake-arena`,
+`sumo-push`, `match-pairs`, `pixel-roulette`) + 2 team (`tug-of-war`, `bomb-relay`) + 3 duel
+(`sink-the-fleet`, `pixel-pong`, `quick-draw`) — with **no-repeat
 seeded line-ups**, **mid-session reconnect/rejoin** + **host transfer (auto-on-disconnect + manual) /
 kick / idle-room reaper**, **observability** (structured JSON logs + `GET /api/metrics`),
 **teams** (2 fixed teams, balanced seeded assignment + host move/shuffle, team scoring distribution),
 **duels** (seeded simultaneous 1v1 pairing + win/loss aggregation),
 **audio** (background music + synthesized 8-bit SFX + volume sliders),
 **i18n (EN/ES)** (Transloco, runtime toggle, all UI + Phaser scenes translated),
+**post-match analysis** (Phase 4: 7 skill axes tagged on the catalog → per-player skill radar +
+session summary on the final screen, from `sessionAnalysis`),
+**handicap** (Phase 3: bounded scoring catch-up lever from `handicap` with a host lobby toggle +
+on-results transparency, **off by default**; only the mechanical per-game hooks remain deferred),
+**real-time action games** (Phase 5: client snapshot interpolation `game/netcode/SnapshotInterpolator`
++ 6 games — `fruit-catch`, `pixel-rain`, `pixel-dash`, `snake-arena`, `pixel-pong`, `sumo-push`),
 **GitHub Actions CI**, the self-hosted pixel font + per-breakpoint responsive tuning, and the
 **retro arcade look & feel** (palette theme, arcade frame, pixel-art avatars, high-score tables).
-Next up is Phase 3 (handicap / catch-up) or Phase 4 (post-match analysis). See `docs/backlog.md` →
-*Current status* for the authoritative checklist.
+Next candidates: Phase 6 (DB/accounts), the deferred Phase 3 mechanical handicap hooks, or growing the
+catalog on demand. Design decisions from the clear-out pass live in `docs/implementation-decisions.md`.
+See `docs/backlog.md` → *Current status* for the authoritative checklist.
 
 Documentation lives in `docs/`:
 - `PRD.md` — product requirements.
@@ -35,12 +44,13 @@ Documentation lives in `docs/`:
 - `technical-architecture.md` — stack & architecture (mirrors `../utopia-offline`).
 - `art-direction.md` — retro classic-arcade pixel-art visual identity.
 - `backlog.md` — phased roadmap (MVP first, then incremental epics); tracks implementation status.
+- `implementation-decisions.md` — KISS decision log (what was built/deferred and why; revertable).
 
 ## Code layout (implemented)
 
 - `apps/server` — hexagonal: `domain/` (entities `Room`/`Player`, `minigames/` pluggable contract +
-  `buttonMasher`/`reactionDuel`/`colorTrap`/`trivia`/`balloonChicken`/`numberRush`/`quickMath`/`oddOneOut`/`higherLower`/`bugSmash`/`stopClock`/`memoryFlash`/`simon`/`pixelHoops`/`pixelWeight`/`pixelSplit`/`tugOfWar`/`sinkTheFleet`/`bombRelay`
-  + `registry`, `services/{scoring,teamAssignment,pairing}`,
+  `buttonMasher`/`reactionDuel`/`colorTrap`/`trivia`/`balloonChicken`/`numberRush`/`quickMath`/`oddOneOut`/`higherLower`/`bugSmash`/`stopClock`/`memoryFlash`/`simon`/`pixelHoops`/`pixelWeight`/`pixelSplit`/`tugOfWar`/`sinkTheFleet`/`bombRelay`/`fruitCatch`/`pixelRain`/`pixelDash`/`snakeArena`/`pong`/`sumo`/`matchPairs`/`quickDraw`/`roulette`
+  + `registry`, `services/{scoring,teamAssignment,pairing,sessionAnalysis,handicap,finalRanking}`,
   `ports/Random`), `application/`
   (`session/SessionEngine`+`SessionManager`, `use-cases/`, `ports/`), `infrastructure/`
   (`driving/ws/GameSocket`+`validate`+`simulationLoop`, `driving/http`, `driven/{time,random,id}`,
@@ -52,7 +62,8 @@ Documentation lives in `docs/`:
 - `apps/client` — Angular 20 shell; `features/{join,room}` (RoomComponent drives all phases);
   `core/net/game-socket.service`; `game/` (Phaser, framework-agnostic): `GameClient`,
   `serverMsgRouter`, `RoundState`,
-  `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,BalloonChickenScene,NumberRushScene,QuickMathScene,OddOneOutScene,HigherLowerScene,BugSmashScene,StopClockScene,MemoryFlashScene,SimonScene,PixelHoopsScene,PixelWeightScene,PixelSplitScene,TugOfWarScene,SinkTheFleetScene,BombRelayScene}`.
+  `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,BalloonChickenScene,NumberRushScene,QuickMathScene,OddOneOutScene,HigherLowerScene,BugSmashScene,StopClockScene,MemoryFlashScene,SimonScene,PixelHoopsScene,PixelWeightScene,PixelSplitScene,TugOfWarScene,SinkTheFleetScene,BombRelayScene,FruitCatchScene,PixelRainScene,PixelDashScene,SnakeArenaScene,PongScene,SumoScene,MatchPairsScene,QuickDrawScene,RouletteScene}`
+  + `netcode/SnapshotInterpolator` (client-side interpolation for real-time scenes).
 
 ### Adding a mini-game
 One domain module (`domain/minigames/<id>.ts` implementing `MiniGame`) + registry entry + shared wire

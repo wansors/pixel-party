@@ -42,7 +42,8 @@
       "makeHost": "Make host",
       "kick": "Kick",
       "swapTeam": "Swap team",
-      "shuffleTeams": "Shuffle teams"
+      "shuffleTeams": "Shuffle teams",
+      "handicap": "Catch-up (comebacks)"
     },
     "intro": {
       "round": "Round",
@@ -51,7 +52,8 @@
     "result": {
       "roundWinner": "ROUND WINNER",
       "teamWinner": "WINNING TEAM",
-      "totals": "Totals coming up..."
+      "totals": "Totals coming up...",
+      "catchup": "+{{n}} catch-up"
     },
     "scoreboard": {
       "title": "High Scores",
@@ -61,6 +63,15 @@
       "title": "* FINAL RANKING *",
       "first": "1ST",
       "newHighScore": "NEW HIGH SCORE"
+    },
+    "summary": {
+      "profileTitle": "Your skill profile",
+      "title": "Session summary",
+      "mvp": "Most wins",
+      "wins": "{{n}} rounds",
+      "comeback": "Comeback",
+      "positions": "+{{n}} places",
+      "roundWinner": "won by"
     },
     "joinRejected": "Join rejected: {{reason}}",
     "intentRejected": "{{intent}} rejected: {{reason}}"
@@ -76,6 +87,15 @@
     "name_taken": "That name is taken"
   },
   "catalog": {
+    "axis": {
+      "reflexes": "Reflexes",
+      "speed": "Speed",
+      "knowledge": "Knowledge",
+      "memory": "Memory",
+      "precision": "Precision",
+      "nerve": "Nerve",
+      "focus": "Focus"
+    },
     "minigame": {
       "reaction-duel": {
         "name": "Reaction Duel",

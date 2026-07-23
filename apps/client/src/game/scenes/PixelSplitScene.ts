@@ -114,8 +114,9 @@ export class PixelSplitScene extends Phaser.Scene {
       this.pixels.push(this.add.rectangle(x, y, this.cellSize - 1, this.cellSize - 1, 0x3a7bd5))
     }
     this.drawnIndex = obj.index
-    // Start the cut in the middle.
-    this.cut = Math.max(1, Math.round(obj.cols / 2))
+    // Start the cut at the far left every object: a centred default would score full points on
+    // symmetric figures without the player doing anything, making them trivial.
+    this.cut = 1
   }
 
   override update(): void {

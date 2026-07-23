@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core'
 import { TranslocoService } from '@jsverse/transloco'
-import { MINIGAMES_BY_ID, type MiniGameId } from '@pp/shared'
+import { MINIGAMES_BY_ID, type MiniGameId, type SkillAxis } from '@pp/shared'
 
 // Central id→display-text resolver for the mini-game catalog: names + blurbs the lobby/host UI and the
 // round intro/result titlebar show, resolved by the stable mini-game id with an ENGLISH FALLBACK to the
@@ -23,6 +23,12 @@ export class CatalogI18nService {
       `catalog.minigame.${id}.blurb`,
       MINIGAMES_BY_ID.get(id)?.blurb ?? '',
     )
+  }
+
+  // Skill-axis display label for the Phase 4 radar; English fallback is the capitalized axis id.
+  axisLabel(axis: SkillAxis): string {
+    const fallback = axis.charAt(0).toUpperCase() + axis.slice(1)
+    return this.resolveOrFallback(`catalog.axis.${axis}`, fallback)
   }
 
   // Transloco's default missing handler echoes the key on a miss; treat key-echo or empty as a miss and

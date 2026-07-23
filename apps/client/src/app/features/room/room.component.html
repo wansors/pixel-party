@@ -119,6 +119,15 @@
                 (change)="setRounds($any($event.target).value)"
               />
             </label>
+            <label class="handicap-toggle">
+              <input
+                type="checkbox"
+                [checked]="handicap()"
+                [disabled]="!isHost()"
+                (change)="toggleHandicap($any($event.target).checked)"
+              />
+              {{ 'room.lobby.handicap' | transloco }}
+            </label>
           </div>
 
           <div class="actions">
@@ -192,6 +201,9 @@
                 @if (roundStat(s.playerId); as stat) {
                   <span class="stat">{{ stat }}</span>
                 }
+                @if (roundHandicap(s.playerId); as bonus) {
+                  <span class="catchup">{{ 'room.result.catchup' | transloco: { n: bonus } }}</span>
+                }
                 <span class="pts">+{{ s.points }}</span>
               </li>
             }
@@ -250,6 +262,60 @@
             <p class="winner blink">
               {{ 'room.final.newHighScore' | transloco }} - {{ playerName(final()[0].playerId) }}!
             </p>
+          }
+
+          @if (hasProfile()) {
+            <div class="profile">
+              <h3>{{ 'room.summary.profileTitle' | transloco }}</h3>
+              <app-skill-radar
+                [data]="myRadar()"
+                [color]="playerColor(selfId())"
+                [size]="220"
+                [ariaLabel]="'room.summary.profileTitle' | transloco"
+              />
+            </div>
+          }
+
+          @if (summary(); as sum) {
+            <div class="summary">
+              <h3>{{ 'room.summary.title' | transloco }}</h3>
+              <ul class="highlights">
+                @if (sum.mostRoundWins; as mvp) {
+                  <li>
+                    <span class="tag">{{ 'room.summary.mvp' | transloco }}</span>
+                    <span class="who" [style.color]="playerColor(mvp.playerId)">{{
+                      playerName(mvp.playerId)
+                    }}</span>
+                    <span class="detail">{{
+                      'room.summary.wins' | transloco: { n: mvp.wins }
+                    }}</span>
+                  </li>
+                }
+                @if (sum.biggestComeback; as cb) {
+                  <li>
+                    <span class="tag">{{ 'room.summary.comeback' | transloco }}</span>
+                    <span class="who" [style.color]="playerColor(cb.playerId)">{{
+                      playerName(cb.playerId)
+                    }}</span>
+                    <span class="detail">{{
+                      'room.summary.positions' | transloco: { n: cb.positionsGained }
+                    }}</span>
+                  </li>
+                }
+              </ul>
+              <ol class="rounds">
+                @for (r of sum.perRound; track $index) {
+                  <li>
+                    <span class="game">{{ gameName(r.minigameId) }}</span>
+                    @if (r.winnerId) {
+                      <span class="who" [style.color]="playerColor(r.winnerId)">{{
+                        playerName(r.winnerId)
+                      }}</span>
+                    }
+                  </li>
+                }
+              </ol>
+            </div>
           }
         </div>
       </section>

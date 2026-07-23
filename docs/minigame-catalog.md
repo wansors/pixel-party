@@ -37,8 +37,11 @@ A3 (`trivia`) and D1 (`balloon-chicken`) — plus (as of 2026-07-21) the P1 wave
 (`number-rush`), E2 Quick Math (`quick-math`), E3 Odd One Out (`odd-one-out`), E5 Higher or Lower
 (`higher-lower`), A6 Bug smash (`bug-smash`), A10 Stop the clock (`stop-clock`), E8 Memory Flash
 (`memory-flash`), A4 Simon (`simon`) and A5 Pixel Hoops (`pixel-hoops`); plus the P1 fast-follows E12
-Pixel Weight (`pixel-weight`) and E11 Pixel Split (`pixel-split`). **16 mini-games total** — the full
-P1 wave + fast-follows are shipped.
+Pixel Weight (`pixel-weight`) and E11 Pixel Split (`pixel-split`). Then the Phase 2 formats (C1
+`tug-of-war`, C2 `bomb-relay`, B2 `sink-the-fleet`) and the Phase 5 real-time wave (2026-07-23): D2
+Fruit Catch (`fruit-catch`), A7 Pixel Rain (`pixel-rain`), A9 Pixel Dash (`pixel-dash`), A8 Snake Arena
+(`snake-arena`), B1 Pixel Pong (`pixel-pong`), B3 Sumo Push (`sumo-push`) — behind a client snapshot
+interpolator (netcode hardening); plus Match (A11 `match-pairs`), Quick Draw (E7 `quick-draw`) and Pixel Roulette (D3 `pixel-roulette`). **28 mini-games total.**
 
 ---
 
@@ -89,21 +92,21 @@ P1 wave + fast-follows are shipped.
 - **Win condition**: highest score. · **Result**: ranking by score.
 - **Latency**: low. · **Complexity**: low/medium.
 
-### A7. Pixel rain ("Dodge")
+### A7. ✅ Pixel rain ("Dodge") — implemented (`pixel-rain`)
 - **Concept**: move an avatar to dodge falling objects; survive as long as possible.
 - **Type**: FFA (own board, same seed) · **Input**: drag/keyboard · **Duration**: up to ~45 s · **Banter**: 💥💥
 - **Rules**: identical obstacle pattern (same seed); eliminated on collision.
 - **Win condition**: longest survival. · **Result**: ranking by time.
 - **Latency**: medium (client sim, server validates final time). · **Complexity**: medium.
 
-### A8. Snake Arena
+### A8. ✅ Snake Arena — implemented (`snake-arena`)
 - **Concept**: classic snake — grow by eating pixels, don't crash into walls or your own tail.
 - **Type**: FFA (own board, same food seed) · **Input**: swipe/keyboard · **Duration**: up to ~60 s · **Banter**: 💥💥
 - **Rules**: same food layout for everyone; crashing eliminates you.
 - **Win condition**: longest snake / longest survival. · **Result**: ranking by length.
 - **Latency**: medium. · **Complexity**: medium.
 
-### A9. Pixel Dash ("Platform race")
+### A9. ✅ Pixel Dash ("Platform race") — implemented (`pixel-dash`)
 - **Concept**: short auto-runner/obstacle sprint; first to the flag wins.
 - **Type**: FFA (own track, identical layout) · **Input**: tap to jump · **Duration**: up to ~40 s · **Banter**: 💥💥💥
 - **Rules**: identical track; mistakes cost time, not lives.
@@ -117,7 +120,7 @@ P1 wave + fast-follows are shipped.
 - **Win condition**: lowest accumulated error. · **Result**: ranking by error.
 - **Latency**: low. · **Complexity**: low.
 
-### A11. Speed puzzle ("Match")
+### A11. ✅ Speed puzzle ("Match") — implemented (`match-pairs`)
 - **Concept**: memory/card game — uncover matching pairs fastest / with fewest attempts.
 - **Type**: FFA (own board, same layout) · **Input**: tap · **Duration**: up to ~60 s · **Banter**: 💥
 - **Rules**: identical board; win by matching everything first / fewest misses.
@@ -131,7 +134,7 @@ P1 wave + fast-follows are shipped.
 > Players are paired into 1v1 matches; winners advance in a bracket, or all pairs play simultaneously and
 > results feed the round ranking. Great for building rivalries.
 
-### B1. Pixel Pong
+### B1. ✅ Pixel Pong — implemented (`pixel-pong`)
 - **Concept**: classic pong, 1v1. First to N points.
 - **Type**: Duel (bracket) · **Input**: drag paddle · **Duration**: ~30–45 s per match · **Banter**: 💥💥💥
 - **Rules**: standard pong; ball speeds up over time.
@@ -145,7 +148,7 @@ P1 wave + fast-follows are shipped.
 - **Win condition**: sink the enemy fleet first. · **Result**: win/loss → round ranking.
 - **Latency**: low (turn-based). · **Complexity**: medium.
 
-### B3. Sumo Push
+### B3. ✅ Sumo Push — implemented (`sumo-push`)
 - **Concept**: two pixel sumos in a ring; shove the opponent out with timed pushes.
 - **Type**: Duel (1v1) or FFA arena (up to 10 in one ring) · **Input**: tap/direction · **Duration**: ~30 s · **Banter**: 💥💥💥
 - **Rules**: physics shove; last one in the ring wins. FFA variant = battle royale.
@@ -193,14 +196,14 @@ P1 wave + fast-follows are shipped.
 - **Win condition**: highest banked points. · **Result**: ranking by banked points.
 - **Latency**: low (server owns the threshold). · **Complexity**: low.
 
-### D2. Fruit Catch
+### D2. ✅ Fruit Catch — implemented (`fruit-catch`)
 - **Concept**: catch falling fruit in a basket; avoid the bombs.
 - **Type**: FFA (same seed) · **Input**: drag · **Duration**: 30 s · **Banter**: 💥💥
 - **Rules**: identical drop pattern; fruit +, bombs reset combo.
 - **Win condition**: highest score. · **Result**: ranking by score.
 - **Latency**: low/medium. · **Complexity**: low/medium.
 
-### D3. Pixel Roulette ("Luck")
+### D3. ✅ Pixel Roulette ("Luck") — implemented (`pixel-roulette`)
 - **Concept**: pure chance to shake up standings (Mario Party style).
 - **Type**: FFA · **Input**: tap to spin · **Duration**: 15 s · **Banter**: 💥💥
 - **Rules**: each player spins; random result (server-validated).
@@ -230,7 +233,7 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
   revealed early); ranked by streak.* FFA · tap · 20 s · low effort · low latency · banter 💥💥💥 (nerve).
 - **E6. Pixel Beat** — tap to the rhythm; hit the beats on time.
   FFA · tap · ~40 s · medium effort · low/medium latency · banter 💥💥.
-- **E7. Quick Draw Duel** — western reaction shootout: draw first when "FIRE!" flashes, 1v1.
+- **E7. ✅ Quick Draw Duel** — implemented (`quick-draw`); — western reaction shootout: draw first when "FIRE!" flashes, 1v1.
   Duel · tap · ~15 s/match · low effort · medium latency · banter 💥💥💥.
 - **E8. ✅ Memory Flash** — a burst of pixels flashes; answer how many of a target appeared. *Implemented
   (`memory-flash`): seeded board sequence, self-paced; client flashes then asks; server owns the counts.*
@@ -255,6 +258,12 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
   4×4 or 6×6 to fit a party round). Winner is whoever completes it first; if nobody finishes in time,
   rank by **most correct cells placed** (server validates each cell, so a wrong entry never counts).
   FFA · tap (cell + number) · ~60–90 s · medium/high effort · low latency · banter 💥💥.
+- **E15. Bubble Pop ("Bust-a-Move")** — bubble-shooter puzzle: aim and shoot coloured bubbles upward at a
+  hanging cluster; **3+ same-colour bubbles that touch pop**, and any bubbles left unattached drop for a
+  bonus. Same **seeded** starting layout + shot-colour queue for everyone, so it's a fair race on an
+  identical board; server owns the grid and validates each shot (client can't fake a clear). Ranked by
+  bubbles cleared (finishers by fastest board-clear). FFA · drag-aim + tap to shoot · ~60 s · medium/high
+  effort · low latency · banter 💥💥.
 
 ### E1 (full card). ⭐ ✅ Color Trap ("Stroop") — implemented (`color-trap`)
 - **Concept**: a color word (e.g., "RED") is shown in a mismatched ink color (e.g., blue). Tap the

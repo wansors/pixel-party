@@ -10,9 +10,12 @@ import {
   type MiniGameMeta,
   PLAYER_COLORS,
   type PlayerDto,
+  type PlayerRadarDto,
   type RoundResultDto,
+  SKILL_AXES,
   type ScoreEntryDto,
   type ServerMsg,
+  type SessionSummaryDto,
   TEAMS,
   type TeamId,
   type TeamRoundResult,
@@ -24,6 +27,7 @@ import { GameSocketService } from '../../core/net/game-socket.service'
 import { AudioControlsComponent } from '../../shared/audio-controls.component'
 import { LanguageToggleComponent } from '../../shared/language-toggle.component'
 import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
+import { type RadarAxis, SkillRadarComponent } from '../../shared/skill-radar.component'
 
 type View = 'connecting' | 'lobby' | 'intro' | 'round' | 'round-result' | 'scoreboard' | 'final'
 
@@ -34,7 +38,13 @@ const pick = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length
 // by GameClient (Phaser), booted inside runOutsideAngular so its rAF never drives change detection.
 @Component({
   selector: 'app-room',
-  imports: [PixelAvatarComponent, AudioControlsComponent, LanguageToggleComponent, TranslocoPipe],
+  imports: [
+    PixelAvatarComponent,
+    SkillRadarComponent,
+    AudioControlsComponent,
+    LanguageToggleComponent,
+    TranslocoPipe,
+  ],
   templateUrl: './room.component.html',
   styleUrl: './room.component.scss',
 })
@@ -64,6 +74,8 @@ export class RoomComponent implements OnInit {
   readonly rounds = signal(0)
   // True when the line-up includes a team game — the lobby then shows team assignment.
   readonly usesTeams = signal(false)
+  // Bounded scoring catch-up toggle (Phase 3), mirrored from LOBBY_STATE.
+  readonly handicap = signal(false)
 
   readonly copied = signal(false)
   readonly intro = signal<{ round: number; total: number; game: string } | null>(null)
@@ -71,6 +83,9 @@ export class RoomComponent implements OnInit {
   readonly roundResult = signal<{ round: number; result: RoundResultDto } | null>(null)
   readonly scoreboard = signal<ScoreEntryDto[]>([])
   readonly final = signal<ScoreEntryDto[]>([])
+  // Phase 4 post-match analysis (present on FINAL_RANKING).
+  readonly radars = signal<PlayerRadarDto[]>([])
+  readonly summary = signal<SessionSummaryDto | null>(null)
 
   private game?: GameClient
   private currentGame?: MiniGameId
@@ -142,6 +157,7 @@ export class RoomComponent implements OnInit {
         this.selectedGameIds.set(msg.minigameIds)
         this.rounds.set(msg.rounds)
         this.usesTeams.set(msg.usesTeams)
+        this.handicap.set(msg.handicap)
         this.maybeSendDefaultConfig(msg.minigameIds)
         if (this.view() === 'connecting' || this.view() === 'lobby') this.view.set('lobby')
         break
@@ -176,6 +192,8 @@ export class RoomComponent implements OnInit {
         break
       case 'FINAL_RANKING':
         this.final.set(msg.scores)
+        this.radars.set(msg.radars ?? [])
+        this.summary.set(msg.summary ?? null)
         this.view.set('final')
         this.game?.destroy()
         this.game = undefined
@@ -282,6 +300,16 @@ export class RoomComponent implements OnInit {
     this.net.send({ type: 'HOST_CONFIG', minigameIds: this.selectedGameIds(), rounds: n })
   }
 
+  toggleHandicap(on: boolean): void {
+    if (!this.isHost()) return
+    this.net.send({
+      type: 'HOST_CONFIG',
+      minigameIds: this.selectedGameIds(),
+      rounds: this.rounds() || this.selectedGameIds().length,
+      handicap: on,
+    })
+  }
+
   get inviteUrl(): string {
     return `${location.origin}/?code=${this.code()}`
   }
@@ -374,5 +402,25 @@ export class RoomComponent implements OnInit {
   // Game-specific performance detail for a player on the round-result screen (e.g. "142 ms").
   roundStat(id: string): string {
     return this.roundResult()?.result.stats?.[id] ?? ''
+  }
+
+  // Catch-up bonus points a player earned this round (0 = none / handicap off).
+  roundHandicap(id: string): number {
+    return this.roundResult()?.result.handicap?.[id] ?? 0
+  }
+
+  // ── Post-match analysis (Phase 4) ─────────────────────────────────────────
+  // The viewing player's skill radar: axes played this session, in the shared axis order, labelled.
+  myRadar(): RadarAxis[] {
+    const mine = this.radars().find((r) => r.playerId === this.selfId())
+    if (!mine) return []
+    return SKILL_AXES.flatMap((axis) => {
+      const value = mine.axes[axis]
+      return value === undefined ? [] : [{ label: this.catalog.axisLabel(axis), value }]
+    })
+  }
+
+  hasProfile(): boolean {
+    return this.myRadar().length > 0
   }
 }

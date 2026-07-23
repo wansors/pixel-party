@@ -42,7 +42,8 @@
       "makeHost": "Hacer anfitrión",
       "kick": "Expulsar",
       "swapTeam": "Cambiar equipo",
-      "shuffleTeams": "Rebarajar equipos"
+      "shuffleTeams": "Rebarajar equipos",
+      "handicap": "Remontada (catch-up)"
     },
     "intro": {
       "round": "Ronda",
@@ -51,7 +52,8 @@
     "result": {
       "roundWinner": "GANADOR DE RONDA",
       "teamWinner": "EQUIPO GANADOR",
-      "totals": "Totales enseguida..."
+      "totals": "Totales enseguida...",
+      "catchup": "+{{n}} remontada"
     },
     "scoreboard": {
       "title": "Puntuaciones",
@@ -61,6 +63,15 @@
       "title": "* CLASIFICACIÓN FINAL *",
       "first": "1º",
       "newHighScore": "¡NUEVO RÉCORD!"
+    },
+    "summary": {
+      "profileTitle": "Tu perfil de habilidades",
+      "title": "Resumen de la sesión",
+      "mvp": "Más victorias",
+      "wins": "{{n}} rondas",
+      "comeback": "Remontada",
+      "positions": "+{{n}} puestos",
+      "roundWinner": "ganó"
     },
     "joinRejected": "Entrada rechazada: {{reason}}",
     "intentRejected": "{{intent}} rechazado: {{reason}}"
@@ -76,6 +87,15 @@
     "name_taken": "Ese nombre ya está en uso"
   },
   "catalog": {
+    "axis": {
+      "reflexes": "Reflejos",
+      "speed": "Velocidad",
+      "knowledge": "Conocimiento",
+      "memory": "Memoria",
+      "precision": "Precisión",
+      "nerve": "Nervio",
+      "focus": "Concentración"
+    },
     "minigame": {
       "reaction-duel": {
         "name": "Duelo de Reflejos",

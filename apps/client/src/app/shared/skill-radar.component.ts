@@ -1,0 +1,117 @@
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core'
+
+// One axis of the radar: a translated label and a 0..1 value.
+export interface RadarAxis {
+  label: string
+  value: number
+}
+
+const CX = 60
+const CY = 60
+const R = 40 // radius at value 1.0
+const RINGS = [1, 0.66, 0.33] // reference rings drawn behind the data polygon
+
+interface Pt {
+  x: number
+  y: number
+}
+
+// Inline-SVG skill radar (pentagon/hexagon…) for the post-match player profile. Dumb + OnPush: it draws
+// whatever axes it is given, in order. Mirrors the crisp self-hosted SVG approach of PixelAvatarComponent
+// (no charting library, CSP-safe).
+@Component({
+  selector: 'app-skill-radar',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <svg
+      [attr.width]="size()"
+      [attr.height]="size()"
+      viewBox="0 0 120 120"
+      class="skill-radar"
+      role="img"
+      [attr.aria-label]="ariaLabel()"
+    >
+      @for (ring of geo().rings; track $index) {
+        <polygon [attr.points]="ring" class="ring" />
+      }
+      @for (s of geo().spokes; track $index) {
+        <line x1="60" y1="60" [attr.x2]="s.x" [attr.y2]="s.y" class="spoke" />
+      }
+      <polygon
+        [attr.points]="geo().data"
+        class="area"
+        [attr.fill]="color()"
+        [attr.stroke]="color()"
+      />
+      @for (l of geo().labels; track l.label) {
+        <text [attr.x]="l.x" [attr.y]="l.y" [attr.text-anchor]="l.anchor" class="axis-label">
+          {{ l.label }}
+        </text>
+      }
+    </svg>
+  `,
+  styles: `
+    .skill-radar {
+      display: block;
+    }
+    .ring {
+      fill: none;
+      stroke: rgba(159, 179, 200, 0.25);
+      stroke-width: 0.5;
+    }
+    .spoke {
+      stroke: rgba(159, 179, 200, 0.25);
+      stroke-width: 0.5;
+    }
+    .area {
+      fill-opacity: 0.35;
+      stroke-width: 1.5;
+      stroke-linejoin: round;
+    }
+    .axis-label {
+      fill: #9fb3c8;
+      font-family: monospace;
+      font-size: 6px;
+    }
+  `,
+})
+export class SkillRadarComponent {
+  readonly data = input<RadarAxis[]>([])
+  readonly color = input<string>('#ffd166')
+  readonly size = input<number>(200)
+  readonly ariaLabel = input<string>('skill radar')
+
+  readonly geo = computed(() => {
+    const axes = this.data()
+    const n = axes.length
+    const rings = RINGS.map((f) => this.polygon(n, () => f))
+    const spokes: Pt[] = axes.map((_, i) => this.point(i, n, R))
+    const data = this.polygon(n, (i) => Math.max(0, Math.min(1, axes[i]?.value ?? 0)))
+    const labels = axes.map((a, i) => {
+      const p = this.point(i, n, R + 13)
+      // Anchor by horizontal position so labels sit outside the shape without overlapping it.
+      const anchor = p.x < CX - 1 ? 'end' : p.x > CX + 1 ? 'start' : 'middle'
+      return { label: a.label, x: p.x, y: p.y, anchor }
+    })
+    return { rings, spokes, data, labels }
+  })
+
+  // Angle for axis i of n, starting at the top (12 o'clock) and going clockwise.
+  private angle(i: number, n: number): number {
+    return -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(1, n)
+  }
+
+  private point(i: number, n: number, radius: number): Pt {
+    const a = this.angle(i, n)
+    return { x: CX + radius * Math.cos(a), y: CY + radius * Math.sin(a) }
+  }
+
+  // Build an SVG points string over all axes, with the radius fraction chosen per index.
+  private polygon(n: number, frac: (i: number) => number): string {
+    if (n === 0) return ''
+    return Array.from({ length: n }, (_, i) => {
+      const p = this.point(i, n, R * frac(i))
+      return `${p.x.toFixed(2)},${p.y.toFixed(2)}`
+    }).join(' ')
+  }
+}

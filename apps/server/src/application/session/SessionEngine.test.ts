@@ -15,6 +15,7 @@ const CONFIG: SessionConfig = {
   snapshotEveryNTicks: 1,
   defaultDurationMs: 500,
   baseSeed: 1,
+  handicap: { enabled: false, maxBonusPct: 0.2 },
 }
 
 const noRandom: Random = { next: () => 0 }
@@ -27,16 +28,16 @@ function roomWith(...names: string[]): Room {
 }
 
 // Drive the engine deterministically with a controllable clock; `a` mashes every tick, `b` never does.
-function playSession(room: Room): ServerMsg[] {
+function playSession(room: Room, cfg: SessionConfig = CONFIG): ServerMsg[] {
   let t = 0
   const clock: Clock = { now: () => t }
   const captured: ServerMsg[] = []
   const publisher: Publisher = { toRoom: (_code, msg) => captured.push(msg) }
-  const engine = new SessionEngine(room, publisher, clock, noRandom, CONFIG)
+  const engine = new SessionEngine(room, publisher, clock, noRandom, cfg)
 
   engine.start()
   for (let i = 0; i < 400 && !engine.isFinished; i++) {
-    t += 1000 / CONFIG.tickHz
+    t += 1000 / cfg.tickHz
     engine.onInput('a', { kind: 'mash' })
     engine.tick()
   }
@@ -79,6 +80,30 @@ describe('SessionEngine', () => {
     const room = roomWith('a', 'b')
     playSession(room)
     expect(room.phase).toBe('final')
+  })
+
+  test('a handicap-enabled session still completes and keeps the winner on top', () => {
+    const room = roomWith('a', 'b')
+    // Host toggle on (room is the source of truth); server cap from config.
+    room.configure(['button-masher'], 1, true)
+    const msgs = playSession(room, { ...CONFIG, handicap: { enabled: true, maxBonusPct: 0.2 } })
+    const final = msgs.find((m) => m.type === 'FINAL_RANKING')
+    if (final?.type !== 'FINAL_RANKING') throw new Error('no final')
+    // Round 1 standings are level so no bonus applies; the masher still wins outright.
+    expect(final.scores.find((s) => s.playerId === 'a')?.rank).toBe(1)
+  })
+
+  test('final ranking carries the Phase 4 analysis (radars + summary)', () => {
+    const msgs = playSession(roomWith('a', 'b'))
+    const final = msgs.find((m) => m.type === 'FINAL_RANKING')
+    if (final?.type !== 'FINAL_RANKING') throw new Error('no final')
+    // A radar per player; the round winner scores 1.0 on the game's axis (button-masher → speed).
+    expect(final.radars?.length).toBe(2)
+    const a = final.radars?.find((r) => r.playerId === 'a')
+    expect(a?.axes.speed).toBe(1)
+    // Summary reports the per-round winner and the most-wins leader.
+    expect(final.summary?.perRound.length).toBe(1)
+    expect(final.summary?.mostRoundWins).toEqual({ playerId: 'a', wins: 1 })
   })
 
   test('plays a multi-game sequence with no repeats and finishes', () => {

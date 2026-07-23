@@ -22,7 +22,10 @@ const VALIDATORS = {
   JOIN: (m) => isStr(m.name) && isStr(m.color) && isStr(m.avatar),
   REJOIN: (m) => isStr(m.playerId),
   SET_READY: (m) => isBool(m.ready),
-  HOST_CONFIG: (m) => isStrArray(m.minigameIds) && isNum(m.rounds),
+  HOST_CONFIG: (m) =>
+    isStrArray(m.minigameIds) &&
+    isNum(m.rounds) &&
+    (m.handicap === undefined || isBool(m.handicap)),
   SET_TEAM: (m) => isStr(m.playerId) && isStr(m.team),
   SHUFFLE_TEAMS: () => true,
   TRANSFER_HOST: (m) => isStr(m.playerId),

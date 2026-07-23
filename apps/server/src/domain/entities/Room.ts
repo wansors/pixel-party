@@ -9,6 +9,8 @@ export class Room {
   private _phase: RoomPhase = 'lobby'
   private _minigameIds: MiniGameId[] = []
   private _rounds = 0
+  // Host-toggled bounded scoring catch-up for the session (Phase 3). Default off.
+  private _handicap = false
   // Wall-clock ms of the last meaningful activity (set by the adapter via the Clock port). The idle
   // sweeper reaps rooms that go quiet for too long — abandoned lobbies and never-joined rooms.
   private _lastActivityAt = 0
@@ -18,8 +20,10 @@ export class Room {
     private readonly maxPlayers: number,
   ) {}
 
-  static create(code: string, maxPlayers: number): Room {
-    return new Room(code, maxPlayers)
+  static create(code: string, maxPlayers: number, handicapDefault = false): Room {
+    const room = new Room(code, maxPlayers)
+    room._handicap = handicapDefault
+    return room
   }
 
   get phase(): RoomPhase {
@@ -33,6 +37,9 @@ export class Room {
   }
   get rounds(): number {
     return this._rounds
+  }
+  get handicap(): boolean {
+    return this._handicap
   }
   get lastActivityAt(): number {
     return this._lastActivityAt
@@ -100,9 +107,10 @@ export class Room {
     this._lastActivityAt = now
   }
 
-  configure(minigameIds: MiniGameId[], rounds: number): void {
+  configure(minigameIds: MiniGameId[], rounds: number, handicap: boolean = this._handicap): void {
     this._minigameIds = [...minigameIds]
     this._rounds = rounds
+    this._handicap = handicap
   }
 
   // ── Teams (Phase 2) ────────────────────────────────────────────────────────

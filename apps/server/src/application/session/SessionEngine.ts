@@ -1,8 +1,10 @@
 import type {
   MiniGameId,
+  PlayerRadarDto,
   RoundResultDto,
   ScoreEntryDto,
   ServerMsg,
+  SessionSummaryDto,
   TeamId,
   TeamRoundResult,
 } from '@pp/shared'
@@ -11,7 +13,14 @@ import type { Room } from '../../domain/entities/Room'
 import type { MiniGame, NormalizedResult, PlayerId } from '../../domain/minigames/MiniGame'
 import { createMiniGame } from '../../domain/minigames/registry'
 import type { Random } from '../../domain/ports/Random'
+import { finalRanking } from '../../domain/services/finalRanking'
+import { type HandicapConfig, applyScoringHandicap } from '../../domain/services/handicap'
 import { awardPoints, awardTeamPoints } from '../../domain/services/scoring'
+import {
+  type RoundAnalysis,
+  buildRadars,
+  buildSummary,
+} from '../../domain/services/sessionAnalysis'
 import type { Clock } from '../ports/Clock'
 import type { Publisher } from '../ports/Publisher'
 
@@ -25,6 +34,9 @@ export interface SessionConfig {
   snapshotEveryNTicks: number
   defaultDurationMs: number
   baseSeed: number
+  // Optional bounded scoring catch-up (scoring-system.md §3.1). Ships OFF; when enabled it only inflates
+  // trailing players' own awards within a cap — never reorders a round.
+  handicap: HandicapConfig
 }
 
 type Phase = 'intro' | 'playing' | 'roundResult' | 'scoreboard' | 'final'
@@ -47,6 +59,16 @@ export class SessionEngine {
   private roundPlayers: PlayerId[] = []
   // Team membership snapshotted at round start (empty for FFA rounds); drives team scoring.
   private roundTeams = new Map<TeamId, PlayerId[]>()
+  // Phase 4 post-match analysis: one entry per finished round, consumed to build the final radar +
+  // session summary. Presentational only — never feeds scoring.
+  private readonly analysis: RoundAnalysis[] = []
+  private finalRadars: PlayerRadarDto[] = []
+  private finalSummary?: SessionSummaryDto
+  // Final-ranking tiebreakers (scoring-system.md §5): count of round wins (shared top position) and the
+  // running sum of per-round positions, so equal totals break by most firsts then best average position.
+  private readonly firsts = new Map<PlayerId, number>()
+  private readonly positionSum = new Map<PlayerId, number>()
+  private readonly roundsPlayed = new Map<PlayerId, number>()
 
   constructor(
     private readonly room: Room,
@@ -185,20 +207,35 @@ export class SessionEngine {
     const result = game.getResult(this.gameState)
     // Team rounds distribute points by team position; FFA rounds award per player directly.
     const isTeam = game.format === 'team'
-    const roundPoints = isTeam ? awardTeamPoints(result, this.roundTeams) : awardPoints(result)
+    const basePoints = isTeam ? awardTeamPoints(result, this.roundTeams) : awardPoints(result)
+    // Optional bounded catch-up on the awarded points, keyed off the standings BEFORE this round. The
+    // host lobby toggle (room.handicap) is the on/off switch; the cap comes from server config.
+    const standingsBefore = new Map(this.cumulative)
+    const { points: roundPoints, bonus } = applyScoringHandicap(basePoints, standingsBefore, {
+      enabled: this.room.handicap,
+      maxBonusPct: this.config.handicap.maxBonusPct,
+    })
     for (const [playerId, pts] of roundPoints) {
       this.cumulative.set(playerId, (this.cumulative.get(playerId) ?? 0) + pts)
     }
     const { placements, teams } = isTeam
       ? this.teamResultView(result)
       : { placements: result.placements, teams: undefined }
+    // Surface the catch-up bonus for transparency: keep only the non-zero entries (omit entirely when
+    // handicap is off or nobody got a boost).
+    const handicap: Record<PlayerId, number> = {}
+    for (const [pid, b] of bonus) if (b > 0) handicap[pid] = Math.round(b * 10) / 10
     this.lastResult = {
       minigameId: id,
       placements,
       scores: toScoreEntries(roundPoints),
       stats: result.stats,
       teams,
+      handicap: Object.keys(handicap).length > 0 ? handicap : undefined,
     }
+    // Radar reflects skill, so it normalizes the BASE award (before any catch-up bonus).
+    this.recordAnalysis(id, basePoints, placements)
+    this.accumulateTiebreak(basePoints)
     // Reveal the round's own outcome first; the cumulative scoreboard follows after its own dwell.
     this.publish({ type: 'ROUND_RESULT', round: this.roundIndex + 1, result: this.lastResult })
     this.room.setPhase('round-result')
@@ -225,6 +262,56 @@ export class SessionEngine {
     return { placements, teams }
   }
 
+  // Capture this round for the post-match analysis. Normalization is points-relative: the round's top
+  // scorer maps to 1.0 and the rest scale down by the award table — a simple, format-agnostic proxy for
+  // "how well did they do on this game's skill".
+  private recordAnalysis(
+    id: MiniGameId,
+    roundPoints: Map<PlayerId, number>,
+    placements: PlayerId[],
+  ): void {
+    const maxPts = Math.max(0, ...roundPoints.values())
+    const norm = new Map<PlayerId, number>()
+    for (const [pid, pts] of roundPoints) norm.set(pid, maxPts > 0 ? pts / maxPts : 0)
+    this.analysis.push({
+      minigameId: id,
+      axes: MINIGAMES_BY_ID.get(id)?.axes ?? [],
+      norm,
+      winnerId: placements[0] ?? null,
+      standings: this.standingsSnapshot(),
+    })
+  }
+
+  // Dense 1-based standings position per player from the current cumulative totals.
+  private standingsSnapshot(): Map<PlayerId, number> {
+    const map = new Map<PlayerId, number>()
+    for (const e of toScoreEntries(this.cumulative)) map.set(e.playerId, e.rank)
+    return map
+  }
+
+  // Accumulate this round's 0-based positions (from the base award; ties share the position) into the
+  // tiebreaker tallies: a "first" is any player sharing the top position.
+  private accumulateTiebreak(basePoints: Map<PlayerId, number>): void {
+    const sorted = [...basePoints.entries()].sort((a, b) => b[1] - a[1])
+    let position = 0
+    let prev: number | undefined
+    sorted.forEach(([pid, pts], idx) => {
+      if (idx > 0 && pts !== prev) position = idx
+      prev = pts
+      if (position === 0) this.firsts.set(pid, (this.firsts.get(pid) ?? 0) + 1)
+      this.positionSum.set(pid, (this.positionSum.get(pid) ?? 0) + position)
+      this.roundsPlayed.set(pid, (this.roundsPlayed.get(pid) ?? 0) + 1)
+    })
+  }
+
+  private finalRanking(): ScoreEntryDto[] {
+    return finalRanking(this.cumulative, {
+      firsts: this.firsts,
+      positionSum: this.positionSum,
+      roundsPlayed: this.roundsPlayed,
+    })
+  }
+
   private beginScoreboard(now: number): void {
     this.publish({ type: 'SCOREBOARD', scores: toScoreEntries(this.cumulative) })
     this.room.setPhase('scoreboard')
@@ -240,7 +327,15 @@ export class SessionEngine {
     }
     this.phase = 'final'
     this.room.setPhase('final')
-    this.publish({ type: 'FINAL_RANKING', scores: toScoreEntries(this.cumulative) })
+    const players = [...this.cumulative.keys()]
+    this.finalRadars = buildRadars(this.analysis, players)
+    this.finalSummary = buildSummary(this.analysis, players)
+    this.publish({
+      type: 'FINAL_RANKING',
+      scores: this.finalRanking(),
+      radars: this.finalRadars,
+      summary: this.finalSummary,
+    })
   }
 
   // Ordered messages that rebuild the current session view for a single reconnecting socket. Mirrors
@@ -292,7 +387,14 @@ export class SessionEngine {
         return msgs
       }
       case 'final':
-        return [{ type: 'FINAL_RANKING', scores: toScoreEntries(this.cumulative) }]
+        return [
+          {
+            type: 'FINAL_RANKING',
+            scores: this.finalRanking(),
+            radars: this.finalRadars,
+            summary: this.finalSummary,
+          },
+        ]
     }
   }
 

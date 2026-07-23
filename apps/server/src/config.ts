@@ -34,6 +34,10 @@ export const config = {
   roomCodeLen: envInt(process.env.ROOM_CODE_LEN, 4),
   roomMaxPlayers: envInt(process.env.ROOM_MAX_PLAYERS, 10),
   roomIdleTimeoutSec: envInt(process.env.ROOM_IDLE_TIMEOUT_SEC, 900),
+  // Bounded scoring catch-up (Phase 3). Ships OFF; enable per deployment while tuning. The cap is an
+  // integer percent (default 20 → up to +20% for the furthest-behind player).
+  handicapEnabled: (process.env.HANDICAP_ENABLED ?? '').toLowerCase() === 'true',
+  handicapMaxBonusPct: envInt(process.env.HANDICAP_MAX_BONUS_PCT, 20, 0) / 100,
   get allowedOrigins(): string[] {
     return parseAllowedOrigins()
   },

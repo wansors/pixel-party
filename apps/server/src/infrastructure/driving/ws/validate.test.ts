@@ -19,6 +19,16 @@ describe('isValidClientMsg', () => {
     expect(isValidClientMsg({ type: 'KICK_PLAYER', playerId: 'p2' })).toBe(true)
   })
 
+  test('HOST_CONFIG handicap is an optional boolean', () => {
+    expect(isValidClientMsg({ type: 'HOST_CONFIG', minigameIds: ['a'], rounds: 3 })).toBe(true)
+    expect(
+      isValidClientMsg({ type: 'HOST_CONFIG', minigameIds: ['a'], rounds: 3, handicap: true }),
+    ).toBe(true)
+    expect(
+      isValidClientMsg({ type: 'HOST_CONFIG', minigameIds: ['a'], rounds: 3, handicap: 'yes' }),
+    ).toBe(false)
+  })
+
   test('defers an unknown discriminant to the caller (returns true)', () => {
     expect(isValidClientMsg({ type: 'FUTURE_INTENT' })).toBe(true)
   })

@@ -13,13 +13,15 @@ export class LiveRooms implements LiveRoomRegistry {
     private readonly codeLen: number,
     private readonly maxPlayers: number,
     private readonly clock: Clock,
+    // Initial handicap setting for new rooms (deployment default; the host can toggle it in the lobby).
+    private readonly handicapDefault = false,
   ) {}
 
   create(): Room {
     // Retry on the (rare, short-code) collision so a fresh code is always unique in the live set.
     let code = this.ids.roomCode(this.codeLen)
     while (this.rooms.has(code)) code = this.ids.roomCode(this.codeLen)
-    const room = Room.create(code, this.maxPlayers)
+    const room = Room.create(code, this.maxPlayers, this.handicapDefault)
     // Seed activity at creation so a room that is never joined ages toward the idle sweeper.
     room.touch(this.clock.now())
     this.rooms.set(code, room)

@@ -1,4 +1,4 @@
-import type { MiniGameFormat, MiniGameId } from './catalog/minigames'
+import type { MiniGameFormat, MiniGameId, SkillAxis } from './catalog/minigames'
 import type { TeamId } from './theme'
 
 // Wire-contract version: bump on any BREAKING wire change (renamed/removed message types or fields,
@@ -44,6 +44,9 @@ export interface RoundResultDto {
   // Present for team-format rounds: the team ranking behind the per-player points, for the "TEAM RED
   // WINS" banner. Ordered by rank (index 0 = winning team). Purely presentational.
   teams?: TeamRoundResult[]
+  // Catch-up bonus points added to a player's award this round (Phase 3), keyed by playerId. Only
+  // present when handicap is enabled and the bonus is non-zero — the results screen shows it as "+N".
+  handicap?: Record<string, number>
 }
 
 export interface TeamRoundResult {
@@ -51,6 +54,28 @@ export interface TeamRoundResult {
   rank: number
   points: number
   memberIds: string[]
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Phase 4 — post-match analysis. All presentational: computed from the round results the engine
+// already produces; never feeds scoring or the line-up.
+// ---------------------------------------------------------------------------------------------------
+
+// A player's skill profile across the session: a 0..1 score per axis (1 = won every game on that axis).
+// Only axes actually played this session are present — the radar draws whatever it receives.
+export interface PlayerRadarDto {
+  playerId: string
+  axes: Partial<Record<SkillAxis, number>>
+}
+
+// Session banter surface: who won each round, who won the most, and the biggest climb up the standings.
+export interface SessionSummaryDto {
+  // Round-by-round winner (index 0 = round 1). `winnerId` is null if nobody scored that round.
+  perRound: { minigameId: MiniGameId; winnerId: string | null }[]
+  // Player with the most round wins (null if there were no rounds / no winners).
+  mostRoundWins: { playerId: string; wins: number } | null
+  // Largest improvement in standings position from a player's worst point to the final (0 if none).
+  biggestComeback: { playerId: string; positionsGained: number } | null
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -65,8 +90,9 @@ export type ClientMsg =
   // previously minted playerId; the server re-attaches it and replays the current session state.
   | { type: 'REJOIN'; playerId: string }
   | { type: 'SET_READY'; ready: boolean }
-  // Host-only: configure the session (which games, how many rounds). Ignored from non-hosts.
-  | { type: 'HOST_CONFIG'; minigameIds: MiniGameId[]; rounds: number }
+  // Host-only: configure the session (which games, how many rounds, catch-up on/off). Ignored from
+  // non-hosts. `handicap` omitted = leave the current setting unchanged.
+  | { type: 'HOST_CONFIG'; minigameIds: MiniGameId[]; rounds: number; handicap?: boolean }
   // Host-only: move a player to a team (team-format line-ups only).
   | { type: 'SET_TEAM'; playerId: string; team: TeamId }
   // Host-only: re-roll the balanced team assignment.
@@ -108,6 +134,8 @@ export type ServerMsg =
       rounds: number
       // True when the configured line-up includes a team-format game — the lobby then shows team UI.
       usesTeams: boolean
+      // Whether bounded scoring catch-up is enabled for this session (host toggle; Phase 3).
+      handicap: boolean
     }
   // A round is about to start: countdown intro so clients can preload the scene.
   | {
@@ -124,8 +152,14 @@ export type ServerMsg =
   | { type: 'ROUND_RESULT'; round: number; result: RoundResultDto }
   // Session-wide cumulative ranking (shown between rounds).
   | { type: 'SCOREBOARD'; scores: ScoreEntryDto[] }
-  // Session over — final ranking.
-  | { type: 'FINAL_RANKING'; scores: ScoreEntryDto[] }
+  // Session over — final ranking, plus the Phase 4 post-match analysis (radar per player + summary).
+  // The analysis fields are optional so an older client simply ignores them.
+  | {
+      type: 'FINAL_RANKING'
+      scores: ScoreEntryDto[]
+      radars?: PlayerRadarDto[]
+      summary?: SessionSummaryDto
+    }
   // Generic per-intent acknowledgement (ok/reject with a stable machine reason).
   | { type: 'ACK'; intent: ClientMsgType; ok: boolean; reason?: string }
   | { type: 'JOIN_REJECTED'; reason: JoinRejectReason }

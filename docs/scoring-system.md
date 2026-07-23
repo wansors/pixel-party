@@ -117,10 +117,11 @@ Guardrails:
 At the end of the last round, players are ordered by **total accumulated points** (higher wins).
 
 ### Tiebreaker rules (in order)
-1. **Most 1st places** achieved during the session.
-2. **Best average position** across mini-games.
-3. **Result in a quick tiebreaker mini-game** (e.g., "Quick reaction", 1 round).
-4. If still tied: **shared tie** on the podium.
+1. **Most 1st places** achieved during the session. *(Implemented — `domain/services/finalRanking`.)*
+2. **Best average position** across mini-games. *(Implemented.)*
+3. **Result in a quick tiebreaker mini-game** (e.g., "Quick reaction", 1 round). *(Future — needs an
+   engine sub-flow; see `implementation-decisions.md` D12.)*
+4. If still tied: **shared tie** on the podium. *(Implemented — players equal on 1+2 share a rank.)*
 
 ---
 

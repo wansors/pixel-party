@@ -21,6 +21,8 @@ export class SimonScene extends Phaser.Scene {
   private playStart = 0
   private lastTapAt = 0
   private wasAlive = true
+  // Last sequence slot whose tone was played during playback, so each pad sounds once as it lights.
+  private lastPlaySlot = -1
 
   constructor(
     private readonly send: (msg: ClientMsg) => void,
@@ -76,7 +78,7 @@ export class SimonScene extends Phaser.Scene {
     if (this.time.now - this.lastTapAt < 120) return // debounce double taps
     this.lastTapAt = this.time.now
     this.flash(pad, 200)
-    this.sfx.click()
+    this.sfx.pad(pad)
     this.send({ type: 'MINIGAME_INPUT', input: { kind: 'pad', pad } })
   }
 
@@ -102,6 +104,7 @@ export class SimonScene extends Phaser.Scene {
       this.shownLen = me.seq.length
       this.playing = true
       this.playStart = this.time.now
+      this.lastPlaySlot = -1
     }
 
     if (!me.alive) {
@@ -120,10 +123,16 @@ export class SimonScene extends Phaser.Scene {
       const slot = PLAY_ON_MS + PLAY_GAP_MS
       const idx = Math.floor(elapsed / slot)
       this.status?.setText(this.t('game.simon.watch')).setColor('#ffd166')
+      const inOnWindow = elapsed % slot < PLAY_ON_MS
       this.pads.forEach((p, i) => {
-        const lit = idx < seq.length && seq[idx] === i && elapsed % slot < PLAY_ON_MS
+        const lit = idx < seq.length && seq[idx] === i && inOnWindow
         p.setAlpha(lit ? 1 : 0.4)
       })
+      // Sound each pad once as it lights up during playback.
+      if (idx < seq.length && idx !== this.lastPlaySlot && inOnWindow) {
+        this.lastPlaySlot = idx
+        this.sfx.pad(seq[idx] as number)
+      }
       if (idx >= seq.length) this.playing = false
     } else {
       this.status?.setText(this.t('game.simon.repeat')).setColor('#06d6a0')

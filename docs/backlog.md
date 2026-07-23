@@ -1,6 +1,6 @@
 # Backlog — Pixel Party
 
-- **Version**: 0.4 (draft)
+- **Version**: 0.5 (draft)
 - **Date**: 2026-07-23
 
 Phased product backlog. The philosophy is **start with a minimal MVP and grow incrementally** — build
@@ -9,7 +9,7 @@ analysis…) phase by phase. Nothing is built "just in case".
 
 ## Current status (2026-07-23)
 
-**MVP is playable end-to-end, now with 16 mini-games + audio.** The full stack is scaffolded and runnable
+**MVP is playable end-to-end, now with 28 mini-games + audio + post-match analysis.** The full stack is scaffolded and runnable
 (`bun run dev` → server :3000 + client :4200, LAN-accessible; see [`../README.md`](../README.md)). What
 works today:
 
@@ -35,14 +35,30 @@ works today:
   chunky buttons, pixel-art avatars (self-hosted SVG sprites) with a join-screen picker, high-score
   scoreboard/final ranking, optional CRT overlay.
 
-**Phase 0 and Phase 1 are complete** (closed out 2026-07-23): the pixel font is bundled, responsive
-tuning is done, and the Phase 1 robustness work landed — no-repeat game selection, host transfer
-(auto-on-disconnect + manual) + kick, room inactivity reaper, and observability (structured JSON logs +
-`/api/metrics`). **Phase 2 is in progress**: the teams slice shipped (2 fixed teams + balanced seeded
-assignment + host move/shuffle + team scoring distribution + Tug of War) and the duels slice shipped
-(seeded simultaneous 1v1 pairing + win/loss aggregation + Sink the Fleet Battleship), bringing the
-catalog to **19 mini-games** and completing **Phase 2** (teams + duels). Next up: Phase 3 (handicap /
-catch-up) or Phase 4 (post-match analysis / player radar).
+**Phases 0–2 are complete.** Phase 0/1: pixel font, responsive tuning, no-repeat game selection, host
+transfer (auto + manual) + kick, room inactivity reaper, observability (JSON logs + `/api/metrics`).
+Phase 2: teams (2 fixed teams + balanced seeded assignment + host move/shuffle + team scoring + Tug of
+War + Bomb Relay) and duels (seeded 1v1 pairing + win/loss aggregation + Sink the Fleet) — **19
+mini-games**.
+
+**Phase 4 is complete and Phase 3 partially landed** (2026-07-23 backlog clear-out pass; decisions in
+[`implementation-decisions.md`](implementation-decisions.md)):
+- **Phase 4 — post-match analysis**: skill-axis tagging (7 axes on `MiniGameMeta`), a per-player skill
+  radar (inline-SVG `app-skill-radar`, shows the viewing player's profile) + session summary (most
+  wins, biggest comeback, per-round winners), computed in `domain/services/sessionAnalysis` and carried
+  on `FINAL_RANKING`. Additive; scoring untouched.
+- **Phase 3 — handicap**: the bounded **scoring** catch-up lever shipped (`domain/services/handicap`),
+  wired into the engine, **off by default** (env-gated). Mechanical per-game hooks + in-UI
+  transparency/host toggle deferred until tuned.
+- Icebox polish: Pixel Split cut now starts far-left (symmetric figures no longer trivial); Simon plays
+  a distinct tone per pad.
+
+**Phase 5 also landed** (2026-07-23): netcode hardening (client snapshot interpolation) + all six
+real-time action games — Fruit Catch, Pixel Rain, Pixel Dash, Snake Arena, Pixel Pong, Sumo Push —
+bringing the catalog to **25 mini-games**. Then Match (A11), Quick Draw (E7) and Pixel Roulette (D3) followed, reaching **28 mini-games**.
+
+Next candidates: **Phase 6** (DB/accounts/history), the deferred **handicap mechanical hooks** (Phase 3),
+or growing the mini-game catalog on demand. See D9 for the remaining deferrals.
 
 ## How this backlog works
 
@@ -88,7 +104,9 @@ ranking. Latency-tolerant games only; no teams/duels/handicap yet.
 
 ### Scoring
 - [x] Position → points table (`DEFAULT_AWARD_TABLE`) with tie-averaging, cumulative scoreboard per round.
-- [x] Final ranking + tiebreakers. *Dense ranks + averaged ties; richer tiebreakers can come later.*
+- [x] Final ranking + tiebreakers. *Dense ranks + averaged ties; **richer tiebreakers landed 2026-07-23**
+      (`domain/services/finalRanking`): equal totals break by most 1st places, then best average
+      position (scoring §5.1–5.2). The §5.3 sudden-death tiebreaker mini-game is still future (D12).*
 
 ### Client
 - [x] Angular 20 shell: join, lobby, round intro, results, final ranking (single `RoomComponent`).
@@ -191,10 +209,21 @@ end-to-end + playable.
 
 ## Phase 3 — Handicap / catch-up
 
-- [ ] Handicap engine: compute per-player/team factor from current standings (bounded, capped).
-- [ ] Mechanical handicap hooks in mini-games (leader nerf / trailer boost / team weighting).
-- [ ] Scoring handicap (bounded multiplier), shown transparently on results.
-- [ ] Session config toggles (default off).
+**Mostly complete** (2026-07-23) — the bounded **scoring** lever ships with a host toggle + on-results
+transparency (off by default). Only the mechanical per-game hooks stay deferred until tuned. See
+`implementation-decisions.md` D8 / D8-UPDATE.
+
+- [x] Handicap engine: compute per-player factor from current standings (bounded, capped). *Done —
+      `domain/services/handicap.ts` `applyScoringHandicap`: trailer bonus scales linearly with distance
+      behind, capped at `maxBonusPct`; leader gets 0; never reorders a round. Fully unit-tested.*
+- [ ] Mechanical handicap hooks in mini-games (leader nerf / trailer boost / team weighting). *Deferred
+      (D8): touches all 19 games; build once the scoring lever is validated on real sessions.*
+- [x] Scoring handicap (bounded multiplier), shown transparently on results. *Done — wired in
+      `SessionEngine.endRound`; the per-player catch-up bonus rides `RoundResultDto.handicap` and shows
+      as a "+N catch-up" badge on the round-result screen.*
+- [x] Session config toggles (default off). *Done — host lobby checkbox (`HOST_CONFIG.handicap` →
+      `LOBBY_STATE.handicap`), room flag is the source of truth; `HANDICAP_ENABLED` env seeds the default
+      for new rooms, `HANDICAP_MAX_BONUS_PCT` sets the cap.*
 
 *Depends on: Phase 0; benefits from Phase 2. See `scoring-system.md` §3.1 and `minigame-catalog.md` §H.*
 
@@ -202,13 +231,25 @@ end-to-end + playable.
 
 ## Phase 4 — Post-match analysis & player profile
 
-The end-of-session summary evolves from a flat ranking into a richer profile.
+**Complete** (2026-07-23). The end-of-session summary evolved from a flat ranking into a richer profile.
+See `implementation-decisions.md` D3–D7 for the choices taken.
 
-- [ ] **Skill-axis tagging**: tag each mini-game by axis (see below) so results can be aggregated per axis.
-- [ ] **Player radar / pentagon** (Brain Training / Nintendo DS style): a radar chart per player showing
-      their normalized score on each skill axis across the session (agility high, thinking lower, etc.).
-- [ ] Session summary: per-round breakdown, biggest comeback, MVP moments (banter surface).
-- [ ] Persist enough per-session data to render the analysis (see Phase 6 if long-term history is wanted).
+- [x] **Skill-axis tagging**: *Done — `SkillAxis` (7 axes: reflexes/speed/knowledge/memory/precision/
+      nerve/focus) + `SKILL_AXES` in `@pp/shared`; `MiniGameMeta.axes` tags all 19 games (each ≥1 axis).*
+- [x] **Player radar / pentagon** (Brain Training / Nintendo DS style): *Done — `app-skill-radar` (dumb
+      OnPush inline-SVG, no chart lib) renders the viewing player's normalized per-axis profile on the
+      final screen. The wire carries a radar per player (`PlayerRadarDto`), so showing all is a
+      client-only follow-up (decision D6).*
+- [x] Session summary: per-round breakdown, biggest comeback, MVP moments (banter surface). *Done —
+      `SessionSummaryDto` (per-round winners, most round wins, biggest standings comeback), computed in
+      the domain service `sessionAnalysis` and shown under the final ranking.*
+- [x] Persist enough per-session data to render the analysis. *Done in-memory: the engine accumulates a
+      per-round `RoundAnalysis` and computes the radar+summary at session end (no DB — Phase 6 remains
+      the first DB phase). Normalization is points-relative (decision D4).*
+
+> Delivery notes: analysis rides on the existing `FINAL_RANKING` message (optional `radars`/`summary`
+> fields; `PROTOCOL_VERSION` unchanged — decision D5) and replays on reconnect. Additive only; scoring
+> and line-up are untouched.
 
 ### Proposed skill axes (for the radar)
 | Axis | Fed by (catalog) |
@@ -229,12 +270,21 @@ The end-of-session summary evolves from a flat ranking into a richer profile.
 
 ## Phase 5 — Real-time action mini-games
 
-Deferred until the netcode/sync layer is proven (higher latency sensitivity).
+**Complete** (2026-07-23). Netcode hardening landed as a client snapshot interpolator and all six action
+games shipped end-to-end. See `implementation-decisions.md` D10.
 
-- [ ] Netcode hardening: client interpolation (~100 ms), input prediction where needed.
-- [ ] Pixel Pong (B1), Sumo Push (B3), Pixel Dash (A9), Snake Arena (A8), Pixel rain (A7), Fruit Catch (D2).
+- [x] Netcode hardening: client interpolation (~100 ms). *Done — `game/netcode/SnapshotInterpolator`
+      buffers the two latest snapshots and renders ~100 ms behind, lerping entities by stable id; scenes
+      opt in. Input prediction not needed — each scene renders its own avatar locally (immediate) while
+      the server stays authoritative for scoring/collision (D10).*
+- [x] Pixel Pong (B1), Sumo Push (B3), Pixel Dash (A9), Snake Arena (A8), Pixel rain (A7), Fruit Catch
+      (D2). *All shipped as pluggable domain modules + Phaser scenes, each with domain tests. `fruit-catch`
+      is the reference (seeded falling stream, item y is a pure function of time). `pixel-pong` is a 1v1
+      duel (seeded pairing, server-owned ball, interpolated); `sumo-push` is an FFA shove arena (physics,
+      survival ranking); `snake-arena` is grid-stepped; `pixel-rain`/`pixel-dash` are seeded
+      dodge/timing FFA. Catalog now **25 mini-games**.*
 
-*Depends on: Phase 0 (tick loop), ideally Phase 2 (duels for Pong/Sumo).*
+*Depends on: Phase 0 (tick loop), Phase 2 (duel pairing for Pong).*
 
 ---
 
@@ -274,7 +324,7 @@ follows the priority tiers there:
 | MVP | P0 | Quick reaction (A1 ✅), Button masher (A2 ✅), Color Trap (E1 ✅), Trivia (A3 ✅), Balloon Chicken (D1 ✅) — all 5 shipped | 0 |
 | +1 | P1 | Number Rush (E4 ✅), Quick Math (E2 ✅), Odd One Out (E3 ✅), Higher/Lower (E5 ✅), Bug smash (A6 ✅), Timing (A10 ✅), Memory Flash (E8 ✅), Simon (A4 ✅), Pixel Hoops (A5 ✅), Pixel Weight (E12 ✅), Pixel Split (E11 ✅) — **P1 wave + fast-follows complete** | 1 |
 | +2 | P2 | Tug of War (C1 ✅), Sink the Fleet (B2 ✅), Bomb Relay (C2 ✅), Match (A11), Quick Draw Duel (E7), Pixel Beat (E6), Fruit Catch (D2), Fleet Battle (C3) | 2 |
-| +action | P3 | Pong (B1), Sumo (B3), Pixel Dash (A9), Snake (A8), Maze Sprint (E9), Pixel rain (A7), Line Clear (E10), Roulette (D3) | 5 |
+| +action | P3/P5 | Pong (B1 ✅), Sumo (B3 ✅), Pixel Dash (A9 ✅), Snake (A8 ✅), Pixel rain (A7 ✅), Fruit Catch (D2 ✅ — from P2 list); still open: Maze Sprint (E9), Line Clear (E10), Roulette (D3) | 5 |
 
 > P0 group is 5 games ranked; the MVP ships the top 3 (A1, A2, E1) with D1/A3 as fast-follows. See
 > `minigame-ideas.md` for the full ranked table and rationale.
@@ -293,6 +343,12 @@ follows the priority tiers there:
       identical seeded piece sequence, clear the most lines in a short window. *P3, rides the action wave.*
 - [ ] **Sudoku Race** — E14: everyone solves the same seeded Sudoku (small/quick grid); winner is
       first-to-solve, else most correct cells placed (server validates each cell). *P2, puzzle.*
+- [ ] **Bubble Pop ("Bust-a-Move")** — E15: bubble-shooter puzzle — aim and shoot coloured bubbles
+      upward at a hanging cluster; 3+ touching same-colour bubbles pop and unattached bubbles drop for a
+      bonus. Same seeded starting board + shot-colour queue for everyone; server owns the grid and
+      validates each shot. Ranked by bubbles cleared (finishers by fastest board-clear). *P3 — latency-
+      tolerant (self-paced, common seed) but high build effort (aim physics + hex-grid snap + cluster
+      flood-fill); rides the puzzle/action wave.*
 - [ ] **Racing cluster** (top-down pixel racers; real-time, high latency sensitivity → ride the Phase 5
       action wave once netcode interpolation/prediction is proven). All seeded so every player gets the
       same track/AI; server-authoritative positions.
@@ -303,6 +359,13 @@ follows the priority tiers there:
         (no direct contact); rank by finish time. Handles/grip + checkpoints; FFA scored by time.
   - [ ] **Speed Circuit** (`speed-circuit`) — multi-lap wheel-to-wheel race on a proper circuit; racing
         line + slipstream/boost pickups; final lap order → placements. FFA (duel/team variants later).
+- [x] **Pixel Split — reset the cut to the far left each object** — *Done 2026-07-23: the `pixel-split`
+      cut selector now initialises at the leftmost boundary on every object (was centred), so symmetric
+      figures are no longer trivially solved by the default cut. Client selector-init change; server
+      still owns the per-column counts. See `implementation-decisions.md` D1.*
+- [x] **Simon per-pad tones** — *Done 2026-07-23: each Simon (`simon`) pad now plays a distinct pitch
+      on tap and during sequence playback, via a new `Sfx.pad()` on the existing WebAudio 8-bit synth
+      (no assets, respects the SFX volume). See `implementation-decisions.md` D2.*
 - [ ] Manual mini-game selection/editor by the host.
 - [ ] Spectator mode.
 - [ ] Custom trivia packs.

@@ -8,18 +8,27 @@ import { BombRelayScene } from './scenes/BombRelayScene'
 import { BugSmashScene } from './scenes/BugSmashScene'
 import { ButtonMasherScene } from './scenes/ButtonMasherScene'
 import { ColorTrapScene } from './scenes/ColorTrapScene'
+import { FruitCatchScene } from './scenes/FruitCatchScene'
 import { HigherLowerScene } from './scenes/HigherLowerScene'
+import { MatchPairsScene } from './scenes/MatchPairsScene'
 import { MemoryFlashScene } from './scenes/MemoryFlashScene'
 import { NumberRushScene } from './scenes/NumberRushScene'
 import { OddOneOutScene } from './scenes/OddOneOutScene'
+import { PixelDashScene } from './scenes/PixelDashScene'
 import { PixelHoopsScene } from './scenes/PixelHoopsScene'
+import { PixelRainScene } from './scenes/PixelRainScene'
 import { PixelSplitScene } from './scenes/PixelSplitScene'
 import { PixelWeightScene } from './scenes/PixelWeightScene'
+import { PongScene } from './scenes/PongScene'
+import { QuickDrawScene } from './scenes/QuickDrawScene'
 import { QuickMathScene } from './scenes/QuickMathScene'
 import { ReactionScene } from './scenes/ReactionScene'
+import { RouletteScene } from './scenes/RouletteScene'
 import { SimonScene } from './scenes/SimonScene'
 import { SinkTheFleetScene } from './scenes/SinkTheFleetScene'
+import { SnakeArenaScene } from './scenes/SnakeArenaScene'
 import { StopClockScene } from './scenes/StopClockScene'
+import { SumoScene } from './scenes/SumoScene'
 import { TriviaScene } from './scenes/TriviaScene'
 import { TugOfWarScene } from './scenes/TugOfWarScene'
 import { ServerMsgRouter } from './serverMsgRouter'
@@ -100,6 +109,15 @@ export class GameClient {
     this.game.scene.add('color-trap', new ColorTrapScene(...deps), false)
     this.game.scene.add('trivia', new TriviaScene(...deps), false)
     this.game.scene.add('balloon-chicken', new BalloonChickenScene(...deps), false)
+    this.game.scene.add('fruit-catch', new FruitCatchScene(...deps), false)
+    this.game.scene.add('pixel-rain', new PixelRainScene(...deps), false)
+    this.game.scene.add('pixel-dash', new PixelDashScene(...deps), false)
+    this.game.scene.add('snake-arena', new SnakeArenaScene(...deps), false)
+    this.game.scene.add('pixel-pong', new PongScene(...deps), false)
+    this.game.scene.add('sumo-push', new SumoScene(...deps), false)
+    this.game.scene.add('match-pairs', new MatchPairsScene(...deps), false)
+    this.game.scene.add('quick-draw', new QuickDrawScene(...deps), false)
+    this.game.scene.add('pixel-roulette', new RouletteScene(...deps), false)
     this.game.scene.add('number-rush', new NumberRushScene(...deps), false)
     this.game.scene.add('quick-math', new QuickMathScene(...deps), false)
     this.game.scene.add('odd-one-out', new OddOneOutScene(...deps), false)

@@ -64,4 +64,13 @@ export class Sfx {
   pop(): void {
     this.tone(400, 180, { slideTo: 50, gain: 0.35 })
   }
+
+  // Simon pad tone: one distinct pitch per colour pad (played on tap and on sequence playback), for
+  // the classic Simon feel. Ascending pentatonic set so any pad order still sounds musical.
+  pad(index: number): void {
+    const freq = Sfx.PAD_TONES[index % Sfx.PAD_TONES.length] ?? 440
+    this.tone(freq, 260, { gain: 0.3 })
+  }
+
+  private static readonly PAD_TONES = [261.63, 329.63, 392.0, 523.25] // C4, E4, G4, C5
 }

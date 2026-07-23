@@ -18,7 +18,13 @@ export function bootstrap() {
   const ids = new CryptoIdGenerator()
   const logger = createLogger()
   const metrics = createMetrics()
-  const rooms = new LiveRooms(ids, config.roomCodeLen, config.roomMaxPlayers, clock)
+  const rooms = new LiveRooms(
+    ids,
+    config.roomCodeLen,
+    config.roomMaxPlayers,
+    clock,
+    config.handicapEnabled,
+  )
 
   const createRoom = new CreateRoomUseCase(rooms)
   const joinRoom = new JoinRoomUseCase(rooms, ids)
@@ -31,6 +37,10 @@ export function bootstrap() {
     snapshotEveryNTicks: config.snapshotEveryNTicks,
     defaultDurationMs: 10_000,
     baseSeed: config.seed,
+    handicap: {
+      enabled: config.handicapEnabled,
+      maxBonusPct: config.handicapMaxBonusPct,
+    },
   }
 
   const server = startGameServer({

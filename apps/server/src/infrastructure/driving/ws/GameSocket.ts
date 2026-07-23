@@ -75,6 +75,7 @@ function lobbyState(room: Room): LobbyStateMsg {
     minigameIds: [...room.minigameIds],
     rounds: room.rounds,
     usesTeams: lineupUsesTeams(room),
+    handicap: room.handicap,
   }
 }
 
@@ -219,7 +220,7 @@ export function startGameServer(deps: GameSocketDeps) {
     const ids = [...new Set(msg.minigameIds.filter((id) => MINIGAMES_BY_ID.has(id)))]
     const cap = ids.length > 0 ? Math.min(20, ids.length) : 20
     const rounds = Math.max(1, Math.min(cap, Math.floor(msg.rounds) || 1))
-    room.configure(ids, rounds)
+    room.configure(ids, rounds, msg.handicap ?? room.handicap)
     ensureTeams(room)
     broadcastLobby(room)
   }
