@@ -1,4 +1,5 @@
 export * from './balloonChicken'
+export * from './bombRelay'
 export * from './bugSmash'
 export * from './buttonMasher'
 export * from './colorTrap'

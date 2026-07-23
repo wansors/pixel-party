@@ -4,6 +4,7 @@ import { RoundState } from './RoundState'
 import type { Sfx } from './Sfx'
 import type { Translate } from './i18n'
 import { BalloonChickenScene } from './scenes/BalloonChickenScene'
+import { BombRelayScene } from './scenes/BombRelayScene'
 import { BugSmashScene } from './scenes/BugSmashScene'
 import { ButtonMasherScene } from './scenes/ButtonMasherScene'
 import { ColorTrapScene } from './scenes/ColorTrapScene'
@@ -43,6 +44,7 @@ const SCENE_IDS: MiniGameId[] = [
   'pixel-split',
   'tug-of-war',
   'sink-the-fleet',
+  'bomb-relay',
 ]
 
 // Pure Phaser config factory — testable without `new Phaser.Game` (which needs a DOM/canvas). Scenes
@@ -111,6 +113,7 @@ export class GameClient {
     this.game.scene.add('pixel-split', new PixelSplitScene(...deps), false)
     this.game.scene.add('tug-of-war', new TugOfWarScene(...deps), false)
     this.game.scene.add('sink-the-fleet', new SinkTheFleetScene(...deps), false)
+    this.game.scene.add('bomb-relay', new BombRelayScene(...deps), false)
   }
 
   // Switch the active scene to the round's mini-game (no-op if already active).

@@ -1,6 +1,7 @@
 import type { MiniGameId } from '@pp/shared'
 import type { MiniGame } from './MiniGame'
 import { BalloonChicken } from './balloonChicken'
+import { BombRelay } from './bombRelay'
 import { BugSmash } from './bugSmash'
 import { ButtonMasher } from './buttonMasher'
 import { ColorTrap } from './colorTrap'
@@ -40,6 +41,7 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'pixel-split': () => new PixelSplit() as unknown as MiniGame<unknown, unknown>,
   'tug-of-war': () => new TugOfWar() as unknown as MiniGame<unknown, unknown>,
   'sink-the-fleet': () => new SinkTheFleet() as unknown as MiniGame<unknown, unknown>,
+  'bomb-relay': () => new BombRelay() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

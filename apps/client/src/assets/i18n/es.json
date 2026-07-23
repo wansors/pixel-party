@@ -148,6 +148,10 @@
       "sink-the-fleet": {
         "name": "Hunde la Flota",
         "blurb": "Batalla naval cara a cara. Disparad por turnos y hunde a tu rival antes de que te hunda."
+      },
+      "bomb-relay": {
+        "name": "Relevo Bomba",
+        "blurb": "Pasa la bomba por tu equipo: machaca tu tramo y pásala antes de que estalle la mecha."
       }
     }
   },
@@ -247,6 +251,15 @@
       "draw": "Tiempo agotado — empate",
       "bye": "Sin rival esta ronda — victoria directa",
       "hint": "Toca una celda en aguas enemigas para disparar en tu turno"
+    },
+    "bombRelay": {
+      "mash": "¡MACHACA — pásala!",
+      "waiting": "Espera la bomba...",
+      "teammateHolds": "Un compañero tiene la bomba",
+      "relays": "pases",
+      "booms": "explosiones",
+      "hint": "Solo puedes machacar mientras TÚ tienes la bomba",
+      "spectator": "Sin equipo — miras esta ronda"
     }
   }
 }

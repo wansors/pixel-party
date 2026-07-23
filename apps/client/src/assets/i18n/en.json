@@ -148,6 +148,10 @@
       "sink-the-fleet": {
         "name": "Sink the Fleet",
         "blurb": "Head-to-head Battleship. Take turns firing to sink your rival before they sink you."
+      },
+      "bomb-relay": {
+        "name": "Bomb Relay",
+        "blurb": "Pass the bomb down your team — mash your leg and hand it off before the fuse blows."
       }
     }
   },
@@ -247,6 +251,15 @@
       "draw": "Time up — draw",
       "bye": "No rival this round — free win",
       "hint": "Tap a cell in enemy waters to fire on your turn"
+    },
+    "bombRelay": {
+      "mash": "MASH — pass it on!",
+      "waiting": "Wait for the bomb...",
+      "teammateHolds": "A teammate has the bomb",
+      "relays": "passes",
+      "booms": "booms",
+      "hint": "You can only mash while YOU hold the bomb",
+      "spectator": "No team — watching this round"
     }
   }
 }

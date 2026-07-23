@@ -41,7 +41,8 @@ tuning is done, and the Phase 1 robustness work landed — no-repeat game select
 `/api/metrics`). **Phase 2 is in progress**: the teams slice shipped (2 fixed teams + balanced seeded
 assignment + host move/shuffle + team scoring distribution + Tug of War) and the duels slice shipped
 (seeded simultaneous 1v1 pairing + win/loss aggregation + Sink the Fleet Battleship), bringing the
-catalog to **18 mini-games**. Still open in Phase 2: Bomb Relay (C2).
+catalog to **19 mini-games** and completing **Phase 2** (teams + duels). Next up: Phase 3 (handicap /
+catch-up) or Phase 4 (post-match analysis / player radar).
 
 ## How this backlog works
 
@@ -155,8 +156,8 @@ ranking. Latency-tolerant games only; no teams/duels/handicap yet.
 
 ## Phase 2 — Formats: teams & duels
 
-**In progress** — teams (Tug of War) and duels (Sink the Fleet) slices landed 2026-07-23, both
-end-to-end + playable. Remaining: Bomb Relay (C2).
+**Complete** (2026-07-23) — teams (Tug of War, Bomb Relay) and duels (Sink the Fleet) all shipped
+end-to-end + playable.
 
 - [x] Team assignment service (random / host-set) + team scoring distribution. *Done 2026-07-23: two
       fixed teams (`red`/`blue`, `@pp/shared` `TEAMS`). `balancedTeams` (domain service) does a seeded
@@ -172,9 +173,12 @@ end-to-end + playable. Remaining: Bomb Relay (C2).
       into a round ranking (winners share rank 0, losers rank 1) that feeds the standard position table.
       Chose simultaneous 1v1 over a single-elimination bracket — it keeps everyone playing every round
       (party model) and maps to one round with no idle eliminated players.*
-- [~] Team games: Tug of War (C1), Bomb Relay (C2). *Tug of War (`tug-of-war`) shipped 2026-07-23:
-      real-time team mash; each team's progress is average pulls-per-member (fair for uneven teams);
-      win by a decisive per-capita lead or by leading at the timer. Bomb Relay (C2) still pending.*
+- [x] Team games: Tug of War (C1), Bomb Relay (C2). *Tug of War (`tug-of-war`): real-time team mash,
+      progress is average pulls-per-member (fair for uneven teams), win by a decisive per-capita lead or
+      by leading at the timer. Bomb Relay (`bomb-relay`, 2026-07-23): hot-potato relay — each team shares
+      one bomb held by one member at a time; the holder mashes to fill their leg (12 taps) and pass it on
+      (+1 relay), racing a hidden seeded fuse; if it blows first the team takes an explosion and the bomb
+      rotates. Most relays wins (fewer explosions breaks ties). Both reuse the team format + scoring.*
 - [x] Duel games (turn-based, low latency): Sink the Fleet (B2). *Done 2026-07-23 (`sink-the-fleet`):
       simultaneous 1v1 Battleship on a 5×5 board (fleet [3,2,2]); fleets are auto-placed and never sent
       on the wire (only shot hit/miss results are, so nothing exploitable leaks — no per-player channel
@@ -269,7 +273,7 @@ follows the priority tiers there:
 |------|------|-----------------|-------|
 | MVP | P0 | Quick reaction (A1 ✅), Button masher (A2 ✅), Color Trap (E1 ✅), Trivia (A3 ✅), Balloon Chicken (D1 ✅) — all 5 shipped | 0 |
 | +1 | P1 | Number Rush (E4 ✅), Quick Math (E2 ✅), Odd One Out (E3 ✅), Higher/Lower (E5 ✅), Bug smash (A6 ✅), Timing (A10 ✅), Memory Flash (E8 ✅), Simon (A4 ✅), Pixel Hoops (A5 ✅), Pixel Weight (E12 ✅), Pixel Split (E11 ✅) — **P1 wave + fast-follows complete** | 1 |
-| +2 | P2 | Tug of War (C1 ✅), Sink the Fleet (B2 ✅), Match (A11), Bomb Relay (C2), Quick Draw Duel (E7), Pixel Beat (E6), Fruit Catch (D2), Fleet Battle (C3) | 2 |
+| +2 | P2 | Tug of War (C1 ✅), Sink the Fleet (B2 ✅), Bomb Relay (C2 ✅), Match (A11), Quick Draw Duel (E7), Pixel Beat (E6), Fruit Catch (D2), Fleet Battle (C3) | 2 |
 | +action | P3 | Pong (B1), Sumo (B3), Pixel Dash (A9), Snake (A8), Maze Sprint (E9), Pixel rain (A7), Line Clear (E10), Roulette (D3) | 5 |
 
 > P0 group is 5 games ranked; the MVP ships the top 3 (A1, A2, E1) with D1/A3 as fast-follows. See
@@ -289,6 +293,16 @@ follows the priority tiers there:
       identical seeded piece sequence, clear the most lines in a short window. *P3, rides the action wave.*
 - [ ] **Sudoku Race** — E14: everyone solves the same seeded Sudoku (small/quick grid); winner is
       first-to-solve, else most correct cells placed (server validates each cell). *P2, puzzle.*
+- [ ] **Racing cluster** (top-down pixel racers; real-time, high latency sensitivity → ride the Phase 5
+      action wave once netcode interpolation/prediction is proven). All seeded so every player gets the
+      same track/AI; server-authoritative positions.
+  - [ ] **Micro Race** (`micro-race`, Micro Machines style) — chaotic top-down sprint on a tabletop-scale
+        track; laps around a short circuit, bumping/hazards, first across the line wins (placements →
+        position points). FFA, short.
+  - [ ] **Rally Stage** (`rally-stage`) — point-to-point time-trial against the clock on a twisty stage
+        (no direct contact); rank by finish time. Handles/grip + checkpoints; FFA scored by time.
+  - [ ] **Speed Circuit** (`speed-circuit`) — multi-lap wheel-to-wheel race on a proper circuit; racing
+        line + slipstream/boost pickups; final lap order → placements. FFA (duel/team variants later).
 - [ ] Manual mini-game selection/editor by the host.
 - [ ] Spectator mode.
 - [ ] Custom trivia packs.
