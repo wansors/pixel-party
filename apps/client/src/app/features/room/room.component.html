@@ -40,6 +40,10 @@
               <li [class.off]="!p.connected">
                 <app-pixel-avatar [avatar]="$any(p.avatar)" [color]="p.color" [size]="28" />
                 <span class="pname" [style.color]="p.color">{{ p.name }}</span>
+                @if (usesTeams() && p.team) {
+                  <span class="team-badge" [style.borderColor]="teamColor(p.team)"
+                    [style.color]="teamColor(p.team)">{{ teamName(p.team) }}</span>
+                }
                 @if (p.id === hostId()) {
                   <span class="tag">{{ 'room.lobby.host' | transloco }}</span>
                 }
@@ -48,9 +52,19 @@
                 } @else if (p.ready) {
                   <span class="ready">{{ 'room.lobby.ready' | transloco }}</span>
                 }
-                @if (isHost() && p.id !== selfId()) {
+                @if (isHost()) {
                   <span class="host-actions">
-                    @if (p.id !== hostId()) {
+                    @if (usesTeams() && p.team) {
+                      <button
+                        type="button"
+                        class="mini"
+                        [title]="'room.lobby.swapTeam' | transloco"
+                        (click)="swapTeam(p)"
+                      >
+                        ⇄
+                      </button>
+                    }
+                    @if (p.id !== selfId() && p.id !== hostId()) {
                       <button
                         type="button"
                         class="mini"
@@ -60,14 +74,16 @@
                         {{ 'room.lobby.makeHost' | transloco }}
                       </button>
                     }
-                    <button
-                      type="button"
-                      class="mini danger"
-                      [title]="'room.lobby.kick' | transloco"
-                      (click)="kick(p.id)"
-                    >
-                      {{ 'room.lobby.kick' | transloco }}
-                    </button>
+                    @if (p.id !== selfId()) {
+                      <button
+                        type="button"
+                        class="mini danger"
+                        [title]="'room.lobby.kick' | transloco"
+                        (click)="kick(p.id)"
+                      >
+                        {{ 'room.lobby.kick' | transloco }}
+                      </button>
+                    }
                   </span>
                 }
               </li>
@@ -109,6 +125,11 @@
             <button type="button" class="arcade-btn" (click)="toggleReady()">
               {{ (myReady ? 'room.lobby.notReady' : 'room.lobby.imReady') | transloco }}
             </button>
+            @if (isHost() && usesTeams()) {
+              <button type="button" class="arcade-btn" (click)="shuffleTeams()">
+                {{ 'room.lobby.shuffleTeams' | transloco }}
+              </button>
+            }
             @if (isHost()) {
               <button
                 type="button"
@@ -140,7 +161,12 @@
       <section class="board arcade-window">
         <div class="arcade-titlebar">{{ gameName(roundResult()?.result?.minigameId ?? '') }}</div>
         <div class="pad">
-          @if (roundWinnerId(); as wid) {
+          @if (winningTeam(); as wt) {
+            <div class="team-winner" [style.borderColor]="teamColor(wt.id)">
+              <span class="label">{{ 'room.result.teamWinner' | transloco }}</span>
+              <span class="tname" [style.color]="teamColor(wt.id)">{{ teamName(wt.id) }}</span>
+            </div>
+          } @else if (roundWinnerId(); as wid) {
             <div class="round-winner">
               <span class="label">{{ 'room.result.roundWinner' | transloco }}</span>
               <app-pixel-avatar

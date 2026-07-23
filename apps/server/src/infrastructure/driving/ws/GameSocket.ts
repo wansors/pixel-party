@@ -1,5 +1,5 @@
 import type { ClientMsg, PlayerDto, ServerMsg } from '@pp/shared'
-import { MINIGAMES_BY_ID, PROTOCOL_VERSION } from '@pp/shared'
+import { MINIGAMES_BY_ID, PROTOCOL_VERSION, TEAM_IDS } from '@pp/shared'
 import type { ServerWebSocket } from 'bun'
 import type { Clock } from '../../../application/ports/Clock'
 import type { LiveRoomRegistry } from '../../../application/ports/LiveRoomRegistry'
@@ -12,6 +12,7 @@ import { config } from '../../../config'
 import type { Player } from '../../../domain/entities/Player'
 import type { Room } from '../../../domain/entities/Room'
 import type { Random } from '../../../domain/ports/Random'
+import { balancedTeams, smallerTeam } from '../../../domain/services/teamAssignment'
 import { reapIdleRooms } from '../../live/roomSweeper'
 import type { Logger } from '../../observability/logger'
 import type { Metrics } from '../../observability/metrics'
@@ -56,7 +57,13 @@ function toPlayerDto(p: Player): PlayerDto {
     avatar: p.avatar,
     ready: p.ready,
     connected: p.connected,
+    team: p.team,
   }
+}
+
+// True when the configured line-up includes a team-format game (drives team assignment + lobby UI).
+function lineupUsesTeams(room: Room): boolean {
+  return room.minigameIds.some((id) => MINIGAMES_BY_ID.get(id)?.format === 'team')
 }
 
 function lobbyState(room: Room): LobbyStateMsg {
@@ -67,6 +74,7 @@ function lobbyState(room: Room): LobbyStateMsg {
     hostId: room.hostId ?? '',
     minigameIds: [...room.minigameIds],
     rounds: room.rounds,
+    usesTeams: lineupUsesTeams(room),
   }
 }
 
@@ -90,6 +98,23 @@ export function startGameServer(deps: GameSocketDeps) {
     active_rooms: deps.rooms.list().length,
     running_sessions: manager.runningCount,
   })
+
+  // Keep team assignment in sync with the line-up: a balanced split appears when a team game is added
+  // (and none is set yet); teams are cleared when the line-up drops back to FFA-only.
+  const ensureTeams = (room: Room): void => {
+    if (!lineupUsesTeams(room)) {
+      if (room.hasTeams) room.clearTeams()
+      return
+    }
+    if (!room.hasTeams && room.list().length > 0) {
+      room.setTeams(
+        balancedTeams(
+          room.list().map((p) => p.id),
+          deps.random,
+        ),
+      )
+    }
+  }
 
   // JOIN mints identity: run the use case, attach the resolved id/host flag, subscribe, then WELCOME.
   const handleJoin = (
@@ -127,7 +152,14 @@ export function startGameServer(deps: GameSocketDeps) {
       isHost: result.isHost,
     })
     const room = deps.rooms.get(ws.data.roomCode)
-    if (room) broadcastLobby(room)
+    if (room) {
+      // Team line-up: slot the newcomer into the smaller team without reshuffling everyone else.
+      if (lineupUsesTeams(room)) {
+        const p = room.get(result.playerId)
+        if (p && !p.team) p.setTeam(smallerTeam(room.teamCounts()))
+      }
+      broadcastLobby(room)
+    }
   }
 
   // REJOIN reclaims an existing seat after a socket drop: re-attach the id, mark it connected, then
@@ -188,6 +220,40 @@ export function startGameServer(deps: GameSocketDeps) {
     const cap = ids.length > 0 ? Math.min(20, ids.length) : 20
     const rounds = Math.max(1, Math.min(cap, Math.floor(msg.rounds) || 1))
     room.configure(ids, rounds)
+    ensureTeams(room)
+    broadcastLobby(room)
+  }
+
+  const handleSetTeam = (
+    ws: ServerWebSocket<SocketData>,
+    msg: Extract<ClientMsg, { type: 'SET_TEAM' }>,
+  ): void => {
+    const room = deps.rooms.get(ws.data.roomCode)
+    if (!room || !ws.data.playerId || !room.isHost(ws.data.playerId)) {
+      send(ws, { type: 'ACK', intent: 'SET_TEAM', ok: false, reason: 'not_host' })
+      return
+    }
+    const target = room.get(msg.playerId)
+    if (!target || !(TEAM_IDS as readonly string[]).includes(msg.team)) {
+      send(ws, { type: 'ACK', intent: 'SET_TEAM', ok: false, reason: 'invalid' })
+      return
+    }
+    target.setTeam(msg.team)
+    broadcastLobby(room)
+  }
+
+  const handleShuffleTeams = (ws: ServerWebSocket<SocketData>): void => {
+    const room = deps.rooms.get(ws.data.roomCode)
+    if (!room || !ws.data.playerId || !room.isHost(ws.data.playerId)) {
+      send(ws, { type: 'ACK', intent: 'SHUFFLE_TEAMS', ok: false, reason: 'not_host' })
+      return
+    }
+    room.setTeams(
+      balancedTeams(
+        room.list().map((p) => p.id),
+        deps.random,
+      ),
+    )
     broadcastLobby(room)
   }
 
@@ -289,6 +355,12 @@ export function startGameServer(deps: GameSocketDeps) {
         break
       case 'HOST_CONFIG':
         handleHostConfig(ws, msg)
+        break
+      case 'SET_TEAM':
+        handleSetTeam(ws, msg)
+        break
+      case 'SHUFFLE_TEAMS':
+        handleShuffleTeams(ws)
         break
       case 'TRANSFER_HOST':
         handleTransferHost(ws, msg)

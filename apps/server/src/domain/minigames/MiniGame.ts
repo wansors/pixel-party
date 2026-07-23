@@ -1,4 +1,4 @@
-import type { MiniGameFormat, MiniGameId } from '@pp/shared'
+import type { MiniGameFormat, MiniGameId, TeamId } from '@pp/shared'
 import type { Random } from '../ports/Random'
 
 export type PlayerId = string
@@ -20,6 +20,8 @@ export interface MiniGameInitCtx {
   random: Random
   // Round start time (server clock). A timed game derives its deadline from this.
   now: number
+  // Team membership for team-format games (playerId -> team). Absent/empty for FFA games.
+  teams?: Record<PlayerId, TeamId>
   config?: Record<string, unknown>
 }
 

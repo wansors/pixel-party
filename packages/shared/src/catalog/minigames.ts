@@ -150,6 +150,14 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     durationSec: 40,
     blurb: 'Cut the object in two halves with the same number of pixels.',
   },
+  {
+    id: 'tug-of-war',
+    name: 'Tug of War',
+    format: 'team',
+    realtime: true,
+    durationSec: 15,
+    blurb: 'Two teams, one rope. Mash together to pull the marker to your side.',
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

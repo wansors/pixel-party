@@ -111,6 +111,14 @@ header {
   }
   // Host-only per-row controls (make host / kick). Pushed to the right; the ready tag, when present,
   // already claims margin-left:auto, so guard the gap with a small margin instead.
+  .team-badge {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.1rem 0.35rem;
+    border: 2px solid currentColor;
+    border-radius: 2px;
+  }
   .host-actions {
     margin-left: auto;
     display: flex;
@@ -258,6 +266,29 @@ header {
   .wname {
     font-size: 1.1rem;
     font-weight: 700;
+    text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+  }
+}
+
+// ── Team round winner banner ─────────────────────────────────────────────────
+.team-winner {
+  display: grid;
+  justify-items: center;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 0 1rem;
+  border-bottom: 3px solid currentColor;
+
+  .label {
+    color: var(--c-dim);
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+  }
+  .tname {
+    font-size: 1.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
     text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
   }
 }

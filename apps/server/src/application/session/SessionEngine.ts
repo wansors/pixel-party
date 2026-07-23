@@ -1,10 +1,17 @@
-import type { MiniGameId, RoundResultDto, ScoreEntryDto, ServerMsg } from '@pp/shared'
+import type {
+  MiniGameId,
+  RoundResultDto,
+  ScoreEntryDto,
+  ServerMsg,
+  TeamId,
+  TeamRoundResult,
+} from '@pp/shared'
 import { MINIGAMES_BY_ID } from '@pp/shared'
 import type { Room } from '../../domain/entities/Room'
-import type { MiniGame, PlayerId } from '../../domain/minigames/MiniGame'
+import type { MiniGame, NormalizedResult, PlayerId } from '../../domain/minigames/MiniGame'
 import { createMiniGame } from '../../domain/minigames/registry'
 import type { Random } from '../../domain/ports/Random'
-import { awardPoints } from '../../domain/services/scoring'
+import { awardPoints, awardTeamPoints } from '../../domain/services/scoring'
 import type { Clock } from '../ports/Clock'
 import type { Publisher } from '../ports/Publisher'
 
@@ -38,6 +45,8 @@ export class SessionEngine {
   private readonly cumulative = new Map<PlayerId, number>()
   // Players are snapshotted at round start so a mid-round leave/join can't reshape the result.
   private roundPlayers: PlayerId[] = []
+  // Team membership snapshotted at round start (empty for FFA rounds); drives team scoring.
+  private roundTeams = new Map<TeamId, PlayerId[]>()
 
   constructor(
     private readonly room: Room,
@@ -129,11 +138,22 @@ export class SessionEngine {
     }
     this.game = game
     this.roundPlayers = this.room.list().map((p) => p.id)
+    // Snapshot team membership for the round (empty for FFA games) and feed it to the game.
+    this.roundTeams = new Map()
+    const teams: Record<PlayerId, TeamId> = {}
+    for (const p of this.room.list()) {
+      if (!p.team) continue
+      teams[p.id] = p.team
+      const bucket = this.roundTeams.get(p.team) ?? []
+      bucket.push(p.id)
+      this.roundTeams.set(p.team, bucket)
+    }
     this.gameState = game.init({
       players: this.roundPlayers,
       seed: this.config.baseSeed + this.roundIndex,
       random: this.random,
       now,
+      teams,
       config: { durationMs },
     })
     this.tickCount = 0
@@ -163,21 +183,46 @@ export class SessionEngine {
     const game = this.game as MiniGame<unknown, unknown>
     const id = this.sequence[this.roundIndex] as MiniGameId
     const result = game.getResult(this.gameState)
-    const roundPoints = awardPoints(result)
+    // Team rounds distribute points by team position; FFA rounds award per player directly.
+    const isTeam = game.format === 'team'
+    const roundPoints = isTeam ? awardTeamPoints(result, this.roundTeams) : awardPoints(result)
     for (const [playerId, pts] of roundPoints) {
       this.cumulative.set(playerId, (this.cumulative.get(playerId) ?? 0) + pts)
     }
+    const { placements, teams } = isTeam
+      ? this.teamResultView(result)
+      : { placements: result.placements, teams: undefined }
     this.lastResult = {
       minigameId: id,
-      placements: result.placements,
+      placements,
       scores: toScoreEntries(roundPoints),
       stats: result.stats,
+      teams,
     }
     // Reveal the round's own outcome first; the cumulative scoreboard follows after its own dwell.
     this.publish({ type: 'ROUND_RESULT', round: this.roundIndex + 1, result: this.lastResult })
     this.room.setPhase('round-result')
     this.phase = 'roundResult'
     this.phaseEndsAt = now + this.config.roundResultMs
+  }
+
+  // Wire view for a team round: teams ordered by rank (winner first), player placements expanded to
+  // that order, plus the per-team summary that drives the "TEAM RED WINS" banner.
+  private teamResultView(result: NormalizedResult): {
+    placements: PlayerId[]
+    teams: TeamRoundResult[]
+  } {
+    const teamPoints = awardPoints(result)
+    const rankOf = (t: string): number => result.ranks?.[t] ?? 0
+    const ordered = [...result.placements].sort((a, b) => rankOf(a) - rankOf(b))
+    const teams: TeamRoundResult[] = ordered.map((t) => ({
+      id: t as TeamId,
+      rank: rankOf(t),
+      points: teamPoints.get(t) ?? 0,
+      memberIds: this.roundTeams.get(t as TeamId) ?? [],
+    }))
+    const placements = ordered.flatMap((t) => this.roundTeams.get(t as TeamId) ?? [])
+    return { placements, teams }
   }
 
   private beginScoreboard(now: number): void {

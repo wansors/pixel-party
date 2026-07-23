@@ -1,3 +1,4 @@
+import type { TeamId } from '@pp/shared'
 import type { NormalizedResult, PlayerId } from '../minigames/MiniGame'
 
 // Position -> points award table (scoring-system.md §2). Strong reward for 1st, compressed flat tail so
@@ -35,6 +36,24 @@ export function awardPoints(
     const avg = sum / members.length
     for (const id of members) out.set(id, avg)
     position += members.length
+  }
+  return out
+}
+
+// Team scoring distribution (scoring-system.md §2.2): rank the TEAMS via the same position table (with
+// tie-averaging over team positions), then give EVERY member their team's points — not averaged over
+// the number of members, so team size never dilutes the award. `teamResult` places team ids;
+// `membership` maps each team to the players who were in the round.
+export function awardTeamPoints(
+  teamResult: NormalizedResult,
+  membership: Map<TeamId, PlayerId[]>,
+  table: readonly number[] = DEFAULT_AWARD_TABLE,
+): Map<PlayerId, number> {
+  const teamPoints = awardPoints(teamResult, table)
+  const out = new Map<PlayerId, number>()
+  for (const [team, members] of membership) {
+    const pts = teamPoints.get(team) ?? 0
+    for (const id of members) out.set(id, pts)
   }
   return out
 }

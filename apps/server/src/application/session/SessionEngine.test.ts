@@ -143,6 +143,53 @@ describe('SessionEngine', () => {
     expect(intro?.type === 'ROUND_INTRO' && intro.totalRounds).toBe(2)
   })
 
+  test('team round awards team-position points and reports the winning team', () => {
+    const room = Room.create('TEAM', 10)
+    for (const id of ['a', 'b', 'c', 'd']) {
+      room.add(Player.create({ id, name: id, color: '#fff', avatar: 'x' }))
+    }
+    room.setTeams(
+      new Map([
+        ['a', 'red'],
+        ['b', 'red'],
+        ['c', 'blue'],
+        ['d', 'blue'],
+      ]),
+    )
+    room.configure(['tug-of-war'], 1)
+
+    let t = 0
+    const clock: Clock = { now: () => t }
+    const captured: ServerMsg[] = []
+    const engine = new SessionEngine(
+      room,
+      { toRoom: (_c, m) => captured.push(m) },
+      clock,
+      noRandom,
+      CONFIG,
+    )
+    engine.start()
+    for (let i = 0; i < 400 && !engine.isFinished; i++) {
+      t += 1000 / CONFIG.tickHz
+      // Only red pulls -> red wins.
+      engine.onInput('a', { kind: 'pull' })
+      engine.onInput('b', { kind: 'pull' })
+      engine.tick()
+    }
+
+    const rr = captured.find((m) => m.type === 'ROUND_RESULT')
+    if (rr?.type !== 'ROUND_RESULT') throw new Error('no round result')
+    expect(rr.result.teams).toBeDefined()
+    expect(rr.result.teams?.find((tm) => tm.rank === 0)?.id).toBe('red')
+
+    const final = captured.find((m) => m.type === 'FINAL_RANKING')
+    if (final?.type !== 'FINAL_RANKING') throw new Error('no final')
+    // Both red members get the winning team's points (10), undiluted by team size.
+    expect(final.scores.find((s) => s.playerId === 'a')?.points).toBe(10)
+    expect(final.scores.find((s) => s.playerId === 'b')?.points).toBe(10)
+    expect(final.scores.find((s) => s.playerId === 'c')?.points).toBe(7)
+  })
+
   test('resumeMessages rebuilds the live round for a reconnecting socket', () => {
     const room = roomWith('a', 'b')
     let t = 0

@@ -38,3 +38,20 @@ export const PLAYER_COLORS: readonly string[] = [
 // Preset pixel-avatar sprite ids (the "monigote" set). Sprite grids live client-side.
 export const AVATARS = ['cat', 'dog', 'fox', 'owl', 'frog', 'bear'] as const
 export type AvatarId = (typeof AVATARS)[number]
+
+// Team play (Phase 2): two fixed teams. Members keep their own player color/avatar; the team hue is
+// used only for team-round chrome (rope sides, "TEAM RED WINS" banner, lobby grouping).
+export type TeamId = 'red' | 'blue'
+
+export interface TeamMeta {
+  readonly id: TeamId
+  readonly name: string
+  readonly color: string
+}
+
+export const TEAMS: readonly TeamMeta[] = [
+  { id: 'red', name: 'Red', color: '#ff5252' },
+  { id: 'blue', name: 'Blue', color: '#5b8cff' },
+]
+
+export const TEAM_IDS: readonly TeamId[] = TEAMS.map((t) => t.id)

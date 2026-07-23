@@ -1,4 +1,5 @@
 import type { MiniGameFormat, MiniGameId } from './catalog/minigames'
+import type { TeamId } from './theme'
 
 // Wire-contract version: bump on any BREAKING wire change (renamed/removed message types or fields,
 // changed semantics). The server stamps it on WELCOME; the client compares against its own compiled
@@ -18,6 +19,8 @@ export interface PlayerDto {
   avatar: string
   ready: boolean
   connected: boolean
+  // Team assignment (Phase 2). Present only while the room's line-up includes a team-format game.
+  team?: TeamId
 }
 
 // The room lifecycle phase drives which UI/scene is active.
@@ -38,6 +41,16 @@ export interface RoundResultDto {
   // Optional per-player performance detail for the round-result screen (e.g. "142 ms", "5 correct",
   // "streak 7"). Game-specific and purely presentational — it never feeds scoring. Keyed by playerId.
   stats?: Record<string, string>
+  // Present for team-format rounds: the team ranking behind the per-player points, for the "TEAM RED
+  // WINS" banner. Ordered by rank (index 0 = winning team). Purely presentational.
+  teams?: TeamRoundResult[]
+}
+
+export interface TeamRoundResult {
+  id: TeamId
+  rank: number
+  points: number
+  memberIds: string[]
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -54,6 +67,10 @@ export type ClientMsg =
   | { type: 'SET_READY'; ready: boolean }
   // Host-only: configure the session (which games, how many rounds). Ignored from non-hosts.
   | { type: 'HOST_CONFIG'; minigameIds: MiniGameId[]; rounds: number }
+  // Host-only: move a player to a team (team-format line-ups only).
+  | { type: 'SET_TEAM'; playerId: string; team: TeamId }
+  // Host-only: re-roll the balanced team assignment.
+  | { type: 'SHUFFLE_TEAMS' }
   // Host-only: hand the host role to another member.
   | { type: 'TRANSFER_HOST'; playerId: string }
   // Host-only: remove another member from the room.
@@ -89,6 +106,8 @@ export type ServerMsg =
       hostId: string
       minigameIds: MiniGameId[]
       rounds: number
+      // True when the configured line-up includes a team-format game — the lobby then shows team UI.
+      usesTeams: boolean
     }
   // A round is about to start: countdown intro so clients can preload the scene.
   | {

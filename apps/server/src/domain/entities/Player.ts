@@ -1,3 +1,5 @@
+import type { TeamId } from '@pp/shared'
+
 export interface PlayerProps {
   id: string
   name: string
@@ -8,6 +10,8 @@ export interface PlayerProps {
 // Anonymous, ephemeral player (no account in Phase 1). Private constructor + static factories:
 // create() mints a fresh lobby member; reconstitute() trusts already-validated live state.
 export class Player {
+  private _team?: TeamId
+
   private constructor(
     readonly id: string,
     private _name: string,
@@ -36,11 +40,17 @@ export class Player {
   get connected(): boolean {
     return this._connected
   }
+  get team(): TeamId | undefined {
+    return this._team
+  }
 
   setReady(ready: boolean): void {
     this._ready = ready
   }
   setConnected(connected: boolean): void {
     this._connected = connected
+  }
+  setTeam(team: TeamId | undefined): void {
+    this._team = team
   }
 }

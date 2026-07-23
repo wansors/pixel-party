@@ -16,6 +16,7 @@ import { ReactionDuel } from './reactionDuel'
 import { Simon } from './simon'
 import { StopClock } from './stopClock'
 import { Trivia } from './trivia'
+import { TugOfWar } from './tugOfWar'
 
 // Mini-game registry: id -> factory. The session engine is agnostic — it looks up a factory by id and
 // runs the round. Adding a game = one domain module + one entry here (+ its client scene + catalog meta).
@@ -36,6 +37,7 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'pixel-hoops': () => new PixelHoops() as unknown as MiniGame<unknown, unknown>,
   'pixel-weight': () => new PixelWeight() as unknown as MiniGame<unknown, unknown>,
   'pixel-split': () => new PixelSplit() as unknown as MiniGame<unknown, unknown>,
+  'tug-of-war': () => new TugOfWar() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

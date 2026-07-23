@@ -12,16 +12,18 @@ for a session-wide ranking. See [`README.md`](README.md).
 scaffolded and the game is playable end-to-end. Run it with `bun run dev` (see `README.md`). Live now:
 rooms + lobby (ready/host), host game selector + round count, server-authoritative session engine (intro
 countdown → play → per-round result → cumulative scoreboard → final), scoring/scoreboard/final ranking,
-**16 mini-games** (`button-masher`, `reaction-duel`, `color-trap`, `trivia`, `balloon-chicken`,
+**17 mini-games** — 16 FFA (`button-masher`, `reaction-duel`, `color-trap`, `trivia`, `balloon-chicken`,
 `number-rush`, `quick-math`, `odd-one-out`, `higher-lower`, `bug-smash`, `stop-clock`, `memory-flash`,
-`simon`, `pixel-hoops`, `pixel-weight`, `pixel-split`) with **no-repeat seeded line-ups**,
-**mid-session reconnect/rejoin** + **host transfer (auto-on-disconnect + manual) / kick / idle-room
-reaper**, **observability** (structured JSON logs + `GET /api/metrics`),
+`simon`, `pixel-hoops`, `pixel-weight`, `pixel-split`) + 1 team game (`tug-of-war`) — with **no-repeat
+seeded line-ups**, **mid-session reconnect/rejoin** + **host transfer (auto-on-disconnect + manual) /
+kick / idle-room reaper**, **observability** (structured JSON logs + `GET /api/metrics`),
+**teams** (2 fixed teams, balanced seeded assignment + host move/shuffle, team scoring distribution),
 **audio** (background music + synthesized 8-bit SFX + volume sliders),
 **i18n (EN/ES)** (Transloco, runtime toggle, all UI + Phaser scenes translated),
 **GitHub Actions CI**, the self-hosted pixel font + per-breakpoint responsive tuning, and the
-**retro arcade look & feel** (palette theme, arcade frame, pixel-art avatars, high-score tables). Next
-up is Phase 2 (teams & duels). See `docs/backlog.md` → *Current status* for the authoritative checklist.
+**retro arcade look & feel** (palette theme, arcade frame, pixel-art avatars, high-score tables).
+**Phase 2 is in progress** (teams slice done; duels + Bomb Relay next). See `docs/backlog.md` →
+*Current status* for the authoritative checklist.
 
 Documentation lives in `docs/`:
 - `PRD.md` — product requirements.
@@ -35,18 +37,20 @@ Documentation lives in `docs/`:
 ## Code layout (implemented)
 
 - `apps/server` — hexagonal: `domain/` (entities `Room`/`Player`, `minigames/` pluggable contract +
-  `buttonMasher`/`reactionDuel`/`colorTrap`/`trivia`/`balloonChicken`/`numberRush`/`quickMath`/`oddOneOut`/`higherLower`/`bugSmash`/`stopClock`/`memoryFlash`/`simon`/`pixelHoops`/`pixelWeight`/`pixelSplit`
-  + `registry`, `services/scoring`,
+  `buttonMasher`/`reactionDuel`/`colorTrap`/`trivia`/`balloonChicken`/`numberRush`/`quickMath`/`oddOneOut`/`higherLower`/`bugSmash`/`stopClock`/`memoryFlash`/`simon`/`pixelHoops`/`pixelWeight`/`pixelSplit`/`tugOfWar`
+  + `registry`, `services/{scoring,teamAssignment}`,
   `ports/Random`), `application/`
   (`session/SessionEngine`+`SessionManager`, `use-cases/`, `ports/`), `infrastructure/`
   (`driving/ws/GameSocket`+`validate`+`simulationLoop`, `driving/http`, `driven/{time,random,id}`,
-  `live/LiveRooms`), `composition-root.ts`, `config.ts`, `index.ts`.
-- `packages/shared` — `protocol.ts` (wire unions + `PROTOCOL_VERSION`), `catalog/minigames`, `games/`
-  (per-game wire snapshot/input types; `pixelObjects` holds the shared pixel-art set for weight/split).
+  `live/{LiveRooms,roomSweeper}`, `observability/{logger,metrics}`), `composition-root.ts`, `config.ts`,
+  `index.ts`.
+- `packages/shared` — `protocol.ts` (wire unions + `PROTOCOL_VERSION`), `catalog/minigames`, `theme.ts`
+  (palette + `TEAMS`), `games/` (per-game wire snapshot/input types; `pixelObjects` holds the shared
+  pixel-art set for weight/split).
 - `apps/client` — Angular 20 shell; `features/{join,room}` (RoomComponent drives all phases);
   `core/net/game-socket.service`; `game/` (Phaser, framework-agnostic): `GameClient`,
   `serverMsgRouter`, `RoundState`,
-  `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,BalloonChickenScene,NumberRushScene,QuickMathScene,OddOneOutScene,HigherLowerScene,BugSmashScene,StopClockScene,MemoryFlashScene,SimonScene,PixelHoopsScene,PixelWeightScene,PixelSplitScene}`.
+  `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,BalloonChickenScene,NumberRushScene,QuickMathScene,OddOneOutScene,HigherLowerScene,BugSmashScene,StopClockScene,MemoryFlashScene,SimonScene,PixelHoopsScene,PixelWeightScene,PixelSplitScene,TugOfWarScene}`.
 
 ### Adding a mini-game
 One domain module (`domain/minigames/<id>.ts` implementing `MiniGame`) + registry entry + shared wire

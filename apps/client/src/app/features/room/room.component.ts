@@ -13,6 +13,9 @@ import {
   type RoundResultDto,
   type ScoreEntryDto,
   type ServerMsg,
+  TEAMS,
+  type TeamId,
+  type TeamRoundResult,
 } from '@pp/shared'
 import { GameClient } from '../../../game/GameClient'
 import { AudioService } from '../../core/audio/audio.service'
@@ -59,6 +62,8 @@ export class RoomComponent implements OnInit {
   // Host session config (mirrors LOBBY_STATE so everyone sees the current selection).
   readonly selectedGameIds = signal<MiniGameId[]>([])
   readonly rounds = signal(0)
+  // True when the line-up includes a team game — the lobby then shows team assignment.
+  readonly usesTeams = signal(false)
 
   readonly copied = signal(false)
   readonly intro = signal<{ round: number; total: number; game: string } | null>(null)
@@ -136,6 +141,7 @@ export class RoomComponent implements OnInit {
         this.isHost.set(msg.hostId === this.selfId())
         this.selectedGameIds.set(msg.minigameIds)
         this.rounds.set(msg.rounds)
+        this.usesTeams.set(msg.usesTeams)
         this.maybeSendDefaultConfig(msg.minigameIds)
         if (this.view() === 'connecting' || this.view() === 'lobby') this.view.set('lobby')
         break
@@ -314,6 +320,34 @@ export class RoomComponent implements OnInit {
   kick(id: string): void {
     if (!this.isHost() || id === this.selfId()) return
     this.net.send({ type: 'KICK_PLAYER', playerId: id })
+  }
+
+  // ── Teams ───────────────────────────────────────────────────────────────
+  swapTeam(p: PlayerDto): void {
+    if (!this.isHost() || !p.team) return
+    this.net.send({ type: 'SET_TEAM', playerId: p.id, team: p.team === 'red' ? 'blue' : 'red' })
+  }
+
+  shuffleTeams(): void {
+    if (!this.isHost()) return
+    this.net.send({ type: 'SHUFFLE_TEAMS' })
+  }
+
+  teamColor(team: TeamId): string {
+    return TEAMS.find((t) => t.id === team)?.color ?? '#7b88a8'
+  }
+
+  teamName(team: TeamId): string {
+    return this.transloco.translate(`team.${team}`)
+  }
+
+  // Team ranking behind the current round result (empty for FFA rounds); rank 0 = winning team.
+  resultTeams(): TeamRoundResult[] {
+    return this.roundResult()?.result.teams ?? []
+  }
+
+  winningTeam(): TeamRoundResult | null {
+    return this.resultTeams().find((t) => t.rank === 0) ?? null
   }
 
   gameName(id: string): string {

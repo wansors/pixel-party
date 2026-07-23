@@ -40,7 +40,9 @@
       "imReady": "I'm ready",
       "start": "Start",
       "makeHost": "Make host",
-      "kick": "Kick"
+      "kick": "Kick",
+      "swapTeam": "Swap team",
+      "shuffleTeams": "Shuffle teams"
     },
     "intro": {
       "round": "Round",
@@ -48,6 +50,7 @@
     },
     "result": {
       "roundWinner": "ROUND WINNER",
+      "teamWinner": "WINNING TEAM",
       "totals": "Totals coming up..."
     },
     "scoreboard": {
@@ -61,6 +64,10 @@
     },
     "joinRejected": "Join rejected: {{reason}}",
     "intentRejected": "{{intent}} rejected: {{reason}}"
+  },
+  "team": {
+    "red": "Red",
+    "blue": "Blue"
   },
   "reason": {
     "room_not_found": "Room not found",
@@ -133,6 +140,10 @@
       "pixel-split": {
         "name": "Pixel Split",
         "blurb": "Cut the object in two halves with the same number of pixels."
+      },
+      "tug-of-war": {
+        "name": "Tug of War",
+        "blurb": "Two teams, one rope. Mash together to pull the marker to your side."
       }
     }
   },
@@ -215,6 +226,12 @@
     "pixelSplit": {
       "prompt": "Split it evenly",
       "cut": "CUT"
+    },
+    "tugOfWar": {
+      "pull": "PULL!",
+      "hint": "Tap / press SPACE to pull the rope your way",
+      "team": "Your team",
+      "spectator": "No team — watching this round"
     }
   }
 }

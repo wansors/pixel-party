@@ -40,7 +40,9 @@
       "imReady": "Estoy listo",
       "start": "Empezar",
       "makeHost": "Hacer anfitrión",
-      "kick": "Expulsar"
+      "kick": "Expulsar",
+      "swapTeam": "Cambiar equipo",
+      "shuffleTeams": "Rebarajar equipos"
     },
     "intro": {
       "round": "Ronda",
@@ -48,6 +50,7 @@
     },
     "result": {
       "roundWinner": "GANADOR DE RONDA",
+      "teamWinner": "EQUIPO GANADOR",
       "totals": "Totales enseguida..."
     },
     "scoreboard": {
@@ -61,6 +64,10 @@
     },
     "joinRejected": "Entrada rechazada: {{reason}}",
     "intentRejected": "{{intent}} rechazado: {{reason}}"
+  },
+  "team": {
+    "red": "Rojo",
+    "blue": "Azul"
   },
   "reason": {
     "room_not_found": "Sala no encontrada",
@@ -133,6 +140,10 @@
       "pixel-split": {
         "name": "Pixel Corte",
         "blurb": "Corta el objeto en dos mitades con el mismo número de píxeles."
+      },
+      "tug-of-war": {
+        "name": "Sogatira",
+        "blurb": "Dos equipos, una cuerda. Machacad juntos para llevar la marca a vuestro lado."
       }
     }
   },
@@ -215,6 +226,12 @@
     "pixelSplit": {
       "prompt": "Divídelo por igual",
       "cut": "CORTAR"
+    },
+    "tugOfWar": {
+      "pull": "¡TIRA!",
+      "hint": "Toca / pulsa ESPACIO para tirar de la cuerda hacia tu lado",
+      "team": "Tu equipo",
+      "spectator": "Sin equipo — miras esta ronda"
     }
   }
 }

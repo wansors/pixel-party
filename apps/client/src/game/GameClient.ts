@@ -19,6 +19,7 @@ import { ReactionScene } from './scenes/ReactionScene'
 import { SimonScene } from './scenes/SimonScene'
 import { StopClockScene } from './scenes/StopClockScene'
 import { TriviaScene } from './scenes/TriviaScene'
+import { TugOfWarScene } from './scenes/TugOfWarScene'
 import { ServerMsgRouter } from './serverMsgRouter'
 
 // Scene keys MUST equal the mini-game ids so a round can start its scene by id.
@@ -39,6 +40,7 @@ const SCENE_IDS: MiniGameId[] = [
   'pixel-hoops',
   'pixel-weight',
   'pixel-split',
+  'tug-of-war',
 ]
 
 // Pure Phaser config factory — testable without `new Phaser.Game` (which needs a DOM/canvas). Scenes
@@ -105,6 +107,7 @@ export class GameClient {
     this.game.scene.add('pixel-hoops', new PixelHoopsScene(...deps), false)
     this.game.scene.add('pixel-weight', new PixelWeightScene(...deps), false)
     this.game.scene.add('pixel-split', new PixelSplitScene(...deps), false)
+    this.game.scene.add('tug-of-war', new TugOfWarScene(...deps), false)
   }
 
   // Switch the active scene to the round's mini-game (no-op if already active).

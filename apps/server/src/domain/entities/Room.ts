@@ -1,4 +1,4 @@
-import type { MiniGameId, RoomPhase } from '@pp/shared'
+import type { MiniGameId, RoomPhase, TeamId } from '@pp/shared'
 import type { Player } from './Player'
 
 // The authoritative in-memory room aggregate: roster, host, session config and phase. No I/O — the
@@ -103,6 +103,40 @@ export class Room {
   configure(minigameIds: MiniGameId[], rounds: number): void {
     this._minigameIds = [...minigameIds]
     this._rounds = rounds
+  }
+
+  // ── Teams (Phase 2) ────────────────────────────────────────────────────────
+  get hasTeams(): boolean {
+    return this.list().some((p) => p.team !== undefined)
+  }
+
+  // Apply a full assignment (playerId -> team); players absent from the map are cleared.
+  setTeams(assignment: Map<string, TeamId>): void {
+    for (const p of this.list()) p.setTeam(assignment.get(p.id))
+  }
+
+  clearTeams(): void {
+    for (const p of this.list()) p.setTeam(undefined)
+  }
+
+  teamCounts(): Map<TeamId, number> {
+    const counts = new Map<TeamId, number>()
+    for (const p of this.list()) {
+      if (p.team) counts.set(p.team, (counts.get(p.team) ?? 0) + 1)
+    }
+    return counts
+  }
+
+  // teamId -> members, for scoring/round snapshots (only players currently in the room).
+  teamMembership(): Map<TeamId, string[]> {
+    const membership = new Map<TeamId, string[]>()
+    for (const p of this.list()) {
+      if (!p.team) continue
+      const bucket = membership.get(p.team) ?? []
+      bucket.push(p.id)
+      membership.set(p.team, bucket)
+    }
+    return membership
   }
 
   setPhase(phase: RoomPhase): void {
