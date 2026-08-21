@@ -69,5 +69,6 @@ bun run build:client    # production Angular build
 ## Tech
 
 **Bun** monorepo · **TypeScript** · **hexagonal** server · **Bun-native WebSockets** · **Angular 20 +
-Phaser 3** client · optional **`bun:sqlite`** · **Biome**. Server-authoritative and deterministic,
-mirroring the `utopia-offline` reference project. See [`docs/technical-architecture.md`](docs/technical-architecture.md).
+Phaser 3** client · **no database** (stateless, anonymous, by design) · **Biome**. Server-authoritative
+and deterministic, mirroring the `utopia-offline` reference project. See
+[`docs/technical-architecture.md`](docs/technical-architecture.md).

@@ -24,7 +24,7 @@ domain changes (rooms / sessions / mini-games / scoring instead of an MMORPG wor
 | Client shell | **Angular 20** (standalone components, `@angular/build`) — all DOM/UI |
 | Game rendering | **Phaser 3** — mini-game canvas only, decoupled from Angular |
 | Shared contracts | `packages/shared` (`@pp/shared`): protocol + catalog data, consumed by both apps |
-| Persistence | **None in Phase 1** — everything in-memory/ephemeral. `bun:sqlite` is a **later-phase** add-on only |
+| Persistence | **None, permanently** — everything in-memory/ephemeral by design (no `bun:sqlite`, ever) |
 | Lint/format | **Biome** (100 cols, single quotes, semicolons as-needed) |
 | Tests | **`bun test`** (server/shared) + **Karma/Jasmine** (client) |
 | CI | GitHub Actions: determinism → lint → typecheck → test |
@@ -60,13 +60,12 @@ domain/
 application/
   use-cases/                # one per intent: CreateRoom, JoinRoom, SetReady, StartSession,
                             #   StartRound, SubmitInput, EndRound, EndSession, Reconnect…
-  ports/                    # Clock, IdGenerator, LiveRoomRegistry, SessionRepository (optional)
+  ports/                    # Clock, IdGenerator, LiveRoomRegistry
 infrastructure/
   driving/ws/               # Bun.serve WS adapter + intent registry + shape validator
   driven/time/              # SystemClock
   driven/random/            # SeededRandom (mulberry32)
   driven/id/                # room code + id generation
-  driven/persistence/       # (optional) Sqlite* repos for history
   live/                     # LiveRooms — in-memory authoritative room/session state
 composition-root.ts         # the single wiring point
 config.ts                   # env-driven config
@@ -129,12 +128,11 @@ nothing about Bun, WebSocket, or SQLite.
 | `Random` (domain) | `SeededRandom` | `next(): number` 0..1, mulberry32 — deterministic mini-game seeds |
 | `IdGenerator` | crypto-based | player ids, room codes |
 | `LiveRoomRegistry` | `LiveRooms` | in-memory authoritative rooms/sessions (structural port) |
-| `SessionRepository` | `SqliteSessionRepository` | **not in Phase 1** — future only, for session history |
 
 ### Wiring
-Single **composition root** (`composition-root.ts`), no DI framework: reads config, (optionally) opens
-`bun:sqlite`, `new`s the clock/random/id/live-rooms and every use case with its ports, then calls
-`startGameServer({...})`. `index.ts` is just `bootstrap().catch(...)`.
+Single **composition root** (`composition-root.ts`), no DI framework: reads config, `new`s the
+clock/random/id/live-rooms and every use case with its ports, then calls `startGameServer({...})`.
+`index.ts` is just `bootstrap().catch(...)`.
 
 ---
 
@@ -247,15 +245,15 @@ engine changes.
 
 ## 7. Persistence
 
-- **Phase 1: no database at all.** Rooms, sessions, players, and scores live **only in memory**
+- **No database, permanently.** Rooms, sessions, players, and scores live **only in memory**
   (`LiveRooms`). When a room closes (session ends or inactivity timeout), everything is discarded —
   nothing is saved. Players are anonymous (color + pixel avatar + name; see `art-direction.md` §6), so
   there is no account or profile to persist. This is the main divergence from utopia (which persists a
-  durable world), and it keeps the MVP simple: no schema, no migrations, no `bun:sqlite`.
-- **Later phase only**: introduce `bun:sqlite` (raw SQL, forward-only `migrations/*.sql`, `migrate.ts`,
-  idempotent seed) with one `Sqlite*Repository` per aggregate, for **session history / stats** (FR-6.6),
-  the post-match analysis persistence (backlog Phase 4), and eventually optional accounts. Follow
-  utopia's persistence conventions verbatim when added.
+  durable world), and it's a deliberate, durable product choice, not an MVP simplification: no schema, no
+  migrations, no `bun:sqlite`, ever. There is no "Phase 6" that introduces one — see
+  `implementation-decisions.md` D15.
+- Post-match analysis (backlog Phase 4) renders entirely from the in-memory session state accumulated
+  during the round; it does not need persistence.
 
 ---
 
@@ -283,8 +281,8 @@ engine changes.
 ## 9. Divergences from the reference (utopia-offline)
 
 Intentional differences given Pixel Party's nature:
-1. **Ephemeral rooms, not a persistent world** — persistence is optional; the live in-memory store is
-   the source of truth during a session.
+1. **Ephemeral rooms, not a persistent world** — there is no persistence, permanently; the live
+   in-memory store is the only source of truth, for the life of the room.
 2. **Session/round engine instead of a single continuous world** — the tick loop runs per active
    real-time mini-game, not a global world simulation; many mini-games don't need a continuous tick.
 3. **Mini-game plugin registry** — the pluggable-game contract (§6) is the core extension point,
@@ -304,6 +302,9 @@ Intentional differences given Pixel Party's nature:
    alphabet (no 0/O/1/I), regenerated on collision in `LiveRooms` (`ROOM_CODE_LEN` env, default 4).**
 3. ~~TICK_HZ and snapshot throttle defaults~~ — **implemented: `TICK_HZ` 20, snapshot every 3 ticks
    (`SNAPSHOT_EVERY_N_TICKS`), intro 3 s / result 5 s in the session config (composition-root).**
-4. ~~Whether to introduce `bun:sqlite` in v1~~ — **decided: no DB in Phase 1, strictly in-memory.**
-5. Scaling: single-instance for MVP; a Redis pub/sub backplane if multi-instance is needed later
-   (utopia is single-instance).
+4. ~~Whether to introduce `bun:sqlite` in v1~~ — **decided permanently: no DB, ever; strictly in-memory
+   (D15).**
+5. ~~Scaling: single-instance for MVP; a Redis pub/sub backplane if multi-instance is needed later~~ —
+   **decided permanently: single-instance only.** The target deployment is a LAN party (players
+   physically together on one local network), which never needs more than one process; a multi-instance
+   backplane has no use case here (D17).

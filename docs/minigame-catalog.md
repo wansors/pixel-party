@@ -165,7 +165,8 @@ interpolator (netcode hardening); plus Match (A11 `match-pairs`), Quick Draw (E7
 ### C1. Tug of War
 - **Concept**: two teams button-mash to drag the pixel rope to their side.
 - **Type**: Team · **Input**: repeated tap · **Duration**: ~20–30 s · **Banter**: 💥💥💥
-- **Rules**: aggregated team tap rate moves the rope; handicap can weight smaller teams.
+- **Rules**: progress is the team's *average* pulls-per-member, which is already fair for uneven team
+  sizes without needing a separate handicap hook (see §H).
 - **Win condition**: pull the marker past your line. · **Result**: winning team ranks above.
 - **Latency**: low (aggregate rates). · **Complexity**: low/medium.
 
@@ -278,18 +279,18 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
 - **Accessibility**: never color-only — pair each color button with a distinct shape/symbol and label
   so the mismatch is still solvable without color discrimination (see cross-cutting notes).
 
-## H. Handicap / catch-up (per mini-game hooks)
+## H. Handicap / catch-up
 
-To keep sessions competitive and full of comebacks, mini-games can expose optional **handicap hooks**
-that the engine tunes based on the current session standings (see `scoring-system.md` §catch-up):
+To keep sessions competitive and full of comebacks, the session engine applies a bounded **scoring**
+catch-up: trailing players earn a capped bonus on their own round award, scaled by how far behind they
+are in the standings (see `scoring-system.md` §3.1). It's opt-in per room (host toggle, off by default)
+and transparent — an applied bonus shows on the round-result screen.
 
-- **Leader nerf**: session leaders get a slight disadvantage (smaller paddle in Pong, faster obstacles
-  in Pixel Dash, higher burst odds in Balloon Chicken).
-- **Trailer boost**: players at the bottom get a small edge (larger catch basket, extra reaction margin,
-  bonus multiplier).
-- **Team weighting**: in team games, the smaller or trailing team gets a proportional boost.
-- **Always optional and bounded**: handicap is configurable per session and capped so it never fully
-  decides the outcome — it narrows gaps, it doesn't hand out wins.
+Per-mini-game **mechanical** hooks (leader nerf, trailer boost, team weighting baked into a specific
+game's rules) were considered and **dropped, not built** — see `implementation-decisions.md` D14. The
+scoring lever alone meets the catch-up goal without a bespoke rule change in all 28 games. Where a game
+is naturally fair to uneven groups by construction (e.g. Tug of War's per-member average, see C1), that
+stays as ordinary game design, not a handicap hook.
 
 ---
 

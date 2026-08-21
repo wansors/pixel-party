@@ -198,15 +198,77 @@ misses — each would be speculative or gated, and the project rule is "nothing 
 
 - ~~**Phase 5 — real-time action mini-games**~~ — **NO LONGER DEFERRED**: shipped 2026-07-23 (netcode
   interpolation + all six games). See D10 / D11.
-- **Phase 6 — accounts, history, DB**: this is explicitly the *first* phase to introduce a database
-  (`bun:sqlite`). Phases 0–5 are intentionally in-memory/ephemeral. Adding persistence now would be a
-  large architectural change with no current consumer (Phase 4 analysis renders fine from live state).
-- **Remaining Phase 7 — emotes, in-room chat, public matchmaking**: social/infra features with no
-  dependency from the current game loop; unscheduled. (Audio + i18n from Phase 7 already shipped.)
+- ~~**Phase 6 — accounts, history, DB**~~ — **PERMANENTLY DROPPED, not deferred**: see D15. The project
+  stays in-memory/ephemeral and players stay anonymous by design, not as a temporary MVP simplification.
+- ~~**Remaining Phase 7 — emotes, in-room chat, public matchmaking**~~ — **PERMANENTLY DROPPED, not
+  deferred**: see D16. (Audio + i18n from Phase 7 already shipped, pulled forward into Phase 0.)
 - **Building the rest of the mini-game catalog** (Bubble Pop E15, Match A11, Quick Draw E7, Pixel Beat
   E6, Fleet Battle C3, Sudoku Race E14, Quick Tetris E13, the racing cluster, …): the catalog is meant
   to grow **wave by wave on demand**, not all up front (`minigame-catalog.md`, `backlog.md`). 19 games
   is a strong session already. New ones are added when prioritized — several are P3/high-effort or ride
   the Phase 5 action wave. Kept as ranked ideas.
-- **Revisit if**: a netcode pass is scheduled (unlocks Phase 5), long-term history/accounts are wanted
-  (Phase 6), or a specific new mini-game is prioritized off the ranked list.
+- **Revisit if**: a netcode pass is scheduled (unlocks Phase 5) or a specific new mini-game is
+  prioritized off the ranked list. Phase 6 has no revisit condition — see D15.
+
+### D14 — Phase 3 closed: scoring lever only, mechanical per-game hooks dropped — DECIDED
+
+- **What**: Phase 3 (handicap) is now **complete**. The bounded **scoring** catch-up
+  (`applyScoringHandicap`) plus its host toggle and on-results transparency (D8, D8-UPDATE) is the whole
+  feature. The **mechanical per-game hooks** (leader nerf / trailer boost / team weighting inside each
+  mini-game, `minigame-catalog.md` §H) are dropped, not deferred — they will not be built.
+- **Why**: D8 deferred the hooks pending validation of the scoring lever "in real sessions." That
+  validation step isn't going to happen as a gate for this feature — the scoring lever alone already
+  satisfies the product goal (bounded, transparent catch-up) at a fraction of the cost. The mechanical
+  version would touch all 28 mini-game domain modules plus several Phaser scenes for a marginal gameplay
+  gain, which conflicts with "nothing built just in case."
+- **Revisit if**: real playtesting shows the points-only bonus is too weak to matter (e.g., trailing
+  players never feel it because rounds are too short/decisive) — then reconsider mechanical hooks for a
+  small, targeted subset of games rather than all 28.
+
+### D15 — Phase 6 dropped: the project stays permanently stateless and anonymous — DECIDED
+
+- **What**: Phase 6 (`bun:sqlite` persistence, accounts, session history, achievements/seasons) is
+  removed from the roadmap, not deferred. There is no later phase that introduces a database. Rooms,
+  sessions, players, and scores stay in-memory/ephemeral for the life of the project, and players stay
+  anonymous (color + pixel avatar + name, no login) by design.
+- **Why**: **the deployment target is a LAN party** — players physically together, sharing one local
+  network, playing a self-contained session and then walking away (see D17 for the matching scaling
+  decision). That target *is* the product decision: the game is meant to be a zero-friction "hand people
+  a room code and play" experience (see `art-direction.md` §6, `technical-architecture.md` §7).
+  Accounts/history/persistence would work against that: sign-up friction, data retention to think about,
+  and a DB/migrations layer to maintain for a use case (cross-session identity) that doesn't exist when
+  the "session" is a room of friends in the same physical space for one evening. Phases 0–5 already prove
+  the whole product works end-to-end without one.
+- **Impact**: `docs/PRD.md` §8/§9, `docs/technical-architecture.md` §7/§10, `docs/backlog.md` no longer
+  list Phase 6 as a future phase — persistence is now a closed question, not an open one.
+- **Revisit if**: never, without an explicit new product requirement (e.g., cross-session leaderboards)
+  that the team decides is worth the trade-off — this is a deliberate, durable constraint, not a gap.
+
+### D16 — Phase 7 dropped: no chat, emotes, avatar customization, or public matchmaking — DECIDED
+
+- **What**: the remaining Phase 7 items (avatars/customization, emotes, in-room chat, public matchmaking)
+  are removed from the roadmap, not deferred. The two Phase 7 items with real value — audio and i18n —
+  already shipped, pulled forward into Phase 0. Nothing else from that phase is planned. Phase 5 is now
+  the last numbered phase; the only open-ended track left is growing the mini-game catalog on demand.
+- **Why**: same root cause as D15 — **the deployment target is a LAN party**, not an internet-facing
+  social platform. Chat, emotes, and public matchmaking are features for people who *aren't* already
+  together and need a way to find/message each other; at a LAN party everyone is in the same room and
+  already talking. They'd also pull toward moderation, abuse handling, and discoverability concerns (see
+  `PRD.md` §10 risk on abuse/toxicity) that don't fit a tool meant to be "hand a room code to people
+  you're already with." Avatar customization has no account to attach preferences to (D15), so it would
+  need to be re-picked every room join anyway — marginal value for the build cost.
+- **Revisit if**: never, without an explicit new product requirement — same durability as D15. If a
+  private per-room "quick chat"/emote wheel is ever wanted, treat it as a fresh, small, scoped feature
+  proposal rather than reopening Phase 7.
+
+### D17 — Scaling: single-instance, permanently — no multi-instance/Redis backplane — DECIDED
+
+- **What**: the icebox item "multi-instance scaling with a Redis pub/sub backplane" and the open
+  scaling question in `technical-architecture.md` §10 are closed, not deferred. Pixel Party runs as one
+  Bun process; there is no plan to ever run more than one.
+- **Why**: **the deployment target is a LAN party** (D15, D16) — a handful of rooms of 4–10 players on
+  one local network, run from a single machine on that network. That's an inherently single-instance
+  load; a pub/sub backplane exists to fan a WS topic out across processes/hosts for internet-scale
+  traffic, which this project will never see. Building it would be pure speculation with no consumer.
+- **Revisit if**: never, without an explicit new product requirement that changes the deployment model
+  away from LAN-local (e.g., a hosted public version) — not something to build ahead of that need.

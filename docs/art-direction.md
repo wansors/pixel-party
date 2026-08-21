@@ -64,12 +64,12 @@ shared visual language so all screens and mini-games read as one coherent system
 - **Optional CRT layer**: a subtle scanline / vignette / slight curvature overlay, **toggleable** and
   off by default for accessibility and performance (must not hurt readability on mobile).
 
-## 5. Sound (later phase, but part of the identity)
+## 5. Sound (shipped)
 
 - **Chiptune** music (menu loop, tense mini-game loop, victory jingle) and **8-bit SFX** (select,
   confirm, error buzz, countdown beep, score tick, coin, game-over).
-- Ships in a later phase (see `backlog.md` Phase 7) but designed for from the start; keep audio optional
-  and mutable.
+- Shipped in Phase 0 (pulled forward from the original later-phase plan); audio stays optional and
+  mutable via volume sliders.
 
 ## 6. Player representation (anonymous)
 

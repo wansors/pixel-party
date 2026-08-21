@@ -26,7 +26,8 @@ real time with the rest.
 - **Pixel-art, arcade-classic inspired**: simple, recognizable ideas (basketball, battleship, pong…)
   reskinned in a coherent pixel aesthetic.
 - Mix of **individual, duel (1v1/bracket), and team** mini-games so the social dynamic keeps shifting.
-- Ideal for friends, family, or remote team events.
+- Ideal for friends and family sharing a **local network** (LAN party style) — the target is people
+  physically together, not a remote/internet-scale deployment (see §8, §12).
 
 ---
 
@@ -197,14 +198,16 @@ outcomes. See `minigame-catalog.md` §H and `scoring-system.md`.
 
 > **Stack decided.** Pixel Party mirrors the architecture of the reference project `utopia-offline`:
 > **Bun** monorepo, **TypeScript**, **hexagonal** server, **Bun-native WebSockets**, **Angular 20 +
-> Phaser 3** client, optional **`bun:sqlite`**, **Biome**, server-authoritative + deterministic core.
+> Phaser 3** client, **no database** (permanently stateless/anonymous — see below), **Biome**,
+> server-authoritative + deterministic core.
 > Full blueprint in [`technical-architecture.md`](technical-architecture.md). This section is a summary.
 
 ### 8.1 Key technical needs
 - **Bidirectional real-time** communication (WebSockets) with low latency.
 - **Server-authoritative** room state.
 - Frontend game rendering (**Canvas 2D**, WebGL as an option for heavier graphics).
-- Ephemeral in-memory rooms; minimal persistence (optional, for history).
+- Ephemeral in-memory rooms; **no persistence** — the game is stateless and players stay anonymous by
+  design (not an MVP simplification; see `technical-architecture.md` §7).
 
 ### 8.2 Stack (decided — mirrors `utopia-offline`)
 
@@ -218,7 +221,7 @@ outcomes. See `minigame-catalog.md` §H and `scoring-system.md`.
 | Client shell | Angular 20 (`@angular/build`) — all DOM/UI |
 | Game rendering | Phaser 3 — mini-game canvas only |
 | State authority | Server-authoritative + deterministic (seeded `Random`, `Clock`) |
-| Persistence | **No DB in Phase 1** — all in-memory/ephemeral; `bun:sqlite` later-phase only |
+| Persistence | **No DB, permanently** — all in-memory/ephemeral, by design (see `technical-architecture.md` §7) |
 
 The main advantage of Bun + TypeScript is sharing the data model and validation logic between client and
 server. See [`technical-architecture.md`](technical-architecture.md) for the full mapping and the
@@ -242,7 +245,6 @@ mini-games can be added without modifying the core.
    - Mini-game rendering (Canvas)           - Session engine (round sequence)
    - Input sending                          - Mini-game instances (authority)
    - Visual interpolation/prediction        - Scoring computation
-                                            - (optional) History persistence
 ```
 
 ---
@@ -268,8 +270,12 @@ deliberately minimal; formats, handicap, and analysis come in later phases.
 - **Handicap / catch-up** (Phase 3).
 - **Post-match analysis & player radar/pentagon** (Brain Training style — per-axis score profile, Phase 4).
 - **Real-time action mini-games** once the netcode is proven (Phase 5).
-- User accounts, persistent history, statistics, achievements, seasons (Phase 6).
-- Avatars, emotes, in-room chat, audio, public matchmaking, i18n (Phase 7).
+
+> Phase 5 is the last numbered phase. There is no Phase 6 (accounts/persistent history/achievements,
+> permanently dropped — the game stays stateless and anonymous by design, `technical-architecture.md`
+> §7) and no Phase 7 (avatars/customization, emotes, in-room chat, public matchmaking, also permanently
+> dropped; audio and i18n already shipped in Phase 0). See `backlog.md` and `implementation-decisions.md`
+> D15/D16.
 
 ---
 
@@ -282,7 +288,7 @@ deliberately minimal; formats, handicap, and analysis come in later phases.
 | Disconnections break the match | High | Reconnection (FR-2.3) + timeouts and recompute without blocking |
 | Complexity of adding mini-games | Medium | Pluggable contract (§8.3) and game-agnostic engine |
 | Device/input fragmentation | Medium | Design mini-games with simple, responsive-first inputs |
-| Abuse/toxicity (nicknames, public rooms) | Low (private MVP) | Private code-based rooms in MVP; moderation in public phase |
+| Abuse/toxicity (nicknames) | Low | Private code-based rooms only — no public matchmaking is planned (D16), so exposure stays limited to whoever the host shares the room code with |
 
 ---
 
@@ -301,12 +307,15 @@ deliberately minimal; formats, handicap, and analysis come in later phases.
 
 1. Default number of rounds per session and target total duration (MVP uses a fixed default; value TBD).
 2. Room code length/format.
-3. Scaling strategy (single-instance in MVP, or multi-instance with a backplane later?).
 
 Resolved:
-- **Persistence** — no DB in Phase 1; strictly in-memory/ephemeral (see §8, `technical-architecture.md` §7).
+- **Persistence** — no DB, permanently; strictly in-memory/ephemeral by design, not just for the MVP
+  (see §8, `technical-architecture.md` §7).
 - **Art direction** — retro classic-arcade pixel-art identity (see `art-direction.md`).
 - **Mini-game selection** — MVP is **random-only**; host **manual** selection/editor is a later add (see
   `backlog.md` Icebox). Configuring the **number of rounds** moves to **Phase 1** (`backlog.md`).
+- **Scaling** — single-instance, permanently. The target is a LAN party (players physically together on
+  one local network), not an internet-scale deployment, so a multi-instance/Redis backplane has no
+  use case and is dropped from the roadmap (see `implementation-decisions.md` D17).
 
 > Stack is decided (§8). Remaining technical open points are tracked in `technical-architecture.md` §10.

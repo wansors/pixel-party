@@ -87,20 +87,21 @@ For *Mario Party*-style variety (enabled via room configuration):
 
 ## 3.1 Handicap / catch-up
 
-To keep sessions competitive and full of comebacks, the engine can apply **bounded** catch-up based on
-the current standings. Two levers, both optional and configurable per session:
+To keep sessions competitive and full of comebacks, the engine applies **bounded** catch-up based on the
+current standings via a single lever:
 
-- **Mechanical handicap** (in-game): the engine passes a handicap factor to each mini-game's handicap
-  hooks (see `minigame-catalog.md` §H) — leader nerf, trailer boost, team weighting. The factor scales
-  with how far ahead/behind a player is.
-- **Scoring handicap** (points): trailing players can receive a small multiplier on earned points (e.g.,
-  up to +20% for the bottom placements), or the leader's award is slightly compressed.
+- **Scoring handicap** (points): trailing players receive a small, capped bonus on their round award
+  (up to `maxBonusPct`, default +20%), scaled by how far behind they are; the leader gets 0.
+
+A **mechanical handicap** (per-mini-game hooks — leader nerf, trailer boost, team weighting baked into
+each game's rules; see `minigame-catalog.md` §H) was considered and **deliberately not built** — it
+would touch every mini-game for a marginal gain over the scoring lever alone (see
+`implementation-decisions.md` D14).
 
 Guardrails:
 - **Capped**: total handicap effect is bounded so it narrows gaps without handing out wins.
-- **Opt-in**: ships toggled off in the MVP; tuned once real sessions are observed.
-- **Transparent**: if scoring handicap is applied, show it in the results screen so it never feels
-  arbitrary.
+- **Opt-in**: ships toggled off by default; a host enables it per room.
+- **Transparent**: the applied bonus is shown on the round-result screen so it never feels arbitrary.
 
 ---
 

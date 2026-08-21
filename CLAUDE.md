@@ -6,13 +6,18 @@ Pixel Party: a browser-based multiplayer collection of mini-games, *Mario Party*
 to a room from their own device, play a series of short mini-games back to back, and accumulate points
 for a session-wide ranking. See [`README.md`](README.md).
 
+**Deployment target: a local LAN party with friends** — one process, on one local network, no accounts.
+This is the reason the project is permanently stateless/anonymous/single-instance by design (no DB, no
+social/public-matchmaking phase, no multi-instance scaling — see `docs/implementation-decisions.md`
+D15–D17). Don't propose features that assume an internet-facing, multi-tenant, or persistent deployment.
+
 ## Current phase
 
 **Phases 0 & 1 complete** (development started 2026-07-20; closed out 2026-07-23). The stack is
 scaffolded and the game is playable end-to-end. Run it with `bun run dev` (see `README.md`). Live now:
 rooms + lobby (ready/host), host game selector + round count, server-authoritative session engine (intro
 countdown → play → per-round result → cumulative scoreboard → final), scoring/scoreboard/final ranking,
-**Phases 0–5 complete** (Phase 3 handicap partial; 2026-07-23). **28 mini-games** — 23 FFA
+**Phases 0–5 complete** (2026-08-21). **28 mini-games** — 23 FFA
 (`button-masher`, `reaction-duel`, `color-trap`, `trivia`, `balloon-chicken`, `number-rush`,
 `quick-math`, `odd-one-out`, `higher-lower`, `bug-smash`, `stop-clock`, `memory-flash`, `simon`,
 `pixel-hoops`, `pixel-weight`, `pixel-split`, `fruit-catch`, `pixel-rain`, `pixel-dash`, `snake-arena`,
@@ -26,13 +31,17 @@ kick / idle-room reaper**, **observability** (structured JSON logs + `GET /api/m
 **i18n (EN/ES)** (Transloco, runtime toggle, all UI + Phaser scenes translated),
 **post-match analysis** (Phase 4: 7 skill axes tagged on the catalog → per-player skill radar +
 session summary on the final screen, from `sessionAnalysis`),
-**handicap** (Phase 3: bounded scoring catch-up lever from `handicap` with a host lobby toggle +
-on-results transparency, **off by default**; only the mechanical per-game hooks remain deferred),
+**handicap** (Phase 3, **complete**: bounded scoring catch-up lever from `handicap` with a host lobby
+toggle + on-results transparency, **off by default**; mechanical per-game hooks were considered and
+dropped, not built — scoring lever is the whole feature, see D14),
 **real-time action games** (Phase 5: client snapshot interpolation `game/netcode/SnapshotInterpolator`
 + 6 games — `fruit-catch`, `pixel-rain`, `pixel-dash`, `snake-arena`, `pixel-pong`, `sumo-push`),
 **GitHub Actions CI**, the self-hosted pixel font + per-breakpoint responsive tuning, and the
 **retro arcade look & feel** (palette theme, arcade frame, pixel-art avatars, high-score tables).
-Next candidates: Phase 6 (DB/accounts), the deferred Phase 3 mechanical handicap hooks, or growing the
+**Phase 5 is the last numbered phase.** The project is **permanently stateless and anonymous by
+design** — no database, no accounts, no "Phase 6" (dropped, not deferred; see D15) — and there's no
+further social/polish phase either: no "Phase 7" (chat/emotes/avatar customization/public matchmaking,
+dropped; see D16 — audio and i18n already shipped in Phase 0). Next candidate: growing the mini-game
 catalog on demand. Design decisions from the clear-out pass live in `docs/implementation-decisions.md`.
 See `docs/backlog.md` → *Current status* for the authoritative checklist.
 
@@ -92,9 +101,10 @@ blueprint in `docs/technical-architecture.md`.
   loader (`assets/i18n/{en,es}.json`), `LanguageService` (signal + localStorage `pp_lang`, default EN),
   `CatalogI18nService` for mini-game names/blurbs (English fallback to `@pp/shared` meta), runtime
   EN|ES toggle. Phaser scenes receive a `Translate` fn injected via `GameClient` (framework-agnostic).
-- **No database in Phase 1** — rooms, sessions, players and scores are in-memory/ephemeral; nothing is
-  persisted when a room closes. Players are anonymous (unique color + preset pixel avatar + name).
-  `bun:sqlite` is a later-phase add-on only (Phase 6).
+- **No database, permanently** — rooms, sessions, players and scores are in-memory/ephemeral; nothing is
+  persisted when a room closes. Players are anonymous (unique color + preset pixel avatar + name). This
+  is a durable product decision, not an MVP simplification — there is no future phase that adds
+  `bun:sqlite`, accounts, or history (see `docs/implementation-decisions.md` D15).
 - **Retro classic-arcade pixel-art** visual identity across web, HUD and mini-games (see
   `docs/art-direction.md`); self-hosted assets, CSP-safe.
 - **Biome** (100 cols, single quotes, semicolons as-needed); `bun test` + Karma for client.

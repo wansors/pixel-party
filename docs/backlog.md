@@ -1,18 +1,21 @@
 # Backlog — Pixel Party
 
-- **Version**: 0.6 (draft)
-- **Date**: 2026-07-23
+- **Version**: 0.8 (draft)
+- **Date**: 2026-08-21
 
 Phased product backlog. The philosophy is **start with a minimal MVP and grow incrementally** — build
 the smallest thing that is fun end-to-end, then add features (more mini-games, handicap, post-match
 analysis…) phase by phase. Nothing is built "just in case".
 
-## Current status (2026-07-23)
+## Current status (2026-08-21)
 
-**Phases 0–5 are complete** (Phase 3 handicap partial — see below). The game is playable end-to-end
-(`bun run dev` → server :3000 + client :4200, LAN-accessible; see [`../README.md`](../README.md)) with
-**28 mini-games**. Design decisions from the clear-out pass are logged in
-[`implementation-decisions.md`](implementation-decisions.md) (D1–D13).
+**Phases 0–5 are complete, and that's the whole roadmap.** The game is playable end-to-end (`bun run dev`
+→ server :3000 + client :4200, LAN-accessible; see [`../README.md`](../README.md)) with **28
+mini-games**. The deployment target is a **local LAN party with friends** — one process, on one local
+network, no accounts — which is why the project is permanently **stateless, anonymous, and
+single-instance by design**: no database (D15), no further social/polish phase (D16), no multi-instance
+scaling (D17). What remains open-ended is growing the mini-game catalog on demand. Design decisions from
+the clear-out pass are logged in [`implementation-decisions.md`](implementation-decisions.md) (D1–D17).
 
 ### Foundation & platform
 - Bun workspaces monorepo, hexagonal server, `@pp/shared` wire contracts, Biome + TS strict +
@@ -42,13 +45,14 @@ analysis…) phase by phase. Nothing is built "just in case".
 - **Phase 0/1** — MVP + individual-game catalog + robustness/observability. **Complete.**
 - **Phase 2** — teams + duels (assignment, pairing, team/duel scoring). **Complete.**
 - **Phase 3** — handicap: bounded scoring catch-up lever with a host lobby toggle + on-results
-  transparency, off by default. **Partial** — mechanical per-game hooks deferred (D8).
+  transparency, off by default. **Complete** — mechanical per-game hooks dropped, not deferred (D14).
 - **Phase 4** — post-match analysis: 7 skill axes → per-player radar + session summary. **Complete.**
 - **Phase 5** — real-time action games: client snapshot interpolation + 6 games. **Complete.**
 
-Next candidates: **Phase 6** (DB/accounts/history — first phase to introduce a database), the deferred
-**Phase 3 mechanical handicap hooks**, remaining **Phase 7** social (chat/emotes/matchmaking), or
-growing the catalog on demand. See D9 for why those are deferred.
+**Phase 5 is the last numbered phase.** There is no Phase 6 (DB/accounts — dropped, D15) and no Phase 7
+(the remaining polish & social items — avatars/customization, emotes, in-room chat, public matchmaking —
+dropped, D16; audio and i18n already shipped in Phase 0). Next candidates: growing the mini-game catalog
+on demand (see `minigame-ideas.md`).
 
 ## How this backlog works
 
@@ -199,15 +203,15 @@ end-to-end + playable.
 
 ## Phase 3 — Handicap / catch-up
 
-**Mostly complete** (2026-07-23) — the bounded **scoring** lever ships with a host toggle + on-results
-transparency (off by default). Only the mechanical per-game hooks stay deferred until tuned. See
-`implementation-decisions.md` D8 / D8-UPDATE.
+**Complete** (2026-08-21) — the bounded **scoring** lever ships with a host toggle + on-results
+transparency (off by default). The mechanical per-game hooks are **dropped, not deferred** — the scoring
+lever is the whole feature. See `implementation-decisions.md` D8 / D8-UPDATE / D14.
 
 - [x] Handicap engine: compute per-player factor from current standings (bounded, capped). *Done —
       `domain/services/handicap.ts` `applyScoringHandicap`: trailer bonus scales linearly with distance
       behind, capped at `maxBonusPct`; leader gets 0; never reorders a round. Fully unit-tested.*
-- [ ] Mechanical handicap hooks in mini-games (leader nerf / trailer boost / team weighting). *Deferred
-      (D8): touches all 19 games; build once the scoring lever is validated on real sessions.*
+- [x] ~~Mechanical handicap hooks in mini-games (leader nerf / trailer boost / team weighting)~~ —
+      **dropped (D14)**: would touch all 28 games for a marginal gain over the scoring lever alone.
 - [x] Scoring handicap (bounded multiplier), shown transparently on results. *Done — wired in
       `SessionEngine.endRound`; the per-player catch-up bonus rides `RoundResultDto.handicap` and shows
       as a "+N catch-up" badge on the round-result screen.*
@@ -215,7 +219,8 @@ transparency (off by default). Only the mechanical per-game hooks stay deferred 
       `LOBBY_STATE.handicap`), room flag is the source of truth; `HANDICAP_ENABLED` env seeds the default
       for new rooms, `HANDICAP_MAX_BONUS_PCT` sets the cap.*
 
-*Depends on: Phase 0; benefits from Phase 2. See `scoring-system.md` §3.1 and `minigame-catalog.md` §H.*
+*Depends on: Phase 0; benefits from Phase 2. See `scoring-system.md` §3.1. The per-game hooks in
+`minigame-catalog.md` §H are historical context for a path not taken (D14).*
 
 ---
 
@@ -234,8 +239,8 @@ See `implementation-decisions.md` D3–D7 for the choices taken.
       `SessionSummaryDto` (per-round winners, most round wins, biggest standings comeback), computed in
       the domain service `sessionAnalysis` and shown under the final ranking.*
 - [x] Persist enough per-session data to render the analysis. *Done in-memory: the engine accumulates a
-      per-round `RoundAnalysis` and computes the radar+summary at session end (no DB — Phase 6 remains
-      the first DB phase). Normalization is points-relative (decision D4).*
+      per-round `RoundAnalysis` and computes the radar+summary at session end — no DB, and none is
+      planned (D15). Normalization is points-relative (decision D4).*
 
 > Delivery notes: analysis rides on the existing `FINAL_RANKING` message (optional `radars`/`summary`
 > fields; `PROTOCOL_VERSION` unchanged — decision D5) and replays on reconnect. Additive only; scoring
@@ -278,28 +283,11 @@ games shipped end-to-end. See `implementation-decisions.md` D10.
 
 ---
 
-## Phase 6 — Accounts, history & progression
-
-> This is the **first phase that introduces a database**. Phases 0–5 are fully in-memory/ephemeral.
-
-- [ ] `bun:sqlite` persistence layer (raw SQL, migrations, seed) — follow utopia conventions.
-- [ ] Optional accounts (lightweight); persistent session history & lifetime stats.
-- [ ] Achievements, seasons, leaderboards.
-
-*Depends on: Phase 0; Phase 4 for analysis persistence.*
-
----
-
-## Phase 7 — Polish & social
-
-- [ ] Avatars/customization, emotes, in-room chat.
-- [x] Audio: music + SFX. *Pulled forward to Phase 0.*
-- [ ] Public matchmaking (open rooms / quick match).
-- [x] **i18n ES/EN across the UI** — done 2026-07-22 (pulled forward). Transloco (mirrors
-      `../utopia-offline`): static bundled `assets/i18n/{en,es}.json`, `LanguageService` (signal +
-      `pp_lang`, default EN), `CatalogI18nService` (mini-game names/blurbs, English fallback), runtime
-      EN|ES toggle. Covers the full Angular shell + all 16 Phaser scenes (scenes get a `Translate` fn via
-      `GameClient`). Trivia questions and Color-Trap word content stay server/shared English for now.
+> Phase numbering keeps its gaps: there is no Phase 6 and no Phase 7. Phase 6 was accounts/history/DB,
+> permanently dropped (D15). Phase 7 was "polish & social" — audio and i18n (the two items with real
+> value) already shipped, pulled forward into Phase 0; the rest (avatars/customization, emotes, in-room
+> chat, public matchmaking) is permanently dropped too, not deferred (D16). The project stops at Phase 5
+> plus on-demand catalog growth.
 
 ---
 
@@ -360,4 +348,5 @@ follows the priority tiers there:
 - [ ] Spectator mode.
 - [ ] Custom trivia packs.
 - [ ] Cosmetic pixel themes / seasonal skins.
-- [ ] Multi-instance scaling with a Redis pub/sub backplane.
+- [x] ~~Multi-instance scaling with a Redis pub/sub backplane~~ — **dropped, not planned** (D17): the
+      target deployment is a single-instance LAN party, which never needs more than one process.
