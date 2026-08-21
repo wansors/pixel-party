@@ -107,6 +107,9 @@ export type ClientMsg =
   | { type: 'KICK_PLAYER'; playerId: string }
   // Host-only: begin the session.
   | { type: 'START_SESSION' }
+  // Host-only: after FINAL_RANKING, return the room to the lobby (same roster/line-up/handicap) so
+  // another session can be configured and started without everyone leaving and re-joining.
+  | { type: 'PLAY_AGAIN' }
   // Per-frame/round input for the active mini-game. Opaque payload validated by the active game.
   | { type: 'MINIGAME_INPUT'; input: unknown }
   | { type: 'LEAVE' }

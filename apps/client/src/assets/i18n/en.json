@@ -37,6 +37,8 @@
       "games": "Games",
       "selectAll": "Select all",
       "selectNone": "Select none",
+      "allGames": "All",
+      "coverage": "Session skill coverage",
       "rounds": "Rounds:",
       "notReady": "Not ready",
       "imReady": "I'm ready",
@@ -64,7 +66,9 @@
     "final": {
       "title": "* FINAL RANKING *",
       "first": "1ST",
-      "newHighScore": "NEW HIGH SCORE"
+      "newHighScore": "NEW HIGH SCORE",
+      "playAgain": "Play again",
+      "waitingHost": "Waiting for the host to start a new game…"
     },
     "summary": {
       "profileTitle": "Your skill profile",

@@ -31,6 +31,7 @@ const VALIDATORS = {
   TRANSFER_HOST: (m) => isStr(m.playerId),
   KICK_PLAYER: (m) => isStr(m.playerId),
   START_SESSION: () => true,
+  PLAY_AGAIN: () => true,
   MINIGAME_INPUT: (m) => 'input' in m,
   LEAVE: () => true,
 } satisfies Record<ClientMsg['type'], Validator>

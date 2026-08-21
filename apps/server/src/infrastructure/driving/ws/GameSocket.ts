@@ -280,6 +280,27 @@ export function startGameServer(deps: GameSocketDeps) {
     send(ws, { type: 'ACK', intent: 'START_SESSION', ok: true })
   }
 
+  // Host-only: after FINAL_RANKING, send the room back to the lobby with the same roster/line-up/
+  // handicap so the host can re-pick or reuse the line-up and start again via the normal START_SESSION
+  // flow. The finished engine is already gone (SessionManager drops it once isFinished), so a fresh
+  // START_SESSION naturally starts scoreless — the only reset needed here is the room's phase.
+  const handlePlayAgain = (ws: ServerWebSocket<SocketData>): void => {
+    const room = deps.rooms.get(ws.data.roomCode)
+    if (!room || !ws.data.playerId || !room.isHost(ws.data.playerId)) {
+      send(ws, { type: 'ACK', intent: 'PLAY_AGAIN', ok: false, reason: 'not_host' })
+      return
+    }
+    if (room.phase !== 'final') {
+      send(ws, { type: 'ACK', intent: 'PLAY_AGAIN', ok: false, reason: 'not_finished' })
+      return
+    }
+    room.setPhase('lobby')
+    for (const p of room.list()) p.setReady(false)
+    deps.logger.info('play_again', { room: room.code })
+    broadcastLobby(room)
+    send(ws, { type: 'ACK', intent: 'PLAY_AGAIN', ok: true })
+  }
+
   const handleTransferHost = (
     ws: ServerWebSocket<SocketData>,
     msg: Extract<ClientMsg, { type: 'TRANSFER_HOST' }>,
@@ -371,6 +392,9 @@ export function startGameServer(deps: GameSocketDeps) {
         break
       case 'START_SESSION':
         handleStartSession(ws)
+        break
+      case 'PLAY_AGAIN':
+        handlePlayAgain(ws)
         break
       case 'MINIGAME_INPUT':
         handleMinigameInput(ws, msg)

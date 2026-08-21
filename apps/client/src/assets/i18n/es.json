@@ -37,6 +37,8 @@
       "games": "Juegos",
       "selectAll": "Seleccionar todos",
       "selectNone": "Ninguno",
+      "allGames": "Todos",
+      "coverage": "Cobertura de habilidades",
       "rounds": "Rondas:",
       "notReady": "No listo",
       "imReady": "Estoy listo",
@@ -64,7 +66,9 @@
     "final": {
       "title": "* CLASIFICACIÓN FINAL *",
       "first": "1º",
-      "newHighScore": "¡NUEVO RÉCORD!"
+      "newHighScore": "¡NUEVO RÉCORD!",
+      "playAgain": "Jugar otra vez",
+      "waitingHost": "Esperando a que el anfitrión inicie otra partida…"
     },
     "summary": {
       "profileTitle": "Tu perfil de habilidades",

@@ -1,9 +1,10 @@
-import { Component, DestroyRef, NgZone, type OnInit, inject, signal } from '@angular/core'
+import { Component, DestroyRef, NgZone, type OnInit, computed, inject, signal } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco'
 import {
   AVATARS,
+  AXIS_COLORS,
   type AvatarId,
   MINIGAMES,
   type MiniGameId,
@@ -16,6 +17,7 @@ import {
   type ScoreEntryDto,
   type ServerMsg,
   type SessionSummaryDto,
+  type SkillAxis,
   TEAMS,
   type TeamId,
   type TeamRoundResult,
@@ -76,6 +78,9 @@ export class RoomComponent implements OnInit {
   readonly usesTeams = signal(false)
   // Bounded scoring catch-up toggle (Phase 3), mirrored from LOBBY_STATE.
   readonly handicap = signal(false)
+  // Game-selector axis filter (client-only UI state, not mirrored to the server): null = show every
+  // game; a SkillAxis narrows the grid to games tagged with it, so a host can build a themed line-up.
+  readonly axisFilter = signal<SkillAxis | null>(null)
 
   readonly copied = signal(false)
   readonly intro = signal<{ round: number; total: number; game: string } | null>(null)
@@ -159,7 +164,11 @@ export class RoomComponent implements OnInit {
         this.usesTeams.set(msg.usesTeams)
         this.handicap.set(msg.handicap)
         this.maybeSendDefaultConfig(msg.minigameIds)
-        if (this.view() === 'connecting' || this.view() === 'lobby') this.view.set('lobby')
+        // Keyed off the server's phase (not the current view): a LOBBY_STATE broadcast during an active
+        // round (e.g. another player reconnecting) always carries that round's phase, so it never snaps
+        // an in-round client back to the lobby — only a genuine lobby phase does, which also covers the
+        // final -> lobby transition after PLAY_AGAIN.
+        if (msg.phase === 'lobby') this.view.set('lobby')
         break
       case 'ROUND_INTRO':
         this.currentGame = msg.minigameId
@@ -283,6 +292,39 @@ export class RoomComponent implements OnInit {
     this.net.send({ type: 'HOST_CONFIG', minigameIds: ids, rounds: ids.length })
   }
 
+  // Games shown in the picker grid, narrowed by the active axis filter chip (if any).
+  readonly filteredGames = computed(() => {
+    const axis = this.axisFilter()
+    return axis ? this.availableGames.filter((g) => g.axes.includes(axis)) : this.availableGames
+  })
+
+  // Aggregate skill coverage of the current line-up, as a 0..1 radar per axis (relative to whichever
+  // axis the selection leans on most) — a "what will this session train" preview, not a performance
+  // score. Empty selection means the radar has nothing to draw; the template hides it in that case.
+  readonly selectionCoverage = computed(() => {
+    const ids = new Set(this.selectedGameIds())
+    const counts = new Map<SkillAxis, number>()
+    for (const g of this.availableGames) {
+      if (!ids.has(g.id)) continue
+      for (const axis of g.axes) counts.set(axis, (counts.get(axis) ?? 0) + 1)
+    }
+    const max = Math.max(1, ...counts.values())
+    return SKILL_AXES.map((axis) => ({
+      label: this.catalog.axisLabel(axis),
+      value: (counts.get(axis) ?? 0) / max,
+    }))
+  })
+
+  readonly skillAxes = SKILL_AXES
+
+  axisColor(axis: SkillAxis): string {
+    return AXIS_COLORS[axis]
+  }
+
+  toggleAxisFilter(axis: SkillAxis): void {
+    this.axisFilter.set(this.axisFilter() === axis ? null : axis)
+  }
+
   isSelected(id: MiniGameId): boolean {
     return this.selectedGameIds().includes(id)
   }
@@ -350,6 +392,11 @@ export class RoomComponent implements OnInit {
 
   start(): void {
     this.net.send({ type: 'START_SESSION' })
+  }
+
+  playAgain(): void {
+    if (!this.isHost()) return
+    this.net.send({ type: 'PLAY_AGAIN' })
   }
 
   makeHost(id: string): void {

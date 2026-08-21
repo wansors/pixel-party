@@ -24,7 +24,7 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
   ],
   template: `
     <main class="join">
-      <div class="sound"><app-language-toggle /><app-audio-controls /></div>
+      <div class="sound"><app-audio-controls /></div>
       <div class="arcade-window cabinet">
         <div class="arcade-titlebar">{{ 'join.title' | transloco }}</div>
         <div class="body">
@@ -87,11 +87,14 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
           }
         </div>
       </div>
+      <footer><app-language-toggle /></footer>
     </main>
   `,
   styles: `
     .join { display: grid; place-content: center; min-height: 100vh; padding: 1rem; }
     .sound { position: fixed; top: 0.75rem; right: 0.75rem; z-index: 10; }
+    footer { position: fixed; bottom: 0.75rem; left: 0; right: 0; display: flex;
+      justify-content: center; z-index: 10; }
     .cabinet { width: min(92vw, 380px); }
     .body { display: grid; gap: 0.9rem; padding: 1.1rem; }
     .me { display: grid; place-content: center; }

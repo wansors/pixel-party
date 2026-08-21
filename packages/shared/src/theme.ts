@@ -2,6 +2,8 @@
 // are given as 0xRRGGBB numbers for the Phaser canvas; `hexToCss` / the *_CSS arrays expose the same
 // values to the Angular shell (which also mirrors them as CSS custom properties in styles.scss).
 
+import type { SkillAxis } from './catalog'
+
 export const PALETTE = {
   bg: 0x10121c,
   panel: 0x1b1e2e,
@@ -55,3 +57,15 @@ export const TEAMS: readonly TeamMeta[] = [
 ]
 
 export const TEAM_IDS: readonly TeamId[] = TEAMS.map((t) => t.id)
+
+// One accent hue per skill axis (Phase 4 catalog tagging), reused to color-code axis filter chips and
+// per-game badges in the host's mini-game picker — lets a host spot/build a themed line-up at a glance.
+export const AXIS_COLORS: Record<SkillAxis, string> = {
+  reflexes: '#ff3e7f',
+  speed: '#ffcf4b',
+  knowledge: '#29d3f2',
+  memory: '#8be94b',
+  precision: '#ff7b3d',
+  nerve: '#ff5252',
+  focus: '#b06bff',
+}
