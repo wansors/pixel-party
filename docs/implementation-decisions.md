@@ -272,3 +272,23 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   traffic, which this project will never see. Building it would be pure speculation with no consumer.
 - **Revisit if**: never, without an explicit new product requirement that changes the deployment model
   away from LAN-local (e.g., a hosted public version) — not something to build ahead of that need.
+
+### D18 — Catalog growth: Sudoku Race — DECIDED
+
+- **What**: added `sudoku-race` (E14, catalog now **29**): a self-paced FFA puzzle race. Everyone gets
+  the same seeded 4×4 sudoku (2×2 boxes, 8 of 16 cells blank); tapping a blank cycles it 0→1→2→3→4→0.
+  Ranked by first-to-solve, else most cells correct.
+- **How**: the solved grid is built without a backtracking solver — take a canonical valid 4×4 sudoku,
+  relabel its digits with a seeded permutation, then apply validity-preserving row/column swaps within
+  each band/stack, a band/stack swap, and an optional transpose (all gated on `random.next()`). This
+  guarantees a valid puzzle every time and only needs the existing seeded `Random` port. The solution is
+  never put on the wire, only a per-player fill grid + correctness count (`SudokuSnapshot`) — matching
+  `sink-the-fleet`'s "nothing exploitable leaks" convention rather than `match-pairs`'s (which does
+  broadcast revealed values). Follows the standard pluggable-game recipe: one domain module
+  (`domain/minigames/sudokuRace.ts`), one registry entry, wire types in `packages/shared/src/games/`,
+  one Phaser scene (`SudokuRaceScene`), one `MINIGAMES` catalog entry. No i18n keys were needed — the
+  scene reuses the existing `game.common.done` / `game.common.correct` strings.
+- **Revisit if**: 4×4 (8 blanks) feels too easy or too short for a ~75 s round — the grid size, box
+  size, and blank count are the three constants (`SIZE`, `BOX`, `BLANKS`) at the top of the domain
+  module; a 6×6/3×2-box variant would need a different canonical base grid and box-shape-aware
+  transforms, not just changed constants.

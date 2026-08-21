@@ -35,6 +35,8 @@
       "off": "desc.",
       "ready": "listo",
       "games": "Juegos",
+      "selectAll": "Seleccionar todos",
+      "selectNone": "Ninguno",
       "rounds": "Rondas:",
       "notReady": "No listo",
       "imReady": "Estoy listo",

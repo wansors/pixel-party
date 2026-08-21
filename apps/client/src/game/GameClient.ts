@@ -28,6 +28,7 @@ import { SimonScene } from './scenes/SimonScene'
 import { SinkTheFleetScene } from './scenes/SinkTheFleetScene'
 import { SnakeArenaScene } from './scenes/SnakeArenaScene'
 import { StopClockScene } from './scenes/StopClockScene'
+import { SudokuRaceScene } from './scenes/SudokuRaceScene'
 import { SumoScene } from './scenes/SumoScene'
 import { TriviaScene } from './scenes/TriviaScene'
 import { TugOfWarScene } from './scenes/TugOfWarScene'
@@ -54,6 +55,7 @@ const SCENE_IDS: MiniGameId[] = [
   'tug-of-war',
   'sink-the-fleet',
   'bomb-relay',
+  'sudoku-race',
 ]
 
 // Pure Phaser config factory — testable without `new Phaser.Game` (which needs a DOM/canvas). Scenes
@@ -132,6 +134,7 @@ export class GameClient {
     this.game.scene.add('tug-of-war', new TugOfWarScene(...deps), false)
     this.game.scene.add('sink-the-fleet', new SinkTheFleetScene(...deps), false)
     this.game.scene.add('bomb-relay', new BombRelayScene(...deps), false)
+    this.game.scene.add('sudoku-race', new SudokuRaceScene(...deps), false)
   }
 
   // Switch the active scene to the round's mini-game (no-op if already active).

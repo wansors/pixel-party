@@ -41,7 +41,8 @@ Pixel Weight (`pixel-weight`) and E11 Pixel Split (`pixel-split`). Then the Phas
 `tug-of-war`, C2 `bomb-relay`, B2 `sink-the-fleet`) and the Phase 5 real-time wave (2026-07-23): D2
 Fruit Catch (`fruit-catch`), A7 Pixel Rain (`pixel-rain`), A9 Pixel Dash (`pixel-dash`), A8 Snake Arena
 (`snake-arena`), B1 Pixel Pong (`pixel-pong`), B3 Sumo Push (`sumo-push`) — behind a client snapshot
-interpolator (netcode hardening); plus Match (A11 `match-pairs`), Quick Draw (E7 `quick-draw`) and Pixel Roulette (D3 `pixel-roulette`). **28 mini-games total.**
+interpolator (netcode hardening); plus Match (A11 `match-pairs`), Quick Draw (E7 `quick-draw`) and Pixel
+Roulette (D3 `pixel-roulette`); then (2026-08-21) E14 Sudoku Race (`sudoku-race`). **29 mini-games total.**
 
 ---
 
@@ -255,10 +256,13 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
 - **E13. Quick Tetris** — a short, fast Tetris sprint (compact variant of **E10**): identical seeded
   piece sequence for all; clear as many lines as possible in a fixed short window (or reach N lines
   fastest). FFA · tap/drag · ~45 s · high effort · low latency · banter 💥💥.
-- **E14. Sudoku Race** — everyone solves the **same seeded** Sudoku (likely a smaller/quick grid such as
-  4×4 or 6×6 to fit a party round). Winner is whoever completes it first; if nobody finishes in time,
-  rank by **most correct cells placed** (server validates each cell, so a wrong entry never counts).
-  FFA · tap (cell + number) · ~60–90 s · medium/high effort · low latency · banter 💥💥.
+- **E14. ✅ Sudoku Race** — everyone solves the **same seeded** Sudoku. *Implemented (`sudoku-race`): a
+  4×4 grid (2×2 boxes), 8 of 16 cells blank; tap a blank to cycle 0→1→2→3→4→0. Winner is whoever
+  completes it first; if nobody finishes in time, rank by **most correct cells placed** (server
+  validates each cell, so a wrong entry never counts). The solved grid comes from a canonical valid
+  sudoku via seeded digit relabeling + row/col/band/stack permutations — always valid, no backtracking
+  solver needed — and the solution never goes on the wire.* FFA · tap (cell cycles a value) · ~75 s ·
+  medium effort · low latency · banter 💥💥.
 - **E15. Bubble Pop ("Bust-a-Move")** — bubble-shooter puzzle: aim and shoot coloured bubbles upward at a
   hanging cluster; **3+ same-colour bubbles that touch pop**, and any bubbles left unattached drop for a
   bonus. Same **seeded** starting layout + shot-colour queue for everyone, so it's a fair race on an

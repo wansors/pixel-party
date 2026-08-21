@@ -225,6 +225,9 @@ export class SessionEngine {
     // handicap is off or nobody got a boost).
     const handicap: Record<PlayerId, number> = {}
     for (const [pid, b] of bonus) if (b > 0) handicap[pid] = Math.round(b * 10) / 10
+    // Radar reflects skill, so it normalizes the BASE award (before any catch-up bonus). Recorded before
+    // building the radar below so this round's own result is already folded in.
+    this.recordAnalysis(id, basePoints, placements)
     this.lastResult = {
       minigameId: id,
       placements,
@@ -232,9 +235,8 @@ export class SessionEngine {
       stats: result.stats,
       teams,
       handicap: Object.keys(handicap).length > 0 ? handicap : undefined,
+      radars: buildRadars(this.analysis, [...this.cumulative.keys()]),
     }
-    // Radar reflects skill, so it normalizes the BASE award (before any catch-up bonus).
-    this.recordAnalysis(id, basePoints, placements)
     this.accumulateTiebreak(basePoints)
     // Reveal the round's own outcome first; the cumulative scoreboard follows after its own dwell.
     this.publish({ type: 'ROUND_RESULT', round: this.roundIndex + 1, result: this.lastResult })

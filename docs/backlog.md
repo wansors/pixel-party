@@ -1,6 +1,6 @@
 # Backlog — Pixel Party
 
-- **Version**: 0.8 (draft)
+- **Version**: 0.9 (draft)
 - **Date**: 2026-08-21
 
 Phased product backlog. The philosophy is **start with a minimal MVP and grow incrementally** — build
@@ -10,16 +10,16 @@ analysis…) phase by phase. Nothing is built "just in case".
 ## Current status (2026-08-21)
 
 **Phases 0–5 are complete, and that's the whole roadmap.** The game is playable end-to-end (`bun run dev`
-→ server :3000 + client :4200, LAN-accessible; see [`../README.md`](../README.md)) with **28
+→ server :3000 + client :4200, LAN-accessible; see [`../README.md`](../README.md)) with **29
 mini-games**. The deployment target is a **local LAN party with friends** — one process, on one local
 network, no accounts — which is why the project is permanently **stateless, anonymous, and
 single-instance by design**: no database (D15), no further social/polish phase (D16), no multi-instance
 scaling (D17). What remains open-ended is growing the mini-game catalog on demand. Design decisions from
-the clear-out pass are logged in [`implementation-decisions.md`](implementation-decisions.md) (D1–D17).
+the clear-out pass are logged in [`implementation-decisions.md`](implementation-decisions.md) (D1–D18).
 
 ### Foundation & platform
 - Bun workspaces monorepo, hexagonal server, `@pp/shared` wire contracts, Biome + TS strict +
-  determinism gate + **GitHub Actions CI**. Test suite: **155 server/shared + 7 client (Karma)**, green.
+  determinism gate + **GitHub Actions CI**. Test suite: **166 server/shared + 7 client (Karma)**, green.
 - Server-authoritative, deterministic core (seeded `Random` + `Clock` ports; the domain never touches
   `Math.random`/`Date.now`). Bun-native WS with a hand-written shape validator (no Zod).
 - Angular 20 shell + Phaser 3 (decoupled); **i18n EN/ES** (Transloco) across the UI + every scene;
@@ -34,11 +34,11 @@ the clear-out pass are logged in [`implementation-decisions.md`](implementation-
 - Scoring: position→points table with tie-averaging; **final-ranking tiebreakers** (most 1st places →
   best average position, `domain/services/finalRanking`).
 
-### Mini-games — 28 (pluggable domain module + Phaser scene each)
-- **23 FFA**: `reaction-duel`, `button-masher`, `color-trap`, `trivia`, `balloon-chicken`,
+### Mini-games — 29 (pluggable domain module + Phaser scene each)
+- **24 FFA**: `reaction-duel`, `button-masher`, `color-trap`, `trivia`, `balloon-chicken`,
   `number-rush`, `quick-math`, `odd-one-out`, `higher-lower`, `bug-smash`, `stop-clock`, `memory-flash`,
   `simon`, `pixel-hoops`, `pixel-weight`, `pixel-split`, `fruit-catch`, `pixel-rain`, `pixel-dash`,
-  `snake-arena`, `sumo-push`, `match-pairs`, `pixel-roulette`.
+  `snake-arena`, `sumo-push`, `match-pairs`, `pixel-roulette`, `sudoku-race`.
 - **2 team**: `tug-of-war`, `bomb-relay`. **3 duel**: `sink-the-fleet`, `pixel-pong`, `quick-draw`.
 
 ### Epics
@@ -319,8 +319,11 @@ follows the priority tiers there:
       the counts. *Balance variant not built.*
 - [ ] **Quick Tetris** — E13: short, fast Tetris sprint (compact variant of E10 Line Clear Sprint);
       identical seeded piece sequence, clear the most lines in a short window. *P3, rides the action wave.*
-- [ ] **Sudoku Race** — E14: everyone solves the same seeded Sudoku (small/quick grid); winner is
-      first-to-solve, else most correct cells placed (server validates each cell). *P2, puzzle.*
+- [x] **Sudoku Race** — E14 (`sudoku-race`, shipped 2026-08-21): everyone races the same seeded 4×4
+      sudoku (2×2 boxes, 8 of 16 cells blank); tap a blank to cycle it 0→1→2→3→4→0. Winner is
+      first-to-solve, else most correct cells placed. The solved grid is drawn from a canonical valid
+      sudoku via seeded digit relabeling + row/col/band/stack permutations (no backtracking solver
+      needed) and never sent on the wire — only fills + a correctness count.
 - [ ] **Bubble Pop ("Bust-a-Move")** — E15: bubble-shooter puzzle — aim and shoot coloured bubbles
       upward at a hanging cluster; 3+ touching same-colour bubbles pop and unattached bubbles drop for a
       bonus. Same seeded starting board + shot-colour queue for everyone; server owns the grid and

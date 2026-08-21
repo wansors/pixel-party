@@ -449,7 +449,10 @@ export function startGameServer(deps: GameSocketDeps) {
     },
     websocket: {
       idleTimeout: config.wsIdleTimeoutSec,
-      sendPings: false,
+      // Bun's automatic ping/pong keepalive. Without it, a connection with no application traffic for
+      // `wsIdleTimeoutSec` (e.g. a player idling in the lobby, or reading a self-paced puzzle round)
+      // gets force-closed as idle even though the player is still there.
+      sendPings: true,
       open() {
         // Nothing to do until JOIN mints identity; the client sends JOIN as its first frame.
       },

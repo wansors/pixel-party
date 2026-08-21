@@ -17,11 +17,11 @@ D15–D17). Don't propose features that assume an internet-facing, multi-tenant,
 scaffolded and the game is playable end-to-end. Run it with `bun run dev` (see `README.md`). Live now:
 rooms + lobby (ready/host), host game selector + round count, server-authoritative session engine (intro
 countdown → play → per-round result → cumulative scoreboard → final), scoring/scoreboard/final ranking,
-**Phases 0–5 complete** (2026-08-21). **28 mini-games** — 23 FFA
+**Phases 0–5 complete** (2026-08-21). **29 mini-games** — 24 FFA
 (`button-masher`, `reaction-duel`, `color-trap`, `trivia`, `balloon-chicken`, `number-rush`,
 `quick-math`, `odd-one-out`, `higher-lower`, `bug-smash`, `stop-clock`, `memory-flash`, `simon`,
 `pixel-hoops`, `pixel-weight`, `pixel-split`, `fruit-catch`, `pixel-rain`, `pixel-dash`, `snake-arena`,
-`sumo-push`, `match-pairs`, `pixel-roulette`) + 2 team (`tug-of-war`, `bomb-relay`) + 3 duel
+`sumo-push`, `match-pairs`, `pixel-roulette`, `sudoku-race`) + 2 team (`tug-of-war`, `bomb-relay`) + 3 duel
 (`sink-the-fleet`, `pixel-pong`, `quick-draw`) — with **no-repeat
 seeded line-ups**, **mid-session reconnect/rejoin** + **host transfer (auto-on-disconnect + manual) /
 kick / idle-room reaper**, **observability** (structured JSON logs + `GET /api/metrics`),
@@ -58,7 +58,7 @@ Documentation lives in `docs/`:
 ## Code layout (implemented)
 
 - `apps/server` — hexagonal: `domain/` (entities `Room`/`Player`, `minigames/` pluggable contract +
-  `buttonMasher`/`reactionDuel`/`colorTrap`/`trivia`/`balloonChicken`/`numberRush`/`quickMath`/`oddOneOut`/`higherLower`/`bugSmash`/`stopClock`/`memoryFlash`/`simon`/`pixelHoops`/`pixelWeight`/`pixelSplit`/`tugOfWar`/`sinkTheFleet`/`bombRelay`/`fruitCatch`/`pixelRain`/`pixelDash`/`snakeArena`/`pong`/`sumo`/`matchPairs`/`quickDraw`/`roulette`
+  `buttonMasher`/`reactionDuel`/`colorTrap`/`trivia`/`balloonChicken`/`numberRush`/`quickMath`/`oddOneOut`/`higherLower`/`bugSmash`/`stopClock`/`memoryFlash`/`simon`/`pixelHoops`/`pixelWeight`/`pixelSplit`/`tugOfWar`/`sinkTheFleet`/`bombRelay`/`fruitCatch`/`pixelRain`/`pixelDash`/`snakeArena`/`pong`/`sumo`/`matchPairs`/`quickDraw`/`roulette`/`sudokuRace`
   + `registry`, `services/{scoring,teamAssignment,pairing,sessionAnalysis,handicap,finalRanking}`,
   `ports/Random`), `application/`
   (`session/SessionEngine`+`SessionManager`, `use-cases/`, `ports/`), `infrastructure/`
@@ -71,7 +71,7 @@ Documentation lives in `docs/`:
 - `apps/client` — Angular 20 shell; `features/{join,room}` (RoomComponent drives all phases);
   `core/net/game-socket.service`; `game/` (Phaser, framework-agnostic): `GameClient`,
   `serverMsgRouter`, `RoundState`,
-  `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,BalloonChickenScene,NumberRushScene,QuickMathScene,OddOneOutScene,HigherLowerScene,BugSmashScene,StopClockScene,MemoryFlashScene,SimonScene,PixelHoopsScene,PixelWeightScene,PixelSplitScene,TugOfWarScene,SinkTheFleetScene,BombRelayScene,FruitCatchScene,PixelRainScene,PixelDashScene,SnakeArenaScene,PongScene,SumoScene,MatchPairsScene,QuickDrawScene,RouletteScene}`
+  `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,BalloonChickenScene,NumberRushScene,QuickMathScene,OddOneOutScene,HigherLowerScene,BugSmashScene,StopClockScene,MemoryFlashScene,SimonScene,PixelHoopsScene,PixelWeightScene,PixelSplitScene,TugOfWarScene,SinkTheFleetScene,BombRelayScene,FruitCatchScene,PixelRainScene,PixelDashScene,SnakeArenaScene,PongScene,SumoScene,MatchPairsScene,QuickDrawScene,RouletteScene,SudokuRaceScene}`
   + `netcode/SnapshotInterpolator` (client-side interpolation for real-time scenes).
 
 ### Adding a mini-game

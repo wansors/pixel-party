@@ -106,6 +106,16 @@ describe('SessionEngine', () => {
     expect(final.summary?.mostRoundWins).toEqual({ playerId: 'a', wins: 1 })
   })
 
+  test('round result carries the skill radar built so far, not just the final one', () => {
+    const msgs = playSession(roomWith('a', 'b'))
+    const roundResult = msgs.find((m) => m.type === 'ROUND_RESULT')
+    if (roundResult?.type !== 'ROUND_RESULT') throw new Error('no round result')
+    // Only one round has been played at this point, so this already matches the final radar.
+    expect(roundResult.result.radars?.length).toBe(2)
+    const a = roundResult.result.radars?.find((r) => r.playerId === 'a')
+    expect(a?.axes.speed).toBe(1)
+  })
+
   test('plays a multi-game sequence with no repeats and finishes', () => {
     const room = Room.create('SEQ', 10)
     room.add(Player.create({ id: 'a', name: 'a', color: '#fff', avatar: 'x' }))

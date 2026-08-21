@@ -35,6 +35,8 @@
       "off": "off",
       "ready": "ready",
       "games": "Games",
+      "selectAll": "Select all",
+      "selectNone": "Select none",
       "rounds": "Rounds:",
       "notReady": "Not ready",
       "imReady": "I'm ready",

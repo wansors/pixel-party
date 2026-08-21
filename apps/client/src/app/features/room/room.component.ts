@@ -181,6 +181,7 @@ export class RoomComponent implements OnInit {
       }
       case 'ROUND_RESULT':
         this.roundResult.set({ round: msg.round, result: msg.result })
+        this.radars.set(msg.result.radars ?? [])
         this.view.set('round-result')
         this.audio.sfx.coin()
         break
@@ -292,6 +293,17 @@ export class RoomComponent implements OnInit {
       ? this.selectedGameIds().filter((g) => g !== id)
       : [...this.selectedGameIds(), id]
     this.net.send({ type: 'HOST_CONFIG', minigameIds: next, rounds: this.rounds() || next.length })
+  }
+
+  selectAllGames(): void {
+    if (!this.isHost()) return
+    const ids = this.availableGames.map((g) => g.id)
+    this.net.send({ type: 'HOST_CONFIG', minigameIds: ids, rounds: this.rounds() || ids.length })
+  }
+
+  deselectAllGames(): void {
+    if (!this.isHost()) return
+    this.net.send({ type: 'HOST_CONFIG', minigameIds: [], rounds: 1 })
   }
 
   setRounds(value: string): void {
@@ -410,17 +422,21 @@ export class RoomComponent implements OnInit {
   }
 
   // ── Post-match analysis (Phase 4) ─────────────────────────────────────────
-  // The viewing player's skill radar: axes played this session, in the shared axis order, labelled.
+  // The viewing player's skill radar: ALL skill axes, in the shared axis order, labelled — axes not
+  // played yet show as 0 rather than being dropped. A radar needs every axis as a vertex to read as a
+  // proper shape; omitting unplayed ones shrinks it to too few points (as low as one early in a
+  // session), which renders as a degenerate sliver instead of a filled hexagon.
   myRadar(): RadarAxis[] {
     const mine = this.radars().find((r) => r.playerId === this.selfId())
     if (!mine) return []
-    return SKILL_AXES.flatMap((axis) => {
-      const value = mine.axes[axis]
-      return value === undefined ? [] : [{ label: this.catalog.axisLabel(axis), value }]
-    })
+    return SKILL_AXES.map((axis) => ({
+      label: this.catalog.axisLabel(axis),
+      value: mine.axes[axis] ?? 0,
+    }))
   }
 
   hasProfile(): boolean {
-    return this.myRadar().length > 0
+    const mine = this.radars().find((r) => r.playerId === this.selfId())
+    return !!mine && Object.keys(mine.axes).length > 0
   }
 }

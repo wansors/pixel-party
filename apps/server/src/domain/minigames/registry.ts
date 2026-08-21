@@ -25,6 +25,7 @@ import { Simon } from './simon'
 import { SinkTheFleet } from './sinkTheFleet'
 import { SnakeArena } from './snakeArena'
 import { StopClock } from './stopClock'
+import { SudokuRace } from './sudokuRace'
 import { Sumo } from './sumo'
 import { Trivia } from './trivia'
 import { TugOfWar } from './tugOfWar'
@@ -60,6 +61,7 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'match-pairs': () => new MatchPairs() as unknown as MiniGame<unknown, unknown>,
   'quick-draw': () => new QuickDraw() as unknown as MiniGame<unknown, unknown>,
   'pixel-roulette': () => new Roulette() as unknown as MiniGame<unknown, unknown>,
+  'sudoku-race': () => new SudokuRace() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

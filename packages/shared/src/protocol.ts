@@ -47,6 +47,10 @@ export interface RoundResultDto {
   // Catch-up bonus points added to a player's award this round (Phase 3), keyed by playerId. Only
   // present when handicap is enabled and the bonus is non-zero — the results screen shows it as "+N".
   handicap?: Record<string, number>
+  // Skill radar so far (Phase 4), built from every round played up to and including this one — the same
+  // shape as `FINAL_RANKING.radars`, just recomputed earlier. Lets the round-result screen show the
+  // profile taking shape round by round instead of only once at the end.
+  radars?: PlayerRadarDto[]
 }
 
 export interface TeamRoundResult {

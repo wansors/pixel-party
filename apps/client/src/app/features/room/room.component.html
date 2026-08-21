@@ -91,7 +91,19 @@
           </ul>
 
           <div class="games">
-            <h3>{{ 'room.lobby.games' | transloco }}</h3>
+            <div class="games-header">
+              <h3>{{ 'room.lobby.games' | transloco }}</h3>
+              @if (isHost()) {
+                <div class="bulk">
+                  <button type="button" (click)="selectAllGames()">
+                    {{ 'room.lobby.selectAll' | transloco }}
+                  </button>
+                  <button type="button" (click)="deselectAllGames()">
+                    {{ 'room.lobby.selectNone' | transloco }}
+                  </button>
+                </div>
+              }
+            </div>
             <ul>
               @for (g of availableGames; track g.id) {
                 <li>
@@ -208,6 +220,17 @@
               </li>
             }
           </ol>
+          @if (hasProfile()) {
+            <div class="profile">
+              <h3>{{ 'room.summary.profileTitle' | transloco }}</h3>
+              <app-skill-radar
+                [data]="myRadar()"
+                [color]="playerColor(selfId())"
+                [size]="140"
+                [ariaLabel]="'room.summary.profileTitle' | transloco"
+              />
+            </div>
+          }
           <p class="hint blink">{{ 'room.result.totals' | transloco }}</p>
         </div>
       </section>

@@ -299,6 +299,15 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     blurb: 'Spin for a random number. Highest wins — pure luck.',
     axes: ['nerve'],
   },
+  {
+    id: 'sudoku-race',
+    name: 'Sudoku Race',
+    format: 'ffa',
+    realtime: true,
+    durationSec: 75,
+    blurb: 'Everyone solves the same mini sudoku. Fastest correct grid wins.',
+    axes: ['focus', 'knowledge'],
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

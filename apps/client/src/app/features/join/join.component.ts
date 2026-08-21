@@ -37,6 +37,7 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
             [(ngModel)]="name"
             [placeholder]="'join.yourName' | transloco"
             maxlength="16"
+            (focus)="onNameFocus()"
           />
 
           <div class="picker">
@@ -129,13 +130,40 @@ export class JoinComponent {
 
   readonly avatars = AVATARS
   readonly colors = PLAYER_COLORS
+  private readonly nicknameAdjectives = [
+    'Pixel',
+    'Turbo',
+    'Retro',
+    'Neon',
+    'Rapid',
+    'Mega',
+    'Super',
+    'Cosmic',
+  ]
 
-  name = ''
+  // Prefilled with a fun random name so a player can jump straight to "Crear sala"/"Entrar"; the first
+  // click into the field clears it to make room for typing a real one (see onNameFocus()).
+  name = this.randomName()
+  private nameIsDefault = true
   // Invite links (/?code=XXXX) land here with the room pre-filled; the player still picks identity.
   code = this.route.snapshot.queryParamMap.get('code')?.toUpperCase() ?? ''
   readonly avatar = signal<AvatarId>(AVATARS[0])
   readonly color = signal<string>(PLAYER_COLORS[0])
   readonly message = signal('')
+
+  private randomName(): string {
+    const adjective =
+      this.nicknameAdjectives[Math.floor(Math.random() * this.nicknameAdjectives.length)]
+    const noun = AVATARS[Math.floor(Math.random() * AVATARS.length)] as string
+    const suffix = Math.floor(Math.random() * 90 + 10)
+    return `${adjective}${noun.charAt(0).toUpperCase()}${noun.slice(1)}${suffix}`
+  }
+
+  onNameFocus(): void {
+    if (!this.nameIsDefault) return
+    this.name = ''
+    this.nameIsDefault = false
+  }
 
   async createRoom(): Promise<void> {
     try {

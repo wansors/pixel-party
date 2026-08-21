@@ -160,6 +160,33 @@ header {
     text-transform: uppercase;
     letter-spacing: 0.1em;
   }
+  .games-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    h3 {
+      margin: 0;
+    }
+  }
+  .bulk {
+    display: flex;
+    gap: 0.6rem;
+    button {
+      background: none;
+      border: none;
+      padding: 0;
+      color: var(--c-amber);
+      font-family: var(--font-pixel);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+  }
   ul {
     list-style: none;
     padding: 0;
