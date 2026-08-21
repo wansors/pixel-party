@@ -1,6 +1,6 @@
 # Backlog — Pixel Party
 
-- **Version**: 0.5 (draft)
+- **Version**: 0.6 (draft)
 - **Date**: 2026-07-23
 
 Phased product backlog. The philosophy is **start with a minimal MVP and grow incrementally** — build
@@ -9,56 +9,46 @@ analysis…) phase by phase. Nothing is built "just in case".
 
 ## Current status (2026-07-23)
 
-**MVP is playable end-to-end, now with 28 mini-games + audio + post-match analysis.** The full stack is scaffolded and runnable
-(`bun run dev` → server :3000 + client :4200, LAN-accessible; see [`../README.md`](../README.md)). What
-works today:
+**Phases 0–5 are complete** (Phase 3 handicap partial — see below). The game is playable end-to-end
+(`bun run dev` → server :3000 + client :4200, LAN-accessible; see [`../README.md`](../README.md)) with
+**28 mini-games**. Design decisions from the clear-out pass are logged in
+[`implementation-decisions.md`](implementation-decisions.md) (D1–D13).
 
-- Bun monorepo, hexagonal server, `@pp/shared` contracts, Biome + TS strict + determinism gate +
-  `bun test` (40 passing) + **GitHub Actions CI**. *Foundation complete.*
-- Rooms (create/join over `/api` + WS), lobby with ready state + host role, **host game selector +
-  round count**, server-authoritative **session engine** (intro countdown → play → per-round result →
-  final), position→points scoring with tie-averaging, cumulative scoreboard + final ranking.
-- **16 mini-games** — the 5 P0-tier: Quick reaction (A1, `reaction-duel`), Button masher (A2,
-  `button-masher`), Color Trap (E1, `color-trap`), Lightning Quiz (A3, `trivia`), Balloon Chicken
-  (D1, `balloon-chicken`); the complete **P1 wave** (2026-07-21): Number Rush (E4, `number-rush`),
-  Quick Math (E2, `quick-math`), Odd One Out (E3, `odd-one-out`), Higher or Lower (E5, `higher-lower`),
-  Bug Smash (A6, `bug-smash`), Stop the Clock (A10, `stop-clock`), Memory Flash (E8, `memory-flash`),
-  Simon (A4, `simon`), Pixel Hoops (A5, `pixel-hoops`); plus the two P1 fast-follows (2026-07-22):
-  Pixel Weight (E12, `pixel-weight`), Pixel Split (E11, `pixel-split`). Each is a pluggable domain
-  module + Phaser scene.
-- **Audio** (Phase 7 pulled forward): looping background music + synthesized 8-bit SFX (click,
-  correct/wrong, coin, pop, countdown) across UI and every mini-game; in-app music/SFX volume sliders
-  persisted per device. *WebAudio-synthesized SFX (no asset binaries); music is a self-hosted mp3.*
-- Angular shell (join → lobby → intro countdown → round canvas → scoreboard → final) with socket
-  reconnect backoff **and mid-session rejoin** (REJOIN reclaims a seat, scores survive, state replayed).
-- **Retro arcade look & feel**: shared palette theme (`theme.ts` + CSS vars), arcade window frame +
-  chunky buttons, pixel-art avatars (self-hosted SVG sprites) with a join-screen picker, high-score
-  scoreboard/final ranking, optional CRT overlay.
+### Foundation & platform
+- Bun workspaces monorepo, hexagonal server, `@pp/shared` wire contracts, Biome + TS strict +
+  determinism gate + **GitHub Actions CI**. Test suite: **155 server/shared + 7 client (Karma)**, green.
+- Server-authoritative, deterministic core (seeded `Random` + `Clock` ports; the domain never touches
+  `Math.random`/`Date.now`). Bun-native WS with a hand-written shape validator (no Zod).
+- Angular 20 shell + Phaser 3 (decoupled); **i18n EN/ES** (Transloco) across the UI + every scene;
+  **audio** (music + synthesized 8-bit SFX + volume sliders); **retro arcade** look & feel (palette
+  theme, arcade frame, self-hosted pixel font + avatars, high-score tables, CRT overlay).
 
-**Phases 0–2 are complete.** Phase 0/1: pixel font, responsive tuning, no-repeat game selection, host
-transfer (auto + manual) + kick, room inactivity reaper, observability (JSON logs + `/api/metrics`).
-Phase 2: teams (2 fixed teams + balanced seeded assignment + host move/shuffle + team scoring + Tug of
-War + Bomb Relay) and duels (seeded 1v1 pairing + win/loss aggregation + Sink the Fleet) — **19
-mini-games**.
+### Rooms, session & scoring
+- Rooms (create/join over `/api` + WS), lobby (ready/host, game selector, round count), session engine
+  (intro → play → per-round result → cumulative scoreboard → final).
+- **Robustness**: no-repeat seeded line-ups, mid-session reconnect/rejoin, host transfer
+  (auto-on-disconnect + manual) + kick, idle-room reaper, observability (JSON logs + `/api/metrics`).
+- Scoring: position→points table with tie-averaging; **final-ranking tiebreakers** (most 1st places →
+  best average position, `domain/services/finalRanking`).
 
-**Phase 4 is complete and Phase 3 partially landed** (2026-07-23 backlog clear-out pass; decisions in
-[`implementation-decisions.md`](implementation-decisions.md)):
-- **Phase 4 — post-match analysis**: skill-axis tagging (7 axes on `MiniGameMeta`), a per-player skill
-  radar (inline-SVG `app-skill-radar`, shows the viewing player's profile) + session summary (most
-  wins, biggest comeback, per-round winners), computed in `domain/services/sessionAnalysis` and carried
-  on `FINAL_RANKING`. Additive; scoring untouched.
-- **Phase 3 — handicap**: the bounded **scoring** catch-up lever shipped (`domain/services/handicap`),
-  wired into the engine, **off by default** (env-gated). Mechanical per-game hooks + in-UI
-  transparency/host toggle deferred until tuned.
-- Icebox polish: Pixel Split cut now starts far-left (symmetric figures no longer trivial); Simon plays
-  a distinct tone per pad.
+### Mini-games — 28 (pluggable domain module + Phaser scene each)
+- **23 FFA**: `reaction-duel`, `button-masher`, `color-trap`, `trivia`, `balloon-chicken`,
+  `number-rush`, `quick-math`, `odd-one-out`, `higher-lower`, `bug-smash`, `stop-clock`, `memory-flash`,
+  `simon`, `pixel-hoops`, `pixel-weight`, `pixel-split`, `fruit-catch`, `pixel-rain`, `pixel-dash`,
+  `snake-arena`, `sumo-push`, `match-pairs`, `pixel-roulette`.
+- **2 team**: `tug-of-war`, `bomb-relay`. **3 duel**: `sink-the-fleet`, `pixel-pong`, `quick-draw`.
 
-**Phase 5 also landed** (2026-07-23): netcode hardening (client snapshot interpolation) + all six
-real-time action games — Fruit Catch, Pixel Rain, Pixel Dash, Snake Arena, Pixel Pong, Sumo Push —
-bringing the catalog to **25 mini-games**. Then Match (A11), Quick Draw (E7) and Pixel Roulette (D3) followed, reaching **28 mini-games**.
+### Epics
+- **Phase 0/1** — MVP + individual-game catalog + robustness/observability. **Complete.**
+- **Phase 2** — teams + duels (assignment, pairing, team/duel scoring). **Complete.**
+- **Phase 3** — handicap: bounded scoring catch-up lever with a host lobby toggle + on-results
+  transparency, off by default. **Partial** — mechanical per-game hooks deferred (D8).
+- **Phase 4** — post-match analysis: 7 skill axes → per-player radar + session summary. **Complete.**
+- **Phase 5** — real-time action games: client snapshot interpolation + 6 games. **Complete.**
 
-Next candidates: **Phase 6** (DB/accounts/history), the deferred **handicap mechanical hooks** (Phase 3),
-or growing the mini-game catalog on demand. See D9 for the remaining deferrals.
+Next candidates: **Phase 6** (DB/accounts/history — first phase to introduce a database), the deferred
+**Phase 3 mechanical handicap hooks**, remaining **Phase 7** social (chat/emotes/matchmaking), or
+growing the catalog on demand. See D9 for why those are deferred.
 
 ## How this backlog works
 
@@ -282,7 +272,7 @@ games shipped end-to-end. See `implementation-decisions.md` D10.
       is the reference (seeded falling stream, item y is a pure function of time). `pixel-pong` is a 1v1
       duel (seeded pairing, server-owned ball, interpolated); `sumo-push` is an FFA shove arena (physics,
       survival ranking); `snake-arena` is grid-stepped; `pixel-rain`/`pixel-dash` are seeded
-      dodge/timing FFA. Catalog now **25 mini-games**.*
+      dodge/timing FFA. Brought the catalog to 25 (now **28** with Match, Quick Draw, Roulette).*
 
 *Depends on: Phase 0 (tick loop), Phase 2 (duel pairing for Pong).*
 
