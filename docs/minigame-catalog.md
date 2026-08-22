@@ -66,14 +66,14 @@ Roulette (D3 `pixel-roulette`); then (2026-08-21) E14 Sudoku Race (`sudoku-race`
 
 ### A3. ✅ Lightning quiz ("Trivia") — implemented (`trivia`)
 - **Concept**: multiple-choice questions; rewards correctness and speed.
-- **Type**: FFA · **Input**: tap on option · **Duration**: 45–60 s (5–8 questions) · **Banter**: 💥💥
-- **Rules**: per-question time limit (~8 s). Points for correct answer + speed bonus.
+- **Type**: FFA · **Input**: tap on option · **Duration**: 30 s (4 questions) · **Banter**: 💥💥
+- **Rules**: per-question time limit (7.5 s). Points for correct answer + speed bonus.
 - **Win condition**: highest total score. · **Result**: ranking by points.
 - **Latency**: low. · **Complexity**: medium (question bank + i18n).
 
 ### A4. ✅ Sequence memory ("Simon") — implemented (`simon`)
 - **Concept**: repeat a growing sequence of colors/sounds.
-- **Type**: FFA · **Input**: tap · **Duration**: up to ~60 s · **Banter**: 💥
+- **Type**: FFA · **Input**: tap · **Duration**: up to ~30 s · **Banter**: 💥
 - **Rules**: everyone sees the same growing sequence; a mistake eliminates you; furthest survives.
 - **Win condition**: longest sequence reached (tiebreak by time). · **Result**: ranking by level.
 - **Latency**: low. · **Complexity**: low/medium.
@@ -95,21 +95,21 @@ Roulette (D3 `pixel-roulette`); then (2026-08-21) E14 Sudoku Race (`sudoku-race`
 
 ### A7. ✅ Pixel rain ("Dodge") — implemented (`pixel-rain`)
 - **Concept**: move an avatar to dodge falling objects; survive as long as possible.
-- **Type**: FFA (own board, same seed) · **Input**: drag/keyboard · **Duration**: up to ~45 s · **Banter**: 💥💥
+- **Type**: FFA (own board, same seed) · **Input**: drag/keyboard · **Duration**: up to ~30 s · **Banter**: 💥💥
 - **Rules**: identical obstacle pattern (same seed); eliminated on collision.
 - **Win condition**: longest survival. · **Result**: ranking by time.
 - **Latency**: medium (client sim, server validates final time). · **Complexity**: medium.
 
 ### A8. ✅ Snake Arena — implemented (`snake-arena`)
 - **Concept**: classic snake — grow by eating pixels, don't crash into walls or your own tail.
-- **Type**: FFA (own board, same food seed) · **Input**: swipe/keyboard · **Duration**: up to ~60 s · **Banter**: 💥💥
+- **Type**: FFA (own board, same food seed) · **Input**: swipe/keyboard · **Duration**: up to ~30 s · **Banter**: 💥💥
 - **Rules**: same food layout for everyone; crashing eliminates you.
 - **Win condition**: longest snake / longest survival. · **Result**: ranking by length.
 - **Latency**: medium. · **Complexity**: medium.
 
 ### A9. ✅ Pixel Dash ("Platform race") — implemented (`pixel-dash`)
 - **Concept**: short auto-runner/obstacle sprint; first to the flag wins.
-- **Type**: FFA (own track, identical layout) · **Input**: tap to jump · **Duration**: up to ~40 s · **Banter**: 💥💥💥
+- **Type**: FFA (own track, identical layout) · **Input**: tap to jump · **Duration**: up to ~30 s · **Banter**: 💥💥💥
 - **Rules**: identical track; mistakes cost time, not lives.
 - **Win condition**: fastest finish. · **Result**: ranking by finish time.
 - **Latency**: medium (client sim + server validation). · **Complexity**: medium/high.
@@ -123,7 +123,7 @@ Roulette (D3 `pixel-roulette`); then (2026-08-21) E14 Sudoku Race (`sudoku-race`
 
 ### A11. ✅ Speed puzzle ("Match") — implemented (`match-pairs`)
 - **Concept**: memory/card game — uncover matching pairs fastest / with fewest attempts.
-- **Type**: FFA (own board, same layout) · **Input**: tap · **Duration**: up to ~60 s · **Banter**: 💥
+- **Type**: FFA (own board, same layout) · **Input**: tap · **Duration**: up to ~30 s · **Banter**: 💥
 - **Rules**: identical board; win by matching everything first / fewest misses.
 - **Win condition**: first to complete (tiebreak by attempts). · **Result**: ranking by time/attempts.
 - **Latency**: low. · **Complexity**: medium.
@@ -137,14 +137,14 @@ Roulette (D3 `pixel-roulette`); then (2026-08-21) E14 Sudoku Race (`sudoku-race`
 
 ### B1. ✅ Pixel Pong — implemented (`pixel-pong`)
 - **Concept**: classic pong, 1v1. First to N points.
-- **Type**: Duel (bracket) · **Input**: drag paddle · **Duration**: ~30–45 s per match · **Banter**: 💥💥💥
+- **Type**: Duel (bracket) · **Input**: drag paddle · **Duration**: ~30 s per match · **Banter**: 💥💥💥
 - **Rules**: standard pong; ball speeds up over time.
 - **Win condition**: first to N points. · **Result**: bracket standing → round ranking.
 - **Latency**: high (real-time 1v1; needs interpolation/prediction). · **Complexity**: high.
 
 ### B2. Sink the Fleet ("Battleship")
 - **Concept**: classic battleship — place your fleet, then take turns firing at the opponent's grid.
-- **Type**: Duel (1v1, can pair many simultaneously) · **Input**: tap grid cell · **Duration**: ~60–90 s · **Banter**: 💥💥💥
+- **Type**: Duel (1v1, can pair many simultaneously) · **Input**: tap grid cell · **Duration**: ~30 s · **Banter**: 💥💥💥
 - **Rules**: quick placement phase (auto-place option), then alternating shots with a turn timer.
 - **Win condition**: sink the enemy fleet first. · **Result**: win/loss → round ranking.
 - **Latency**: low (turn-based). · **Complexity**: medium.
@@ -248,11 +248,11 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
   shown; drag a vertical cut so both halves hold the **same number of filled pixels**. Scored against
   the best split the object allows (odd counts can't split perfectly), so the optimal cut always scores
   full points. Same seeded object set for everyone; server owns the per-column counts and scores the
-  cut. FFA · drag · ~40 s (several objects) · low/medium effort · low latency · banter 💥💥.
+  cut. FFA · drag · ~30 s (several objects) · low/medium effort · low latency · banter 💥💥.
 - **E12. ✅ Pixel Weight ("guess the weight")** — implemented (`pixel-weight`): a pixel-art object
   flashes briefly, then hides; guess **how many filled pixels** it had on a slider. Points scale with
   closeness (`max(0, 10 − |error|)`); several objects. Seeded objects; server owns the counts. *Pixel
-  Balance variant not built.* FFA · slider · ~40 s · low effort · low latency · banter 💥💥.
+  Balance variant not built.* FFA · slider · ~30 s · low effort · low latency · banter 💥💥.
 - **E13. Quick Tetris** — a short, fast Tetris sprint (compact variant of **E10**): identical seeded
   piece sequence for all; clear as many lines as possible in a fixed short window (or reach N lines
   fastest). FFA · tap/drag · ~45 s · high effort · low latency · banter 💥💥.
@@ -261,7 +261,7 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
   completes it first; if nobody finishes in time, rank by **most correct cells placed** (server
   validates each cell, so a wrong entry never counts). The solved grid comes from a canonical valid
   sudoku via seeded digit relabeling + row/col/band/stack permutations — always valid, no backtracking
-  solver needed — and the solution never goes on the wire.* FFA · tap (cell cycles a value) · ~75 s ·
+  solver needed — and the solution never goes on the wire.* FFA · tap (cell cycles a value) · ~30 s ·
   medium effort · low latency · banter 💥💥.
 - **E15. Bubble Pop ("Bust-a-Move")** — bubble-shooter puzzle: aim and shoot coloured bubbles upward at a
   hanging cluster; **3+ same-colour bubbles that touch pop**, and any bubbles left unattached drop for a

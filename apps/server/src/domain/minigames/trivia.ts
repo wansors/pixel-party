@@ -2,8 +2,10 @@ import type { TriviaInput, TriviaSnapshot } from '@pp/shared'
 import type { Random } from '../ports/Random'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
-const DEFAULT_QUESTIONS = 6
-const DEFAULT_QUESTION_MS = 8000
+// 4 x 7.5s = 30s total, matching the catalog's 30s cap (SessionEngine only ever forwards `durationMs`,
+// never `questions`/`questionMs`, so these defaults are trivia's real round length in production).
+const DEFAULT_QUESTIONS = 4
+const DEFAULT_QUESTION_MS = 7500
 const BASE_POINTS = 1000
 const SPEED_BONUS = 1000
 
