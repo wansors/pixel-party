@@ -5,15 +5,20 @@ import type { Sfx } from './Sfx'
 import type { Translate } from './i18n'
 import { BalloonChickenScene } from './scenes/BalloonChickenScene'
 import { BombRelayScene } from './scenes/BombRelayScene'
+import { BubblePopScene } from './scenes/BubblePopScene'
 import { BugSmashScene } from './scenes/BugSmashScene'
 import { ButtonMasherScene } from './scenes/ButtonMasherScene'
 import { ColorTrapScene } from './scenes/ColorTrapScene'
+import { FleetBattleScene } from './scenes/FleetBattleScene'
 import { FruitCatchScene } from './scenes/FruitCatchScene'
 import { HigherLowerScene } from './scenes/HigherLowerScene'
+import { LineClearSprintScene } from './scenes/LineClearSprintScene'
 import { MatchPairsScene } from './scenes/MatchPairsScene'
+import { MazeSprintScene } from './scenes/MazeSprintScene'
 import { MemoryFlashScene } from './scenes/MemoryFlashScene'
 import { NumberRushScene } from './scenes/NumberRushScene'
 import { OddOneOutScene } from './scenes/OddOneOutScene'
+import { PixelBeatScene } from './scenes/PixelBeatScene'
 import { PixelDashScene } from './scenes/PixelDashScene'
 import { PixelHoopsScene } from './scenes/PixelHoopsScene'
 import { PixelRainScene } from './scenes/PixelRainScene'
@@ -22,6 +27,7 @@ import { PixelWeightScene } from './scenes/PixelWeightScene'
 import { PongScene } from './scenes/PongScene'
 import { QuickDrawScene } from './scenes/QuickDrawScene'
 import { QuickMathScene } from './scenes/QuickMathScene'
+import { QuickTetrisScene } from './scenes/QuickTetrisScene'
 import { ReactionScene } from './scenes/ReactionScene'
 import { RouletteScene } from './scenes/RouletteScene'
 import { SimonScene } from './scenes/SimonScene'
@@ -34,13 +40,23 @@ import { TriviaScene } from './scenes/TriviaScene'
 import { TugOfWarScene } from './scenes/TugOfWarScene'
 import { ServerMsgRouter } from './serverMsgRouter'
 
-// Scene keys MUST equal the mini-game ids so a round can start its scene by id.
+// Scene keys MUST equal the mini-game ids so a round can start its scene by id. Every id registered in
+// boot() below must appear here too, or switching away from that scene never stops it (see startRound).
 const SCENE_IDS: MiniGameId[] = [
   'button-masher',
   'reaction-duel',
   'color-trap',
   'trivia',
   'balloon-chicken',
+  'fruit-catch',
+  'pixel-rain',
+  'pixel-dash',
+  'snake-arena',
+  'pixel-pong',
+  'sumo-push',
+  'match-pairs',
+  'quick-draw',
+  'pixel-roulette',
   'number-rush',
   'quick-math',
   'odd-one-out',
@@ -56,6 +72,12 @@ const SCENE_IDS: MiniGameId[] = [
   'sink-the-fleet',
   'bomb-relay',
   'sudoku-race',
+  'pixel-beat',
+  'fleet-battle',
+  'maze-sprint',
+  'line-clear-sprint',
+  'quick-tetris',
+  'bubble-pop',
 ]
 
 // Pure Phaser config factory — testable without `new Phaser.Game` (which needs a DOM/canvas). Scenes
@@ -135,6 +157,12 @@ export class GameClient {
     this.game.scene.add('sink-the-fleet', new SinkTheFleetScene(...deps), false)
     this.game.scene.add('bomb-relay', new BombRelayScene(...deps), false)
     this.game.scene.add('sudoku-race', new SudokuRaceScene(...deps), false)
+    this.game.scene.add('pixel-beat', new PixelBeatScene(...deps), false)
+    this.game.scene.add('fleet-battle', new FleetBattleScene(...deps), false)
+    this.game.scene.add('maze-sprint', new MazeSprintScene(...deps), false)
+    this.game.scene.add('line-clear-sprint', new LineClearSprintScene(...deps), false)
+    this.game.scene.add('quick-tetris', new QuickTetrisScene(...deps), false)
+    this.game.scene.add('bubble-pop', new BubblePopScene(...deps), false)
   }
 
   // Switch the active scene to the round's mini-game (no-op if already active).

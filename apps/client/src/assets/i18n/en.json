@@ -185,6 +185,30 @@
       "bomb-relay": {
         "name": "Bomb Relay",
         "blurb": "Pass the bomb down your team — mash your leg and hand it off before the fuse blows."
+      },
+      "pixel-beat": {
+        "name": "Pixel Beat",
+        "blurb": "Tap along to the beat before it fades. Timing is everything."
+      },
+      "fleet-battle": {
+        "name": "Fleet Battle",
+        "blurb": "Team Battleship — coordinate shots with your squad to sink the enemy fleet first."
+      },
+      "maze-sprint": {
+        "name": "Maze Sprint",
+        "blurb": "Race through the same maze as everyone else. Fastest exit wins."
+      },
+      "line-clear-sprint": {
+        "name": "Line Clear Sprint",
+        "blurb": "Stack pixels, clear lines, beat the clock. Most lines wins."
+      },
+      "quick-tetris": {
+        "name": "Quick Tetris",
+        "blurb": "A short, frantic Tetris sprint — first to clear the target lines wins."
+      },
+      "bubble-pop": {
+        "name": "Bubble Pop",
+        "blurb": "Shoot color-matched bubbles to pop clusters of three or more. Clear the board fastest."
       }
     }
   },
@@ -293,6 +317,37 @@
       "booms": "booms",
       "hint": "You can only mash while YOU hold the bomb",
       "spectator": "No team — watching this round"
+    },
+    "pixelBeat": {
+      "tapHint": "Tap or press SPACE on the beat",
+      "streak": "{{n}} streak"
+    },
+    "fleetBattle": {
+      "hint": "Tap a cell in enemy waters to fire on your team's turn",
+      "spectator": "No team — watching this round",
+      "yourTurn": "{{team}}'S TURN — fire!",
+      "waitTurn": "Waiting on {{team}}...",
+      "won": "FLEET SUNK — YOUR TEAM WINS!",
+      "lost": "Your team's fleet is gone...",
+      "draw": "Time up — draw"
+    },
+    "mazeSprint": {
+      "steps": "{{n}} steps"
+    },
+    "bubblePop": {
+      "score": "{{n}} pts"
+    },
+    "lineClearSprint": {
+      "lines": "{{n}} lines",
+      "progress": "{{n}} lines",
+      "win": "CLEARED!",
+      "toppedOut": "TOPPED OUT"
+    },
+    "quickTetris": {
+      "lines": "{{n}} lines",
+      "progress": "{{n}} / {{target}} lines",
+      "win": "TARGET CLEARED!",
+      "toppedOut": "TOPPED OUT"
     }
   }
 }

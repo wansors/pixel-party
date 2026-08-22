@@ -2,15 +2,20 @@ import type { MiniGameId } from '@pp/shared'
 import type { MiniGame } from './MiniGame'
 import { BalloonChicken } from './balloonChicken'
 import { BombRelay } from './bombRelay'
+import { BubblePop } from './bubblePop'
 import { BugSmash } from './bugSmash'
 import { ButtonMasher } from './buttonMasher'
 import { ColorTrap } from './colorTrap'
+import { FleetBattle } from './fleetBattle'
 import { FruitCatch } from './fruitCatch'
 import { HigherLower } from './higherLower'
+import { LineClearSprint } from './lineClearSprint'
 import { MatchPairs } from './matchPairs'
+import { MazeSprint } from './mazeSprint'
 import { MemoryFlash } from './memoryFlash'
 import { NumberRush } from './numberRush'
 import { OddOneOut } from './oddOneOut'
+import { PixelBeat } from './pixelBeat'
 import { PixelDash } from './pixelDash'
 import { PixelHoops } from './pixelHoops'
 import { PixelRain } from './pixelRain'
@@ -19,6 +24,7 @@ import { PixelWeight } from './pixelWeight'
 import { Pong } from './pong'
 import { QuickDraw } from './quickDraw'
 import { QuickMath } from './quickMath'
+import { QuickTetris } from './quickTetris'
 import { ReactionDuel } from './reactionDuel'
 import { Roulette } from './roulette'
 import { Simon } from './simon'
@@ -62,6 +68,12 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'quick-draw': () => new QuickDraw() as unknown as MiniGame<unknown, unknown>,
   'pixel-roulette': () => new Roulette() as unknown as MiniGame<unknown, unknown>,
   'sudoku-race': () => new SudokuRace() as unknown as MiniGame<unknown, unknown>,
+  'pixel-beat': () => new PixelBeat() as unknown as MiniGame<unknown, unknown>,
+  'fleet-battle': () => new FleetBattle() as unknown as MiniGame<unknown, unknown>,
+  'maze-sprint': () => new MazeSprint() as unknown as MiniGame<unknown, unknown>,
+  'line-clear-sprint': () => new LineClearSprint() as unknown as MiniGame<unknown, unknown>,
+  'quick-tetris': () => new QuickTetris() as unknown as MiniGame<unknown, unknown>,
+  'bubble-pop': () => new BubblePop() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

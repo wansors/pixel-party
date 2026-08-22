@@ -17,13 +17,15 @@ D15–D17). Don't propose features that assume an internet-facing, multi-tenant,
 scaffolded and the game is playable end-to-end. Run it with `bun run dev` (see `README.md`). Live now:
 rooms + lobby (ready/host), host game selector + round count, server-authoritative session engine (intro
 countdown → play → per-round result → cumulative scoreboard → final), scoring/scoreboard/final ranking,
-**Phases 0–5 complete** (2026-08-21). **29 mini-games** — 24 FFA
+**Phases 0–5 complete** (2026-08-21). **35 mini-games** — 29 FFA
 (`button-masher`, `reaction-duel`, `color-trap`, `trivia`, `balloon-chicken`, `number-rush`,
 `quick-math`, `odd-one-out`, `higher-lower`, `bug-smash`, `stop-clock`, `memory-flash`, `simon`,
 `pixel-hoops`, `pixel-weight`, `pixel-split`, `fruit-catch`, `pixel-rain`, `pixel-dash`, `snake-arena`,
-`sumo-push`, `match-pairs`, `pixel-roulette`, `sudoku-race`) + 2 team (`tug-of-war`, `bomb-relay`) + 3 duel
-(`sink-the-fleet`, `pixel-pong`, `quick-draw`) — with **no-repeat
-seeded line-ups**, **mid-session reconnect/rejoin** + **host transfer (auto-on-disconnect + manual) /
+`sumo-push`, `match-pairs`, `pixel-roulette`, `sudoku-race`, `pixel-beat`, `maze-sprint`,
+`line-clear-sprint`, `quick-tetris`, `bubble-pop`) + 3 team (`tug-of-war`, `bomb-relay`, `fleet-battle`)
++ 3 duel (`sink-the-fleet`, `pixel-pong`, `quick-draw`) — with **no-repeat
+seeded line-ups** (also avoids repeating a game's primary skill axis back-to-back when possible),
+**mid-session reconnect/rejoin** + **host transfer (auto-on-disconnect + manual) /
 kick / idle-room reaper**, **observability** (structured JSON logs + `GET /api/metrics`),
 **teams** (2 fixed teams, balanced seeded assignment + host move/shuffle, team scoring distribution),
 **duels** (seeded simultaneous 1v1 pairing + win/loss aggregation),
@@ -41,9 +43,11 @@ dropped, not built — scoring lever is the whole feature, see D14),
 **Phase 5 is the last numbered phase.** The project is **permanently stateless and anonymous by
 design** — no database, no accounts, no "Phase 6" (dropped, not deferred; see D15) — and there's no
 further social/polish phase either: no "Phase 7" (chat/emotes/avatar customization/public matchmaking,
-dropped; see D16 — audio and i18n already shipped in Phase 0). Next candidate: growing the mini-game
-catalog on demand. Design decisions from the clear-out pass live in `docs/implementation-decisions.md`.
-See `docs/backlog.md` → *Current status* for the authoritative checklist.
+dropped; see D16 — audio and i18n already shipped in Phase 0). All ~35 candidates from
+`minigame-ideas.md` are now built — growing the catalog further means adding brand-new ideas, not
+picking up existing backlog rows. Design decisions from the clear-out pass live in
+`docs/implementation-decisions.md`. See `docs/backlog.md` → *Current status* for the authoritative
+checklist.
 
 Documentation lives in `docs/`:
 - `PRD.md` — product requirements.
@@ -58,7 +62,8 @@ Documentation lives in `docs/`:
 ## Code layout (implemented)
 
 - `apps/server` — hexagonal: `domain/` (entities `Room`/`Player`, `minigames/` pluggable contract +
-  `buttonMasher`/`reactionDuel`/`colorTrap`/`trivia`/`balloonChicken`/`numberRush`/`quickMath`/`oddOneOut`/`higherLower`/`bugSmash`/`stopClock`/`memoryFlash`/`simon`/`pixelHoops`/`pixelWeight`/`pixelSplit`/`tugOfWar`/`sinkTheFleet`/`bombRelay`/`fruitCatch`/`pixelRain`/`pixelDash`/`snakeArena`/`pong`/`sumo`/`matchPairs`/`quickDraw`/`roulette`/`sudokuRace`
+  `buttonMasher`/`reactionDuel`/`colorTrap`/`trivia`/`balloonChicken`/`numberRush`/`quickMath`/`oddOneOut`/`higherLower`/`bugSmash`/`stopClock`/`memoryFlash`/`simon`/`pixelHoops`/`pixelWeight`/`pixelSplit`/`tugOfWar`/`sinkTheFleet`/`bombRelay`/`fruitCatch`/`pixelRain`/`pixelDash`/`snakeArena`/`pong`/`sumo`/`matchPairs`/`quickDraw`/`roulette`/`sudokuRace`/`pixelBeat`/`fleetBattle`/`mazeSprint`/`lineClearSprint`/`quickTetris`/`bubblePop`
+  (`tetrisCore` holds the shared engine behind `lineClearSprint`/`quickTetris`)
   + `registry`, `services/{scoring,teamAssignment,pairing,sessionAnalysis,handicap,finalRanking}`,
   `ports/Random`), `application/`
   (`session/SessionEngine`+`SessionManager`, `use-cases/`, `ports/`), `infrastructure/`
@@ -67,11 +72,12 @@ Documentation lives in `docs/`:
   `index.ts`.
 - `packages/shared` — `protocol.ts` (wire unions + `PROTOCOL_VERSION`), `catalog/minigames`, `theme.ts`
   (palette + `TEAMS`), `games/` (per-game wire snapshot/input types; `pixelObjects` holds the shared
-  pixel-art set for weight/split).
+  pixel-art set for weight/split; `tetrisSprint` is shared by `line-clear-sprint`/`quick-tetris`).
 - `apps/client` — Angular 20 shell; `features/{join,room}` (RoomComponent drives all phases);
   `core/net/game-socket.service`; `game/` (Phaser, framework-agnostic): `GameClient`,
   `serverMsgRouter`, `RoundState`,
-  `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,BalloonChickenScene,NumberRushScene,QuickMathScene,OddOneOutScene,HigherLowerScene,BugSmashScene,StopClockScene,MemoryFlashScene,SimonScene,PixelHoopsScene,PixelWeightScene,PixelSplitScene,TugOfWarScene,SinkTheFleetScene,BombRelayScene,FruitCatchScene,PixelRainScene,PixelDashScene,SnakeArenaScene,PongScene,SumoScene,MatchPairsScene,QuickDrawScene,RouletteScene,SudokuRaceScene}`
+  `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,BalloonChickenScene,NumberRushScene,QuickMathScene,OddOneOutScene,HigherLowerScene,BugSmashScene,StopClockScene,MemoryFlashScene,SimonScene,PixelHoopsScene,PixelWeightScene,PixelSplitScene,TugOfWarScene,SinkTheFleetScene,BombRelayScene,FruitCatchScene,PixelRainScene,PixelDashScene,SnakeArenaScene,PongScene,SumoScene,MatchPairsScene,QuickDrawScene,RouletteScene,SudokuRaceScene,PixelBeatScene,FleetBattleScene,MazeSprintScene,LineClearSprintScene,QuickTetrisScene,BubblePopScene}`
+  (`TetrisSprintSceneBase` is the shared base behind the two Tetris-style scenes)
   + `netcode/SnapshotInterpolator` (client-side interpolation for real-time scenes).
 
 ### Adding a mini-game

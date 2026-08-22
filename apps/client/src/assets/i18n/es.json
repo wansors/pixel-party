@@ -185,6 +185,30 @@
       "bomb-relay": {
         "name": "Relevo Bomba",
         "blurb": "Pasa la bomba por tu equipo: machaca tu tramo y pásala antes de que estalle la mecha."
+      },
+      "pixel-beat": {
+        "name": "Pixel Beat",
+        "blurb": "Toca al ritmo antes de que se apague. Todo es cuestión de precisión."
+      },
+      "fleet-battle": {
+        "name": "Batalla de Flotas",
+        "blurb": "Hundir la flota en equipo — coordina los disparos con tu escuadra para hundir al rival primero."
+      },
+      "maze-sprint": {
+        "name": "Sprint del Laberinto",
+        "blurb": "Corre por el mismo laberinto que todos. El primero en salir gana."
+      },
+      "line-clear-sprint": {
+        "name": "Sprint de Líneas",
+        "blurb": "Apila piezas, borra líneas, contra el reloj. Gana quien más líneas complete."
+      },
+      "quick-tetris": {
+        "name": "Tetris Rápido",
+        "blurb": "Un sprint de Tetris corto y frenético — el primero en completar el objetivo gana."
+      },
+      "bubble-pop": {
+        "name": "Explota Burbujas",
+        "blurb": "Dispara burbujas del mismo color para explotar grupos de tres o más. Vacía el tablero el primero."
       }
     }
   },
@@ -293,6 +317,37 @@
       "booms": "explosiones",
       "hint": "Solo puedes machacar mientras TÚ tienes la bomba",
       "spectator": "Sin equipo — miras esta ronda"
+    },
+    "pixelBeat": {
+      "tapHint": "Toca o pulsa ESPACIO al ritmo",
+      "streak": "{{n}} de racha"
+    },
+    "fleetBattle": {
+      "hint": "Toca una casilla en aguas enemigas para disparar en el turno de tu equipo",
+      "spectator": "Sin equipo — miras esta ronda",
+      "yourTurn": "TURNO DE {{team}} — ¡fuego!",
+      "waitTurn": "Esperando a {{team}}...",
+      "won": "FLOTA HUNDIDA — ¡TU EQUIPO GANA!",
+      "lost": "La flota de tu equipo ha caído...",
+      "draw": "Se acabó el tiempo — empate"
+    },
+    "mazeSprint": {
+      "steps": "{{n}} pasos"
+    },
+    "bubblePop": {
+      "score": "{{n}} pts"
+    },
+    "lineClearSprint": {
+      "lines": "{{n}} líneas",
+      "progress": "{{n}} líneas",
+      "win": "¡COMPLETADO!",
+      "toppedOut": "TABLERO LLENO"
+    },
+    "quickTetris": {
+      "lines": "{{n}} líneas",
+      "progress": "{{n}} / {{target}} líneas",
+      "win": "¡OBJETIVO CUMPLIDO!",
+      "toppedOut": "TABLERO LLENO"
     }
   }
 }

@@ -42,7 +42,10 @@ Pixel Weight (`pixel-weight`) and E11 Pixel Split (`pixel-split`). Then the Phas
 Fruit Catch (`fruit-catch`), A7 Pixel Rain (`pixel-rain`), A9 Pixel Dash (`pixel-dash`), A8 Snake Arena
 (`snake-arena`), B1 Pixel Pong (`pixel-pong`), B3 Sumo Push (`sumo-push`) — behind a client snapshot
 interpolator (netcode hardening); plus Match (A11 `match-pairs`), Quick Draw (E7 `quick-draw`) and Pixel
-Roulette (D3 `pixel-roulette`); then (2026-08-21) E14 Sudoku Race (`sudoku-race`). **29 mini-games total.**
+Roulette (D3 `pixel-roulette`); then (2026-08-21) E14 Sudoku Race (`sudoku-race`); then (2026-08-22) the
+rest of the `minigame-ideas.md` backlog: E6 Pixel Beat (`pixel-beat`), C3 Fleet Battle (`fleet-battle`),
+E9 Maze Sprint (`maze-sprint`), E10 Line Clear Sprint (`line-clear-sprint`), E13 Quick Tetris
+(`quick-tetris`) and E15 Bubble Pop (`bubble-pop`). **35 mini-games total — the full backlog is built.**
 
 ---
 
@@ -179,11 +182,15 @@ Roulette (D3 `pixel-roulette`); then (2026-08-21) E14 Sudoku Race (`sudoku-race`
 - **Win condition**: team with fewest explosions. · **Result**: team ranking.
 - **Latency**: medium. · **Complexity**: medium.
 
-### C3. Fleet Battle (team variant of Sink the Fleet)
-- **Concept**: two teams share a grid; members coordinate shots against the enemy fleet.
+### C3. ✅ Fleet Battle (team variant of Sink the Fleet) — implemented (`fleet-battle`)
+- **Concept**: two teams (red/blue) each defend one SHARED fleet; members coordinate shots against the
+  enemy team's fleet. *Implemented: turn alternates by team rather than a per-turn shot budget — during
+  a team's turn, the first valid `fire` from any of its members consumes that turn slot (and passes it
+  to the other team), so any teammate can jump in; a stalling team forfeits its turn on a timeout.*
 - **Type**: Team · **Input**: tap grid · **Duration**: ~90 s · **Banter**: 💥💥
-- **Rules**: shared shot budget per turn; teamwork to triangulate.
-- **Win condition**: sink the enemy fleet first. · **Result**: team ranking.
+- **Rules**: same seeded auto-placed fleet + hit/miss mechanic as Sink the Fleet, scoped to team fleets.
+- **Win condition**: sink the enemy fleet first (a draw at the timer is decided by damage dealt).
+  · **Result**: team ranking.
 - **Latency**: low (turn-based). · **Complexity**: medium.
 
 ---
@@ -233,17 +240,25 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
 - **E5. ✅ Higher or Lower** — guess if the next pixel card is higher/lower; streak = points, one wrong
   ends it. *Implemented (`higher-lower`): one shared seeded deck; server owns upcoming cards (never
   revealed early); ranked by streak.* FFA · tap · 20 s · low effort · low latency · banter 💥💥💥 (nerve).
-- **E6. Pixel Beat** — tap to the rhythm; hit the beats on time.
-  FFA · tap · ~40 s · medium effort · low/medium latency · banter 💥💥.
+- **E6. ✅ Pixel Beat** — tap to the rhythm; hit the beats on time. *Implemented (`pixel-beat`): one
+  seeded beat timeline (metronome + slight jitter) shared by everyone; a tap within a tight window of a
+  not-yet-scored beat scores big, a looser window scores small, a miss breaks the streak.* FFA · tap ·
+  ~40 s · medium effort · low/medium latency · banter 💥💥.
 - **E7. ✅ Quick Draw Duel** — implemented (`quick-draw`); — western reaction shootout: draw first when "FIRE!" flashes, 1v1.
   Duel · tap · ~15 s/match · low effort · medium latency · banter 💥💥💥.
 - **E8. ✅ Memory Flash** — a burst of pixels flashes; answer how many of a target appeared. *Implemented
   (`memory-flash`): seeded board sequence, self-paced; client flashes then asks; server owns the counts.*
   FFA · tap · 25 s · low effort · low latency · banter 💥💥.
-- **E9. Maze Sprint** — navigate a small maze to the exit fastest (identical maze for all).
-  FFA · drag/keyboard · up to 45 s · medium effort · medium latency · banter 💥💥.
-- **E10. Line Clear Sprint** — Tetris-like: clear N lines fastest.
-  FFA · tap/drag · up to 60 s · high effort · low latency · banter 💥.
+- **E9. ✅ Maze Sprint** — navigate a small maze to the exit fastest (identical maze for all).
+  *Implemented (`maze-sprint`): one seeded 9×9 perfect maze (iterative randomized-DFS carve, always
+  fully connected) shared by everyone; each player moves their own position through it independently.
+  Ranked by finish time, then by BFS distance-remaining-to-exit for non-finishers.* FFA · arrow
+  keys/WASD + on-screen buttons · up to 45 s · medium effort · low latency · banter 💥💥.
+- **E10. ✅ Line Clear Sprint** — Tetris-like: clear N lines fastest. *Implemented
+  (`line-clear-sprint`): a simplified no-rotation Tetris engine (shared with Quick Tetris, see E13) on a
+  6×12 board; maximize lines cleared in a fixed 60 s window, ranked by lines cleared (a survivor
+  outranks a topped-out player at an equal score).* FFA · move/drop (keyboard + on-screen buttons) ·
+  60 s · high effort · low latency · banter 💥.
 - **E11. ✅ Pixel Split ("cut in half")** — implemented (`pixel-split`): a seeded pixel-art object is
   shown; drag a vertical cut so both halves hold the **same number of filled pixels**. Scored against
   the best split the object allows (odd counts can't split perfectly), so the optimal cut always scores
@@ -253,9 +268,12 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
   flashes briefly, then hides; guess **how many filled pixels** it had on a slider. Points scale with
   closeness (`max(0, 10 − |error|)`); several objects. Seeded objects; server owns the counts. *Pixel
   Balance variant not built.* FFA · slider · ~30 s · low effort · low latency · banter 💥💥.
-- **E13. Quick Tetris** — a short, fast Tetris sprint (compact variant of **E10**): identical seeded
+- **E13. ✅ Quick Tetris** — a short, fast Tetris sprint (compact variant of **E10**): identical seeded
   piece sequence for all; clear as many lines as possible in a fixed short window (or reach N lines
-  fastest). FFA · tap/drag · ~45 s · high effort · low latency · banter 💥💥.
+  fastest). *Implemented (`quick-tetris`): the same shared no-rotation Tetris engine as Line Clear
+  Sprint, tuned to a 45 s window with a race to `TARGET_LINES = 8` — finishers ranked by time, others by
+  lines cleared.* FFA · move/drop (keyboard + on-screen buttons) · ~45 s · high effort · low latency ·
+  banter 💥💥.
 - **E14. ✅ Sudoku Race** — everyone solves the **same seeded** Sudoku. *Implemented (`sudoku-race`): a
   4×4 grid (2×2 boxes), 8 of 16 cells blank; tap a blank to cycle 0→1→2→3→4→0. Winner is whoever
   completes it first; if nobody finishes in time, rank by **most correct cells placed** (server
@@ -263,12 +281,14 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
   sudoku via seeded digit relabeling + row/col/band/stack permutations — always valid, no backtracking
   solver needed — and the solution never goes on the wire.* FFA · tap (cell cycles a value) · ~30 s ·
   medium effort · low latency · banter 💥💥.
-- **E15. Bubble Pop ("Bust-a-Move")** — bubble-shooter puzzle: aim and shoot coloured bubbles upward at a
+- **E15. ✅ Bubble Pop ("Bust-a-Move")** — bubble-shooter puzzle: aim and shoot coloured bubbles upward at a
   hanging cluster; **3+ same-colour bubbles that touch pop**, and any bubbles left unattached drop for a
   bonus. Same **seeded** starting layout + shot-colour queue for everyone, so it's a fair race on an
   identical board; server owns the grid and validates each shot (client can't fake a clear). Ranked by
-  bubbles cleared (finishers by fastest board-clear). FFA · drag-aim + tap to shoot · ~60 s · medium/high
-  effort · low latency · banter 💥💥.
+  bubbles cleared (finishers by fastest board-clear). *Implemented (`bubble-pop`): a simplified
+  rectangular grid (8×7) with "choose a column" aim stands in for a true hex-grid shooter — the pop
+  (4-directional flood fill, 3+ same colour) and floating-bubble-drop rules are the real thing.* FFA ·
+  tap a column to shoot · ~60 s · medium/high effort · low latency · banter 💥💥.
 
 ### E1 (full card). ⭐ ✅ Color Trap ("Stroop") — implemented (`color-trap`)
 - **Concept**: a color word (e.g., "RED") is shown in a mismatched ink color (e.g., blue). Tap the
@@ -292,7 +312,7 @@ and transparent — an applied bonus shows on the round-result screen.
 
 Per-mini-game **mechanical** hooks (leader nerf, trailer boost, team weighting baked into a specific
 game's rules) were considered and **dropped, not built** — see `implementation-decisions.md` D14. The
-scoring lever alone meets the catch-up goal without a bespoke rule change in all 28 games. Where a game
+scoring lever alone meets the catch-up goal without a bespoke rule change in any of the 35 games. Where a game
 is naturally fair to uneven groups by construction (e.g. Tug of War's per-member average, see C1), that
 stays as ordinary game design, not a handicap hook.
 
