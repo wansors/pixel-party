@@ -18,35 +18,35 @@ const O_SHAPE_INDEX = SHAPES.findIndex(
 
 describe('tetrisCore', () => {
   test('collides detects a left-wall collision but not an in-bounds move', () => {
-    const piece: FallingPiece = { shapeIndex: O_SHAPE_INDEX, x: 0, y: 0 }
+    const piece: FallingPiece = { shapeIndex: O_SHAPE_INDEX, x: 0, y: 0, rotation: 0 }
     const board = new Array(COLS * ROWS).fill(0)
     expect(collides(board, COLS, ROWS, piece, -1, 0)).toBe(true)
     expect(collides(board, COLS, ROWS, piece, 0, 0)).toBe(false)
   })
 
   test('collides detects a right-wall collision', () => {
-    const piece: FallingPiece = { shapeIndex: O_SHAPE_INDEX, x: COLS - 2, y: 0 }
+    const piece: FallingPiece = { shapeIndex: O_SHAPE_INDEX, x: COLS - 2, y: 0, rotation: 0 }
     const board = new Array(COLS * ROWS).fill(0)
     expect(collides(board, COLS, ROWS, piece, 1, 0)).toBe(true)
     expect(collides(board, COLS, ROWS, piece, 0, 0)).toBe(false)
   })
 
   test('collides detects a floor collision', () => {
-    const piece: FallingPiece = { shapeIndex: O_SHAPE_INDEX, x: 0, y: ROWS - 2 }
+    const piece: FallingPiece = { shapeIndex: O_SHAPE_INDEX, x: 0, y: ROWS - 2, rotation: 0 }
     const board = new Array(COLS * ROWS).fill(0)
     expect(collides(board, COLS, ROWS, piece, 0, 1)).toBe(true)
     expect(collides(board, COLS, ROWS, piece, 0, 0)).toBe(false)
   })
 
   test('collides detects occupied board cells', () => {
-    const piece: FallingPiece = { shapeIndex: O_SHAPE_INDEX, x: 0, y: 0 }
+    const piece: FallingPiece = { shapeIndex: O_SHAPE_INDEX, x: 0, y: 0, rotation: 0 }
     const board = new Array(COLS * ROWS).fill(0)
     board[1 * COLS + 0] = 3 // directly below the piece's bottom-left cell
     expect(collides(board, COLS, ROWS, piece, 0, 1)).toBe(true)
   })
 
   test('lockPiece bakes the piece cells into the board with its color', () => {
-    const piece: FallingPiece = { shapeIndex: O_SHAPE_INDEX, x: 2, y: 3 }
+    const piece: FallingPiece = { shapeIndex: O_SHAPE_INDEX, x: 2, y: 3, rotation: 0 }
     const board = new Array(COLS * ROWS).fill(0)
     const shape = SHAPES[O_SHAPE_INDEX]
     if (!shape) throw new Error('missing shape')

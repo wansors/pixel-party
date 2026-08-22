@@ -143,7 +143,7 @@ export class BalloonChickenScene extends Phaser.Scene {
               : p.status === 'cashed'
                 ? ' $'
                 : ''
-          return `${i + 1}. ${id === selfId ? you : id.slice(0, 6)} — ${v}${tag}`
+          return `${i + 1}. ${id === selfId ? you : this.state.nameOf(id)} — ${v}${tag}`
         })
         .join('\n'),
     )

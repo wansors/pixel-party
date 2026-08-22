@@ -139,9 +139,12 @@ export class FruitCatch implements MiniGame<FruitCatchState, FruitCatchInput> {
   }
 
   snapshot(state: FruitCatchState, now: number): FruitCatchSnapshot {
+    // Stop rendering an item once it reaches the catch line — it's already resolved (caught or missed)
+    // by then, so letting it keep visibly falling past the basket to the bottom of the screen just reads
+    // as fruit that was never collected.
     const items = state.items.flatMap((item) => {
       const y = this.yOf(state, item, now)
-      return y >= 0 && y <= 1 ? [{ id: item.id, x: item.x, y, kind: item.kind }] : []
+      return y >= 0 && y < CATCH_Y ? [{ id: item.id, x: item.x, y, kind: item.kind }] : []
     })
     return {
       items,

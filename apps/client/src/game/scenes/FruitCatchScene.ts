@@ -128,9 +128,11 @@ export class FruitCatchScene extends Phaser.Scene {
     const radius = minDim * 0.035
     let sprite = this.sprites.get(item.id)
     if (!sprite) {
-      const color = item.kind === 'bomb' ? 0x11181f : 0xe63946
+      // The bomb used to be near-black on a near-black background, told apart only by a thin ring —
+      // easy to miss. A visibly lighter body plus a bolder stroke reads as a bomb at a glance.
+      const color = item.kind === 'bomb' ? 0x3a3f66 : 0xe63946
       sprite = this.add.circle(x, y, radius, color)
-      if (item.kind === 'bomb') sprite.setStrokeStyle(3, 0xf4c20d)
+      if (item.kind === 'bomb') sprite.setStrokeStyle(4, 0xf4c20d)
       this.sprites.set(item.id, sprite)
     }
     sprite.setPosition(x, y)

@@ -10,6 +10,7 @@ import {
   renderBoard,
   stepFall,
   tryMove,
+  tryRotate,
 } from './tetrisCore'
 
 const DEFAULT_DURATION_MS = 45_000
@@ -67,6 +68,7 @@ export class QuickTetris implements MiniGame<QuickTetrisState, TetrisSprintInput
     if ((state.doneAt.get(playerId) ?? 0) > 0) return state
     if (input.kind === 'move') tryMove(p, input.dir === 'left' ? -1 : 1)
     else if (input.kind === 'drop') hardDrop(p, state.queue)
+    else if (input.kind === 'rotate') tryRotate(p)
     this.markDoneIfReached(state, playerId, now)
     return state
   }

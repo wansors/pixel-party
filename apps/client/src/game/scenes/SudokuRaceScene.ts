@@ -84,7 +84,7 @@ export class SudokuRaceScene extends Phaser.Scene {
     if (!snap) return
     const selfId = this.state.selfId ?? ''
     const board = snap.boards[selfId]
-    if (!board || board.done) return
+    if (!board || board.done || board.lockedMask[index]) return
     const value = ((board.grid[index] ?? 0) + 1) % (size + 1)
     this.sfx.click()
     this.send({ type: 'MINIGAME_INPUT', input: { kind: 'fill', index, value } })
@@ -111,10 +111,13 @@ export class SudokuRaceScene extends Phaser.Scene {
       const cellEl = this.cells[i]
       if (!cellEl) continue
       const given = snap.given[i] ?? 0
+      const locked = board.lockedMask[i] ?? false
       const value = given || board.grid[i] || 0
       cellEl.label.setText(value ? String(value) : '')
-      cellEl.label.setColor(given ? '#6fa8ff' : board.done ? '#2a9d3f' : '#e6edf3')
-      cellEl.rect.setFillStyle(board.done ? 0x14301f : given ? 0x101a30 : cellEl.baseColor)
+      cellEl.label.setColor(given ? '#6fa8ff' : board.done || locked ? '#2a9d3f' : '#e6edf3')
+      cellEl.rect.setFillStyle(
+        board.done ? 0x14301f : given || locked ? 0x101a30 : cellEl.baseColor,
+      )
     }
   }
 }

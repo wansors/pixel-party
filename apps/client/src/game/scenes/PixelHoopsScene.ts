@@ -1,11 +1,10 @@
-import type { ClientMsg, PixelHoopsSnapshot } from '@pp/shared'
+import { type ClientMsg, type PixelHoopsSnapshot, toleranceForShot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
 
 const CHARGE_MS = 1200
-const TOLERANCE = 0.12
 
 // Pixel Hoops (basketball) canvas. Hold to charge the power meter, release to shoot; match the green
 // target band (higher hoop = more power). Consecutive baskets build a combo. Scene key === mini-game id.
@@ -136,7 +135,8 @@ export class PixelHoopsScene extends Phaser.Scene {
     // Hoop height + target band track the required power.
     this.hoop?.setY(this.hoopLo + (this.hoopHi - this.hoopLo) * target)
     this.targetBand?.setY(this.meterBottom - target * this.meterH)
-    this.targetBand?.setSize(this.meterBg?.width ?? 20, Math.max(6, TOLERANCE * 2 * this.meterH))
+    const tolerance = idx >= 0 ? toleranceForShot(idx) : toleranceForShot(0)
+    this.targetBand?.setSize(this.meterBg?.width ?? 20, Math.max(6, tolerance * 2 * this.meterH))
 
     const p = this.charging ? this.power() : 0
     this.meterFill?.setSize((this.meterBg?.width ?? 20) - 8, p * this.meterH)

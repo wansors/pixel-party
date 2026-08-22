@@ -1,10 +1,13 @@
-import type { PixelHoopsInput, PixelHoopsShot, PixelHoopsSnapshot } from '@pp/shared'
+import {
+  type PixelHoopsInput,
+  type PixelHoopsShot,
+  type PixelHoopsSnapshot,
+  toleranceForShot,
+} from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 30_000
 const SHOTS = 40
-// How close the released power must be to the shot's target to sink it.
-const TOLERANCE = 0.12
 // Extra points per basket while a streak is running (capped).
 const MAX_COMBO_BONUS = 4
 
@@ -61,7 +64,7 @@ export class PixelHoops implements MiniGame<PixelHoopsState, PixelHoopsInput> {
     if (ptr === undefined || ptr >= state.shots.length || input.index !== ptr) return state
     const power = Math.max(0, Math.min(1, input.power))
     const target = state.shots[ptr] as number
-    if (Math.abs(power - target) < TOLERANCE) {
+    if (Math.abs(power - target) < toleranceForShot(ptr)) {
       const combo = state.combo.get(playerId) ?? 0
       const points = 1 + Math.min(combo, MAX_COMBO_BONUS)
       state.score.set(playerId, (state.score.get(playerId) ?? 0) + points)

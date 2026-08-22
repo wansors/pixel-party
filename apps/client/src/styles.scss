@@ -60,9 +60,11 @@ html {
     font-size: 13px;
   }
 }
-// Never let the arcade chrome force a horizontal scrollbar on any breakpoint.
+// The app is a fixed-viewport arcade cabinet, not a scrolling page — the document itself never
+// scrolls. Individual panels with variable-length content (lobby roster, results list, ...) scroll
+// internally instead (see room.component.scss), so nothing becomes unreachable.
 body {
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 html,

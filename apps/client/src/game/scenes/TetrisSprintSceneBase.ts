@@ -65,6 +65,7 @@ export class TetrisSprintSceneBase extends Phaser.Scene {
     this.input.keyboard?.on('keydown-RIGHT', () => this.move('right'))
     this.input.keyboard?.on('keydown-DOWN', () => this.drop())
     this.input.keyboard?.on('keydown-SPACE', () => this.drop())
+    this.input.keyboard?.on('keydown-UP', () => this.rotate())
 
     this.buildTouchControls()
   }
@@ -82,9 +83,10 @@ export class TetrisSprintSceneBase extends Phaser.Scene {
         .text(x, y, label, { fontFamily: 'monospace', fontSize: '22px', color: '#e6edf3' })
         .setOrigin(0.5)
     }
-    addButton(width * 0.2, '◀', () => this.move('left'))
-    addButton(width * 0.5, '▼', () => this.drop())
-    addButton(width * 0.8, '▶', () => this.move('right'))
+    addButton(width * 0.15, '◀', () => this.move('left'))
+    addButton(width * 0.4, '▼', () => this.drop())
+    addButton(width * 0.6, '⟳', () => this.rotate())
+    addButton(width * 0.85, '▶', () => this.move('right'))
   }
 
   private move(dir: 'left' | 'right'): void {
@@ -95,6 +97,11 @@ export class TetrisSprintSceneBase extends Phaser.Scene {
   private drop(): void {
     this.sfx.click()
     this.send({ type: 'MINIGAME_INPUT', input: { kind: 'drop' } })
+  }
+
+  private rotate(): void {
+    this.sfx.click()
+    this.send({ type: 'MINIGAME_INPUT', input: { kind: 'rotate' } })
   }
 
   private build(snap: TetrisSprintSnapshot): void {

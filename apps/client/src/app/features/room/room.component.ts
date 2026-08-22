@@ -31,7 +31,7 @@ import { LanguageToggleComponent } from '../../shared/language-toggle.component'
 import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
 import { type RadarAxis, SkillRadarComponent } from '../../shared/skill-radar.component'
 
-type View = 'connecting' | 'lobby' | 'intro' | 'round' | 'round-result' | 'scoreboard' | 'final'
+type View = 'connecting' | 'lobby' | 'intro' | 'round' | 'round-result' | 'final'
 
 const pick = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)] as T
 
@@ -185,6 +185,7 @@ export class RoomComponent implements OnInit {
         break
       case 'LOBBY_STATE':
         this.players.set(msg.players)
+        this.syncPlayerNames()
         this.hostId.set(msg.hostId)
         this.isHost.set(msg.hostId === this.selfId())
         this.selectedGameIds.set(msg.minigameIds)
@@ -235,10 +236,9 @@ export class RoomComponent implements OnInit {
         // Snapshot the outgoing board before it's replaced, so the live-scoreboard arrows can compare
         // "where a player was" vs "where they are now".
         this.previousScoreboard.set(this.scoreboard())
+        // The cumulative board renders inline on the round-result screen (winner + this round's points
+        // + running totals together), so this never needs its own view switch — just refresh the data.
         this.scoreboard.set(msg.scores)
-        // The cumulative board follows the round-result reveal; don't clobber intro/round/final on a
-        // reconnect, where SCOREBOARD is only seeding scores.
-        if (this.view() === 'round-result') this.view.set('scoreboard')
         break
       case 'FINAL_RANKING':
         this.final.set(msg.scores)
@@ -296,9 +296,17 @@ export class RoomComponent implements OnInit {
       (k, p) => this.transloco.translate(k, p),
     )
     if (this.selfId()) this.game.state.selfId = this.selfId()
+    this.syncPlayerNames()
     this.zone.runOutsideAngular(() => {
       setTimeout(() => this.game?.boot('game-container'), 0)
     })
+  }
+
+  // Mirrors the current roster's display names into the Phaser-side RoundState, so mini-game scenes can
+  // show real names in their own leaderboards instead of falling back to a slice of the player id.
+  private syncPlayerNames(): void {
+    if (!this.game) return
+    this.game.state.names = Object.fromEntries(this.players().map((p) => [p.id, p.name]))
   }
 
   private startCountdown(startsInMs: number): void {
@@ -560,17 +568,25 @@ export class RoomComponent implements OnInit {
   }
 
   // How the room stands RIGHT NOW: while a round is live and the game's snapshot exposes a readable
-  // per-player tally, rank by that (updates every ROUND_STATE tick — instant, this-round standings).
-  // Otherwise fall back to the last cumulative SCOREBOARD (or an all-tied roster before round 1).
+  // per-player tally, order by that (updates every ROUND_STATE tick — instant, this-round movement).
+  // The points shown are always the cumulative session total, though — the per-round tally is a
+  // game-specific raw metric (taps, lines cleared, ...), not session points, so it only drives ordering
+  // here, never the displayed number. Otherwise fall back to the last cumulative SCOREBOARD (or an
+  // all-tied roster before round 1).
   readonly liveStandings = computed<ScoreEntryDto[]>(() => {
+    const sb = this.scoreboard()
     const metric = this.liveMetric()
     if (metric) {
+      const cumulative = new Map(sb.map((s) => [s.playerId, s.points]))
       const ranks = this.ranksFromMetric(metric)
       return this.players()
-        .map((p) => ({ playerId: p.id, points: metric[p.id] ?? 0, rank: ranks.get(p.id) ?? 1 }))
+        .map((p) => ({
+          playerId: p.id,
+          points: cumulative.get(p.id) ?? 0,
+          rank: ranks.get(p.id) ?? 1,
+        }))
         .sort((a, b) => a.rank - b.rank)
     }
-    const sb = this.scoreboard()
     if (sb.length) return sb
     return this.players().map((p) => ({ playerId: p.id, points: 0, rank: 1 }))
   })

@@ -1,8 +1,8 @@
 import type { Random } from '../ports/Random'
 
 // Shared simplified Tetris engine reused by both `line-clear-sprint` and `quick-tetris`. Deliberately
-// minimal for a party game: fixed-shape pieces (no rotation), a small board, and gravity-only movement
-// plus left/right/drop input. Everyone races the same seeded piece queue (see `createQueue`).
+// minimal for a party game: a small board and gravity-only movement plus left/right/drop/rotate input.
+// Everyone races the same seeded piece queue (see `createQueue`).
 
 export const COLS = 6
 export const ROWS = 12
@@ -61,13 +61,39 @@ export interface FallingPiece {
   shapeIndex: number
   x: number
   y: number
+  rotation: number // 0..3, quarter-turns clockwise from the shape's base orientation
+}
+
+type Cells = { x: number; y: number }[]
+
+function normalizeCells(cells: Cells): Cells {
+  const minX = Math.min(...cells.map((c) => c.x))
+  const minY = Math.min(...cells.map((c) => c.y))
+  return cells.map((c) => ({ x: c.x - minX, y: c.y - minY }))
+}
+
+// Rotates a cell set 90° clockwise within its own bounding box.
+function rotateCellsCW(cells: Cells): Cells {
+  const maxY = Math.max(...cells.map((c) => c.y))
+  return normalizeCells(cells.map((c) => ({ x: maxY - c.y, y: c.x })))
+}
+
+// Precomputed 4 rotation states per shape, so rotating at runtime is a lookup, not recomputation.
+const SHAPE_ROTATIONS: readonly Cells[][] = SHAPES.map((shape) => {
+  const rotations: Cells[] = [normalizeCells(shape.cells)]
+  for (let i = 1; i < 4; i++) rotations.push(rotateCellsCW(rotations[i - 1] as Cells))
+  return rotations
+})
+
+function pieceCells(piece: FallingPiece): Cells {
+  return SHAPE_ROTATIONS[piece.shapeIndex]?.[piece.rotation] ?? []
 }
 
 export function spawnPiece(shapeIndex: number, cols: number): FallingPiece {
   const idx = ((shapeIndex % SHAPES.length) + SHAPES.length) % SHAPES.length
   const shape = SHAPES[idx] as PieceShape
   const width = Math.max(...shape.cells.map((c) => c.x)) + 1
-  return { shapeIndex: idx, x: Math.floor((cols - width) / 2), y: 0 }
+  return { shapeIndex: idx, x: Math.floor((cols - width) / 2), y: 0, rotation: 0 }
 }
 
 // A seeded sequence of shape indices shared by every player in the round, long enough to outlast any
@@ -90,9 +116,9 @@ export function collides(
   dx: number,
   dy: number,
 ): boolean {
-  const shape = SHAPES[piece.shapeIndex]
-  if (!shape) return true
-  return shape.cells.some((c) => {
+  const cells = pieceCells(piece)
+  if (!cells.length) return true
+  return cells.some((c) => {
     const nx = piece.x + c.x + dx
     const ny = piece.y + c.y + dy
     if (nx < 0 || nx >= cols || ny >= rows) return true
@@ -105,8 +131,9 @@ export function collides(
 // state, so mutating in place is fine — callers that need to preserve the input array copy it first.
 export function lockPiece(board: Cell[], cols: number, piece: FallingPiece): Cell[] {
   const shape = SHAPES[piece.shapeIndex]
-  if (!shape) return board
-  for (const c of shape.cells) {
+  const cells = pieceCells(piece)
+  if (!shape || !cells.length) return board
+  for (const c of cells) {
     const nx = piece.x + c.x
     const ny = piece.y + c.y
     if (nx >= 0 && nx < cols && ny >= 0 && ny * cols + nx < board.length) {
@@ -186,6 +213,19 @@ export function tryMove(p: PlayerBoardState, dir: -1 | 1): void {
   }
 }
 
+// Rotates the falling piece a quarter-turn clockwise, trying a small set of horizontal wall-kick
+// offsets (own column, then one/two columns either side) before giving up as a no-op.
+export function tryRotate(p: PlayerBoardState): void {
+  if (p.toppedOut) return
+  const rotated: FallingPiece = { ...p.current, rotation: (p.current.rotation + 1) % 4 }
+  for (const dx of [0, -1, 1, -2, 2]) {
+    if (!collides(p.board, COLS, ROWS, rotated, dx, 0)) {
+      p.current = { ...rotated, x: rotated.x + dx }
+      return
+    }
+  }
+}
+
 export function hardDrop(p: PlayerBoardState, queue: number[]): void {
   if (p.toppedOut) return
   while (!collides(p.board, COLS, ROWS, p.current, 0, 1)) {
@@ -200,8 +240,9 @@ export function renderBoard(p: PlayerBoardState): Cell[] {
   const grid = [...p.board]
   if (p.toppedOut) return grid
   const shape = SHAPES[p.current.shapeIndex]
-  if (!shape) return grid
-  for (const c of shape.cells) {
+  const cells = pieceCells(p.current)
+  if (!shape || !cells.length) return grid
+  for (const c of cells) {
     const nx = p.current.x + c.x
     const ny = p.current.y + c.y
     if (nx >= 0 && nx < COLS && ny >= 0 && ny * COLS + nx < grid.length) {

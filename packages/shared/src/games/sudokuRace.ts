@@ -7,6 +7,9 @@ export interface SudokuBoard {
   grid: number[]
   // How many of this player's non-given cells currently hold the correct value.
   correctCount: number
+  // size*size flags; true for a non-given cell this player has already filled correctly — the server
+  // rejects further edits to it, so the client should render it as locked too.
+  lockedMask: boolean[]
   done: boolean
 }
 

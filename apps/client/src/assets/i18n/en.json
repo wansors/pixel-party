@@ -56,7 +56,6 @@
     "result": {
       "roundWinner": "ROUND WINNER",
       "teamWinner": "WINNING TEAM",
-      "totals": "Totals coming up...",
       "catchup": "+{{n}} catch-up",
       "callout": {
         "streak": ["MONSTER KILL!!!", "UNSTOPPABLE!", "ON FIRE!", "RAMPAGE!"],

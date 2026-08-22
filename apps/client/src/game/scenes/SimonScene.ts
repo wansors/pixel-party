@@ -7,6 +7,28 @@ import type { Translate } from '../i18n'
 const PAD_COLORS = [0xe63946, 0x3a7bd5, 0x2a9d3f, 0xf4c20d]
 const PLAY_ON_MS = 420
 const PLAY_GAP_MS = 180
+// A repeated pad (e.g. seq = [1, 1, 2]) needs a longer, clearer gap than a change of pad — with the
+// normal gap the second flash of the same color barely reads as a separate tap.
+const PLAY_REPEAT_GAP_MS = 420
+
+interface PlaySlot {
+  pad: number
+  start: number
+  end: number
+}
+
+// Precomputes each pad's on-window along the playback timeline, widening the gap before a slot whose
+// pad repeats the previous one.
+function buildPlaySlots(seq: number[]): PlaySlot[] {
+  const slots: PlaySlot[] = []
+  let t = 0
+  seq.forEach((pad, i) => {
+    if (i > 0) t += pad === seq[i - 1] ? PLAY_REPEAT_GAP_MS : PLAY_GAP_MS
+    slots.push({ pad, start: t, end: t + PLAY_ON_MS })
+    t += PLAY_ON_MS
+  })
+  return slots
+}
 
 // Simon (sequence memory) canvas. When the player's sequence grows it plays the pads back (input
 // locked), then lets the player repeat them. Scene key === mini-game id.
@@ -23,6 +45,7 @@ export class SimonScene extends Phaser.Scene {
   private wasAlive = true
   // Last sequence slot whose tone was played during playback, so each pad sounds once as it lights.
   private lastPlaySlot = -1
+  private playSlots: PlaySlot[] = []
 
   constructor(
     private readonly send: (msg: ClientMsg) => void,
@@ -38,6 +61,7 @@ export class SimonScene extends Phaser.Scene {
     this.shownLen = -1
     this.playing = false
     this.wasAlive = true
+    this.playSlots = []
     const { width, height } = this.scale
     const cx = width / 2
     this.info = this.add
@@ -105,6 +129,7 @@ export class SimonScene extends Phaser.Scene {
       this.playing = true
       this.playStart = this.time.now
       this.lastPlaySlot = -1
+      this.playSlots = buildPlaySlots(me.seq)
     }
 
     if (!me.alive) {
@@ -118,22 +143,18 @@ export class SimonScene extends Phaser.Scene {
     }
 
     if (this.playing) {
-      const seq = (this.state.state as SimonSnapshot).players[this.state.selfId ?? '']?.seq ?? []
       const elapsed = this.time.now - this.playStart
-      const slot = PLAY_ON_MS + PLAY_GAP_MS
-      const idx = Math.floor(elapsed / slot)
+      const idx = this.playSlots.findIndex((s) => elapsed >= s.start && elapsed < s.end)
+      const active = idx >= 0 ? this.playSlots[idx] : undefined
       this.status?.setText(this.t('game.simon.watch')).setColor('#ffd166')
-      const inOnWindow = elapsed % slot < PLAY_ON_MS
-      this.pads.forEach((p, i) => {
-        const lit = idx < seq.length && seq[idx] === i && inOnWindow
-        p.setAlpha(lit ? 1 : 0.4)
-      })
+      this.pads.forEach((p, i) => p.setAlpha(active?.pad === i ? 1 : 0.4))
       // Sound each pad once as it lights up during playback.
-      if (idx < seq.length && idx !== this.lastPlaySlot && inOnWindow) {
+      if (active && idx !== this.lastPlaySlot) {
         this.lastPlaySlot = idx
-        this.sfx.pad(seq[idx] as number)
+        this.sfx.pad(active.pad)
       }
-      if (idx >= seq.length) this.playing = false
+      const totalMs = this.playSlots.at(-1)?.end ?? 0
+      if (elapsed >= totalMs) this.playing = false
     } else {
       this.status?.setText(this.t('game.simon.repeat')).setColor('#06d6a0')
     }

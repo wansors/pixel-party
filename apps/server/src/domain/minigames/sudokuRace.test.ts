@@ -87,6 +87,18 @@ describe('SudokuRace', () => {
     expect(nn(s.correctCount.get('p'))).toBe(1)
   })
 
+  test('a cell already filled correctly is locked against further edits', () => {
+    const game = new SudokuRace()
+    let s = init(['p'])
+    const blankIndex = s.givenMask.findIndex((g) => !g)
+    const correctValue = s.solution[blankIndex] as number
+    const wrongValue = (correctValue % 4) + 1
+    s = game.onInput(s, 'p', { kind: 'fill', index: blankIndex, value: correctValue }, 1)
+    s = game.onInput(s, 'p', { kind: 'fill', index: blankIndex, value: wrongValue }, 2)
+    expect(nn(s.grids.get('p'))[blankIndex]).toBe(correctValue)
+    expect(nn(s.correctCount.get('p'))).toBe(1)
+  })
+
   test('a given cell, out-of-range index, or out-of-range value are all rejected', () => {
     const game = new SudokuRace()
     let s = init(['p'])

@@ -131,6 +131,8 @@ export class SudokuRace implements MiniGame<SudokuRaceState, SudokuInput> {
     if (now >= state.endsAt) return state
     const grid = state.grids.get(playerId)
     if (!grid) return state
+    // A cell already filled correctly is locked — editing it further could only make it wrong again.
+    if (grid[index] === state.solution[index]) return state
     grid[index] = value
     let correct = 0
     for (let i = 0; i < CELLS; i++) {
@@ -180,9 +182,11 @@ export class SudokuRace implements MiniGame<SudokuRaceState, SudokuInput> {
     const given = state.solution.map((v, i) => (state.givenMask[i] ? v : 0))
     const boards: Record<string, SudokuSnapshot['boards'][string]> = {}
     for (const pid of state.players) {
+      const grid = state.grids.get(pid) ?? []
       boards[pid] = {
-        grid: [...(state.grids.get(pid) ?? [])],
+        grid: [...grid],
         correctCount: state.correctCount.get(pid) ?? 0,
+        lockedMask: grid.map((v, i) => !state.givenMask[i] && v === state.solution[i]),
         done: (state.doneAt.get(pid) ?? 0) > 0,
       }
     }

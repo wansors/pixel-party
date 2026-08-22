@@ -23,4 +23,7 @@ export interface TetrisSprintSnapshot {
   targetLines?: number
 }
 
-export type TetrisSprintInput = { kind: 'move'; dir: 'left' | 'right' } | { kind: 'drop' }
+export type TetrisSprintInput =
+  | { kind: 'move'; dir: 'left' | 'right' }
+  | { kind: 'drop' }
+  | { kind: 'rotate' }

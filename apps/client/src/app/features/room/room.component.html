@@ -312,31 +312,25 @@
               />
             </div>
           }
-          <p class="hint blink">{{ 'room.result.totals' | transloco }}</p>
-        </div>
-      </section>
-    }
-
-    @case ('scoreboard') {
-      <section class="board arcade-window">
-        <div class="arcade-titlebar">{{ 'room.scoreboard.title' | transloco }}</div>
-        <div class="pad">
-          <ol class="highscore">
-            @for (s of scoreboard(); track s.playerId) {
-              <li [class.me]="s.playerId === selfId()" [class.lead]="s.rank === 1">
-                <span class="rank">{{ s.rank }}</span>
-                <app-pixel-avatar
-                  [avatar]="playerAvatar(s.playerId)"
-                  [color]="playerColor(s.playerId)"
-                  [size]="24"
-                />
-                <span class="name" [style.color]="playerColor(s.playerId)">{{
-                  playerName(s.playerId)
-                }}</span>
-                <span class="pts">{{ s.points }}</span>
-              </li>
-            }
-          </ol>
+          @if (scoreboard().length) {
+            <h3>{{ 'room.scoreboard.title' | transloco }}</h3>
+            <ol class="highscore">
+              @for (s of scoreboard(); track s.playerId) {
+                <li [class.me]="s.playerId === selfId()" [class.lead]="s.rank === 1">
+                  <span class="rank">{{ s.rank }}</span>
+                  <app-pixel-avatar
+                    [avatar]="playerAvatar(s.playerId)"
+                    [color]="playerColor(s.playerId)"
+                    [size]="24"
+                  />
+                  <span class="name" [style.color]="playerColor(s.playerId)">{{
+                    playerName(s.playerId)
+                  }}</span>
+                  <span class="pts">{{ s.points }}</span>
+                </li>
+              }
+            </ol>
+          }
           <p class="hint blink">{{ 'room.scoreboard.nextRound' | transloco }}</p>
         </div>
       </section>

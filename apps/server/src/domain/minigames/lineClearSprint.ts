@@ -10,6 +10,7 @@ import {
   renderBoard,
   stepFall,
   tryMove,
+  tryRotate,
 } from './tetrisCore'
 
 const DEFAULT_DURATION_MS = 60_000
@@ -53,6 +54,7 @@ export class LineClearSprint implements MiniGame<LineClearSprintState, TetrisSpr
     if (!p || p.toppedOut) return state
     if (input.kind === 'move') tryMove(p, input.dir === 'left' ? -1 : 1)
     else if (input.kind === 'drop') hardDrop(p, state.queue)
+    else if (input.kind === 'rotate') tryRotate(p)
     return state
   }
 

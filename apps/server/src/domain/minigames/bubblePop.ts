@@ -31,7 +31,11 @@ function buildShotQueue(random: Random): number[] {
 }
 
 // 4-directional flood fill from `start` over cells matching `matches`. Returns visited indices.
-function floodFill(board: number[], start: number, matches: (index: number) => boolean): number[] {
+function floodFill(
+  board: number[],
+  start: number,
+  matches: (index: number) => boolean,
+): Set<number> {
   const visited = new Set<number>([start])
   const stack = [start]
   while (stack.length > 0) {
@@ -51,6 +55,23 @@ function floodFill(board: number[], start: number, matches: (index: number) => b
     }
   }
   return visited
+}
+
+// Walks the shared shot queue from `fromIndex` to the next color that's still present on `board` — a
+// shot in a color the player has already fully cleared could never be popped, softlocking their board.
+// Falls back to the raw slot if the board holds none of the queue's colors (i.e. it's already empty).
+function nextValidShot(
+  board: number[],
+  queue: number[],
+  fromIndex: number,
+): { index: number; color: number } {
+  const present = new Set(board.filter((c) => c !== 0))
+  for (let steps = 0; steps < queue.length; steps++) {
+    const index = fromIndex + steps
+    const color = queue[index % queue.length] as number
+    if (present.has(color)) return { index, color }
+  }
+  return { index: fromIndex, color: queue[fromIndex % queue.length] as number }
 }
 
 // Finds the landing row for a shot in `col`: the topmost empty cell whose slot below is either the
@@ -144,8 +165,8 @@ export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
     const board = state.boards.get(playerId)
     const shotIndex = state.shotIndex.get(playerId)
     if (!board || shotIndex === undefined) return state
-    const color = state.shotQueue[shotIndex % state.shotQueue.length] as number
-    state.shotIndex.set(playerId, shotIndex + 1)
+    const { index, color } = nextValidShot(board, state.shotQueue, shotIndex)
+    state.shotIndex.set(playerId, index + 1)
     const row = landingRow(board, col)
     if (row === -1) return state
     const placed = at(row, col)
@@ -199,10 +220,11 @@ export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
     for (const pid of state.players) {
       const shotIndex = state.shotIndex.get(pid) ?? 0
       const score = state.score.get(pid) ?? 0
+      const board = state.boards.get(pid) ?? []
       boards[pid] = {
-        grid: [...(state.boards.get(pid) ?? [])],
+        grid: [...board],
         score,
-        nextColor: state.shotQueue[shotIndex % state.shotQueue.length] as number,
+        nextColor: nextValidShot(board, state.shotQueue, shotIndex).color,
         done: (state.doneAt.get(pid) ?? 0) > 0,
       }
       scores[pid] = score

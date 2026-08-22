@@ -72,7 +72,7 @@ export class ButtonMasherScene extends Phaser.Scene {
       Object.entries(snap.counts)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
-        .map(([id, n], i) => `${i + 1}. ${id === selfId ? you : id.slice(0, 6)} — ${n}`)
+        .map(([id, n], i) => `${i + 1}. ${id === selfId ? you : this.state.nameOf(id)} — ${n}`)
         .join('\n'),
     )
   }

@@ -26,3 +26,16 @@ export interface PixelHoopsInput {
   index: number
   power: number
 }
+
+// How close the released power must be to a shot's target to sink it, as a function of shot index —
+// shared by the server (scoring) and the client (drawing the green target band the same size the server
+// actually accepts). Starts generous and tightens with every shot, holding at a floor past SHOTS_TO_MIN
+// so the round doesn't become unwinnable, not just harder.
+const MAX_TOLERANCE = 0.16
+const MIN_TOLERANCE = 0.07
+const SHOTS_TO_MIN = 24
+
+export function toleranceForShot(index: number): number {
+  const t = Math.min(1, Math.max(0, index) / SHOTS_TO_MIN)
+  return MAX_TOLERANCE - (MAX_TOLERANCE - MIN_TOLERANCE) * t
+}
