@@ -334,13 +334,18 @@ export class RoomComponent implements OnInit {
     const next = this.isSelected(id)
       ? this.selectedGameIds().filter((g) => g !== id)
       : [...this.selectedGameIds(), id]
-    this.net.send({ type: 'HOST_CONFIG', minigameIds: next, rounds: this.rounds() || next.length })
+    // No-repeat sessions play each selected game at most once, so rounds tracks the selection size by
+    // default — picking a game adds a round, dropping one removes it. `||` here would have kept
+    // whatever round count was already set (truthy from the very first default config) and silently
+    // stopped following the selection; the server-side clamp then only ever capped it down, never back
+    // up, so growing the line-up after shrinking it looked like rounds was "stuck".
+    this.net.send({ type: 'HOST_CONFIG', minigameIds: next, rounds: next.length })
   }
 
   selectAllGames(): void {
     if (!this.isHost()) return
     const ids = this.availableGames.map((g) => g.id)
-    this.net.send({ type: 'HOST_CONFIG', minigameIds: ids, rounds: this.rounds() || ids.length })
+    this.net.send({ type: 'HOST_CONFIG', minigameIds: ids, rounds: ids.length })
   }
 
   deselectAllGames(): void {
