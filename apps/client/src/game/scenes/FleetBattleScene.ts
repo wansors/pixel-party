@@ -1,17 +1,17 @@
+import { PALETTE } from '@pp/shared'
 import type { ClientMsg, FleetBattleSnapshot, TeamId } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import { addArcadeBackdrop, bodyStyle, ensurePixelBlock, headlineStyle } from '../pixelStyle'
 
-const HIT = 0xff5252
-const MISS = 0x5b6b7b
-const FRAME = 0x5b62a6
-const NEUTRAL = 0x1b1e2e
-const TEXT = '#eef1f7'
-const ACCENT = '#ffcf4b'
-const RED = 0xff5252
+const RED = PALETTE.red
 const BLUE = 0x5b8cff
+
+const CELL_NEUTRAL_KEY = 'pp-fleet-cell-neutral'
+const CELL_HIT_KEY = 'pp-fleet-cell-hit'
+const CELL_MISS_KEY = 'pp-fleet-cell-miss'
 
 // Fleet Battle (team Battleship) canvas. Renders two grids: the ENEMY grid (fire at the enemy team's
 // fleet, on your team's turn) and OUR FLEET grid (incoming damage). Fires only when it's your team's
@@ -23,8 +23,8 @@ export class FleetBattleScene extends Phaser.Scene {
   private targetLabel?: Phaser.GameObjects.Text
   private fleetLabel?: Phaser.GameObjects.Text
   private waitText?: Phaser.GameObjects.Text
-  private targetCells: Phaser.GameObjects.Rectangle[] = []
-  private fleetCells: Phaser.GameObjects.Rectangle[] = []
+  private targetCells: Phaser.GameObjects.Image[] = []
+  private fleetCells: Phaser.GameObjects.Image[] = []
   private built = false
 
   constructor(
@@ -40,33 +40,28 @@ export class FleetBattleScene extends Phaser.Scene {
     this.built = false
     this.targetCells = []
     this.fleetCells = []
+    addArcadeBackdrop(this)
+    ensurePixelBlock(this, CELL_NEUTRAL_KEY, 32, PALETTE.panel)
+    ensurePixelBlock(this, CELL_HIT_KEY, 32, RED)
+    ensurePixelBlock(this, CELL_MISS_KEY, 32, PALETTE.dim)
     const { width, height } = this.scale
     const cx = width / 2
     this.turnText = this.add
-      .text(cx, height * 0.05, '', { fontFamily: 'monospace', fontSize: '24px', color: ACCENT })
+      .text(cx, height * 0.05, '', headlineStyle(24, PALETTE.amber))
       .setOrigin(0.5)
     this.infoText = this.add
-      .text(cx, height * 0.11, '', {
-        fontFamily: 'monospace',
-        fontSize: '16px',
-        color: TEXT,
-        align: 'center',
-      })
+      .text(cx, height * 0.11, '', bodyStyle(16, PALETTE.text, { align: 'center' }))
       .setOrigin(0.5)
     this.resultText = this.add
-      .text(cx, height * 0.05, '', { fontFamily: 'monospace', fontSize: '28px', color: ACCENT })
+      .text(cx, height * 0.05, '', headlineStyle(28, PALETTE.amber))
       .setOrigin(0.5)
       .setVisible(false)
     this.waitText = this.add
-      .text(cx, height / 2, '...', { fontFamily: 'monospace', fontSize: '24px', color: TEXT })
+      .text(cx, height / 2, '...', headlineStyle(24, PALETTE.text))
       .setOrigin(0.5)
       .setVisible(false)
     this.add
-      .text(cx, height * 0.95, this.t('game.fleetBattle.hint'), {
-        fontFamily: 'monospace',
-        fontSize: '14px',
-        color: '#5b6b7b',
-      })
+      .text(cx, height * 0.95, this.t('game.fleetBattle.hint'), bodyStyle(14, PALETTE.dim))
       .setOrigin(0.5)
   }
 
@@ -93,13 +88,11 @@ export class FleetBattleScene extends Phaser.Scene {
   }
 
   private gridLabel(x: number, y: number, text: string): Phaser.GameObjects.Text {
-    return this.add
-      .text(x, y, text, { fontFamily: 'monospace', fontSize: '16px', color: TEXT })
-      .setOrigin(0.5)
+    return this.add.text(x, y, text, bodyStyle(16, PALETTE.text)).setOrigin(0.5)
   }
 
   private buildGrid(
-    into: Phaser.GameObjects.Rectangle[],
+    into: Phaser.GameObjects.Image[],
     ccx: number,
     ccy: number,
     area: number,
@@ -115,12 +108,12 @@ export class FleetBattleScene extends Phaser.Scene {
       const row = Math.floor(i / n)
       const x = startX + col * (size + gap)
       const y = startY + row * (size + gap)
-      const rect = this.add.rectangle(x, y, size, size, NEUTRAL).setStrokeStyle(2, FRAME)
+      const img = this.add.image(x, y, CELL_NEUTRAL_KEY).setDisplaySize(size, size)
       if (interactive) {
-        rect.setInteractive({ useHandCursor: true })
-        rect.on('pointerdown', () => this.fire(i))
+        img.setInteractive({ useHandCursor: true })
+        img.on('pointerdown', () => this.fire(i))
       }
-      into.push(rect)
+      into.push(img)
     }
   }
 
@@ -204,14 +197,14 @@ export class FleetBattleScene extends Phaser.Scene {
 
     const shotByCell = new Map<number, boolean>()
     for (const s of mine.shots) shotByCell.set(s.cell, s.hit)
-    this.targetCells.forEach((rect, i) => {
-      if (shotByCell.has(i)) rect.setFillStyle(shotByCell.get(i) ? HIT : MISS)
-      else rect.setFillStyle(NEUTRAL)
+    this.targetCells.forEach((img, i) => {
+      if (shotByCell.has(i)) img.setTexture(shotByCell.get(i) ? CELL_HIT_KEY : CELL_MISS_KEY)
+      else img.setTexture(CELL_NEUTRAL_KEY)
     })
 
     const damaged = new Set(mine.damage)
-    this.fleetCells.forEach((rect, i) => {
-      rect.setFillStyle(damaged.has(i) ? HIT : NEUTRAL)
+    this.fleetCells.forEach((img, i) => {
+      img.setTexture(damaged.has(i) ? CELL_HIT_KEY : CELL_NEUTRAL_KEY)
     })
   }
 

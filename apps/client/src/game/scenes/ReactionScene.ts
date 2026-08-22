@@ -1,8 +1,10 @@
+import { PALETTE } from '@pp/shared'
 import type { ClientMsg, ReactionSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import { addArcadeBackdrop, bodyStyle, headlineStyle } from '../pixelStyle'
 
 // Reaction Duel canvas. Red screen -> green screen; tap after green. Scene key === mini-game id.
 export class ReactionScene extends Phaser.Scene {
@@ -22,6 +24,7 @@ export class ReactionScene extends Phaser.Scene {
   }
 
   create(): void {
+    addArcadeBackdrop(this)
     // Scene instances survive stop/start across rounds — reset per-round SFX trackers here.
     this.wasGreen = false
     this.resolved = false
@@ -29,19 +32,15 @@ export class ReactionScene extends Phaser.Scene {
     const cx = width / 2
     this.bg = this.add.rectangle(cx, height / 2, width, height, 0x8b1e2d).setOrigin(0.5)
     this.title = this.add
-      .text(cx, height * 0.4, this.t('game.reaction.wait'), {
-        fontFamily: 'monospace',
-        fontSize: '56px',
-        color: '#ffffff',
-      })
+      .text(cx, height * 0.4, this.t('game.reaction.wait'), headlineStyle(56, PALETTE.text))
       .setOrigin(0.5)
     this.status = this.add
-      .text(cx, height * 0.6, this.t('game.reaction.instruction'), {
-        fontFamily: 'monospace',
-        fontSize: '18px',
-        color: '#ffe0e0',
-        align: 'center',
-      })
+      .text(
+        cx,
+        height * 0.6,
+        this.t('game.reaction.instruction'),
+        bodyStyle(18, PALETTE.text, { align: 'center' }),
+      )
       .setOrigin(0.5)
 
     this.input.on('pointerdown', () => this.tap())

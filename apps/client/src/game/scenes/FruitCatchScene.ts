@@ -1,9 +1,13 @@
+import { PALETTE } from '@pp/shared'
 import type { ClientMsg, FruitCatchSnapshot, FruitItem } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
 import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
+import { addArcadeBackdrop, bodyStyle, ensurePixelOrb, headlineStyle } from '../pixelStyle'
+
+const FRUIT_ORB_DIAMETER = 10
 
 // Fruit Catch canvas (Phase 5). The server owns the falling stream + scoring; this renders the items
 // smoothed through the snapshot interpolator (netcode hardening) and the player's own basket locally.
@@ -12,7 +16,9 @@ export class FruitCatchScene extends Phaser.Scene {
   private timer?: Phaser.GameObjects.Text
   private score?: Phaser.GameObjects.Text
   private basket?: Phaser.GameObjects.Rectangle
-  private readonly sprites = new Map<number, Phaser.GameObjects.Arc>()
+  private readonly sprites = new Map<number, Phaser.GameObjects.Image>()
+  private fruitOrbKey = ''
+  private bombOrbKey = ''
   private readonly interp = new SnapshotInterpolator<FruitCatchSnapshot>(100)
   private lastTick = -1
   private basketX = 0.5
@@ -38,25 +44,21 @@ export class FruitCatchScene extends Phaser.Scene {
     for (const s of this.sprites.values()) s.destroy()
     this.sprites.clear()
 
+    addArcadeBackdrop(this)
+    this.fruitOrbKey = ensurePixelOrb(this, 'pp-fruit-item', FRUIT_ORB_DIAMETER, PALETTE.red)
+    this.bombOrbKey = ensurePixelOrb(this, 'pp-fruit-bomb', FRUIT_ORB_DIAMETER, PALETTE.frame)
+
     const { width, height } = this.scale
     this.timer = this.add
-      .text(width / 2, height * 0.06, '', {
-        fontFamily: 'monospace',
-        fontSize: '24px',
-        color: '#06d6a0',
-      })
+      .text(width / 2, height * 0.06, '', headlineStyle(24, PALETTE.lime))
       .setOrigin(0.5)
     this.score = this.add
-      .text(width / 2, height * 0.12, '', {
-        fontFamily: 'monospace',
-        fontSize: '16px',
-        color: '#9fb3c8',
-      })
+      .text(width / 2, height * 0.12, '', bodyStyle(16, PALETTE.dim))
       .setOrigin(0.5)
 
     this.basket = this.add
-      .rectangle(width / 2, height * 0.9, width * 0.18, height * 0.035, 0xffd166)
-      .setStrokeStyle(3, 0x11181f)
+      .rectangle(width / 2, height * 0.9, width * 0.18, height * 0.035, PALETTE.amber)
+      .setStrokeStyle(3, PALETTE.bg)
 
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.aim(p.x))
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
@@ -125,16 +127,12 @@ export class FruitCatchScene extends Phaser.Scene {
   }
 
   private drawItem(item: FruitItem, x: number, y: number, minDim: number): void {
-    const radius = minDim * 0.035
+    const diameter = minDim * 0.07
     let sprite = this.sprites.get(item.id)
     if (!sprite) {
-      // The bomb used to be near-black on a near-black background, told apart only by a thin ring —
-      // easy to miss. A visibly lighter body plus a bolder stroke reads as a bomb at a glance.
-      const color = item.kind === 'bomb' ? 0x3a3f66 : 0xe63946
-      sprite = this.add.circle(x, y, radius, color)
-      if (item.kind === 'bomb') sprite.setStrokeStyle(4, 0xf4c20d)
+      sprite = this.add.image(x, y, item.kind === 'bomb' ? this.bombOrbKey : this.fruitOrbKey)
       this.sprites.set(item.id, sprite)
     }
-    sprite.setPosition(x, y)
+    sprite.setPosition(x, y).setDisplaySize(diameter, diameter)
   }
 }

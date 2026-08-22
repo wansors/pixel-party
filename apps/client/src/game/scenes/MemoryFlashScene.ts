@@ -1,10 +1,24 @@
-import type { ClientMsg, MemoryFlashBoard, MemoryFlashSnapshot } from '@pp/shared'
+import {
+  type ClientMsg,
+  type MemoryFlashBoard,
+  type MemoryFlashSnapshot,
+  PALETTE,
+} from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import {
+  addArcadeBackdrop,
+  bodyStyle,
+  ensurePixelBlock,
+  headlineStyle,
+  hexToCss,
+} from '../pixelStyle'
 
 const css = (hex: number): string => `#${hex.toString(16).padStart(6, '0')}`
+const CHOICE_BG = PALETTE.frame
+const CHOICE_KEY = 'pp-memflash-choice'
 
 // Memory Flash canvas. When a new board arrives it flashes the pixels for flashMs, then hides them and
 // shows the "how many <colour>?" answer buttons. Scene key === mini-game id.
@@ -12,8 +26,8 @@ export class MemoryFlashScene extends Phaser.Scene {
   private timer?: Phaser.GameObjects.Text
   private score?: Phaser.GameObjects.Text
   private prompt?: Phaser.GameObjects.Text
-  private pixels: Phaser.GameObjects.Rectangle[] = []
-  private choiceBtns: Phaser.GameObjects.Rectangle[] = []
+  private pixels: Phaser.GameObjects.Image[] = []
+  private choiceBtns: Phaser.GameObjects.Image[] = []
   private choiceLabels: Phaser.GameObjects.Text[] = []
   private drawnLevel = -1
   private flashUntil = 0
@@ -37,16 +51,16 @@ export class MemoryFlashScene extends Phaser.Scene {
     this.flashUntil = 0
     this.lastScore = 0
     this.lastLevel = -1
+    addArcadeBackdrop(this)
+    ensurePixelBlock(this, CHOICE_KEY, 32, CHOICE_BG)
     const { width, height } = this.scale
     const cx = width / 2
     this.timer = this.add
-      .text(cx, height * 0.06, '', { fontFamily: 'monospace', fontSize: '24px', color: '#06d6a0' })
+      .text(cx, height * 0.06, '', headlineStyle(24, PALETTE.lime))
       .setOrigin(0.5)
-    this.score = this.add
-      .text(cx, height * 0.12, '', { fontFamily: 'monospace', fontSize: '16px', color: '#9fb3c8' })
-      .setOrigin(0.5)
+    this.score = this.add.text(cx, height * 0.12, '', bodyStyle(16, PALETTE.dim)).setOrigin(0.5)
     this.prompt = this.add
-      .text(cx, height * 0.19, '', { fontFamily: 'monospace', fontSize: '22px', color: '#e6edf3' })
+      .text(cx, height * 0.19, '', headlineStyle(22, PALETTE.text))
       .setOrigin(0.5)
 
     const cols = 2
@@ -59,17 +73,19 @@ export class MemoryFlashScene extends Phaser.Scene {
       const row = Math.floor(i / cols)
       const x = cx + (col === 0 ? -1 : 1) * (bw / 2 + gap / 2)
       const y = top + row * (bh + height * 0.03)
-      const rect = this.add
-        .rectangle(x, y, bw, bh, 0x3a4668)
-        .setStrokeStyle(3, 0x11181f)
+      const img = this.add
+        .image(x, y, CHOICE_KEY)
+        .setDisplaySize(bw, bh)
         .setInteractive({ useHandCursor: true })
-      rect.on('pointerdown', () => this.answer(i))
-      const label = this.add
-        .text(x, y, '', { fontFamily: 'monospace', fontSize: '30px', color: '#e6edf3' })
-        .setOrigin(0.5)
-      this.choiceBtns.push(rect)
+      img.on('pointerdown', () => this.answer(i))
+      const label = this.add.text(x, y, '', headlineStyle(30, PALETTE.text)).setOrigin(0.5)
+      this.choiceBtns.push(img)
       this.choiceLabels.push(label)
     }
+  }
+
+  private blockKeyFor(color: number): string {
+    return `pp-memflash-px-${color.toString(16)}`
   }
 
   private drawBoard(board: MemoryFlashBoard): void {
@@ -85,7 +101,8 @@ export class MemoryFlashScene extends Phaser.Scene {
     for (const px of board.pixels) {
       const x = startX + px.x * (size + gap)
       const y = startY + px.y * (size + gap)
-      this.pixels.push(this.add.rectangle(x, y, size, size, px.color).setStrokeStyle(2, 0x11181f))
+      const key = ensurePixelBlock(this, this.blockKeyFor(px.color), 24, px.color)
+      this.pixels.push(this.add.image(x, y, key).setDisplaySize(size, size))
     }
     this.drawnLevel = board.level
     this.flashUntil = this.time.now + board.flashMs
@@ -140,6 +157,6 @@ export class MemoryFlashScene extends Phaser.Scene {
           ? this.t('game.memoryFlash.memorize')
           : this.t('game.memoryFlash.howMany', { color: board.targetName }),
       )
-      .setColor(flashing ? '#e6edf3' : css(board.targetColor))
+      .setColor(flashing ? hexToCss(PALETTE.text) : css(board.targetColor))
   }
 }

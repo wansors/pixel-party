@@ -1,8 +1,9 @@
-import { COLOR_TRAP_COLORS, type ClientMsg, type ColorTrapSnapshot } from '@pp/shared'
+import { COLOR_TRAP_COLORS, type ClientMsg, type ColorTrapSnapshot, PALETTE } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import { addArcadeBackdrop, bodyStyle, ensurePixelBlock, headlineStyle } from '../pixelStyle'
 
 const css = (hex: number): string => `#${hex.toString(16).padStart(6, '0')}`
 
@@ -14,7 +15,7 @@ export class ColorTrapScene extends Phaser.Scene {
   private progress?: Phaser.GameObjects.Text
   private timer?: Phaser.GameObjects.Text
   private status?: Phaser.GameObjects.Text
-  private buttons: Phaser.GameObjects.Rectangle[] = []
+  private buttons: Phaser.GameObjects.Image[] = []
   private lastAnswered = -1
 
   constructor(
@@ -27,23 +28,14 @@ export class ColorTrapScene extends Phaser.Scene {
   }
 
   create(): void {
+    addArcadeBackdrop(this)
     const { width, height } = this.scale
     const cx = width / 2
-    this.progress = this.add
-      .text(cx, height * 0.1, '', { fontFamily: 'monospace', fontSize: '20px', color: '#9fb3c8' })
-      .setOrigin(0.5)
-    this.word = this.add
-      .text(cx, height * 0.34, '', { fontFamily: 'monospace', fontSize: '72px', color: '#ffffff' })
-      .setOrigin(0.5)
-    this.timer = this.add
-      .text(cx, height * 0.5, '', { fontFamily: 'monospace', fontSize: '24px', color: '#06d6a0' })
-      .setOrigin(0.5)
+    this.progress = this.add.text(cx, height * 0.1, '', bodyStyle(20, PALETTE.dim)).setOrigin(0.5)
+    this.word = this.add.text(cx, height * 0.34, '', headlineStyle(72, PALETTE.text)).setOrigin(0.5)
+    this.timer = this.add.text(cx, height * 0.5, '', headlineStyle(24, PALETTE.lime)).setOrigin(0.5)
     this.status = this.add
-      .text(cx, height * 0.58, this.t('game.colorTrap.instruction'), {
-        fontFamily: 'monospace',
-        fontSize: '16px',
-        color: '#5b6b7b',
-      })
+      .text(cx, height * 0.58, this.t('game.colorTrap.instruction'), bodyStyle(16, PALETTE.dim))
       .setOrigin(0.5)
 
     // One button per palette color along the bottom.
@@ -55,12 +47,13 @@ export class ColorTrapScene extends Phaser.Scene {
     const by = height * 0.8
     COLOR_TRAP_COLORS.forEach((c, i) => {
       const x = startX + i * (bw + gap)
-      const rect = this.add
-        .rectangle(x, by, bw, bw * 0.5, c.hex)
-        .setStrokeStyle(3, 0x11181f)
+      const key = ensurePixelBlock(this, `pp-color-trap-btn-${i}`, 32, c.hex)
+      const img = this.add
+        .image(x, by, key)
+        .setDisplaySize(bw, bw * 0.5)
         .setInteractive({ useHandCursor: true })
-      rect.on('pointerdown', () => this.answer(i))
-      this.buttons.push(rect)
+      img.on('pointerdown', () => this.answer(i))
+      this.buttons.push(img)
     })
   }
 

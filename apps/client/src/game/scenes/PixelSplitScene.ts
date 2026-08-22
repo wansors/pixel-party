@@ -1,8 +1,12 @@
+import { PALETTE } from '@pp/shared'
 import type { ClientMsg, PixelSplitObject, PixelSplitSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import { addArcadeBackdrop, bodyStyle, headlineStyle, shade } from '../pixelStyle'
+
+const OBJECT_COLOR = 0x3a7bd5
 
 // Pixel Split canvas. The object stays visible; drag the vertical cut line to a column boundary so both
 // halves hold the same number of pixels, then submit. Counts are never shown — it's a visual judgment.
@@ -38,23 +42,18 @@ export class PixelSplitScene extends Phaser.Scene {
     this.drawnIndex = -1
     this.lastScore = 0
     this.cut = 1
+    addArcadeBackdrop(this)
     const { width, height } = this.scale
     const cx = width / 2
     this.timer = this.add
-      .text(cx, height * 0.06, '', { fontFamily: 'monospace', fontSize: '24px', color: '#06d6a0' })
+      .text(cx, height * 0.06, '', headlineStyle(24, PALETTE.lime))
       .setOrigin(0.5)
-    this.score = this.add
-      .text(cx, height * 0.12, '', { fontFamily: 'monospace', fontSize: '16px', color: '#9fb3c8' })
-      .setOrigin(0.5)
+    this.score = this.add.text(cx, height * 0.12, '', bodyStyle(16, PALETTE.dim)).setOrigin(0.5)
     this.prompt = this.add
-      .text(cx, height * 0.19, this.t('game.pixelSplit.prompt'), {
-        fontFamily: 'monospace',
-        fontSize: '22px',
-        color: '#e6edf3',
-      })
+      .text(cx, height * 0.19, this.t('game.pixelSplit.prompt'), headlineStyle(22, PALETTE.text))
       .setOrigin(0.5)
 
-    this.cutLine = this.add.rectangle(cx, height * 0.45, 4, height * 0.4, 0xffd166)
+    this.cutLine = this.add.rectangle(cx, height * 0.45, 4, height * 0.4, PALETTE.amber)
 
     // Drag anywhere over the play area to move the cut.
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.setCutFromX(p.x))
@@ -63,16 +62,12 @@ export class PixelSplitScene extends Phaser.Scene {
     })
 
     this.submitBtn = this.add
-      .rectangle(cx, height * 0.86, width * 0.4, height * 0.1, 0x2a9d3f)
-      .setStrokeStyle(3, 0x11181f)
+      .rectangle(cx, height * 0.86, width * 0.4, height * 0.1, PALETTE.lime)
+      .setStrokeStyle(3, PALETTE.bg)
       .setInteractive({ useHandCursor: true })
     this.submitBtn.on('pointerdown', () => this.submit())
     this.submitLabel = this.add
-      .text(cx, height * 0.86, this.t('game.pixelSplit.cut'), {
-        fontFamily: 'monospace',
-        fontSize: '26px',
-        color: '#e6edf3',
-      })
+      .text(cx, height * 0.86, this.t('game.pixelSplit.cut'), headlineStyle(26, PALETTE.text))
       .setOrigin(0.5)
   }
 
@@ -108,10 +103,14 @@ export class PixelSplitScene extends Phaser.Scene {
     this.gridX0 = cx - (obj.cols * this.cellSize) / 2
     this.gridH = obj.rows * this.cellSize
     this.gridTop = height * 0.45 - this.gridH / 2
+    // Simple 2-tone shading: a lighter highlight band on the object's top row, base color elsewhere —
+    // just enough that the flat silhouette reads as lit from above.
+    const highlight = shade(OBJECT_COLOR, 0.25)
     for (const px of obj.pixels) {
       const x = this.gridX0 + px.x * this.cellSize + this.cellSize / 2
       const y = this.gridTop + px.y * this.cellSize + this.cellSize / 2
-      this.pixels.push(this.add.rectangle(x, y, this.cellSize - 1, this.cellSize - 1, 0x3a7bd5))
+      const color = px.y === 0 ? highlight : OBJECT_COLOR
+      this.pixels.push(this.add.rectangle(x, y, this.cellSize - 1, this.cellSize - 1, color))
     }
     this.drawnIndex = obj.index
     // Start the cut at the far left every object: a centred default would score full points on

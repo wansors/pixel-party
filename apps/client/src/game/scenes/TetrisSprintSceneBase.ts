@@ -1,16 +1,18 @@
+import { PALETTE } from '@pp/shared'
 import type { ClientMsg, TetrisSprintSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import { addArcadeBackdrop, bodyStyle, ensurePixelBlock, headlineStyle } from '../pixelStyle'
 
 // 0 = empty board cell; 1..4 map to the four piece colors from tetrisCore's SHAPES.
 const CELL_COLORS: Record<number, number> = {
-  0: 0x1d2740,
-  1: 0x06d6a0,
-  2: 0xffcf4b,
-  3: 0xe63946,
-  4: 0x6fa8ff,
+  0: PALETTE.panel,
+  1: PALETTE.lime,
+  2: PALETTE.amber,
+  3: PALETTE.red,
+  4: PALETTE.cyan,
 }
 
 function kebabToCamel(key: string): string {
@@ -26,7 +28,8 @@ export class TetrisSprintSceneBase extends Phaser.Scene {
   private timer?: Phaser.GameObjects.Text
   private status?: Phaser.GameObjects.Text
   private banner?: Phaser.GameObjects.Text
-  private cells: Phaser.GameObjects.Rectangle[] = []
+  private cells: Phaser.GameObjects.Image[] = []
+  private cellPx = 0
   private built = false
   private prevToppedOut = false
   private prevDone = false
@@ -45,18 +48,18 @@ export class TetrisSprintSceneBase extends Phaser.Scene {
   create(): void {
     this.built = false
     this.cells = []
+    this.cellPx = 0
     this.prevToppedOut = false
     this.prevDone = false
+    addArcadeBackdrop(this)
     const { width, height } = this.scale
     const cx = width / 2
     this.timer = this.add
-      .text(cx, height * 0.05, '', { fontFamily: 'monospace', fontSize: '22px', color: '#06d6a0' })
+      .text(cx, height * 0.05, '', headlineStyle(22, PALETTE.lime))
       .setOrigin(0.5)
-    this.status = this.add
-      .text(cx, height * 0.11, '', { fontFamily: 'monospace', fontSize: '16px', color: '#9fb3c8' })
-      .setOrigin(0.5)
+    this.status = this.add.text(cx, height * 0.11, '', bodyStyle(16)).setOrigin(0.5)
     this.banner = this.add
-      .text(cx, height * 0.42, '', { fontFamily: 'monospace', fontSize: '28px', color: '#ffcf4b' })
+      .text(cx, height * 0.42, '', headlineStyle(24, PALETTE.amber))
       .setOrigin(0.5)
       .setDepth(10)
       .setVisible(false)
@@ -73,15 +76,14 @@ export class TetrisSprintSceneBase extends Phaser.Scene {
   private buildTouchControls(): void {
     const { width, height } = this.scale
     const y = height * 0.93
+    const buttonKey = ensurePixelBlock(this, 'pp-tetris-button', 8, PALETTE.panelAlt)
     const addButton = (x: number, label: string, onTap: () => void): void => {
       this.add
-        .rectangle(x, y, width * 0.16, height * 0.08, 0x1d2740)
-        .setStrokeStyle(2, 0x3a4668)
+        .image(x, y, buttonKey)
+        .setDisplaySize(width * 0.16, height * 0.08)
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', onTap)
-      this.add
-        .text(x, y, label, { fontFamily: 'monospace', fontSize: '22px', color: '#e6edf3' })
-        .setOrigin(0.5)
+      this.add.text(x, y, label, headlineStyle(18)).setOrigin(0.5)
     }
     addButton(width * 0.15, '◀', () => this.move('left'))
     addButton(width * 0.4, '▼', () => this.drop())
@@ -112,16 +114,21 @@ export class TetrisSprintSceneBase extends Phaser.Scene {
     const boardW = cell * snap.cols
     const startX = width / 2 - boardW / 2 + cell / 2
     const startY = height * 0.16 + cell / 2
+    this.cellPx = Math.max(6, Math.floor(cell) - 2)
+    for (const value of Object.keys(CELL_COLORS)) {
+      const v = Number(value)
+      ensurePixelBlock(this, this.blockKey(v), this.cellPx, CELL_COLORS[v])
+    }
     for (let y = 0; y < snap.rows; y++) {
       for (let x = 0; x < snap.cols; x++) {
-        this.cells.push(
-          this.add
-            .rectangle(startX + x * cell, startY + y * cell, cell - 2, cell - 2, CELL_COLORS[0])
-            .setStrokeStyle(1, 0x3a4668),
-        )
+        this.cells.push(this.add.image(startX + x * cell, startY + y * cell, this.blockKey(0)))
       }
     }
     this.built = true
+  }
+
+  private blockKey(value: number): string {
+    return `pp-tetris-block-${value}-${this.cellPx}`
   }
 
   override update(): void {
@@ -159,7 +166,7 @@ export class TetrisSprintSceneBase extends Phaser.Scene {
     for (let i = 0; i < this.cells.length; i++) {
       const cellEl = this.cells[i]
       const v = board.grid[i] ?? 0
-      cellEl?.setFillStyle(CELL_COLORS[v] ?? CELL_COLORS[0])
+      cellEl?.setTexture(this.blockKey(CELL_COLORS[v] !== undefined ? v : 0))
     }
   }
 }

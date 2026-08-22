@@ -1,25 +1,32 @@
 import type { BubblePopSnapshot, ClientMsg } from '@pp/shared'
+import { PALETTE } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import { addArcadeBackdrop, bodyStyle, ensurePixelOrb, headlineStyle } from '../pixelStyle'
 
 // Color id 1..4 -> fill color. 0 (empty) is never rendered as a filled cell.
 const COLOR_HEX: Record<number, number> = {
-  1: 0xff5252,
-  2: 0x5b8cff,
-  3: 0x8be94b,
-  4: 0xffcf4b,
+  1: PALETTE.red,
+  2: PALETTE.cyan,
+  3: PALETTE.lime,
+  4: PALETTE.amber,
 }
-const EMPTY_COLOR = 0x1d2740
+const EMPTY_COLOR = PALETTE.panel
+const ORB_DIAMETER_CELLS = 10
+
+function bubbleKey(colorId: number): string {
+  return `pp-bubble-orb-${colorId}`
+}
 
 // Bubble Pop canvas. Renders this player's own grid: tap one of the COLS targets along the bottom edge
 // to shoot the upcoming color up that column — no drag-aim, just "choose a column". Scene key === id.
 export class BubblePopScene extends Phaser.Scene {
   private timer?: Phaser.GameObjects.Text
   private status?: Phaser.GameObjects.Text
-  private previewSwatch?: Phaser.GameObjects.Arc
-  private cells: Phaser.GameObjects.Rectangle[] = []
+  private previewSwatch?: Phaser.GameObjects.Image
+  private cells: { bg: Phaser.GameObjects.Rectangle; orb: Phaser.GameObjects.Image }[] = []
   private targets: Phaser.GameObjects.Rectangle[] = []
   private built = false
   private prevScore = 0
@@ -35,19 +42,22 @@ export class BubblePopScene extends Phaser.Scene {
   }
 
   create(): void {
+    addArcadeBackdrop(this)
     this.built = false
     this.cells = []
     this.targets = []
     this.prevScore = 0
     this.prevDone = false
+    for (const value of Object.keys(COLOR_HEX)) {
+      const id = Number(value)
+      ensurePixelOrb(this, bubbleKey(id), ORB_DIAMETER_CELLS, COLOR_HEX[id] as number)
+    }
     const { width, height } = this.scale
     const cx = width / 2
     this.timer = this.add
-      .text(cx, height * 0.06, '', { fontFamily: 'monospace', fontSize: '24px', color: '#06d6a0' })
+      .text(cx, height * 0.06, '', headlineStyle(24, PALETTE.lime))
       .setOrigin(0.5)
-    this.status = this.add
-      .text(cx, height * 0.12, '', { fontFamily: 'monospace', fontSize: '18px', color: '#9fb3c8' })
-      .setOrigin(0.5)
+    this.status = this.add.text(cx, height * 0.12, '', bodyStyle(18)).setOrigin(0.5)
   }
 
   private build(snap: BubblePopSnapshot): void {
@@ -64,22 +74,28 @@ export class BubblePopScene extends Phaser.Scene {
       const row = Math.floor(i / snap.cols)
       const x = startX + col * cell
       const y = startY + row * cell
-      const rect = this.add
+      const bg = this.add
         .rectangle(x, y, cell - 3, cell - 3, EMPTY_COLOR)
-        .setStrokeStyle(2, 0x3a4668)
-      this.cells.push(rect)
+        .setStrokeStyle(2, PALETTE.frame)
+      const orb = this.add
+        .image(x, y, bubbleKey(1))
+        .setDisplaySize(cell - 6, cell - 6)
+        .setVisible(false)
+      this.cells.push({ bg, orb })
     }
     const targetY = startY + area.h + cell * 0.6
     for (let col = 0; col < snap.cols; col++) {
       const x = startX + col * cell
       const target = this.add
-        .rectangle(x, targetY, cell - 6, cell * 0.5, 0x2a3a5c)
-        .setStrokeStyle(2, 0x4a5a8c)
+        .rectangle(x, targetY, cell - 6, cell * 0.5, PALETTE.panelAlt)
+        .setStrokeStyle(2, PALETTE.frameLit)
         .setInteractive({ useHandCursor: true })
       target.on('pointerdown', () => this.shoot(col))
       this.targets.push(target)
     }
-    this.previewSwatch = this.add.circle(cx, targetY + cell * 0.9, cell * 0.3, EMPTY_COLOR)
+    this.previewSwatch = this.add
+      .image(cx, targetY + cell * 0.9, bubbleKey(1))
+      .setDisplaySize(cell * 0.6, cell * 0.6)
     this.built = true
   }
 
@@ -109,12 +125,15 @@ export class BubblePopScene extends Phaser.Scene {
     this.prevScore = board.score
     this.prevDone = board.done
     for (let i = 0; i < this.cells.length; i++) {
-      const rect = this.cells[i]
-      if (!rect) continue
+      const cellEl = this.cells[i]
+      if (!cellEl) continue
       const value = board.grid[i] ?? 0
-      rect.setFillStyle(value ? (COLOR_HEX[value] ?? EMPTY_COLOR) : EMPTY_COLOR)
+      cellEl.orb.setVisible(value > 0 && COLOR_HEX[value] !== undefined)
+      if (value && COLOR_HEX[value] !== undefined) cellEl.orb.setTexture(bubbleKey(value))
     }
-    this.previewSwatch?.setFillStyle(COLOR_HEX[board.nextColor] ?? EMPTY_COLOR)
+    if (COLOR_HEX[board.nextColor] !== undefined) {
+      this.previewSwatch?.setTexture(bubbleKey(board.nextColor))
+    }
     for (const target of this.targets) {
       target.setVisible(!board.done)
     }

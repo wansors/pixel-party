@@ -1,10 +1,18 @@
+import { PALETTE } from '@pp/shared'
 import type { ClientMsg, SimonSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import {
+  addArcadeBackdrop,
+  bodyStyle,
+  ensurePixelBlock,
+  headlineStyle,
+  hexToCss,
+} from '../pixelStyle'
 
-const PAD_COLORS = [0xe63946, 0x3a7bd5, 0x2a9d3f, 0xf4c20d]
+const PAD_COLORS = [PALETTE.red, 0x3a7bd5, 0x2a9d3f, PALETTE.amber]
 const PLAY_ON_MS = 420
 const PLAY_GAP_MS = 180
 // A repeated pad (e.g. seq = [1, 1, 2]) needs a longer, clearer gap than a change of pad — with the
@@ -36,7 +44,7 @@ export class SimonScene extends Phaser.Scene {
   private info?: Phaser.GameObjects.Text
   private timer?: Phaser.GameObjects.Text
   private status?: Phaser.GameObjects.Text
-  private pads: Phaser.GameObjects.Rectangle[] = []
+  private pads: Phaser.GameObjects.Image[] = []
   // Playback state.
   private shownLen = -1
   private playing = false
@@ -62,16 +70,15 @@ export class SimonScene extends Phaser.Scene {
     this.playing = false
     this.wasAlive = true
     this.playSlots = []
+    addArcadeBackdrop(this)
     const { width, height } = this.scale
     const cx = width / 2
-    this.info = this.add
-      .text(cx, height * 0.08, '', { fontFamily: 'monospace', fontSize: '20px', color: '#9fb3c8' })
-      .setOrigin(0.5)
+    this.info = this.add.text(cx, height * 0.08, '', bodyStyle(20, PALETTE.dim)).setOrigin(0.5)
     this.timer = this.add
-      .text(cx, height * 0.14, '', { fontFamily: 'monospace', fontSize: '22px', color: '#06d6a0' })
+      .text(cx, height * 0.14, '', headlineStyle(22, PALETTE.lime))
       .setOrigin(0.5)
     this.status = this.add
-      .text(cx, height * 0.2, '', { fontFamily: 'monospace', fontSize: '22px', color: '#e6edf3' })
+      .text(cx, height * 0.2, '', headlineStyle(22, PALETTE.text))
       .setOrigin(0.5)
 
     // Four pads in a 2x2 block.
@@ -80,16 +87,19 @@ export class SimonScene extends Phaser.Scene {
     const size = (area - gap) / 2
     const startX = cx - size - gap / 2 + size / 2
     const startY = height * 0.6 - size - gap / 2 + size / 2
+    const padSize = Math.round(size)
     for (let i = 0; i < 4; i++) {
       const col = i % 2
       const row = Math.floor(i / 2)
       const x = startX + col * (size + gap)
       const y = startY + row * (size + gap)
-      const pad = this.add
-        .rectangle(x, y, size, size, PAD_COLORS[i])
-        .setStrokeStyle(4, 0x11181f)
-        .setAlpha(0.4)
-        .setInteractive({ useHandCursor: true })
+      const padKey = ensurePixelBlock(
+        this,
+        `pp-simon-pad-${i}-${padSize}`,
+        padSize,
+        PAD_COLORS[i] ?? PALETTE.dim,
+      )
+      const pad = this.add.image(x, y, padKey).setAlpha(0.4).setInteractive({ useHandCursor: true })
       pad.on('pointerdown', () => this.tap(i))
       this.pads.push(pad)
     }
@@ -107,10 +117,10 @@ export class SimonScene extends Phaser.Scene {
   }
 
   private flash(pad: number, ms: number): void {
-    const rect = this.pads[pad]
-    if (!rect) return
-    rect.setAlpha(1)
-    this.time.delayedCall(ms, () => rect.setAlpha(this.playing ? 0.4 : 0.4))
+    const img = this.pads[pad]
+    if (!img) return
+    img.setAlpha(1)
+    this.time.delayedCall(ms, () => img.setAlpha(this.playing ? 0.4 : 0.4))
   }
 
   override update(): void {
@@ -133,7 +143,7 @@ export class SimonScene extends Phaser.Scene {
     }
 
     if (!me.alive) {
-      this.status?.setText(this.t('game.simon.out')).setColor('#e63946')
+      this.status?.setText(this.t('game.simon.out')).setColor(hexToCss(PALETTE.red))
       if (this.wasAlive) {
         this.sfx.wrong()
         this.wasAlive = false
@@ -146,7 +156,7 @@ export class SimonScene extends Phaser.Scene {
       const elapsed = this.time.now - this.playStart
       const idx = this.playSlots.findIndex((s) => elapsed >= s.start && elapsed < s.end)
       const active = idx >= 0 ? this.playSlots[idx] : undefined
-      this.status?.setText(this.t('game.simon.watch')).setColor('#ffd166')
+      this.status?.setText(this.t('game.simon.watch')).setColor(hexToCss(PALETTE.amber))
       this.pads.forEach((p, i) => p.setAlpha(active?.pad === i ? 1 : 0.4))
       // Sound each pad once as it lights up during playback.
       if (active && idx !== this.lastPlaySlot) {
@@ -156,7 +166,7 @@ export class SimonScene extends Phaser.Scene {
       const totalMs = this.playSlots.at(-1)?.end ?? 0
       if (elapsed >= totalMs) this.playing = false
     } else {
-      this.status?.setText(this.t('game.simon.repeat')).setColor('#06d6a0')
+      this.status?.setText(this.t('game.simon.repeat')).setColor(hexToCss(PALETTE.lime))
     }
   }
 }

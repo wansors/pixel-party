@@ -1,9 +1,12 @@
+import { PALETTE, hexToCss } from '@pp/shared'
 import type { BombRelaySnapshot, ClientMsg } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import { addArcadeBackdrop, bodyStyle, ensurePixelOrb, headlineStyle } from '../pixelStyle'
 
+// Bespoke team colors — kept as-is, not PALETTE tokens (see pixelStyle.ts task notes).
 const RED = 0xff5252
 const BLUE = 0x5b8cff
 
@@ -12,6 +15,7 @@ const BLUE = 0x5b8cff
 // MINIGAME_INPUT per press when the local player holds the bomb.
 export class BombRelayScene extends Phaser.Scene {
   private side?: Phaser.GameObjects.Rectangle
+  private bombBody?: Phaser.GameObjects.Image
   private bomb?: Phaser.GameObjects.Graphics
   private prompt?: Phaser.GameObjects.Text
   private status?: Phaser.GameObjects.Text
@@ -37,6 +41,7 @@ export class BombRelayScene extends Phaser.Scene {
   }
 
   create(): void {
+    addArcadeBackdrop(this)
     const { width, height } = this.scale
     this.cx = width / 2
     this.cy = height * 0.44
@@ -47,55 +52,31 @@ export class BombRelayScene extends Phaser.Scene {
     this.side = this.add.rectangle(this.cx, height / 2, width, height, RED, 0)
 
     this.timer = this.add
-      .text(this.cx, height * 0.12, '', {
-        fontFamily: 'monospace',
-        fontSize: '28px',
-        color: '#06d6a0',
-      })
+      .text(this.cx, height * 0.12, '', headlineStyle(28, PALETTE.lime))
       .setOrigin(0.5)
 
+    this.bombBody = this.add.image(
+      this.cx,
+      this.cy,
+      ensurePixelOrb(this, 'pp-bomb-body-dim', 20, PALETTE.dim),
+    )
     this.bomb = this.add.graphics()
 
     this.prompt = this.add
-      .text(this.cx, height * 0.24, '', {
-        fontFamily: 'monospace',
-        fontSize: '40px',
-        color: '#ffd166',
-      })
+      .text(this.cx, height * 0.24, '', headlineStyle(40, PALETTE.amber))
       .setOrigin(0.5)
 
     this.bar = this.add.graphics()
 
     this.status = this.add
-      .text(this.cx, height * 0.74, '', {
-        fontFamily: 'monospace',
-        fontSize: '18px',
-        color: '#9fb3c8',
-        align: 'center',
-      })
+      .text(this.cx, height * 0.74, '', bodyStyle(18, PALETTE.dim, { align: 'center' }))
       .setOrigin(0.5)
 
-    this.redScore = this.add
-      .text(this.cx, height * 0.82, '', {
-        fontFamily: 'monospace',
-        fontSize: '18px',
-        color: '#ff5252',
-      })
-      .setOrigin(0.5)
-    this.blueScore = this.add
-      .text(this.cx, height * 0.86, '', {
-        fontFamily: 'monospace',
-        fontSize: '18px',
-        color: '#5b8cff',
-      })
-      .setOrigin(0.5)
+    this.redScore = this.add.text(this.cx, height * 0.82, '', bodyStyle(18, RED)).setOrigin(0.5)
+    this.blueScore = this.add.text(this.cx, height * 0.86, '', bodyStyle(18, BLUE)).setOrigin(0.5)
 
     this.add
-      .text(this.cx, height * 0.94, this.t('game.bombRelay.hint'), {
-        fontFamily: 'monospace',
-        fontSize: '16px',
-        color: '#5b6b7b',
-      })
+      .text(this.cx, height * 0.94, this.t('game.bombRelay.hint'), bodyStyle(16, PALETTE.dim))
       .setOrigin(0.5)
 
     this.input.on('pointerdown', () => this.mash())
@@ -124,24 +105,25 @@ export class BombRelayScene extends Phaser.Scene {
   }
 
   private drawBomb(color: number, prominent: boolean): void {
-    if (!this.bomb) return
+    if (!this.bomb || !this.bombBody) return
     const g = this.bomb
     g.clear()
     const r = prominent ? 46 : 30
     // fuse
-    g.lineStyle(4, 0x9fb3c8, 1)
+    g.lineStyle(4, PALETTE.dim, 1)
     g.beginPath()
     g.moveTo(this.cx, this.cy - r)
     g.lineTo(this.cx + r * 0.5, this.cy - r - 22)
     g.strokePath()
     // spark
-    g.fillStyle(0xffd166, 1)
+    g.fillStyle(PALETTE.amber, 1)
     g.fillCircle(this.cx + r * 0.5, this.cy - r - 22, prominent ? 6 : 4)
     // body
-    g.fillStyle(color, 1)
-    g.fillCircle(this.cx, this.cy, r)
-    g.lineStyle(3, 0x0b0f14, 1)
-    g.strokeCircle(this.cx, this.cy, r)
+    const key = ensurePixelOrb(this, `pp-bomb-body-${color}`, 20, color)
+    this.bombBody
+      .setTexture(key)
+      .setDisplaySize(r * 2, r * 2)
+      .setPosition(this.cx, this.cy)
   }
 
   private drawBar(progress: number, color: number): void {
@@ -149,12 +131,12 @@ export class BombRelayScene extends Phaser.Scene {
     const g = this.bar
     g.clear()
     const h = 20
-    g.fillStyle(0x1c2634, 1)
+    g.fillStyle(PALETTE.panelAlt, 1)
     g.fillRect(this.barX, this.barY, this.barW, h)
     const clamped = Math.max(0, Math.min(1, progress))
     g.fillStyle(color, 1)
     g.fillRect(this.barX, this.barY, this.barW * clamped, h)
-    g.lineStyle(2, 0x5b6b7b, 1)
+    g.lineStyle(2, PALETTE.dim, 1)
     g.strokeRect(this.barX, this.barY, this.barW, h)
   }
 
@@ -176,9 +158,9 @@ export class BombRelayScene extends Phaser.Scene {
     const team = this.myTeam()
     if (!team) {
       this.side?.setFillStyle(RED, 0)
-      this.drawBomb(0x9fb3c8, false)
+      this.drawBomb(PALETTE.dim, false)
       this.prompt?.setText(this.t('game.bombRelay.spectator'))
-      this.prompt?.setColor('#9fb3c8')
+      this.prompt?.setColor(hexToCss(PALETTE.dim))
       this.status?.setText('')
       this.bar?.clear()
       return
@@ -201,12 +183,12 @@ export class BombRelayScene extends Phaser.Scene {
 
     if (holder && !over) {
       this.prompt?.setText(this.t('game.bombRelay.mash'))
-      this.prompt?.setColor('#ffd166')
+      this.prompt?.setColor(hexToCss(PALETTE.amber))
       this.status?.setText('')
       this.drawBar(view.legProgress / Math.max(1, view.legTarget), color)
     } else {
       this.prompt?.setText(this.t('game.bombRelay.waiting'))
-      this.prompt?.setColor('#9fb3c8')
+      this.prompt?.setColor(hexToCss(PALETTE.dim))
       this.status?.setText(this.t('game.bombRelay.teammateHolds'))
       this.bar?.clear()
     }

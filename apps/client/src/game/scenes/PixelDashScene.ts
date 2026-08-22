@@ -1,9 +1,11 @@
+import { PALETTE } from '@pp/shared'
 import type { ClientMsg, PixelDashObstacle, PixelDashSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
 import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
+import { addArcadeBackdrop, bodyStyle, ensurePixelBlock, headlineStyle } from '../pixelStyle'
 
 // Pixel Dash canvas. The server owns the seeded obstacle track + scoring; this renders the obstacles
 // approaching from the right (smoothed through the snapshot interpolator) and the player's own runner
@@ -12,8 +14,8 @@ export class PixelDashScene extends Phaser.Scene {
   private timer?: Phaser.GameObjects.Text
   private score?: Phaser.GameObjects.Text
   private status?: Phaser.GameObjects.Text
-  private runner?: Phaser.GameObjects.Rectangle
-  private readonly sprites = new Map<number, Phaser.GameObjects.Rectangle>()
+  private runner?: Phaser.GameObjects.Image
+  private readonly sprites = new Map<number, Phaser.GameObjects.Image>()
   private readonly interp = new SnapshotInterpolator<PixelDashSnapshot>(100)
   private lastTick = -1
   private lastScore = 0
@@ -29,6 +31,7 @@ export class PixelDashScene extends Phaser.Scene {
   }
 
   create(): void {
+    addArcadeBackdrop(this)
     this.interp.reset()
     this.lastTick = -1
     this.lastScore = 0
@@ -38,32 +41,18 @@ export class PixelDashScene extends Phaser.Scene {
 
     const { width, height } = this.scale
     this.timer = this.add
-      .text(width / 2, height * 0.06, '', {
-        fontFamily: 'monospace',
-        fontSize: '24px',
-        color: '#06d6a0',
-      })
+      .text(width / 2, height * 0.06, '', headlineStyle(24, PALETTE.lime))
       .setOrigin(0.5)
-    this.score = this.add
-      .text(width / 2, height * 0.12, '', {
-        fontFamily: 'monospace',
-        fontSize: '16px',
-        color: '#9fb3c8',
-      })
-      .setOrigin(0.5)
+    this.score = this.add.text(width / 2, height * 0.12, '', bodyStyle(16)).setOrigin(0.5)
     this.status = this.add
-      .text(width / 2, height * 0.18, 'Tap to jump!', {
-        fontFamily: 'monospace',
-        fontSize: '14px',
-        color: '#f4c20d',
-      })
+      .text(width / 2, height * 0.18, 'Tap to jump!', bodyStyle(14, PALETTE.amber))
       .setOrigin(0.5)
 
     // Ground line + runner near the left/bottom.
-    this.add.rectangle(width / 2, height * 0.86, width, 4, 0x11181f)
-    this.runner = this.add
-      .rectangle(width * 0.16, this.groundY(), width * 0.05, width * 0.05, 0xffd166)
-      .setStrokeStyle(3, 0x11181f)
+    this.add.rectangle(width / 2, height * 0.86, width, 4, PALETTE.bg)
+    const runnerSize = Math.round(width * 0.05)
+    const runnerKey = ensurePixelBlock(this, 'pp-dash-runner', runnerSize, PALETTE.amber)
+    this.runner = this.add.image(width * 0.16, this.groundY(), runnerKey)
 
     this.input.on('pointerdown', () => this.jump())
   }
@@ -137,9 +126,13 @@ export class PixelDashScene extends Phaser.Scene {
     const size = minDim * 0.06
     let sprite = this.sprites.get(o.id)
     if (!sprite) {
-      sprite = this.add
-        .rectangle(x, this.groundY(), size, size, 0xe63946)
-        .setStrokeStyle(3, 0x11181f)
+      const key = ensurePixelBlock(
+        this,
+        `pp-dash-obstacle-${Math.round(size)}`,
+        Math.round(size),
+        PALETTE.red,
+      )
+      sprite = this.add.image(x, this.groundY(), key)
       this.sprites.set(o.id, sprite)
     }
     sprite.setPosition(x, this.groundY())

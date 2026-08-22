@@ -1,12 +1,15 @@
+import { PALETTE } from '@pp/shared'
 import type { ClientMsg, MazeSprintSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import { addArcadeBackdrop, bodyStyle, ensurePixelOrb, headlineStyle } from '../pixelStyle'
 
 type Dir = 'up' | 'down' | 'left' | 'right'
 
-const DOT_COLORS = [0x06d6a0, 0xffcf4b, 0xff5252, 0x5b8cff, 0xa06fff, 0x9fb3c8]
+const DOT_COLORS = [PALETTE.lime, PALETTE.amber, PALETTE.red, 0x5b8cff, 0xa06fff, PALETTE.dim]
+const DOT_DIAMETER_CELLS = 10
 
 // Maze Sprint canvas. Renders the ONE shared maze (identical for everyone) plus every player's own dot
 // within it. Movement is server-validated: taps/keys/arrows just send an intent, the server decides
@@ -15,7 +18,7 @@ export class MazeSprintScene extends Phaser.Scene {
   private built = false
   private prevDone = false
   private walls: Phaser.GameObjects.Graphics | undefined
-  private dots: Phaser.GameObjects.Arc[] = []
+  private dots: Phaser.GameObjects.Image[] = []
   private timer?: Phaser.GameObjects.Text
   private status?: Phaser.GameObjects.Text
   private winBanner?: Phaser.GameObjects.Text
@@ -36,20 +39,15 @@ export class MazeSprintScene extends Phaser.Scene {
     this.built = false
     this.prevDone = false
     this.dots = []
+    addArcadeBackdrop(this)
     const { width, height } = this.scale
     const cx = width / 2
     this.timer = this.add
-      .text(cx, height * 0.05, '', { fontFamily: 'monospace', fontSize: '22px', color: '#06d6a0' })
+      .text(cx, height * 0.05, '', headlineStyle(22, PALETTE.lime))
       .setOrigin(0.5)
-    this.status = this.add
-      .text(cx, height * 0.1, '', { fontFamily: 'monospace', fontSize: '16px', color: '#9fb3c8' })
-      .setOrigin(0.5)
+    this.status = this.add.text(cx, height * 0.1, '', bodyStyle(16, PALETTE.dim)).setOrigin(0.5)
     this.winBanner = this.add
-      .text(cx, height * 0.5, this.t('game.common.done'), {
-        fontFamily: 'monospace',
-        fontSize: '36px',
-        color: '#ffcf4b',
-      })
+      .text(cx, height * 0.5, this.t('game.common.done'), headlineStyle(36, PALETTE.amber))
       .setOrigin(0.5)
       .setVisible(false)
     this.walls = this.add.graphics()
@@ -74,13 +72,11 @@ export class MazeSprintScene extends Phaser.Scene {
     const size = gap * 0.9
     const makeButton = (x: number, y: number, label: string, dir: Dir) => {
       const rect = this.add
-        .rectangle(x, y, size, size, 0x1d2740)
-        .setStrokeStyle(2, 0x3a4668)
+        .rectangle(x, y, size, size, PALETTE.panelAlt)
+        .setStrokeStyle(2, PALETTE.frame)
         .setInteractive({ useHandCursor: true })
       rect.on('pointerdown', () => this.move(dir))
-      this.add
-        .text(x, y, label, { fontFamily: 'monospace', fontSize: '22px', color: '#e6edf3' })
-        .setOrigin(0.5)
+      this.add.text(x, y, label, headlineStyle(22, PALETTE.text)).setOrigin(0.5)
     }
     makeButton(cx, baseY - gap, '▲', 'up')
     makeButton(cx - gap, baseY, '◀', 'left')
@@ -107,7 +103,7 @@ export class MazeSprintScene extends Phaser.Scene {
     const g = this.walls
     if (!g) return
     g.clear()
-    g.lineStyle(3, 0x5b6b7b, 1)
+    g.lineStyle(3, PALETTE.dim, 1)
     const size = snap.size
     for (let i = 0; i < snap.walls.length; i++) {
       const row = Math.floor(i / size)
@@ -139,7 +135,7 @@ export class MazeSprintScene extends Phaser.Scene {
     // Mark the exit cell so it reads clearly even before anyone gets close.
     const exitRow = Math.floor(snap.exitIndex / size)
     const exitCol = snap.exitIndex % size
-    g.fillStyle(0x06d6a0, 0.25)
+    g.fillStyle(PALETTE.lime, 0.25)
     g.fillRect(
       this.originX + exitCol * this.cell + 4,
       this.originY + exitRow * this.cell + 4,
@@ -157,6 +153,11 @@ export class MazeSprintScene extends Phaser.Scene {
     }
   }
 
+  private dotKey(color: number): string {
+    const key = `pp-maze-dot-${color.toString(16)}`
+    return ensurePixelOrb(this, key, DOT_DIAMETER_CELLS, color)
+  }
+
   private drawPlayers(snap: MazeSprintSnapshot): void {
     for (const dot of this.dots) dot.destroy()
     this.dots = []
@@ -167,13 +168,20 @@ export class MazeSprintScene extends Phaser.Scene {
       .filter((id) => id !== selfId)
       .forEach((id, idx) => {
         const { x, y } = this.cellCenter(snap.pos[id] ?? 0, snap.size)
-        const color = DOT_COLORS[idx % DOT_COLORS.length] ?? 0x9fb3c8
-        this.dots.push(this.add.circle(x, y, this.cell * 0.16, color, 0.45))
+        const color = DOT_COLORS[idx % DOT_COLORS.length] ?? PALETTE.dim
+        this.dots.push(
+          this.add
+            .image(x, y, this.dotKey(color))
+            .setDisplaySize(this.cell * 0.32, this.cell * 0.32)
+            .setAlpha(0.45),
+        )
       })
     if (selfId in snap.pos) {
       const { x, y } = this.cellCenter(snap.pos[selfId] ?? 0, snap.size)
       this.dots.push(
-        this.add.circle(x, y, this.cell * 0.22, 0xffffff, 1).setStrokeStyle(2, 0x06d6a0),
+        this.add
+          .image(x, y, this.dotKey(PALETTE.lime))
+          .setDisplaySize(this.cell * 0.44, this.cell * 0.44),
       )
     }
   }

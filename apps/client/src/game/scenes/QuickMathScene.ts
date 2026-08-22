@@ -1,10 +1,12 @@
+import { PALETTE } from '@pp/shared'
 import type { ClientMsg, QuickMathSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import { addArcadeBackdrop, bodyStyle, headlineStyle } from '../pixelStyle'
 
-const CHOICE_COLORS = [0xe63946, 0x3a7bd5, 0x2a9d3f, 0xf4c20d]
+const CHOICE_COLORS = [PALETTE.red, 0x3a7bd5, 0x2a9d3f, PALETTE.amber]
 
 // Quick Math canvas. Shows this player's current question + four answer buttons; answering advances to
 // the next question immediately. Scene key === mini-game id.
@@ -32,16 +34,13 @@ export class QuickMathScene extends Phaser.Scene {
     this.choiceLabels = []
     this.lastScore = 0
     this.lastIndex = -1
+    addArcadeBackdrop(this)
     const { width, height } = this.scale
     const cx = width / 2
-    this.timer = this.add
-      .text(cx, height * 0.1, '', { fontFamily: 'monospace', fontSize: '24px', color: '#06d6a0' })
-      .setOrigin(0.5)
-    this.score = this.add
-      .text(cx, height * 0.16, '', { fontFamily: 'monospace', fontSize: '16px', color: '#9fb3c8' })
-      .setOrigin(0.5)
+    this.timer = this.add.text(cx, height * 0.1, '', headlineStyle(24, PALETTE.lime)).setOrigin(0.5)
+    this.score = this.add.text(cx, height * 0.16, '', bodyStyle(16, PALETTE.dim)).setOrigin(0.5)
     this.question = this.add
-      .text(cx, height * 0.34, '', { fontFamily: 'monospace', fontSize: '56px', color: '#e6edf3' })
+      .text(cx, height * 0.34, '', headlineStyle(56, PALETTE.text))
       .setOrigin(0.5)
 
     const cols = 2
@@ -56,12 +55,10 @@ export class QuickMathScene extends Phaser.Scene {
       const y = top + row * (bh + height * 0.03)
       const rect = this.add
         .rectangle(x, y, bw, bh, CHOICE_COLORS[i])
-        .setStrokeStyle(3, 0x11181f)
+        .setStrokeStyle(3, PALETTE.bg)
         .setInteractive({ useHandCursor: true })
       rect.on('pointerdown', () => this.answer(i))
-      const label = this.add
-        .text(x, y, '', { fontFamily: 'monospace', fontSize: '30px', color: '#0b0f14' })
-        .setOrigin(0.5)
+      const label = this.add.text(x, y, '', headlineStyle(30, PALETTE.bg)).setOrigin(0.5)
       this.choiceBtns.push(rect)
       this.choiceLabels.push(label)
     }

@@ -1,9 +1,13 @@
+import { PALETTE } from '@pp/shared'
 import type { ClientMsg, PongSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
 import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
+import { addArcadeBackdrop, ensurePixelOrb, headlineStyle, hexToCss } from '../pixelStyle'
+
+const BALL_ORB_DIAMETER = 10
 
 // Pixel Pong canvas (Phase 5). Your paddle is always drawn on the LEFT (the server mirrors the ball for
 // the right-side player), controlled locally for zero-lag feel; the ball + opponent paddle come from the
@@ -14,7 +18,8 @@ export class PongScene extends Phaser.Scene {
   private status?: Phaser.GameObjects.Text
   private myPaddle?: Phaser.GameObjects.Rectangle
   private oppPaddle?: Phaser.GameObjects.Rectangle
-  private ball?: Phaser.GameObjects.Arc
+  private ball?: Phaser.GameObjects.Image
+  private ballKey = ''
   private readonly interp = new SnapshotInterpolator<PongSnapshot>(100)
   private lastTick = -1
   private padY = 0.5
@@ -40,36 +45,28 @@ export class PongScene extends Phaser.Scene {
     this.lastSentY = -1
     this.lastScoreYou = 0
     this.lastScoreOpp = 0
+    addArcadeBackdrop(this)
+    this.ballKey = ensurePixelOrb(this, 'pp-pong-ball', BALL_ORB_DIAMETER, PALETTE.amber)
     const { width, height } = this.scale
 
     this.timer = this.add
-      .text(width / 2, height * 0.05, '', {
-        fontFamily: 'monospace',
-        fontSize: '20px',
-        color: '#06d6a0',
-      })
+      .text(width / 2, height * 0.05, '', headlineStyle(20, PALETTE.lime))
       .setOrigin(0.5)
     this.scoreText = this.add
-      .text(width / 2, height * 0.11, '', {
-        fontFamily: 'monospace',
-        fontSize: '28px',
-        color: '#e6edf3',
-      })
+      .text(width / 2, height * 0.11, '', headlineStyle(28, PALETTE.text))
       .setOrigin(0.5)
     this.status = this.add
-      .text(width / 2, height * 0.5, '', {
-        fontFamily: 'monospace',
-        fontSize: '32px',
-        color: '#ffd166',
-      })
+      .text(width / 2, height * 0.5, '', headlineStyle(32, PALETTE.amber))
       .setOrigin(0.5)
       .setDepth(10)
 
     const padW = width * 0.02
     const padH = height * this.padHalf * 2
-    this.myPaddle = this.add.rectangle(width * 0.05, height * 0.5, padW, padH, 0x06d6a0)
-    this.oppPaddle = this.add.rectangle(width * 0.95, height * 0.5, padW, padH, 0xe63946)
-    this.ball = this.add.circle(width / 2, height / 2, Math.min(width, height) * 0.02, 0xffd166)
+    this.myPaddle = this.add.rectangle(width * 0.05, height * 0.5, padW, padH, PALETTE.lime)
+    this.oppPaddle = this.add.rectangle(width * 0.95, height * 0.5, padW, padH, PALETTE.red)
+    this.ball = this.add
+      .image(width / 2, height / 2, this.ballKey)
+      .setDisplaySize(Math.min(width, height) * 0.04, Math.min(width, height) * 0.04)
 
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.aim(p.y))
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
@@ -112,9 +109,10 @@ export class PongScene extends Phaser.Scene {
     this.scoreText?.setText(`${me.scoreYou} : ${me.scoreOpp}`)
 
     if (me.done) {
+      const color = me.won ? PALETTE.lime : me.won === null ? PALETTE.amber : PALETTE.red
       this.status
         ?.setText(me.won === null ? 'DRAW' : me.won ? 'YOU WIN!' : 'YOU LOSE')
-        .setColor(me.won ? '#06d6a0' : me.won === null ? '#ffd166' : '#e63946')
+        .setColor(hexToCss(color))
     } else {
       this.status?.setText('')
     }

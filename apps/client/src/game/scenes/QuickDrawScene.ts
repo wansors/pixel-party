@@ -1,8 +1,10 @@
+import { PALETTE } from '@pp/shared'
 import type { ClientMsg, QuickDrawSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import { addArcadeBackdrop, bodyStyle, headlineStyle } from '../pixelStyle'
 
 const WAIT_BG = 0x8b1e2d
 const FIRE_BG = 0x1a7f4b
@@ -30,23 +32,15 @@ export class QuickDrawScene extends Phaser.Scene {
     // Scene instances survive stop/start across rounds — reset per-round trackers here.
     this.wasFired = false
     this.resolved = false
+    addArcadeBackdrop(this)
     const { width, height } = this.scale
     const cx = width / 2
     this.bg = this.add.rectangle(cx, height / 2, width, height, WAIT_BG).setOrigin(0.5)
     this.title = this.add
-      .text(cx, height * 0.4, 'Wait...', {
-        fontFamily: 'monospace',
-        fontSize: '56px',
-        color: '#ffffff',
-      })
+      .text(cx, height * 0.4, 'Wait...', headlineStyle(56, PALETTE.text))
       .setOrigin(0.5)
     this.status = this.add
-      .text(cx, height * 0.6, '', {
-        fontFamily: 'monospace',
-        fontSize: '18px',
-        color: '#ffe0e0',
-        align: 'center',
-      })
+      .text(cx, height * 0.6, '', bodyStyle(18, PALETTE.text, { align: 'center' }))
       .setOrigin(0.5)
 
     this.input.on('pointerdown', () => this.draw())

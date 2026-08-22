@@ -1,10 +1,20 @@
+import { PALETTE } from '@pp/shared'
 import type { ClientMsg, SudokuSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import {
+  addArcadeBackdrop,
+  bodyStyle,
+  ensurePixelBlock,
+  headlineStyle,
+  hexToCss,
+} from '../pixelStyle'
 
 const BOX = 2
+const DONE_BG = 0x14301f
+const LOCKED_BG = 0x101a30
 
 // Sudoku Race canvas. Renders this player's own 4x4 board: locked givens plus tappable blanks that
 // cycle 0→1→2→3→4→0 on each tap. Alternating 2x2 box shading makes the sudoku structure readable at a
@@ -14,13 +24,15 @@ export class SudokuRaceScene extends Phaser.Scene {
   private timer?: Phaser.GameObjects.Text
   private status?: Phaser.GameObjects.Text
   private cells: {
-    rect: Phaser.GameObjects.Rectangle
+    cell: Phaser.GameObjects.Image
     label: Phaser.GameObjects.Text
-    baseColor: number
+    baseKey: string
   }[] = []
   private built = false
   private prevCorrect = 0
   private prevDone = false
+  private doneKey = ''
+  private lockedKey = ''
 
   constructor(
     private readonly send: (msg: ClientMsg) => void,
@@ -36,14 +48,13 @@ export class SudokuRaceScene extends Phaser.Scene {
     this.cells = []
     this.prevCorrect = 0
     this.prevDone = false
+    addArcadeBackdrop(this)
     const { width, height } = this.scale
     const cx = width / 2
     this.timer = this.add
-      .text(cx, height * 0.06, '', { fontFamily: 'monospace', fontSize: '24px', color: '#06d6a0' })
+      .text(cx, height * 0.06, '', headlineStyle(24, PALETTE.lime))
       .setOrigin(0.5)
-    this.status = this.add
-      .text(cx, height * 0.12, '', { fontFamily: 'monospace', fontSize: '18px', color: '#9fb3c8' })
-      .setOrigin(0.5)
+    this.status = this.add.text(cx, height * 0.12, '', bodyStyle(18, PALETTE.dim)).setOrigin(0.5)
   }
 
   private build(snap: SudokuSnapshot): void {
@@ -53,28 +64,27 @@ export class SudokuRaceScene extends Phaser.Scene {
     const cell = area / snap.size
     const startX = cx - area / 2 + cell / 2
     const startY = height * 0.22 + cell / 2
+    const sizePx = Math.max(1, Math.round(cell - 3))
+    const box0Key = ensurePixelBlock(this, `pp-sudoku-box0-${sizePx}`, sizePx, PALETTE.panel)
+    const box1Key = ensurePixelBlock(this, `pp-sudoku-box1-${sizePx}`, sizePx, PALETTE.panelAlt)
+    this.doneKey = ensurePixelBlock(this, `pp-sudoku-done-${sizePx}`, sizePx, DONE_BG)
+    this.lockedKey = ensurePixelBlock(this, `pp-sudoku-locked-${sizePx}`, sizePx, LOCKED_BG)
     for (let i = 0; i < snap.size * snap.size; i++) {
       const col = i % snap.size
       const row = Math.floor(i / snap.size)
       const x = startX + col * cell
       const y = startY + row * cell
       const box = (Math.floor(row / BOX) + Math.floor(col / BOX)) % 2
-      const baseColor = box === 0 ? 0x1d2740 : 0x223257
-      const rect = this.add
-        .rectangle(x, y, cell - 3, cell - 3, baseColor)
-        .setStrokeStyle(3, 0x3a4668)
+      const baseKey = box === 0 ? box0Key : box1Key
+      const cellImg = this.add.image(x, y, baseKey).setDisplaySize(cell - 3, cell - 3)
       const label = this.add
-        .text(x, y, '', {
-          fontFamily: 'monospace',
-          fontSize: `${Math.floor(cell * 0.45)}px`,
-          color: '#e6edf3',
-        })
+        .text(x, y, '', bodyStyle(Math.floor(cell * 0.45), PALETTE.text))
         .setOrigin(0.5)
       if (!snap.given[i]) {
-        rect.setInteractive({ useHandCursor: true })
-        rect.on('pointerdown', () => this.tap(i, snap.size))
+        cellImg.setInteractive({ useHandCursor: true })
+        cellImg.on('pointerdown', () => this.tap(i, snap.size))
       }
-      this.cells.push({ rect, label, baseColor })
+      this.cells.push({ cell: cellImg, label, baseKey })
     }
     this.built = true
   }
@@ -114,9 +124,11 @@ export class SudokuRaceScene extends Phaser.Scene {
       const locked = board.lockedMask[i] ?? false
       const value = given || board.grid[i] || 0
       cellEl.label.setText(value ? String(value) : '')
-      cellEl.label.setColor(given ? '#6fa8ff' : board.done || locked ? '#2a9d3f' : '#e6edf3')
-      cellEl.rect.setFillStyle(
-        board.done ? 0x14301f : given || locked ? 0x101a30 : cellEl.baseColor,
+      cellEl.label.setColor(
+        given ? '#6fa8ff' : board.done || locked ? '#2a9d3f' : hexToCss(PALETTE.text),
+      )
+      cellEl.cell.setTexture(
+        board.done ? this.doneKey : given || locked ? this.lockedKey : cellEl.baseKey,
       )
     }
   }

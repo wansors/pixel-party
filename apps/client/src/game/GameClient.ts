@@ -3,6 +3,7 @@ import Phaser from 'phaser'
 import { RoundState } from './RoundState'
 import type { Sfx } from './Sfx'
 import type { Translate } from './i18n'
+import { ensurePixelFontLoaded } from './pixelStyle'
 import { BalloonChickenScene } from './scenes/BalloonChickenScene'
 import { BombRelayScene } from './scenes/BombRelayScene'
 import { BubblePopScene } from './scenes/BubblePopScene'
@@ -125,6 +126,7 @@ export class GameClient {
 
   boot(parent: string): void {
     if (this.game) return
+    void ensurePixelFontLoaded()
     this.game = new Phaser.Game(gameConfig(parent))
     // Register scenes inactive; the round starts the right one by id.
     const deps = [this.send, this.state, this.sfx, this.t] as const

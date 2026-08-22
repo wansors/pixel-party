@@ -1,9 +1,11 @@
+import { PALETTE } from '@pp/shared'
 import type { OddOneOutBoard, OddOneOutSnapshot } from '@pp/shared'
 import type { ClientMsg } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import { addArcadeBackdrop, bodyStyle, ensurePixelBlock, headlineStyle } from '../pixelStyle'
 
 // Odd One Out canvas. Renders this player's current board (a grid of tiles, one slightly brighter);
 // tap the odd tile to advance. The grid is rebuilt whenever the player reaches a new level. Scene key
@@ -11,7 +13,7 @@ import type { Translate } from '../i18n'
 export class OddOneOutScene extends Phaser.Scene {
   private timer?: Phaser.GameObjects.Text
   private score?: Phaser.GameObjects.Text
-  private tiles: Phaser.GameObjects.Rectangle[] = []
+  private tiles: Phaser.GameObjects.Image[] = []
   private drawnLevel = -1
 
   constructor(
@@ -24,16 +26,15 @@ export class OddOneOutScene extends Phaser.Scene {
   }
 
   create(): void {
+    addArcadeBackdrop(this)
     this.tiles = []
     this.drawnLevel = -1
     const { width, height } = this.scale
     const cx = width / 2
     this.timer = this.add
-      .text(cx, height * 0.06, '', { fontFamily: 'monospace', fontSize: '24px', color: '#06d6a0' })
+      .text(cx, height * 0.06, '', headlineStyle(24, PALETTE.lime))
       .setOrigin(0.5)
-    this.score = this.add
-      .text(cx, height * 0.12, '', { fontFamily: 'monospace', fontSize: '18px', color: '#9fb3c8' })
-      .setOrigin(0.5)
+    this.score = this.add.text(cx, height * 0.12, '', bodyStyle(18)).setOrigin(0.5)
   }
 
   private draw(board: OddOneOutBoard): void {
@@ -46,18 +47,20 @@ export class OddOneOutScene extends Phaser.Scene {
     const size = (area - gap * (board.cols - 1)) / board.cols
     const startX = cx - area / 2 + size / 2
     const startY = height * 0.2 + size / 2
+    const cellPx = Math.max(4, Math.round(size))
     for (let i = 0; i < board.cols * board.rows; i++) {
       const col = i % board.cols
       const row = Math.floor(i / board.cols)
       const x = startX + col * (size + gap)
       const y = startY + row * (size + gap)
       const color = i === board.oddCell ? board.odd : board.base
-      const rect = this.add
-        .rectangle(x, y, size, size, color)
-        .setStrokeStyle(2, 0x11181f)
+      const key = ensurePixelBlock(this, `pp-odd-block-${color}-${cellPx}`, cellPx, color)
+      const tile = this.add
+        .image(x, y, key)
+        .setDisplaySize(size, size)
         .setInteractive({ useHandCursor: true })
-      rect.on('pointerdown', () => this.tap(board, i))
-      this.tiles.push(rect)
+      tile.on('pointerdown', () => this.tap(board, i))
+      this.tiles.push(tile)
     }
     this.drawnLevel = board.level
   }

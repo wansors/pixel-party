@@ -1,9 +1,13 @@
+import { PALETTE } from '@pp/shared'
 import type { ClientMsg, SumoBody, SumoSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
 import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
+import { addArcadeBackdrop, ensurePixelOrb, headlineStyle } from '../pixelStyle'
+
+const ORB_DIAMETER_CELLS = 12
 
 // Sumo Push canvas (Phase 5). Shared arena: every sumo is rendered from the snapshot (interpolated by
 // id); the player steers their own with a drag vector from the ring centre. Scene key === mini-game id.
@@ -11,7 +15,9 @@ export class SumoScene extends Phaser.Scene {
   private timer?: Phaser.GameObjects.Text
   private status?: Phaser.GameObjects.Text
   private ringGfx?: Phaser.GameObjects.Arc
-  private readonly sprites = new Map<string, Phaser.GameObjects.Arc>()
+  private readonly sprites = new Map<string, Phaser.GameObjects.Image>()
+  private meOrbKey = ''
+  private oppOrbKey = ''
   private readonly interp = new SnapshotInterpolator<SumoSnapshot>(100)
   private lastTick = -1
   private dir = { dx: 0, dy: 0 }
@@ -35,26 +41,22 @@ export class SumoScene extends Phaser.Scene {
     for (const s of this.sprites.values()) s.destroy()
     this.sprites.clear()
 
+    addArcadeBackdrop(this)
+    this.meOrbKey = ensurePixelOrb(this, 'pp-sumo-orb-me', ORB_DIAMETER_CELLS, PALETTE.lime)
+    this.oppOrbKey = ensurePixelOrb(this, 'pp-sumo-orb-opp', ORB_DIAMETER_CELLS, PALETTE.red)
+
     const { width, height } = this.scale
     const ringPx = Math.min(width, height) * 0.42
     this.ringGfx = this.add
       .circle(width / 2, height / 2, ringPx)
-      .setStrokeStyle(4, 0x9fb3c8)
-      .setFillStyle(0x11181f, 0.4)
+      .setStrokeStyle(4, PALETTE.dim)
+      .setFillStyle(PALETTE.bg, 0.4)
 
     this.timer = this.add
-      .text(width / 2, height * 0.05, '', {
-        fontFamily: 'monospace',
-        fontSize: '20px',
-        color: '#06d6a0',
-      })
+      .text(width / 2, height * 0.05, '', headlineStyle(20, PALETTE.lime))
       .setOrigin(0.5)
     this.status = this.add
-      .text(width / 2, height * 0.5, '', {
-        fontFamily: 'monospace',
-        fontSize: '30px',
-        color: '#e63946',
-      })
+      .text(width / 2, height * 0.5, '', headlineStyle(30, PALETTE.red))
       .setOrigin(0.5)
       .setDepth(10)
 
@@ -124,13 +126,16 @@ export class SumoScene extends Phaser.Scene {
   }
 
   private drawBody(body: SumoBody, x: number, y: number, minDim: number): void {
-    const radius = minDim * 0.05
+    const diameter = minDim * 0.1
     let sprite = this.sprites.get(body.id)
     if (!sprite) {
       const mine = body.id === (this.state.selfId ?? '')
-      sprite = this.add.circle(x, y, radius, mine ? 0x06d6a0 : 0xe63946).setStrokeStyle(3, 0x11181f)
+      sprite = this.add.image(x, y, mine ? this.meOrbKey : this.oppOrbKey)
       this.sprites.set(body.id, sprite)
     }
-    sprite.setPosition(x, y).setAlpha(body.alive ? 1 : 0.25)
+    sprite
+      .setPosition(x, y)
+      .setDisplaySize(diameter, diameter)
+      .setAlpha(body.alive ? 1 : 0.25)
   }
 }

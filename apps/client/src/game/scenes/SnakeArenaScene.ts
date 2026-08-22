@@ -1,10 +1,20 @@
+import { PALETTE } from '@pp/shared'
 import type { ClientMsg, SnakeSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import {
+  addArcadeBackdrop,
+  bodyStyle,
+  ensurePixelBlock,
+  ensurePixelOrb,
+  headlineStyle,
+} from '../pixelStyle'
 
 type Dir = 'up' | 'down' | 'left' | 'right'
+
+const SEGMENT_BASE_PX = 32
 
 // Snake Arena canvas. The server owns every player's board; this renders only THIS player's snake and
 // food (via selfId), rebuilt each frame from the latest snapshot — the grid snap needs no interpolation.
@@ -13,14 +23,19 @@ export class SnakeArenaScene extends Phaser.Scene {
   private timer?: Phaser.GameObjects.Text
   private score?: Phaser.GameObjects.Text
   private board?: Phaser.GameObjects.Rectangle
-  private food?: Phaser.GameObjects.Rectangle
+  private food?: Phaser.GameObjects.Image
   private dead?: Phaser.GameObjects.Text
-  private readonly segments: Phaser.GameObjects.Rectangle[] = []
+  private readonly segments: Phaser.GameObjects.Image[] = []
   private origin = { x: 0, y: 0 }
   private cell = 0
   private lastLen = 0
   private wasAlive = true
   private swipeStart?: { x: number; y: number }
+  private foodKey = ''
+  private headAliveKey = ''
+  private bodyAliveKey = ''
+  private headDeadKey = ''
+  private bodyDeadKey = ''
 
   constructor(
     private readonly send: (msg: ClientMsg) => void,
@@ -32,33 +47,26 @@ export class SnakeArenaScene extends Phaser.Scene {
   }
 
   create(): void {
+    addArcadeBackdrop(this)
     this.lastLen = 0
     this.wasAlive = true
     for (const s of this.segments) s.destroy()
     this.segments.length = 0
 
+    this.foodKey = ensurePixelOrb(this, 'pp-snake-food', 12, PALETTE.amber)
+    this.headAliveKey = ensurePixelBlock(this, 'pp-snake-head-alive', SEGMENT_BASE_PX, PALETTE.lime)
+    this.bodyAliveKey = ensurePixelBlock(this, 'pp-snake-body-alive', SEGMENT_BASE_PX, PALETTE.cyan)
+    this.headDeadKey = ensurePixelBlock(this, 'pp-snake-head-dead', SEGMENT_BASE_PX, PALETTE.dim)
+    this.bodyDeadKey = ensurePixelBlock(this, 'pp-snake-body-dead', SEGMENT_BASE_PX, PALETTE.frame)
+
     const { width, height } = this.scale
     this.timer = this.add
-      .text(width / 2, height * 0.06, '', {
-        fontFamily: 'monospace',
-        fontSize: '24px',
-        color: '#8be94b',
-      })
+      .text(width / 2, height * 0.06, '', headlineStyle(24, PALETTE.lime))
       .setOrigin(0.5)
-    this.score = this.add
-      .text(width / 2, height * 0.12, '', {
-        fontFamily: 'monospace',
-        fontSize: '16px',
-        color: '#7b88a8',
-      })
-      .setOrigin(0.5)
+    this.score = this.add.text(width / 2, height * 0.12, '', bodyStyle(16)).setOrigin(0.5)
 
     this.dead = this.add
-      .text(width / 2, height / 2, 'DEAD', {
-        fontFamily: 'monospace',
-        fontSize: '40px',
-        color: '#ff5252',
-      })
+      .text(width / 2, height / 2, 'DEAD', headlineStyle(40, PALETTE.red))
       .setOrigin(0.5)
       .setDepth(10)
       .setVisible(false)
@@ -97,24 +105,11 @@ export class SnakeArenaScene extends Phaser.Scene {
     this.origin = { x: (width - boardSize) / 2, y: (height - boardSize) / 2 + height * 0.06 }
     if (!this.board) {
       this.board = this.add
-        .rectangle(0, 0, boardSize, boardSize, 0x1b1e2e)
+        .rectangle(0, 0, boardSize, boardSize, PALETTE.panel)
         .setOrigin(0, 0)
-        .setStrokeStyle(3, 0x3a3f66)
+        .setStrokeStyle(3, PALETTE.frame)
     }
     this.board.setPosition(this.origin.x, this.origin.y).setSize(boardSize, boardSize)
-  }
-
-  private cellRect(cx: number, cy: number, color: number): Phaser.GameObjects.Rectangle {
-    const pad = Math.max(1, Math.floor(this.cell * 0.1))
-    return this.add
-      .rectangle(
-        this.origin.x + cx * this.cell + pad,
-        this.origin.y + cy * this.cell + pad,
-        this.cell - pad * 2,
-        this.cell - pad * 2,
-        color,
-      )
-      .setOrigin(0, 0)
   }
 
   override update(): void {
@@ -141,13 +136,14 @@ export class SnakeArenaScene extends Phaser.Scene {
     }
 
     if (myFood) {
-      if (!this.food) this.food = this.cellRect(myFood.x, myFood.y, 0xffcf4b)
       const pad = Math.max(1, Math.floor(this.cell * 0.1))
-      this.food.setPosition(
-        this.origin.x + myFood.x * this.cell + pad,
-        this.origin.y + myFood.y * this.cell + pad,
-      )
-      this.food.setSize(this.cell - pad * 2, this.cell - pad * 2)
+      if (!this.food) this.food = this.add.image(0, 0, this.foodKey).setOrigin(0, 0)
+      this.food
+        .setPosition(
+          this.origin.x + myFood.x * this.cell + pad,
+          this.origin.y + myFood.y * this.cell + pad,
+        )
+        .setDisplaySize(this.cell - pad * 2, this.cell - pad * 2)
     }
 
     this.renderSnake(me?.body ?? [], me?.alive ?? true)
@@ -158,18 +154,19 @@ export class SnakeArenaScene extends Phaser.Scene {
       const extra = this.segments.pop()
       extra?.destroy()
     }
-    const headColor = alive ? 0x8be94b : 0x7b88a8
-    const bodyColor = alive ? 0x29d3f2 : 0x3a3f66
+    const headKey = alive ? this.headAliveKey : this.headDeadKey
+    const bodyKey = alive ? this.bodyAliveKey : this.bodyDeadKey
+    const pad = Math.max(1, Math.floor(this.cell * 0.1))
     body.forEach((c, i) => {
       let seg = this.segments[i]
       if (!seg) {
-        seg = this.cellRect(c.x, c.y, bodyColor)
+        seg = this.add.image(0, 0, bodyKey).setOrigin(0, 0)
         this.segments[i] = seg
       }
-      const pad = Math.max(1, Math.floor(this.cell * 0.1))
-      seg.setPosition(this.origin.x + c.x * this.cell + pad, this.origin.y + c.y * this.cell + pad)
-      seg.setSize(this.cell - pad * 2, this.cell - pad * 2)
-      seg.setFillStyle(i === 0 ? headColor : bodyColor)
+      seg
+        .setPosition(this.origin.x + c.x * this.cell + pad, this.origin.y + c.y * this.cell + pad)
+        .setDisplaySize(this.cell - pad * 2, this.cell - pad * 2)
+        .setTexture(i === 0 ? headKey : bodyKey)
     })
   }
 }

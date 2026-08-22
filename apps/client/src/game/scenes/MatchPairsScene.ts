@@ -1,8 +1,13 @@
+import { PALETTE } from '@pp/shared'
 import type { ClientMsg, MatchSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import { addArcadeBackdrop, bodyStyle, ensurePixelBlock, headlineStyle } from '../pixelStyle'
+
+// Card-back base color — a deliberately warm, wood-toned "table card" look, not a UI/text color.
+const CARD_BACK_COLOR = 0x14100c
 
 // Match (memory pairs) canvas. Renders this player's own board (a cols×rows grid of face-down cards);
 // tapping a face-down card sends a flip. Cards the server reports face-up or matched show their pairId
@@ -11,13 +16,21 @@ import type { Translate } from '../i18n'
 export class MatchPairsScene extends Phaser.Scene {
   private timer?: Phaser.GameObjects.Text
   private score?: Phaser.GameObjects.Text
-  private cards: { rect: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Text }[] = []
+  private cards: { img: Phaser.GameObjects.Image; label: Phaser.GameObjects.Text }[] = []
   private built = false
   private prevMatched = 0
   private prevAttempts = 0
+  private cellPx = 0
   // One distinct colour per pairId.
   private readonly palette = [
-    0xe63946, 0x06d6a0, 0xffd166, 0x118ab2, 0xef476f, 0x8338ec, 0x2a9d3f, 0xff9f1c,
+    PALETTE.red,
+    PALETTE.lime,
+    PALETTE.amber,
+    0x118ab2,
+    0xef476f,
+    0x8338ec,
+    0x2a9d3f,
+    0xff9f1c,
   ]
 
   constructor(
@@ -30,6 +43,7 @@ export class MatchPairsScene extends Phaser.Scene {
   }
 
   create(): void {
+    addArcadeBackdrop(this)
     this.built = false
     this.cards = []
     this.prevMatched = 0
@@ -37,11 +51,17 @@ export class MatchPairsScene extends Phaser.Scene {
     const { width, height } = this.scale
     const cx = width / 2
     this.timer = this.add
-      .text(cx, height * 0.06, '', { fontFamily: 'monospace', fontSize: '24px', color: '#06d6a0' })
+      .text(cx, height * 0.06, '', headlineStyle(24, PALETTE.lime))
       .setOrigin(0.5)
-    this.score = this.add
-      .text(cx, height * 0.12, '', { fontFamily: 'monospace', fontSize: '18px', color: '#9fb3c8' })
-      .setOrigin(0.5)
+    this.score = this.add.text(cx, height * 0.12, '', bodyStyle(18)).setOrigin(0.5)
+  }
+
+  private backKey(): string {
+    return `pp-match-back-${this.cellPx}`
+  }
+
+  private faceKey(pairId: number): string {
+    return `pp-match-face-${pairId % this.palette.length}-${this.cellPx}`
   }
 
   private build(snap: MatchSnapshot): void {
@@ -52,21 +72,26 @@ export class MatchPairsScene extends Phaser.Scene {
     const cell = (area - gap * (snap.cols - 1)) / snap.cols
     const startX = cx - area / 2 + cell / 2
     const startY = height * 0.2 + cell / 2
+    this.cellPx = Math.max(8, Math.floor(cell))
+    ensurePixelBlock(this, this.backKey(), this.cellPx, CARD_BACK_COLOR)
+    this.palette.forEach((color, idx) =>
+      ensurePixelBlock(this, this.faceKey(idx), this.cellPx, color),
+    )
     for (let i = 0; i < snap.cols * snap.rows; i++) {
       const col = i % snap.cols
       const row = Math.floor(i / snap.cols)
       const x = startX + col * (cell + gap)
       const y = startY + row * (cell + gap)
-      const rect = this.add
-        .rectangle(x, y, cell, cell, 0x14100c)
-        .setStrokeStyle(4, 0x3a2f22)
+      const img = this.add
+        .image(x, y, this.backKey())
+        .setDisplaySize(cell, cell)
         .setInteractive({ useHandCursor: true })
-      rect.on('pointerdown', () => this.flip(i))
+      img.on('pointerdown', () => this.flip(i))
       const label = this.add
-        .text(x, y, '', { fontFamily: 'monospace', fontSize: `${Math.floor(cell * 0.4)}px` })
+        .text(x, y, '', bodyStyle(Math.floor(cell * 0.4), PALETTE.text))
         .setOrigin(0.5)
         .setVisible(false)
-      this.cards.push({ rect, label })
+      this.cards.push({ img, label })
     }
     this.built = true
   }
@@ -106,11 +131,10 @@ export class MatchPairsScene extends Phaser.Scene {
       const isUp = upSet.has(i)
       if (isMatched || isUp) {
         const pairId = reveal[i] ?? 0
-        const color = this.palette[pairId % this.palette.length] as number
-        card.rect.setFillStyle(color, isMatched ? 0.4 : 1)
+        card.img.setTexture(this.faceKey(pairId)).setAlpha(isMatched ? 0.4 : 1)
         card.label.setText(`${pairId}`).setVisible(true)
       } else {
-        card.rect.setFillStyle(0x14100c, 1)
+        card.img.setTexture(this.backKey()).setAlpha(1)
         card.label.setVisible(false)
       }
     }

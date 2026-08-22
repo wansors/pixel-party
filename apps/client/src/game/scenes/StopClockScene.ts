@@ -1,8 +1,10 @@
+import { PALETTE } from '@pp/shared'
 import type { ClientMsg, StopClockSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import { addArcadeBackdrop, bodyStyle, ensurePixelBlock, headlineStyle } from '../pixelStyle'
 
 const PERIOD_MS = 1500
 
@@ -14,9 +16,9 @@ export class StopClockScene extends Phaser.Scene {
   private info?: Phaser.GameObjects.Text
   private status?: Phaser.GameObjects.Text
   private bar?: Phaser.GameObjects.Rectangle
-  private targetMark?: Phaser.GameObjects.Rectangle
-  private needle?: Phaser.GameObjects.Rectangle
-  private button?: Phaser.GameObjects.Rectangle
+  private targetMark?: Phaser.GameObjects.Image
+  private needle?: Phaser.GameObjects.Image
+  private button?: Phaser.GameObjects.Image
   private buttonLabel?: Phaser.GameObjects.Text
   private barLeft = 0
   private barWidth = 0
@@ -31,39 +33,37 @@ export class StopClockScene extends Phaser.Scene {
   }
 
   create(): void {
+    addArcadeBackdrop(this)
     const { width, height } = this.scale
     const cx = width / 2
     this.timer = this.add
-      .text(cx, height * 0.08, '', { fontFamily: 'monospace', fontSize: '24px', color: '#06d6a0' })
+      .text(cx, height * 0.08, '', headlineStyle(24, PALETTE.lime))
       .setOrigin(0.5)
-    this.info = this.add
-      .text(cx, height * 0.15, '', { fontFamily: 'monospace', fontSize: '18px', color: '#9fb3c8' })
-      .setOrigin(0.5)
+    this.info = this.add.text(cx, height * 0.15, '', bodyStyle(18)).setOrigin(0.5)
 
     this.barWidth = width * 0.8
     this.barLeft = cx - this.barWidth / 2
     const barY = height * 0.45
     const barH = height * 0.12
     this.bar = this.add
-      .rectangle(cx, barY, this.barWidth, barH, 0x1d2740)
-      .setStrokeStyle(3, 0x3a4668)
-    this.targetMark = this.add.rectangle(this.barLeft, barY, 6, barH, 0x2a9d3f)
-    this.needle = this.add.rectangle(this.barLeft, barY, 5, barH * 1.35, 0xffd166)
-    this.status = this.add
-      .text(cx, height * 0.6, '', { fontFamily: 'monospace', fontSize: '18px', color: '#5b6b7b' })
-      .setOrigin(0.5)
+      .rectangle(cx, barY, this.barWidth, barH, PALETTE.panelAlt)
+      .setStrokeStyle(3, PALETTE.frame)
 
+    const markKey = ensurePixelBlock(this, 'pp-stopclock-mark', 6, 0x2a9d3f)
+    this.targetMark = this.add.image(this.barLeft, barY, markKey).setDisplaySize(6, barH)
+    const needleKey = ensurePixelBlock(this, 'pp-stopclock-needle', 6, PALETTE.amber)
+    this.needle = this.add.image(this.barLeft, barY, needleKey).setDisplaySize(5, barH * 1.35)
+
+    this.status = this.add.text(cx, height * 0.6, '', bodyStyle(18, PALETTE.dim)).setOrigin(0.5)
+
+    const buttonKey = ensurePixelBlock(this, 'pp-stopclock-button', 12, PALETTE.amber)
     this.button = this.add
-      .rectangle(cx, height * 0.82, width * 0.5, height * 0.12, 0xf4c20d)
-      .setStrokeStyle(3, 0x11181f)
+      .image(cx, height * 0.82, buttonKey)
+      .setDisplaySize(width * 0.5, height * 0.12)
       .setInteractive({ useHandCursor: true })
     this.button.on('pointerdown', () => this.stop())
     this.buttonLabel = this.add
-      .text(cx, height * 0.82, this.t('game.stopClock.stop'), {
-        fontFamily: 'monospace',
-        fontSize: '28px',
-        color: '#0b0f14',
-      })
+      .text(cx, height * 0.82, this.t('game.stopClock.stop'), headlineStyle(28, PALETTE.bg))
       .setOrigin(0.5)
     this.input.keyboard?.on('keydown-SPACE', () => this.stop())
   }

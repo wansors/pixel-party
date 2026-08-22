@@ -1,8 +1,9 @@
-import type { ButtonMasherSnapshot, ClientMsg } from '@pp/shared'
+import { type ButtonMasherSnapshot, type ClientMsg, PALETTE } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import { addArcadeBackdrop, bodyStyle, headlineStyle } from '../pixelStyle'
 
 // Button Masher canvas. Scene key === the mini-game id so GameClient can start it by id. Reads
 // authoritative snapshots from RoundState and sends one MINIGAME_INPUT per press.
@@ -21,35 +22,23 @@ export class ButtonMasherScene extends Phaser.Scene {
   }
 
   create(): void {
+    addArcadeBackdrop(this)
     const { width, height } = this.scale
     const cx = width / 2
     this.add
-      .text(cx, height * 0.14, this.t('game.buttonMasher.mash'), {
-        fontFamily: 'monospace',
-        fontSize: '48px',
-        color: '#ffd166',
-      })
+      .text(cx, height * 0.14, this.t('game.buttonMasher.mash'), headlineStyle(48, PALETTE.amber))
       .setOrigin(0.5)
     this.countText = this.add
-      .text(cx, height * 0.42, '0', { fontFamily: 'monospace', fontSize: '96px', color: '#e6edf3' })
+      .text(cx, height * 0.42, '0', headlineStyle(96, PALETTE.text))
       .setOrigin(0.5)
     this.timer = this.add
-      .text(cx, height * 0.62, '', { fontFamily: 'monospace', fontSize: '28px', color: '#06d6a0' })
+      .text(cx, height * 0.62, '', headlineStyle(28, PALETTE.lime))
       .setOrigin(0.5)
     this.board = this.add
-      .text(cx, height * 0.74, '', {
-        fontFamily: 'monospace',
-        fontSize: '18px',
-        color: '#9fb3c8',
-        align: 'center',
-      })
+      .text(cx, height * 0.74, '', bodyStyle(18, PALETTE.dim, { align: 'center' }))
       .setOrigin(0.5, 0)
     this.add
-      .text(cx, height * 0.9, this.t('game.buttonMasher.hint'), {
-        fontFamily: 'monospace',
-        fontSize: '16px',
-        color: '#5b6b7b',
-      })
+      .text(cx, height * 0.9, this.t('game.buttonMasher.hint'), bodyStyle(16, PALETTE.dim))
       .setOrigin(0.5)
 
     this.input.on('pointerdown', () => this.mash())

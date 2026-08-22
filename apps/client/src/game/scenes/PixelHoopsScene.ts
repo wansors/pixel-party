@@ -1,8 +1,15 @@
-import { type ClientMsg, type PixelHoopsSnapshot, toleranceForShot } from '@pp/shared'
+import { type ClientMsg, PALETTE, type PixelHoopsSnapshot, toleranceForShot } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
 import type { Translate } from '../i18n'
+import {
+  addArcadeBackdrop,
+  bodyStyle,
+  ensurePixelBlock,
+  headlineStyle,
+  hexToCss,
+} from '../pixelStyle'
 
 const CHARGE_MS = 1200
 
@@ -12,7 +19,7 @@ export class PixelHoopsScene extends Phaser.Scene {
   private timer?: Phaser.GameObjects.Text
   private score?: Phaser.GameObjects.Text
   private status?: Phaser.GameObjects.Text
-  private hoop?: Phaser.GameObjects.Rectangle
+  private hoop?: Phaser.GameObjects.Image
   private meterBg?: Phaser.GameObjects.Rectangle
   private meterFill?: Phaser.GameObjects.Rectangle
   private targetBand?: Phaser.GameObjects.Rectangle
@@ -40,20 +47,20 @@ export class PixelHoopsScene extends Phaser.Scene {
     this.charging = false
     this.lastScore = 0
     this.lastIndex = -1
+    addArcadeBackdrop(this)
     const { width, height } = this.scale
     const cx = width / 2
     this.timer = this.add
-      .text(cx, height * 0.06, '', { fontFamily: 'monospace', fontSize: '24px', color: '#06d6a0' })
+      .text(cx, height * 0.06, '', headlineStyle(24, PALETTE.lime))
       .setOrigin(0.5)
-    this.score = this.add
-      .text(cx, height * 0.12, '', { fontFamily: 'monospace', fontSize: '18px', color: '#9fb3c8' })
-      .setOrigin(0.5)
+    this.score = this.add.text(cx, height * 0.12, '', bodyStyle(18)).setOrigin(0.5)
 
     // Hoop travels vertically with the shot's required power (higher target = higher hoop).
     this.hoopX = cx
     this.hoopHi = height * 0.24
     this.hoopLo = height * 0.56
-    this.hoop = this.add.rectangle(this.hoopX, this.hoopLo, width * 0.22, 10, 0xf4c20d)
+    const hoopKey = ensurePixelBlock(this, 'pp-hoops-hoop', 16, PALETTE.amber)
+    this.hoop = this.add.image(this.hoopX, this.hoopLo, hoopKey).setDisplaySize(width * 0.22, 10)
 
     // Power meter on the right.
     this.meterH = height * 0.5
@@ -61,19 +68,21 @@ export class PixelHoopsScene extends Phaser.Scene {
     this.meterX = width * 0.82
     const meterW = width * 0.1
     this.meterBg = this.add
-      .rectangle(this.meterX, this.meterBottom - this.meterH / 2, meterW, this.meterH, 0x1d2740)
-      .setStrokeStyle(3, 0x3a4668)
-    this.targetBand = this.add.rectangle(this.meterX, this.meterBottom, meterW, 10, 0x2a9d3f)
+      .rectangle(
+        this.meterX,
+        this.meterBottom - this.meterH / 2,
+        meterW,
+        this.meterH,
+        PALETTE.panelAlt,
+      )
+      .setStrokeStyle(3, PALETTE.frame)
+    this.targetBand = this.add.rectangle(this.meterX, this.meterBottom, meterW, 10, PALETTE.lime)
     this.meterFill = this.add
-      .rectangle(this.meterX, this.meterBottom, meterW - 8, 0, 0xffd166)
+      .rectangle(this.meterX, this.meterBottom, meterW - 8, 0, PALETTE.amber)
       .setOrigin(0.5, 1)
 
     this.status = this.add
-      .text(cx, height * 0.7, this.t('game.pixelHoops.hint'), {
-        fontFamily: 'monospace',
-        fontSize: '18px',
-        color: '#5b6b7b',
-      })
+      .text(cx, height * 0.7, this.t('game.pixelHoops.hint'), bodyStyle(18))
       .setOrigin(0.5)
 
     this.input.on('pointerdown', () => this.startCharge())
@@ -120,10 +129,12 @@ export class PixelHoopsScene extends Phaser.Scene {
     // Make/miss inferred from the score delta as the shot index advances.
     if (myScore > this.lastScore) {
       this.sfx.coin()
-      this.status?.setText(this.t('game.pixelHoops.swish', { combo })).setColor('#06d6a0')
+      this.status
+        ?.setText(this.t('game.pixelHoops.swish', { combo }))
+        .setColor(hexToCss(PALETTE.lime))
     } else if (this.lastIndex >= 0 && idx > this.lastIndex) {
       this.sfx.wrong()
-      this.status?.setText(this.t('game.pixelHoops.miss')).setColor('#e63946')
+      this.status?.setText(this.t('game.pixelHoops.miss')).setColor(hexToCss(PALETTE.red))
     }
     this.lastScore = myScore
     this.lastIndex = idx
@@ -141,6 +152,6 @@ export class PixelHoopsScene extends Phaser.Scene {
     const p = this.charging ? this.power() : 0
     this.meterFill?.setSize((this.meterBg?.width ?? 20) - 8, p * this.meterH)
 
-    if (!shot) this.status?.setText(this.t('game.common.done')).setColor('#9fb3c8')
+    if (!shot) this.status?.setText(this.t('game.common.done')).setColor(hexToCss(PALETTE.dim))
   }
 }
