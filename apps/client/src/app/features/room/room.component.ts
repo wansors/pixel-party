@@ -35,6 +35,23 @@ type View = 'connecting' | 'lobby' | 'intro' | 'round' | 'round-result' | 'score
 
 const pick = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)] as T
 
+// Best-effort read of "how each player is doing so far this round" out of a mini-game's snapshot.
+// Snapshot shapes vary per game (see packages/shared/src/games/*), but most FFA games expose one of
+// these player-id-keyed, higher-is-better tallies — good enough for a live leaderboard preview. Games
+// without a matching field (duels, team tug-of-war, sumo positions, ...) simply don't drive the live
+// board; it keeps showing the last cumulative scoreboard for those rounds.
+function extractLiveMetric(state: unknown): Record<string, number> | null {
+  if (typeof state !== 'object' || state === null) return null
+  const rec = state as Record<string, unknown>
+  for (const key of ['scores', 'counts', 'progress']) {
+    const v = rec[key]
+    if (v && typeof v === 'object' && Object.values(v).every((n) => typeof n === 'number')) {
+      return v as Record<string, number>
+    }
+  }
+  return null
+}
+
 // Single feature component driving the whole room lifecycle from server messages: lobby -> intro ->
 // round (Phaser canvas) -> scoreboard -> final. Angular owns the DOM/chrome; the round canvas is owned
 // by GameClient (Phaser), booted inside runOutsideAngular so its rAF never drives change detection.
@@ -87,7 +104,16 @@ export class RoomComponent implements OnInit {
   readonly countdown = signal<number | null>(null)
   readonly roundResult = signal<{ round: number; result: RoundResultDto } | null>(null)
   readonly scoreboard = signal<ScoreEntryDto[]>([])
+  // Cumulative standings as of the round before the current one, kept only to derive the live-scoreboard
+  // up/down arrows (rank movement between the last two SCOREBOARD broadcasts).
+  readonly previousScoreboard = signal<ScoreEntryDto[]>([])
+  // The current round's live in-progress tally (from ROUND_STATE), and the one before it — drives the
+  // live-scoreboard panel while playing. Null when the active game's snapshot has no readable metric.
+  readonly liveMetric = signal<Record<string, number> | null>(null)
+  readonly previousLiveMetric = signal<Record<string, number> | null>(null)
   readonly final = signal<ScoreEntryDto[]>([])
+  // Round-result flavor text per player (e.g. "MONSTER KILL!!!"), picked once per round.
+  readonly roundCallouts = signal<Record<string, string>>({})
   // Phase 4 post-match analysis (present on FINAL_RANKING).
   readonly radars = signal<PlayerRadarDto[]>([])
   readonly summary = signal<SessionSummaryDto | null>(null)
@@ -96,6 +122,8 @@ export class RoomComponent implements OnInit {
   private currentGame?: MiniGameId
   private defaultConfigSent = false
   private countdownTimer?: ReturnType<typeof setInterval>
+  // Consecutive round wins per player, used to bump a winner's callout to the "streak" tier.
+  private readonly winStreak = new Map<string, number>()
   private name = ''
   private color: string = pick(PLAYER_COLORS)
   private avatar: AvatarId = pick(AVATARS)
@@ -175,6 +203,10 @@ export class RoomComponent implements OnInit {
         this.intro.set({ round: msg.round, total: msg.totalRounds, game: msg.minigameId })
         this.startCountdown(msg.startsInMs)
         this.view.set('intro')
+        // Fresh round: drop the previous round's live metric so the board doesn't show stale standings
+        // for a heartbeat before the first ROUND_STATE of the new round arrives.
+        this.previousLiveMetric.set(null)
+        this.liveMetric.set(null)
         break
       case 'ROUND_STATE': {
         this.clearCountdown()
@@ -185,16 +217,24 @@ export class RoomComponent implements OnInit {
         // The container was display:none until this view change; RESIZE mode only reacts to window
         // resizes, so force a measure once the section is visible again.
         if (entering) this.zone.runOutsideAngular(() => setTimeout(() => this.game?.refresh(), 0))
+        // Live in-round standings: shift the current reading back a tick before replacing it, so
+        // rankDelta can tell "moved up/down since the last snapshot" instead of just "has a rank".
+        this.previousLiveMetric.set(this.liveMetric())
+        this.liveMetric.set(extractLiveMetric(msg.state))
         this.game?.handle(msg)
         break
       }
       case 'ROUND_RESULT':
         this.roundResult.set({ round: msg.round, result: msg.result })
         this.radars.set(msg.result.radars ?? [])
+        this.roundCallouts.set(this.buildCallouts(msg.result))
         this.view.set('round-result')
         this.audio.sfx.coin()
         break
       case 'SCOREBOARD':
+        // Snapshot the outgoing board before it's replaced, so the live-scoreboard arrows can compare
+        // "where a player was" vs "where they are now".
+        this.previousScoreboard.set(this.scoreboard())
         this.scoreboard.set(msg.scores)
         // The cumulative board follows the round-result reveal; don't clobber intro/round/final on a
         // reconnect, where SCOREBOARD is only seeding scores.
@@ -471,6 +511,87 @@ export class RoomComponent implements OnInit {
   // Catch-up bonus points a player earned this round (0 = none / handicap off).
   roundHandicap(id: string): number {
     return this.roundResult()?.result.handicap?.[id] ?? 0
+  }
+
+  // Cosmetic flavor text for the just-finished round, purely for laughs — never affects scoring. Tiers:
+  // a multi-round winning streak beats a plain win, the round's last place gets razzed, everyone else
+  // gets a neutral line. One random pick per player per round (memoized in `roundCallouts`).
+  private buildCallouts(result: RoundResultDto): Record<string, string> {
+    const winnerId = result.placements[0] ?? null
+    for (const id of this.players().map((p) => p.id)) {
+      const streak = id === winnerId ? (this.winStreak.get(id) ?? 0) + 1 : 0
+      this.winStreak.set(id, streak)
+    }
+    const lastRank = Math.max(0, ...result.scores.map((s) => s.rank))
+    const callouts: Record<string, string> = {}
+    for (const s of result.scores) {
+      const tier =
+        s.playerId === winnerId && (this.winStreak.get(s.playerId) ?? 0) >= 2
+          ? 'streak'
+          : s.playerId === winnerId
+            ? 'winner'
+            : s.rank === lastRank && result.scores.length > 1
+              ? 'loser'
+              : 'other'
+      const options = this.transloco.translate<string[]>(`room.result.callout.${tier}`)
+      callouts[s.playerId] = pick(options)
+    }
+    return callouts
+  }
+
+  // The just-picked flavor line for a player on the round-result screen (empty until computed).
+  calloutFor(id: string): string {
+    return this.roundCallouts()[id] ?? ''
+  }
+
+  // ── Live in-round scoreboard (right-side panel while a mini-game is playing) ────────────────────
+  // Dense ranks (1 = best) from a live-metric reading, higher value = better.
+  private ranksFromMetric(metric: Record<string, number>): Map<string, number> {
+    const sorted = Object.entries(metric).sort((a, b) => b[1] - a[1])
+    const ranks = new Map<string, number>()
+    let rank = 1
+    let prev: number | undefined
+    sorted.forEach(([id, v], idx) => {
+      if (idx > 0 && v !== prev) rank = idx + 1
+      prev = v
+      ranks.set(id, rank)
+    })
+    return ranks
+  }
+
+  // How the room stands RIGHT NOW: while a round is live and the game's snapshot exposes a readable
+  // per-player tally, rank by that (updates every ROUND_STATE tick — instant, this-round standings).
+  // Otherwise fall back to the last cumulative SCOREBOARD (or an all-tied roster before round 1).
+  readonly liveStandings = computed<ScoreEntryDto[]>(() => {
+    const metric = this.liveMetric()
+    if (metric) {
+      const ranks = this.ranksFromMetric(metric)
+      return this.players()
+        .map((p) => ({ playerId: p.id, points: metric[p.id] ?? 0, rank: ranks.get(p.id) ?? 1 }))
+        .sort((a, b) => a.rank - b.rank)
+    }
+    const sb = this.scoreboard()
+    if (sb.length) return sb
+    return this.players().map((p) => ({ playerId: p.id, points: 0, rank: 1 }))
+  })
+
+  // Rank movement since the last reading — within the live round when a metric is driving the board,
+  // otherwise since the previous round's cumulative scoreboard. Positive = climbed, negative = dropped,
+  // 0 = no prior reading yet (e.g. the round's first tick, or round 1 with no scoreboard history).
+  rankDelta(id: string): number {
+    const metric = this.liveMetric()
+    if (metric) {
+      const prevMetric = this.previousLiveMetric()
+      if (!prevMetric) return 0
+      const cur = this.ranksFromMetric(metric).get(id)
+      const prev = this.ranksFromMetric(prevMetric).get(id)
+      if (cur === undefined || prev === undefined) return 0
+      return prev - cur
+    }
+    const prev = this.previousScoreboard().find((s) => s.playerId === id)?.rank
+    const cur = this.scoreboard().find((s) => s.playerId === id)?.rank
+    if (prev === undefined || cur === undefined) return 0
+    return prev - cur
   }
 
   // ── Post-match analysis (Phase 4) ─────────────────────────────────────────

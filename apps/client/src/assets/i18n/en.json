@@ -57,11 +57,18 @@
       "roundWinner": "ROUND WINNER",
       "teamWinner": "WINNING TEAM",
       "totals": "Totals coming up...",
-      "catchup": "+{{n}} catch-up"
+      "catchup": "+{{n}} catch-up",
+      "callout": {
+        "streak": ["MONSTER KILL!!!", "UNSTOPPABLE!", "ON FIRE!", "RAMPAGE!"],
+        "winner": ["You're the best!", "Champion!", "Nailed it!", "Top of the podium!"],
+        "loser": ["Looser!!", "Better luck next time.", "Ouch.", "Last place gang."],
+        "other": ["Solid effort.", "Middle of the pack.", "Keep grinding.", "Not bad!"]
+      }
     },
     "scoreboard": {
       "title": "High Scores",
-      "nextRound": "Next round starting..."
+      "nextRound": "Next round starting...",
+      "live": "Standings"
     },
     "final": {
       "title": "* FINAL RANKING *",

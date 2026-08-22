@@ -178,6 +178,44 @@ describe('SessionEngine', () => {
     expect(intro?.type === 'ROUND_INTRO' && intro.totalRounds).toBe(2)
   })
 
+  test('avoids two consecutive games sharing the same primary skill axis when an alternative exists', () => {
+    const room = Room.create('AXIS', 10)
+    room.add(Player.create({ id: 'a', name: 'a', color: '#fff', avatar: 'x' }))
+    // bug-smash & pixel-rain are both primary-axis `reflexes`; button-masher (speed) and trivia
+    // (knowledge) give the draw a way to keep them apart.
+    room.configure(['bug-smash', 'pixel-rain', 'button-masher', 'trivia'], 4)
+
+    let t = 0
+    const clock: Clock = { now: () => t }
+    const captured: ServerMsg[] = []
+    const engine = new SessionEngine(
+      room,
+      { toRoom: (_c, m) => captured.push(m) },
+      clock,
+      noRandom,
+      CONFIG,
+    )
+    engine.start()
+    for (let i = 0; i < 3200 && !engine.isFinished; i++) {
+      t += 1000 / CONFIG.tickHz
+      engine.onInput('a', { kind: 'mash' })
+      engine.onInput('a', { kind: 'tap' })
+      engine.tick()
+    }
+
+    const ids = captured.flatMap((m) => (m.type === 'ROUND_INTRO' ? [m.minigameId] : []))
+    expect(ids.length).toBe(4)
+    const axisOf: Record<string, string> = {
+      'bug-smash': 'reflexes',
+      'pixel-rain': 'reflexes',
+      'button-masher': 'speed',
+      trivia: 'knowledge',
+    }
+    for (let i = 1; i < ids.length; i++) {
+      expect(axisOf[ids[i] as string]).not.toBe(axisOf[ids[i - 1] as string])
+    }
+  })
+
   test('team round awards team-position points and reports the winning team', () => {
     const room = Room.create('TEAM', 10)
     for (const id of ['a', 'b', 'c', 'd']) {

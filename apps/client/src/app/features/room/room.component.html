@@ -13,7 +13,35 @@
 
   <!-- Kept out of the @switch: the Phaser canvas must survive scoreboard/intro views. -->
   <section class="round" [class.active]="view() === 'round'">
-    <div id="game-container"></div>
+    <div class="round-layout">
+      <div id="game-container"></div>
+      <aside class="live-board" [attr.aria-label]="'room.scoreboard.live' | transloco">
+        <h4>{{ 'room.scoreboard.live' | transloco }}</h4>
+        <ol>
+          @for (s of liveStandings(); track s.playerId) {
+            <li [class.me]="s.playerId === selfId()" [class.lead]="s.rank === 1">
+              <span class="rank">{{ s.rank }}</span>
+              <app-pixel-avatar
+                [avatar]="playerAvatar(s.playerId)"
+                [color]="playerColor(s.playerId)"
+                [size]="18"
+              />
+              <span class="name" [style.color]="playerColor(s.playerId)">{{
+                playerName(s.playerId)
+              }}</span>
+              <span class="pts">{{ s.points }}</span>
+              @if (rankDelta(s.playerId) > 0) {
+                <span class="delta up">▲</span>
+              } @else if (rankDelta(s.playerId) < 0) {
+                <span class="delta down">▼</span>
+              } @else {
+                <span class="delta"></span>
+              }
+            </li>
+          }
+        </ol>
+      </aside>
+    </div>
   </section>
 
   @switch (view()) {
@@ -267,6 +295,9 @@
                   <span class="catchup">{{ 'room.result.catchup' | transloco: { n: bonus } }}</span>
                 }
                 <span class="pts">+{{ s.points }}</span>
+                @if (calloutFor(s.playerId); as callout) {
+                  <span class="callout">{{ callout }}</span>
+                }
               </li>
             }
           </ol>

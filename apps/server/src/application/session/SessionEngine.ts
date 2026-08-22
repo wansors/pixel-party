@@ -5,6 +5,7 @@ import type {
   ScoreEntryDto,
   ServerMsg,
   SessionSummaryDto,
+  SkillAxis,
   TeamId,
   TeamRoundResult,
 } from '@pp/shared'
@@ -83,26 +84,33 @@ export class SessionEngine {
   }
 
   start(): void {
-    // No-repeat within a session: draw distinct games from the pool in a seeded-random order and cap
-    // the round count at the number of distinct games (a game never plays twice in one session).
+    // No-repeat within a session: draw distinct games from the pool and cap the round count at the
+    // number of distinct games (a game never plays twice in one session).
     const pool = this.room.minigameIds.length
       ? [...new Set(this.room.minigameIds)]
       : ['button-masher']
-    const order = this.shuffle(pool)
-    const requested = this.room.rounds > 0 ? this.room.rounds : order.length
-    this.sequence = order.slice(0, Math.min(requested, order.length)) as MiniGameId[]
+    const requested = this.room.rounds > 0 ? this.room.rounds : pool.length
+    this.sequence = this.orderPool(pool, Math.min(requested, pool.length)) as MiniGameId[]
     this.roundIndex = 0
     this.beginIntro(this.clock.now())
   }
 
-  // Fisher-Yates via the Random port — deterministic given the RNG stream (same as the game rolls).
-  private shuffle(items: readonly string[]): string[] {
-    const a = [...items]
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(this.random.next() * (i + 1))
-      ;[a[i], a[j]] = [a[j] as string, a[i] as string]
+  // Seeded draw (via the Random port) that avoids placing two games with the same primary skill axis
+  // back-to-back — e.g. two `knowledge` games in a row — unless every remaining candidate would repeat
+  // it, in which case the constraint is dropped rather than stalling the draw.
+  private orderPool(pool: readonly string[], count: number): string[] {
+    const remaining = [...pool]
+    const sequence: string[] = []
+    let prevAxis: SkillAxis | undefined
+    while (sequence.length < count && remaining.length > 0) {
+      const candidates = remaining.filter((id) => primaryAxis(id) !== prevAxis)
+      const drawFrom = candidates.length > 0 ? candidates : remaining
+      const pick = drawFrom[Math.floor(this.random.next() * drawFrom.length)] as string
+      sequence.push(pick)
+      remaining.splice(remaining.indexOf(pick), 1)
+      prevAxis = primaryAxis(pick)
     }
-    return a
+    return sequence
   }
 
   onInput(playerId: PlayerId, input: unknown): void {
@@ -403,6 +411,11 @@ export class SessionEngine {
   private publish(msg: ServerMsg): void {
     this.publisher.toRoom(this.room.code, msg)
   }
+}
+
+// A game's primary category for the no-consecutive-repeat draw (its first tagged skill axis).
+function primaryAxis(id: string): SkillAxis | undefined {
+  return MINIGAMES_BY_ID.get(id)?.axes[0]
 }
 
 // Sort by points desc into ranked entries with dense 1-based ranks (ties share a rank).
