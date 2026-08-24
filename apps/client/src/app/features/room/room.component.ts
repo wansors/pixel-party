@@ -214,10 +214,26 @@ export class RoomComponent implements OnInit {
         const entering = this.view() !== 'round'
         if (entering) this.view.set('round')
         this.ensureGame()
-        if (this.currentGame) this.game?.startRound(this.currentGame)
-        // The container was display:none until this view change; RESIZE mode only reacts to window
-        // resizes, so force a measure once the section is visible again.
-        if (entering) this.zone.runOutsideAngular(() => setTimeout(() => this.game?.refresh(), 0))
+        const startScene = () => {
+          if (this.currentGame) this.game?.startRound(this.currentGame)
+        }
+        if (entering) {
+          // The section only gets its real (flex-sized) box once this view change reaches the DOM —
+          // before that it's still sized as the full-room overlay it was while parked. Wait two frames
+          // (layout + a safety margin) and refresh the canvas to the settled size BEFORE starting the
+          // scene, or its content gets positioned against the stale larger size and clips once the
+          // layout catches up — this is why some mini-games didn't render fully on entry.
+          this.zone.runOutsideAngular(() => {
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => {
+                this.game?.refresh()
+                startScene()
+              }),
+            )
+          })
+        } else {
+          startScene()
+        }
         // Live in-round standings: shift the current reading back a tick before replacing it, so
         // rankDelta can tell "moved up/down since the last snapshot" instead of just "has a rank".
         this.previousLiveMetric.set(this.liveMetric())
@@ -298,7 +314,7 @@ export class RoomComponent implements OnInit {
     if (this.selfId()) this.game.state.selfId = this.selfId()
     this.syncPlayerNames()
     this.zone.runOutsideAngular(() => {
-      setTimeout(() => this.game?.boot('game-container'), 0)
+      requestAnimationFrame(() => this.game?.boot('game-container'))
     })
   }
 

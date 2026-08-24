@@ -30,7 +30,7 @@ export function bootstrap() {
   const joinRoom = new JoinRoomUseCase(rooms, ids)
 
   const sessionConfig: SessionConfig = {
-    introMs: 3000,
+    introMs: 5000,
     roundResultMs: 4000,
     scoreboardMs: 4000,
     tickHz: config.tickHz,

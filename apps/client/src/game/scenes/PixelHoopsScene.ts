@@ -7,6 +7,7 @@ import {
   addArcadeBackdrop,
   bodyStyle,
   ensurePixelBlock,
+  ensurePixelOrb,
   headlineStyle,
   hexToCss,
 } from '../pixelStyle'
@@ -20,6 +21,9 @@ export class PixelHoopsScene extends Phaser.Scene {
   private score?: Phaser.GameObjects.Text
   private status?: Phaser.GameObjects.Text
   private hoop?: Phaser.GameObjects.Image
+  private ball?: Phaser.GameObjects.Image
+  private shotStartX = 0
+  private shotStartY = 0
   private meterBg?: Phaser.GameObjects.Rectangle
   private meterFill?: Phaser.GameObjects.Rectangle
   private targetBand?: Phaser.GameObjects.Rectangle
@@ -61,6 +65,13 @@ export class PixelHoopsScene extends Phaser.Scene {
     this.hoopLo = height * 0.56
     const hoopKey = ensurePixelBlock(this, 'pp-hoops-hoop', 16, PALETTE.amber)
     this.hoop = this.add.image(this.hoopX, this.hoopLo, hoopKey).setDisplaySize(width * 0.22, 10)
+
+    // Ball flies from the shooter to the hoop on release — purely presentational, the server owns the
+    // make/miss result; this just gives the shot a visible arc instead of a silent number change.
+    const ballKey = ensurePixelOrb(this, 'pp-hoops-ball', 6, PALETTE.orange)
+    this.shotStartX = cx
+    this.shotStartY = height * 0.92
+    this.ball = this.add.image(this.shotStartX, this.shotStartY, ballKey).setVisible(false)
 
     // Power meter on the right.
     this.meterH = height * 0.5
@@ -114,6 +125,30 @@ export class PixelHoopsScene extends Phaser.Scene {
     this.send({
       type: 'MINIGAME_INPUT',
       input: { kind: 'shoot', index: shot.index, power: this.power() },
+    })
+    this.animateShot()
+  }
+
+  private animateShot(): void {
+    if (!this.ball) return
+    const start = new Phaser.Math.Vector2(this.shotStartX, this.shotStartY)
+    const end = new Phaser.Math.Vector2(this.hoopX, this.hoop?.y ?? this.hoopLo)
+    const control = new Phaser.Math.Vector2((start.x + end.x) / 2, Math.min(start.y, end.y) - 80)
+    const path = new Phaser.Curves.QuadraticBezier(start, control, end)
+    this.ball.setPosition(start.x, start.y).setVisible(true).setAlpha(1).setAngle(0)
+    this.tweens.addCounter({
+      from: 0,
+      to: 1,
+      duration: 500,
+      ease: 'Sine.easeIn',
+      onUpdate: (tw) => {
+        const v = tw.getValue() ?? 0
+        const p = path.getPoint(v)
+        this.ball?.setPosition(p.x, p.y).setAngle(v * 360)
+      },
+      onComplete: () => {
+        this.tweens.add({ targets: this.ball, alpha: 0, duration: 200, delay: 60 })
+      },
     })
   }
 

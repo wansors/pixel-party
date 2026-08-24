@@ -55,9 +55,14 @@ export class PixelSplitScene extends Phaser.Scene {
 
     this.cutLine = this.add.rectangle(cx, height * 0.45, 4, height * 0.4, PALETTE.amber)
 
-    // Drag anywhere over the play area to move the cut.
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.setCutFromX(p.x))
-    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+    // Drag over the play area (not the whole scene — a global listener would also fire, and move the
+    // cut, when the Cut button below is pressed) to move the cut.
+    const dragZone = this.add
+      .zone(cx, height * 0.48, width, height * 0.56)
+      .setOrigin(0.5)
+      .setInteractive()
+    dragZone.on('pointerdown', (p: Phaser.Input.Pointer) => this.setCutFromX(p.x))
+    dragZone.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (p.isDown) this.setCutFromX(p.x)
     })
 

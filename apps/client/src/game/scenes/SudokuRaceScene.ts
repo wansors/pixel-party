@@ -120,16 +120,13 @@ export class SudokuRaceScene extends Phaser.Scene {
     for (let i = 0; i < this.cells.length; i++) {
       const cellEl = this.cells[i]
       if (!cellEl) continue
+      // Never acknowledge a correct entry per-cell (only the aggregate "N correct" counter, and the
+      // done state at the end) — otherwise the color change gives away the answer as you go.
       const given = snap.given[i] ?? 0
-      const locked = board.lockedMask[i] ?? false
       const value = given || board.grid[i] || 0
       cellEl.label.setText(value ? String(value) : '')
-      cellEl.label.setColor(
-        given ? '#6fa8ff' : board.done || locked ? '#2a9d3f' : hexToCss(PALETTE.text),
-      )
-      cellEl.cell.setTexture(
-        board.done ? this.doneKey : given || locked ? this.lockedKey : cellEl.baseKey,
-      )
+      cellEl.label.setColor(given ? '#6fa8ff' : board.done ? '#2a9d3f' : hexToCss(PALETTE.text))
+      cellEl.cell.setTexture(board.done ? this.doneKey : given ? this.lockedKey : cellEl.baseKey)
     }
   }
 }
