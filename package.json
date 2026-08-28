@@ -2,6 +2,7 @@
   "name": "pixel-party",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev": "bash scripts/dev.sh",
