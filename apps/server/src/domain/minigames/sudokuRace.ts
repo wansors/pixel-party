@@ -7,6 +7,9 @@ const BOX = 2
 const CELLS = SIZE * SIZE
 const BLANKS = 8
 const DEFAULT_DURATION_MS = 75_000
+// Entering a wrong digit locks that player's fill inputs for this long. Without it a tap-until-it-locks
+// brute force beats actually solving the puzzle (a correct cell freezes, so every guess is free).
+export const WRONG_DIGIT_COOLDOWN_MS = 2000
 
 // A validated 4x4 sudoku solution (rows, cols, and 2x2 boxes each hold 1..4 exactly once).
 const BASE_SOLUTION: readonly number[] = [1, 2, 3, 4, 3, 4, 1, 2, 2, 1, 4, 3, 4, 3, 2, 1]
@@ -85,6 +88,8 @@ export interface SudokuRaceState {
   correctCount: Map<PlayerId, number>
   // 0 = not finished; otherwise the server time the player filled every cell correctly.
   doneAt: Map<PlayerId, number>
+  // playerId -> server time until which that player's fill inputs are ignored (wrong-digit penalty).
+  cooldownUntil: Map<PlayerId, number>
 }
 
 // Self-paced FFA puzzle race. One seeded 4x4 sudoku is shared by everyone; each player fills their own
@@ -112,6 +117,7 @@ export class SudokuRace implements MiniGame<SudokuRaceState, SudokuInput> {
       grids: new Map(ctx.players.map((pid) => [pid, [...startGrid]])),
       correctCount: new Map(ctx.players.map((pid) => [pid, 0])),
       doneAt: new Map(ctx.players.map((pid) => [pid, 0])),
+      cooldownUntil: new Map(ctx.players.map((pid) => [pid, 0])),
     }
   }
 
@@ -129,11 +135,17 @@ export class SudokuRace implements MiniGame<SudokuRaceState, SudokuInput> {
     const doneAt = state.doneAt.get(playerId)
     if (doneAt === undefined || doneAt > 0) return state
     if (now >= state.endsAt) return state
+    // Serving a wrong-digit penalty: every fill (clears included) is ignored until it runs out.
+    if (now < (state.cooldownUntil.get(playerId) ?? 0)) return state
     const grid = state.grids.get(playerId)
     if (!grid) return state
     // A cell already filled correctly is locked — editing it further could only make it wrong again.
     if (grid[index] === state.solution[index]) return state
     grid[index] = value
+    // The wrong digit stays on the board (so the player sees what they entered) but costs a cooldown.
+    if (value !== 0 && value !== state.solution[index]) {
+      state.cooldownUntil.set(playerId, now + WRONG_DIGIT_COOLDOWN_MS)
+    }
     let correct = 0
     for (let i = 0; i < CELLS; i++) {
       if (!state.givenMask[i] && grid[i] === state.solution[i]) correct++
@@ -188,6 +200,7 @@ export class SudokuRace implements MiniGame<SudokuRaceState, SudokuInput> {
         correctCount: state.correctCount.get(pid) ?? 0,
         lockedMask: grid.map((v, i) => !state.givenMask[i] && v === state.solution[i]),
         done: (state.doneAt.get(pid) ?? 0) > 0,
+        cooldownMs: Math.max(0, (state.cooldownUntil.get(pid) ?? 0) - now),
       }
     }
     return {

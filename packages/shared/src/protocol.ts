@@ -154,7 +154,9 @@ export type ServerMsg =
       startsInMs: number
     }
   // Throttled authoritative snapshot of the active mini-game state. Opaque per-game state blob.
-  | { type: 'ROUND_STATE'; round: number; tick: number; state: unknown }
+  // `final` marks the round's last snapshot: the game is over and frozen, and ROUND_RESULT follows
+  // after a short grace period (clients show a FINISH moment on it).
+  | { type: 'ROUND_STATE'; round: number; tick: number; state: unknown; final?: boolean }
   // A round finished — placements + points for this round.
   | { type: 'ROUND_RESULT'; round: number; result: RoundResultDto }
   // Session-wide cumulative ranking (shown between rounds).

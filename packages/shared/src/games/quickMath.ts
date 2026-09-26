@@ -14,10 +14,15 @@ export interface QuickMathSnapshot {
   prompts: Record<string, QuickMathPrompt | null>
   // playerId -> correct answers so far.
   scores: Record<string, number>
+  // playerId -> remaining ms of that player's wrong-answer penalty (0 when none). A wrong answer still
+  // advances to the next sum but starts a short cooldown during which the server ignores every answer
+  // from that player, so mashing one button is slower than actually doing the arithmetic.
+  cooldowns: Record<string, number>
   remainingMs: number
 }
 
-// Answer the question at `index` with option `choice`; the server ignores stale/duplicate answers.
+// Answer the question at `index` with option `choice`; the server ignores stale/duplicate answers and
+// every answer sent while the player's `cooldowns` entry is running.
 export interface QuickMathInput {
   kind: 'answer'
   index: number

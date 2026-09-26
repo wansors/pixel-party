@@ -11,6 +11,10 @@ export interface SudokuBoard {
   // rejects further edits to it, so the client should render it as locked too.
   lockedMask: boolean[]
   done: boolean
+  // Remaining ms of this player's wrong-digit penalty (0 when none). Entering a wrong non-zero digit
+  // keeps it on the board but starts a short cooldown during which the server ignores every fill
+  // input from this player, so guessing digit after digit is slower than solving.
+  cooldownMs: number
 }
 
 export interface SudokuSnapshot {
@@ -23,7 +27,8 @@ export interface SudokuSnapshot {
   remainingMs: number
 }
 
-// Set the cell at `index` to `value` (0 clears it) on this player's own board. No-op on a given cell.
+// Set the cell at `index` to `value` (0 clears it) on this player's own board. No-op on a given cell,
+// on a cell already filled correctly, and while the player's `cooldownMs` is running.
 export interface SudokuInput {
   kind: 'fill'
   index: number

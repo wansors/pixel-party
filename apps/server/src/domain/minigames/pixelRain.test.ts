@@ -36,6 +36,27 @@ describe('PixelRain', () => {
     expect(s.diedAt.get('b')).toBe(0)
   })
 
+  test('ends as soon as only one player is left standing', () => {
+    const game = new PixelRain()
+    let s = init(['a', 'b'])
+    const obs = nn(s.obstacles[0])
+    s = game.onInput(s, 'a', { kind: 'move', x: obs.x }, 0)
+    s = game.onInput(s, 'b', { kind: 'move', x: 0 }, 0)
+    expect(game.isFinished(s, 0)).toBe(false)
+    s = game.tick(s, 50, obs.spawnAt + obs.fallMs)
+    expect(game.isFinished(s, obs.spawnAt + obs.fallMs)).toBe(true)
+    expect(game.getResult(s).placements[0]).toBe('b')
+  })
+
+  test('a solo round runs until the lone player is out', () => {
+    const game = new PixelRain()
+    let s = init(['solo'])
+    const obs = nn(s.obstacles[0])
+    s = game.onInput(s, 'solo', { kind: 'move', x: 0 }, 0)
+    s = game.tick(s, 50, obs.spawnAt + obs.fallMs)
+    expect(game.isFinished(s, obs.spawnAt + obs.fallMs)).toBe(false)
+  })
+
   test('a dead player ignores further input and is not re-hit', () => {
     const game = new PixelRain()
     let s = init(['a'])

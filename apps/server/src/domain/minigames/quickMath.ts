@@ -4,6 +4,9 @@ import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './Mi
 const DEFAULT_DURATION_MS = 30_000
 // Generous pool so even the fastest player never runs dry in the time window.
 const POOL_SIZE = 60
+// A wrong answer locks that player's answers for this long. Without it, mashing one button (a 1-in-4
+// guess per sum, one sum per snapshot) out-scores actually doing the arithmetic.
+export const QUICK_MATH_WRONG_COOLDOWN_MS = 1200
 
 interface Question {
   text: string
@@ -20,11 +23,14 @@ export interface QuickMathState {
   pointer: Map<PlayerId, number>
   correct: Map<PlayerId, number>
   wrong: Map<PlayerId, number>
+  // playerId -> time until which that player's answers are ignored (wrong-answer penalty).
+  cooldownUntil: Map<PlayerId, number>
 }
 
 // Real-time FFA arithmetic sprint. A seeded pool of questions is shared by everyone; each player
-// answers as many as possible before the timer, advancing at their own pace. Pure domain logic:
-// questions come from the injected Random port (seeded per round) and time arrives as `now`.
+// answers as many as possible before the timer, advancing at their own pace; a wrong answer costs a
+// short answer cooldown. Pure domain logic: questions come from the injected Random port (seeded per
+// round) and time arrives as `now`.
 export class QuickMath implements MiniGame<QuickMathState, QuickMathInput> {
   readonly id = 'quick-math'
   readonly format = 'ffa' as const
@@ -77,6 +83,7 @@ export class QuickMath implements MiniGame<QuickMathState, QuickMathInput> {
       pointer: new Map(ctx.players.map((id) => [id, 0])),
       correct: new Map(ctx.players.map((id) => [id, 0])),
       wrong: new Map(ctx.players.map((id) => [id, 0])),
+      cooldownUntil: new Map(ctx.players.map((id) => [id, 0])),
     }
   }
 
@@ -92,10 +99,15 @@ export class QuickMath implements MiniGame<QuickMathState, QuickMathInput> {
     const ptr = state.pointer.get(playerId)
     // Only accept an answer aimed at the player's live question (drops stale/duplicate taps).
     if (ptr === undefined || ptr >= state.pool.length || input.index !== ptr) return state
+    // Serving a wrong-answer penalty: every answer is ignored until it runs out.
+    if (now < (state.cooldownUntil.get(playerId) ?? 0)) return state
     const q = state.pool[ptr] as Question
-    if (input.choice === q.correct)
+    if (input.choice === q.correct) {
       state.correct.set(playerId, (state.correct.get(playerId) ?? 0) + 1)
-    else state.wrong.set(playerId, (state.wrong.get(playerId) ?? 0) + 1)
+    } else {
+      state.wrong.set(playerId, (state.wrong.get(playerId) ?? 0) + 1)
+      state.cooldownUntil.set(playerId, now + QUICK_MATH_WRONG_COOLDOWN_MS)
+    }
     state.pointer.set(playerId, ptr + 1)
     return state
   }
@@ -130,14 +142,17 @@ export class QuickMath implements MiniGame<QuickMathState, QuickMathInput> {
 
   snapshot(state: QuickMathState, now: number): QuickMathSnapshot {
     const prompts: Record<PlayerId, QuickMathPrompt | null> = {}
+    const cooldowns: Record<PlayerId, number> = {}
     for (const id of state.players) {
       const ptr = state.pointer.get(id) ?? 0
       const q = state.pool[ptr]
       prompts[id] = q ? { index: ptr, text: q.text, choices: q.choices } : null
+      cooldowns[id] = Math.max(0, (state.cooldownUntil.get(id) ?? 0) - now)
     }
     return {
       prompts,
       scores: Object.fromEntries(state.correct),
+      cooldowns,
       remainingMs: Math.max(0, state.endsAt - now),
     }
   }

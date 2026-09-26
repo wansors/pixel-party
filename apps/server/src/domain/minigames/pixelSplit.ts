@@ -1,10 +1,12 @@
 import {
   PIXEL_OBJECTS,
+  type PixelObject,
   type PixelSplitInput,
   type PixelSplitSnapshot,
   columnCounts,
 } from '@pp/shared'
 import type { PixelSplitObject } from '@pp/shared'
+import type { Random } from '../ports/Random'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 40_000
@@ -18,6 +20,25 @@ interface Puzzle {
   total: number
   // Best achievable |left - right| over all cut boundaries (objects with odd counts can't split even).
   minError: number
+}
+
+// Seeded per-puzzle placement of a shared object. The art set is fixed (and mostly symmetric), so drawn
+// as-is the ideal cut always sat in the same spot. Each puzzle instead takes the object's tight column
+// span, mirrors it left-right on a coin flip and drops it at a random offset inside a frame half a span
+// wider than the object, so the ideal cut lands somewhere different every time. The frame width depends
+// only on the object, so it keeps its on-screen size. Rows are untouched: they can't move a vertical cut.
+export function placeObject(src: PixelObject, random: Random): PixelObject {
+  const xs = src.cells.map((c) => c.x)
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const span = maxX - minX + 1
+  const slack = Math.ceil(span / 2)
+  const mirror = random.next() < 0.5
+  const offset = Math.floor(random.next() * (slack + 1))
+  const cells = src.cells
+    .map((c) => ({ x: offset + (mirror ? maxX - c.x : c.x - minX), y: c.y }))
+    .sort((a, b) => a.y - b.y || a.x - b.x)
+  return { name: src.name, cols: span + slack, rows: src.rows, cells, count: cells.length }
 }
 
 export interface PixelSplitState {
@@ -47,8 +68,10 @@ export class PixelSplit implements MiniGame<PixelSplitState, PixelSplitInput> {
     }
     const puzzles: Puzzle[] = []
     for (let level = 0; level < LEVELS; level++) {
-      const src = PIXEL_OBJECTS[order[level % order.length] as number]
-      if (!src) continue
+      const shared = PIXEL_OBJECTS[order[level % order.length] as number]
+      if (!shared) continue
+      // Everything the scoring compares against is derived from the placed (transformed) object.
+      const src = placeObject(shared, ctx.random)
       const cols = columnCounts(src)
       const total = src.count
       let minError = total

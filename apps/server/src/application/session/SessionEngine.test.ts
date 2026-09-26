@@ -63,6 +63,40 @@ describe('SessionEngine', () => {
     expect(scoreboard).toBeGreaterThan(roundResult)
   })
 
+  test('publishes the cumulative scoreboard together with the round result, once per round', () => {
+    const msgs = playSession(roomWith('a', 'b'))
+    const roundResult = msgs.findIndex((m) => m.type === 'ROUND_RESULT')
+    expect(msgs[roundResult + 1]?.type).toBe('SCOREBOARD')
+    expect(msgs.filter((m) => m.type === 'SCOREBOARD')).toHaveLength(1)
+  })
+
+  test('publishes a final snapshot, then holds the result back for the grace period', () => {
+    const room = roomWith('a', 'b')
+    let t = 0
+    const clock: Clock = { now: () => t }
+    const captured: { at: number; msg: ServerMsg }[] = []
+    const publisher: Publisher = { toRoom: (_code, msg) => captured.push({ at: t, msg }) }
+    const engine = new SessionEngine(room, publisher, clock, noRandom, {
+      ...CONFIG,
+      roundEndGraceMs: 300,
+    })
+    engine.start()
+    for (let i = 0; i < 400 && !engine.isFinished; i++) {
+      t += 1000 / CONFIG.tickHz
+      engine.onInput('a', { kind: 'mash' })
+      engine.tick()
+    }
+    const final = captured.find((c) => c.msg.type === 'ROUND_STATE' && c.msg.final)
+    const result = captured.find((c) => c.msg.type === 'ROUND_RESULT')
+    if (!final || !result) throw new Error('missing final snapshot or result')
+    expect(result.at - final.at).toBeGreaterThanOrEqual(300)
+    // Frozen during the grace period: no further live snapshots after the final one.
+    const between = captured.filter(
+      (c) => c.at > final.at && c.at < result.at && c.msg.type === 'ROUND_STATE',
+    )
+    expect(between).toHaveLength(0)
+  })
+
   test('the only masher wins the round and the final ranking', () => {
     const msgs = playSession(roomWith('a', 'b'))
     const final = msgs.find((m) => m.type === 'FINAL_RANKING')

@@ -117,6 +117,20 @@ export function startGameServer(deps: GameSocketDeps) {
     }
   }
 
+  // The socket currently holding each seat. A page reload opens the new socket (and REJOINs) before
+  // the old socket's close has been processed; without this, that late close would drop the seat the
+  // new socket just reclaimed (lobby) or mark it offline and move the host role away (mid-session).
+  const seatSockets = new Map<string, ServerWebSocket<SocketData>>()
+  const claimSeat = (ws: ServerWebSocket<SocketData>, playerId: string): void => {
+    const prev = seatSockets.get(playerId)
+    seatSockets.set(playerId, ws)
+    if (prev && prev !== ws) {
+      // Detach the superseded socket first, so its close can no longer touch the seat.
+      prev.data.playerId = undefined
+      prev.close()
+    }
+  }
+
   // JOIN mints identity: run the use case, attach the resolved id/host flag, subscribe, then WELCOME.
   const handleJoin = (
     ws: ServerWebSocket<SocketData>,
@@ -137,6 +151,7 @@ export function startGameServer(deps: GameSocketDeps) {
     }
     ws.data.playerId = result.playerId
     ws.data.isHost = result.isHost
+    claimSeat(ws, result.playerId)
     ws.subscribe(roomTopic(ws.data.roomCode))
     ws.subscribe(playerTopic(result.playerId))
     deps.metrics.inc('players_joined')
@@ -179,6 +194,7 @@ export function startGameServer(deps: GameSocketDeps) {
     }
     ws.data.playerId = player.id
     ws.data.isHost = room.isHost(player.id)
+    claimSeat(ws, player.id)
     player.setConnected(true)
     ws.subscribe(roomTopic(ws.data.roomCode))
     ws.subscribe(playerTopic(player.id))
@@ -413,8 +429,11 @@ export function startGameServer(deps: GameSocketDeps) {
   }
 
   const teardown = (ws: ServerWebSocket<SocketData>): void => {
+    // Only the socket that currently holds the seat may release it (see seatSockets).
+    if (!ws.data.playerId || seatSockets.get(ws.data.playerId) !== ws) return
+    seatSockets.delete(ws.data.playerId)
     const room = deps.rooms.get(ws.data.roomCode)
-    if (!room || !ws.data.playerId) return
+    if (!room) return
     const player = room.get(ws.data.playerId)
     deps.metrics.inc('disconnects')
     // During a live session keep the seat (and its score) so the player can rejoin; only mark it

@@ -18,9 +18,9 @@ export interface PixelObject {
 }
 
 // Each art must be rectangular (all rows equal length). '#' = filled, anything else = empty.
-// Most of these silhouettes are left-right symmetric, so their exact center column is always the ideal
-// Pixel Split cut — every round felt identical. Several are padded with blank columns on one side (still
-// the same recognizable shape, just off-center in its frame) so the ideal cut varies object to object.
+// Several are padded with blank columns on one side (still the same recognizable shape, just off-center
+// in its frame). Pixel Split doesn't rely on that padding: it re-frames every puzzle with a seeded
+// mirror + offset (see placeObject in the server's pixelSplit.ts), so its ideal cut moves between puzzles.
 const ART: Record<string, string[]> = {
   HEART: [
     '..###..###......',

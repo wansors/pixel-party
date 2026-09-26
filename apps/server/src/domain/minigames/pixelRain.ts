@@ -101,9 +101,12 @@ export class PixelRain implements MiniGame<PixelRainState, PixelRainInput> {
     return state
   }
 
+  // Over at the time cap, or once the survivor is decided: last one standing in a multiplayer round
+  // (nobody is left to beat — waiting out the clock alone is dead air), everyone out when solo.
   isFinished(state: PixelRainState, now: number): boolean {
     if (now >= state.endsAt) return true
-    return state.players.every((pid) => state.alive.get(pid) === false)
+    const alive = state.players.filter((pid) => state.alive.get(pid) !== false).length
+    return state.players.length > 1 ? alive <= 1 : alive === 0
   }
 
   private survival(state: PixelRainState, pid: PlayerId): number {

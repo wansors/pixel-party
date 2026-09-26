@@ -17,7 +17,7 @@ export interface PieceShape {
   cells: { x: number; y: number }[]
 }
 
-// Four simple tetromino-like shapes, colors 1..4. No rotation.
+// Four simple tetromino-like shapes, colors 1..4 (rotations are precomputed below; see tryRotate).
 export const SHAPES: readonly PieceShape[] = [
   {
     color: 1,

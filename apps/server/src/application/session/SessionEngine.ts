@@ -27,10 +27,16 @@ import type { Publisher } from '../ports/Publisher'
 
 export interface SessionConfig {
   introMs: number
-  // The post-round reveal is two dwell steps: first the round's own result (who won THIS mini-game),
-  // then the cumulative scoreboard — each shown long enough to read before the next round.
+  // The post-round reveal: the round's own result (who won THIS mini-game) and the cumulative
+  // scoreboard are published together (the client shows them on one screen); the screen then dwells
+  // for roundResultMs + scoreboardMs before the next round's intro.
   roundResultMs: number
   scoreboardMs: number
+  // Freeze on the final state before the reveal: when a round finishes, its last snapshot is published
+  // flagged `final` and the result is held back this long, so players actually see how the round ended
+  // (the winning pull, the last catch) instead of being cut to the results mid-action. Optional; absent
+  // or 0 reveals immediately.
+  roundEndGraceMs?: number
   tickHz: number
   snapshotEveryNTicks: number
   defaultDurationMs: number
@@ -40,7 +46,7 @@ export interface SessionConfig {
   handicap: HandicapConfig
 }
 
-type Phase = 'intro' | 'playing' | 'roundResult' | 'scoreboard' | 'final'
+type Phase = 'intro' | 'playing' | 'finishing' | 'roundResult' | 'scoreboard' | 'final'
 
 // Per-room session state machine. Deterministic by construction: time arrives via the Clock port and
 // randomness via the Random port, so a session is reproducible from (seed, input timeline). The engine
@@ -128,6 +134,9 @@ export class SessionEngine {
       case 'playing':
         this.tickPlaying(now)
         return
+      case 'finishing':
+        if (now >= this.phaseEndsAt) this.endRound(now)
+        return
       case 'roundResult':
         if (now >= this.phaseEndsAt) this.beginScoreboard(now)
         return
@@ -206,7 +215,28 @@ export class SessionEngine {
         state: game.snapshot ? game.snapshot(this.gameState, now) : this.gameState,
       })
     }
-    if (game.isFinished(this.gameState, now)) this.endRound(now)
+    if (game.isFinished(this.gameState, now)) this.beginFinish(now)
+  }
+
+  // The round is over: publish its final state (flagged, so clients can show a FINISH moment), freeze
+  // the game (no more ticks or inputs) and reveal the result after the grace period.
+  private beginFinish(now: number): void {
+    const game = this.game
+    if (!game) return
+    this.publish({
+      type: 'ROUND_STATE',
+      round: this.roundIndex + 1,
+      tick: this.tickCount,
+      state: game.snapshot ? game.snapshot(this.gameState, now) : this.gameState,
+      final: true,
+    })
+    const grace = this.config.roundEndGraceMs ?? 0
+    if (grace <= 0) {
+      this.endRound(now)
+      return
+    }
+    this.phase = 'finishing'
+    this.phaseEndsAt = now + grace
   }
 
   private endRound(now: number): void {
@@ -246,8 +276,11 @@ export class SessionEngine {
       radars: buildRadars(this.analysis, [...this.cumulative.keys()]),
     }
     this.accumulateTiebreak(basePoints)
-    // Reveal the round's own outcome first; the cumulative scoreboard follows after its own dwell.
+    // Reveal the round's own outcome and the updated cumulative standings together: the client renders
+    // both on one results screen, so a separate later SCOREBOARD would leave it showing the previous
+    // round's totals (or none, in round 1) for the whole first dwell.
     this.publish({ type: 'ROUND_RESULT', round: this.roundIndex + 1, result: this.lastResult })
+    this.publish({ type: 'SCOREBOARD', scores: toScoreEntries(this.cumulative) })
     this.room.setPhase('round-result')
     this.phase = 'roundResult'
     this.phaseEndsAt = now + this.config.roundResultMs
@@ -322,8 +355,8 @@ export class SessionEngine {
     })
   }
 
+  // Second half of the results dwell (the SCOREBOARD itself already went out with the round result).
   private beginScoreboard(now: number): void {
-    this.publish({ type: 'SCOREBOARD', scores: toScoreEntries(this.cumulative) })
     this.room.setPhase('scoreboard')
     this.phase = 'scoreboard'
     this.phaseEndsAt = now + this.config.scoreboardMs
@@ -366,7 +399,8 @@ export class SessionEngine {
     switch (this.phase) {
       case 'intro':
         return [scoreboard, roundIntro(Math.max(0, this.phaseEndsAt - now))]
-      case 'playing': {
+      case 'playing':
+      case 'finishing': {
         const msgs: ServerMsg[] = [scoreboard, roundIntro(0)]
         if (this.game) {
           msgs.push({
@@ -374,21 +408,14 @@ export class SessionEngine {
             round: this.roundIndex + 1,
             tick: this.tickCount,
             state: this.game.snapshot ? this.game.snapshot(this.gameState, now) : this.gameState,
+            ...(this.phase === 'finishing' ? { final: true } : {}),
           })
         }
         return msgs
       }
-      case 'roundResult': {
-        // Still on the round-result reveal: replay only that; the cumulative scoreboard broadcasts to
-        // the room when this phase advances.
-        const msgs: ServerMsg[] = []
-        if (this.lastResult) {
-          msgs.push({ type: 'ROUND_RESULT', round: this.roundIndex + 1, result: this.lastResult })
-        }
-        return msgs
-      }
+      case 'roundResult':
       case 'scoreboard': {
-        // Replay the round result then the cumulative scoreboard so the client lands on the latter.
+        // On the results screen: replay the round result, then the cumulative scoreboard shown with it.
         const msgs: ServerMsg[] = []
         if (this.lastResult) {
           msgs.push({ type: 'ROUND_RESULT', round: this.roundIndex + 1, result: this.lastResult })

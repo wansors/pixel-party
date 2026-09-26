@@ -33,6 +33,7 @@ export function bootstrap() {
     introMs: 5000,
     roundResultMs: 4000,
     scoreboardMs: 4000,
+    roundEndGraceMs: 1500,
     tickHz: config.tickHz,
     snapshotEveryNTicks: config.snapshotEveryNTicks,
     defaultDurationMs: 10_000,

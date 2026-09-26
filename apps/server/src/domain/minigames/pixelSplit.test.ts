@@ -1,13 +1,51 @@
 import { describe, expect, test } from 'bun:test'
+import { PIXEL_OBJECTS, type PixelCell, columnCounts } from '@pp/shared'
 import type { Random } from '../ports/Random'
 import { PixelSplit } from './pixelSplit'
 
 // Deterministic seed; the exact object order doesn't matter — the tests read counts off the puzzle.
 const zero: Random = { next: () => 0 }
-const init = (players: string[], now = 0) =>
-  new PixelSplit().init({ players, seed: 1, random: zero, now, config: { durationMs: 40_000 } })
+const init = (players: string[], now = 0, random: Random = zero) =>
+  new PixelSplit().init({ players, seed: 1, random, now, config: { durationMs: 40_000 } })
+
+// Small seeded generator (mulberry32) so the variety tests walk many real, reproducible seeds.
+function seeded(seed: number): Random {
+  let a = seed >>> 0
+  return {
+    next: () => {
+      a = (a + 0x6d2b79f5) | 0
+      let t = Math.imul(a ^ (a >>> 15), a | 1)
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    },
+  }
+}
 
 const leftOf = (cols: number[], cut: number) => cols.slice(0, cut).reduce((a, b) => a + b, 0)
+
+// First cut boundary with the smallest |left - right| imbalance.
+function bestCut(cols: number[]): { cut: number; error: number } {
+  const total = leftOf(cols, cols.length)
+  let best = { cut: 1, error: Number.POSITIVE_INFINITY }
+  for (let cut = 1; cut < cols.length; cut++) {
+    const left = leftOf(cols, cut)
+    const error = Math.abs(left - (total - left))
+    if (error < best.error) best = { cut, error }
+  }
+  return best
+}
+
+// Shape signature with the object shifted flush left (optionally mirrored), to compare placements.
+function signature(cells: readonly PixelCell[], mirror = false): string {
+  const xs = cells.map((c) => c.x)
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  return cells
+    .map((c) => ({ x: mirror ? maxX - c.x : c.x - minX, y: c.y }))
+    .sort((a, b) => a.y - b.y || a.x - b.x)
+    .map((c) => `${c.x},${c.y}`)
+    .join(' ')
+}
 
 describe('PixelSplit', () => {
   test('the optimal cut scores full points', () => {
@@ -44,6 +82,72 @@ describe('PixelSplit', () => {
     s = game.onInput(s, 'a', { kind: 'cut', index: 2, cut: 5 }, 100)
     expect(s.pointer.get('a')).toBe(0)
     expect(s.score.get('a')).toBe(0)
+  })
+
+  test('seeded placement varies where the ideal cut falls between puzzles and rounds', () => {
+    // name -> distinct ideal cut positions (as a fraction of the frame) / orientations seen.
+    const cuts = new Map<string, Set<number>>()
+    const mirrored = new Map<string, Set<boolean>>()
+    for (let seed = 1; seed <= 60; seed++) {
+      for (const puzzle of init(['a'], 0, seeded(seed)).puzzles) {
+        const { name, cols, pixels } = puzzle.object
+        const src = PIXEL_OBJECTS.find((o) => o.name === name)
+        if (!src) throw new Error(`unknown object ${name}`)
+        const flipped = signature(pixels) !== signature(src.cells)
+        cuts.set(name, (cuts.get(name) ?? new Set()).add(bestCut(puzzle.cols).cut / cols))
+        mirrored.set(name, (mirrored.get(name) ?? new Set()).add(flipped))
+      }
+    }
+    expect(cuts.size).toBe(PIXEL_OBJECTS.length)
+    // Every object shows up with its ideal cut in several different places on screen…
+    expect([...cuts].filter(([, seen]) => seen.size < 3).map(([name]) => name)).toEqual([])
+    // …and asymmetric ones in both orientations (a mirrored symmetric shape looks the same).
+    const asymmetric = PIXEL_OBJECTS.filter((o) => {
+      const flipped = signature(o.cells, true)
+      return signature(o.cells) !== flipped
+    })
+    expect(asymmetric.length).toBeGreaterThan(0)
+    for (const { name } of asymmetric)
+      expect({ name, seen: mirrored.get(name)?.size }).toEqual({ name, seen: 2 })
+    // Two different seeds don't just replay the same layout.
+    const layout = (seed: number) =>
+      init(['a'], 0, seeded(seed)).puzzles.map((p) => `${p.object.name}@${bestCut(p.cols).cut}`)
+    expect(layout(7)).not.toEqual(layout(8))
+  })
+
+  test('scoring after the transform matches the placed grid exactly', () => {
+    const game = new PixelSplit()
+    for (let seed = 1; seed <= 25; seed++) {
+      let s = init(['a'], 0, seeded(seed))
+      let expected = 0
+      s.puzzles.forEach((puzzle, index) => {
+        const { name, cols, rows, pixels } = puzzle.object
+        const src = PIXEL_OBJECTS.find((o) => o.name === name)
+        if (!src) throw new Error(`unknown object ${name}`)
+        // Same pixels, same shape (possibly mirrored), all inside the frame.
+        expect(pixels.length).toBe(src.count)
+        expect(puzzle.total).toBe(src.count)
+        expect([signature(src.cells), signature(src.cells, true)]).toContain(signature(pixels))
+        for (const c of pixels) {
+          expect(c.x).toBeGreaterThanOrEqual(0)
+          expect(c.x).toBeLessThan(cols)
+          expect(c.y).toBeGreaterThanOrEqual(0)
+          expect(c.y).toBeLessThan(rows)
+        }
+        // The per-column truth the server scores against is the one the client is shown.
+        expect(puzzle.cols).toEqual(columnCounts({ name, cols, rows, cells: pixels, count: 0 }))
+        // Mirroring/shifting can't change how evenly the object can be split.
+        expect(puzzle.minError).toBe(bestCut(columnCounts(src)).error)
+        // The best cut on the placed grid scores full points; a far-left cut scores what it should.
+        const best = bestCut(puzzle.cols)
+        const cut = index % 2 === 0 ? best.cut : 1
+        const left = leftOf(puzzle.cols, cut)
+        const error = Math.abs(left - (puzzle.total - left))
+        expected += index % 2 === 0 ? 10 : Math.max(0, 10 - (error - puzzle.minError))
+        s = game.onInput(s, 'a', { kind: 'cut', index, cut }, 100 + index)
+        expect(s.score.get('a')).toBe(expected)
+      })
+    }
   })
 
   test('ranks by score, faster finish breaks ties', () => {

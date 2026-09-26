@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { Random } from '../ports/Random'
-import { SudokuRace } from './sudokuRace'
+import { SudokuRace, WRONG_DIGIT_COOLDOWN_MS } from './sudokuRace'
 
 const half: Random = { next: () => 0.5 }
 const nn = <T>(x: T | undefined): T => {
@@ -83,8 +83,55 @@ describe('SudokuRace', () => {
     const wrongValue = (correctValue % 4) + 1
     s = game.onInput(s, 'p', { kind: 'fill', index: blankIndex, value: wrongValue }, 1)
     expect(nn(s.correctCount.get('p'))).toBe(0)
-    s = game.onInput(s, 'p', { kind: 'fill', index: blankIndex, value: correctValue }, 2)
+    // Corrected once the wrong-digit cooldown has run out.
+    const later = 1 + WRONG_DIGIT_COOLDOWN_MS
+    s = game.onInput(s, 'p', { kind: 'fill', index: blankIndex, value: correctValue }, later)
     expect(nn(s.correctCount.get('p'))).toBe(1)
+  })
+
+  test('a wrong digit stays on the board and starts a cooldown that ignores fills until it expires', () => {
+    const game = new SudokuRace()
+    let s = init(['p', 'q'])
+    const blanks = s.givenMask.flatMap((g, i) => (g ? [] : [i]))
+    const a = blanks[0] as number
+    const b = blanks[1] as number
+    const wrongA = ((s.solution[a] as number) % 4) + 1
+    s = game.onInput(s, 'p', { kind: 'fill', index: a, value: wrongA }, 100)
+    expect(nn(s.grids.get('p'))[a]).toBe(wrongA)
+    expect(nn(game.snapshot(s, 100).boards.p).cooldownMs).toBe(WRONG_DIGIT_COOLDOWN_MS)
+    expect(nn(game.snapshot(s, 600).boards.p).cooldownMs).toBe(WRONG_DIGIT_COOLDOWN_MS - 500)
+    // Only the offender is penalized.
+    expect(nn(game.snapshot(s, 100).boards.q).cooldownMs).toBe(0)
+
+    // During the cooldown every fill is ignored: another cell, a correction, even a clear.
+    const end = 100 + WRONG_DIGIT_COOLDOWN_MS
+    s = game.onInput(s, 'p', { kind: 'fill', index: b, value: s.solution[b] as number }, end - 1)
+    s = game.onInput(s, 'p', { kind: 'fill', index: a, value: s.solution[a] as number }, end - 1)
+    s = game.onInput(s, 'p', { kind: 'fill', index: a, value: 0 }, end - 1)
+    expect(nn(s.grids.get('p'))[a]).toBe(wrongA)
+    expect(nn(s.grids.get('p'))[b]).toBe(0)
+    expect(nn(s.correctCount.get('p'))).toBe(0)
+
+    // Accepted again the moment it expires.
+    expect(nn(game.snapshot(s, end).boards.p).cooldownMs).toBe(0)
+    s = game.onInput(s, 'p', { kind: 'fill', index: a, value: s.solution[a] as number }, end)
+    expect(nn(s.grids.get('p'))[a]).toBe(s.solution[a])
+    expect(nn(s.correctCount.get('p'))).toBe(1)
+  })
+
+  test('a correct digit or a clear starts no cooldown', () => {
+    const game = new SudokuRace()
+    let s = init(['p'])
+    const blanks = s.givenMask.flatMap((g, i) => (g ? [] : [i]))
+    const a = blanks[0] as number
+    const b = blanks[1] as number
+    s = game.onInput(s, 'p', { kind: 'fill', index: a, value: s.solution[a] as number }, 10)
+    expect(nn(game.snapshot(s, 10).boards.p).cooldownMs).toBe(0)
+    s = game.onInput(s, 'p', { kind: 'fill', index: b, value: 0 }, 11)
+    expect(nn(game.snapshot(s, 11).boards.p).cooldownMs).toBe(0)
+    // The very next fill lands immediately.
+    s = game.onInput(s, 'p', { kind: 'fill', index: b, value: s.solution[b] as number }, 12)
+    expect(nn(s.correctCount.get('p'))).toBe(2)
   })
 
   test('a cell already filled correctly is locked against further edits', () => {
