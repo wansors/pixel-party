@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pixel Party — promo</title>
+    <!--
+      Pixel Party promo video, built as an HTML page (see docs/promo/README.md).
+      Everything on screen is a pure function of the timeline position `t` (window.__seek(t)), so the
+      same page plays live in a browser (driven by the soundtrack's clock) and renders frame-by-frame
+      to MP4 (render.ts). Cuts are locked to the soundtrack's beat grid: 140 BPM, first beat at 0.357 s.
+    -->
+    <style>
+      @font-face {
+        font-family: 'PixelArcade';
+        src: url('../../apps/client/public/fonts/press-start-2p.woff2') format('woff2');
+      }
+      :root {
+        --bg: #10121c;
+        --panel: #1b1e2e;
+        --panel-alt: #252a40;
+        --frame: #3a3f66;
+        --frame-lit: #5b62a6;
+        --text: #eef1f7;
+        --dim: #7b88a8;
+        --magenta: #ff3e7f;
+        --cyan: #29d3f2;
+        --lime: #8be94b;
+        --amber: #ffcf4b;
+        --orange: #ff7b3d;
+        --red: #ff5252;
+        --blue: #5b8cff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+      }
+      #stage {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1280px;
+        height: 720px;
+        transform-origin: 0 0;
+        overflow: hidden;
+        background: radial-gradient(circle at 50% 30%, #1d2140 0%, var(--bg) 70%);
+        font-family: 'PixelArcade', monospace;
+        color: var(--text);
+      }
+      canvas {
+        position: absolute;
+        inset: 0;
+      }
+      section {
+        position: absolute;
+        inset: 0;
+        display: none;
+      }
+      .abs {
+        position: absolute;
+        will-change: transform, opacity;
+      }
+      .center-x {
+        left: 0;
+        right: 0;
+        text-align: center;
+      }
+
+      /* ── Text styles ─────────────────────────────────────────────── */
+      .shadow {
+        text-shadow:
+          0 6px 0 rgba(0, 0, 0, 0.55),
+          0 0 24px rgba(0, 0, 0, 0.35);
+      }
+      .stroke {
+        -webkit-text-stroke: 3px #10121c;
+        paint-order: stroke fill;
+      }
+      .logo {
+        margin: 0;
+        font-size: 96px;
+        font-weight: normal;
+        letter-spacing: 6px;
+        white-space: nowrap;
+      }
+      .logo span {
+        display: inline-block;
+        will-change: transform;
+      }
+      .h-big {
+        font-size: 48px;
+        line-height: 1.25;
+      }
+      .h-mid {
+        font-size: 32px;
+        line-height: 1.3;
+      }
+      .h-small {
+        font-size: 24px;
+        line-height: 1.4;
+      }
+      .label {
+        font-size: 16px;
+        line-height: 1.5;
+        letter-spacing: 2px;
+      }
+      .mono {
+        font-family: ui-monospace, 'DejaVu Sans Mono', monospace;
+      }
+
+      /* ── Devices & frames ────────────────────────────────────────── */
+      .crt {
+        position: absolute;
+        padding: 14px;
+        background: linear-gradient(#2b3050, #1b1e2e);
+        border: 4px solid var(--frame-lit);
+        box-shadow:
+          0 0 0 4px #0b0c14,
+          0 0 0 10px var(--frame),
+          0 24px 48px rgba(0, 0, 0, 0.6);
+        border-radius: 6px;
+      }
+      .crt img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 3px;
+      }
+      .phone {
+        position: absolute;
+        padding: 18px 12px 22px;
+        background: #0b0c14;
+        border: 4px solid #3a3f66;
+        border-radius: 34px;
+        box-shadow:
+          0 0 0 3px #1b1e2e,
+          0 26px 50px rgba(0, 0, 0, 0.65);
+      }
+      .phone::before {
+        content: '';
+        position: absolute;
+        top: 6px;
+        left: 50%;
+        width: 70px;
+        height: 7px;
+        margin-left: -35px;
+        border-radius: 4px;
+        background: #252a40;
+      }
+      .phone img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 14px;
+      }
+      .laptop {
+        position: absolute;
+      }
+      .laptop .screen {
+        padding: 16px;
+        background: #0b0c14;
+        border: 4px solid #3a3f66;
+        border-radius: 14px 14px 4px 4px;
+      }
+      .laptop .screen img {
+        display: block;
+        width: 100%;
+        border-radius: 4px;
+      }
+      .laptop .base {
+        height: 22px;
+        margin: 0 -48px;
+        background: linear-gradient(#3a3f66, #252a40);
+        border-radius: 0 0 16px 16px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+      }
+
+      /* ── Chips, cards, boxes ─────────────────────────────────────── */
+      .box {
+        position: absolute;
+        background: var(--panel);
+        border: 4px solid var(--frame-lit);
+        box-shadow:
+          0 0 0 4px #0b0c14,
+          0 0 0 8px var(--frame);
+      }
+      .titlebar {
+        padding: 10px 14px;
+        background: var(--frame);
+        color: var(--amber);
+        font-size: 16px;
+        letter-spacing: 2px;
+        border-bottom: 4px solid var(--frame-lit);
+      }
+      .chip {
+        position: absolute;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 16px 20px;
+        font-size: 24px;
+        background: var(--panel-alt);
+        border: 4px solid var(--frame-lit);
+        box-shadow: 0 6px 0 #0b0c14;
+      }
+      .chip i {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+      }
+      .card {
+        position: absolute;
+        width: 360px;
+        background: var(--panel);
+        border: 4px solid var(--frame-lit);
+        box-shadow:
+          0 0 0 4px #0b0c14,
+          0 18px 36px rgba(0, 0, 0, 0.5);
+      }
+      .card .thumb {
+        height: 210px;
+        overflow: hidden;
+        border-bottom: 4px solid var(--frame);
+      }
+      .card .thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .card .body {
+        padding: 18px 16px 20px;
+        text-align: center;
+      }
+      .card .name {
+        font-size: 24px;
+      }
+      .card .sub {
+        margin-top: 12px;
+        color: var(--dim);
+        font-size: 16px;
+      }
+      .shout {
+        font-size: 64px;
+        white-space: nowrap;
+        color: var(--amber);
+        -webkit-text-stroke: 10px #10121c;
+        paint-order: stroke fill;
+        text-shadow: 0 8px 0 rgba(0, 0, 0, 0.6);
+      }
+      .gname {
+        padding: 10px 14px;
+        font-size: 16px;
+        letter-spacing: 2px;
+        color: var(--cyan);
+        background: rgba(11, 12, 20, 0.88);
+        border: 3px solid var(--cyan);
+        white-space: nowrap;
+      }
+      .terminal {
+        padding: 18px 24px;
+        font-size: 22px;
+        background: #0b0c14;
+        border: 4px solid var(--frame-lit);
+        color: var(--lime);
+      }
+      .code-box {
+        padding: 22px 30px 26px;
+        background: #0b0c14;
+        border: 4px solid var(--frame);
+        text-align: center;
+      }
+      .code-box .code {
+        margin-top: 14px;
+        font-size: 72px;
+        letter-spacing: 18px;
+        color: var(--amber);
+        text-shadow: 0 6px 0 #6b4f12;
+        min-height: 80px;
+      }
+      .caret {
+        display: inline-block;
+        width: 0.6em;
+        height: 0.1em;
+        background: var(--amber);
+        vertical-align: baseline;
+      }
+
+      /* ── Overlays ────────────────────────────────────────────────── */
+      #flash {
+        position: absolute;
+        inset: 0;
+        background: #fff;
+        opacity: 0;
+        pointer-events: none;
+      }
+      #fade {
+        position: absolute;
+        inset: 0;
+        background: #000;
+        opacity: 0;
+        pointer-events: none;
+      }
+      #scan {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.16) 0 2px, transparent 2px 4px),
+          radial-gradient(ellipse at center, transparent 58%, rgba(0, 0, 0, 0.55) 100%);
+      }
+
+      /* ── Player controls (live playback only; hidden while rendering) ─ */
+      #ui {
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 10px;
+        font-family: 'PixelArcade', monospace;
+      }
+      #ui button {
+        font: inherit;
+        font-size: 14px;
+        padding: 12px 18px;
+        color: #05231b;
+        background: var(--lime);
+        border: 3px solid var(--lime);
+        box-shadow: 0 4px 0 #4c9a2a;
+        cursor: pointer;
+      }
+      body.rendering #ui {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <canvas id="bg" width="1280" height="720"></canvas>
+
+      <!-- 1 · Power-on + logo + tagline -->
+      <section id="s-intro">
+        <div id="powerline" class="abs" style="left: 0; top: 358px; width: 1280px; height: 4px; background: #fff"></div>
+        <div id="coin" class="abs center-x label" style="top: 336px; color: var(--amber)">INSERT COIN</div>
+        <h1 id="logo" class="abs center-x logo shadow" style="top: 250px"></h1>
+        <div id="tagline" class="abs center-x h-small" style="top: 400px; color: var(--text)"></div>
+        <div id="subline" class="abs center-x label" style="top: 460px; color: var(--dim)">
+          A PARTY OF PIXEL MINI-GAMES FOR YOUR CREW
+        </div>
+      </section>
+
+      <!-- 2 · Join from any phone -->
+      <section id="s-join">
+        <div id="j-h1" class="abs h-big shadow" style="left: 80px; top: 120px; color: var(--cyan)">GRAB YOUR<br />PHONE.</div>
+        <div id="j-h2" class="abs h-mid shadow" style="left: 80px; top: 272px; color: var(--text)">JOIN WITH<br />A CODE.</div>
+        <div id="j-code" class="abs code-box" style="left: 80px; top: 400px; width: 470px">
+          <div class="label" style="color: var(--dim)">ROOM CODE</div>
+          <div class="code" id="j-code-text"></div>
+        </div>
+        <div id="j-stamp" class="abs label" style="left: 84px; top: 620px; color: var(--lime)">NO APP · NO SIGN-UP · NO ACCOUNTS</div>
+        <div id="j-phone" class="phone" style="left: 760px; top: 46px; width: 300px; height: 628px">
+          <img src="assets/join-phone.webp" alt="" />
+        </div>
+      </section>
+
+      <!-- 3 · The host builds the line-up -->
+      <section id="s-lobby">
+        <div id="l-laptop" class="laptop" style="left: 100px; top: 96px; width: 760px">
+          <div class="screen"><img src="assets/lobby-host.webp" alt="" /></div>
+          <div class="base"></div>
+        </div>
+        <div id="l-h1" class="abs h-mid shadow" style="left: 930px; top: 110px; width: 330px; color: var(--amber)">THE HOST<br />PICKS THE<br />LINE-UP</div>
+        <div id="l-count" class="abs shadow" style="left: 930px; top: 300px; font-size: 96px; color: var(--lime)">0</div>
+        <div id="l-count-label" class="abs label" style="left: 934px; top: 410px; color: var(--dim)">MINI-GAMES</div>
+        <div id="l-tag0" class="chip" style="left: 930px; top: 470px; font-size: 16px; padding: 10px 14px"><i style="background: var(--magenta)"></i>FILTER BY SKILL</div>
+        <div id="l-tag1" class="chip" style="left: 930px; top: 540px; font-size: 16px; padding: 10px 14px"><i style="background: var(--cyan)"></i>SET THE ROUNDS</div>
+        <div id="l-tag2" class="chip" style="left: 930px; top: 610px; font-size: 16px; padding: 10px 14px"><i style="background: var(--lime)"></i>PRESS START</div>
+      </section>
+
+      <!-- 4 · Game montage (one shot every 2 beats) -->
+      <section id="s-montage">
+        <div id="m-crt" class="crt" style="left: 150px; top: 44px; width: 980px; height: 632px"></div>
+        <div id="m-phone" class="phone" style="left: 250px; top: 36px; width: 300px; height: 648px"></div>
+        <div id="m-shout" class="abs shout" style="left: 0; top: 0"></div>
+        <div id="m-name" class="abs gname" style="left: 0; top: 0"></div>
+        <div id="m-more" class="abs center-x h-big stroke shadow" style="top: 300px; color: var(--magenta)">+ 19 MORE GAMES</div>
+      </section>
+
+      <!-- 5 · Formats -->
+      <section id="s-formats">
+        <div id="f-h1" class="abs center-x h-big shadow" style="top: 60px; color: var(--amber)">EVERY WAY TO PLAY</div>
+        <div id="f-card0" class="card" style="left: 40px; top: 170px">
+          <div class="thumb"><img src="assets/m-masher.webp" alt="" /></div>
+          <div class="body"><div class="name" style="color: var(--lime)">FREE-FOR-ALL</div><div class="sub">ALL AGAINST ALL</div></div>
+        </div>
+        <div id="f-card1" class="card" style="left: 460px; top: 170px">
+          <div class="thumb"><img src="assets/m-tug.webp" alt="" /></div>
+          <div class="body"><div class="name" style="color: var(--red)">TEAM BATTLES</div><div class="sub">RED VS BLUE</div></div>
+        </div>
+        <div id="f-card2" class="card" style="left: 880px; top: 170px">
+          <div class="thumb"><img src="assets/m-fleet.webp" alt="" /></div>
+          <div class="body"><div class="name" style="color: var(--cyan)">1V1 DUELS</div><div class="sub">HEAD TO HEAD</div></div>
+        </div>
+      </section>
+
+      <!-- 6 · Standings + podium -->
+      <section id="s-podium">
+        <div id="p-result" class="crt" style="left: 60px; top: 150px; width: 560px; height: 364px"><img src="assets/result-team.webp" alt="" /></div>
+        <div id="p-final" class="crt" style="left: 560px; top: 120px; width: 680px; height: 442px"><img src="assets/final-podium.webp" alt="" /></div>
+        <div id="p-h1" class="abs h-mid stroke shadow" style="left: 60px; top: 56px; color: var(--cyan)">CLIMB THE STANDINGS</div>
+        <div id="p-h2" class="abs center-x h-big stroke shadow" style="top: 596px; color: var(--amber)">CROWN THE CHAMPION</div>
+      </section>
+
+      <!-- 7 · Features -->
+      <section id="s-features">
+        <div id="x-h1" class="abs center-x h-big shadow" style="top: 56px; color: var(--lime)">BUILT FOR LAN PARTIES</div>
+        <div id="x-chips"></div>
+      </section>
+
+      <!-- 8 · End card -->
+      <section id="s-end">
+        <h1 id="e-logo" class="abs center-x logo shadow" style="top: 190px"></h1>
+        <div id="e-sub" class="abs center-x label" style="top: 322px; color: var(--dim)">35 MINI-GAMES · ONE ROOM · ENDLESS BRAGGING RIGHTS</div>
+        <div id="e-play" class="abs center-x h-big stroke shadow" style="top: 400px; color: var(--amber)">PRESS START</div>
+        <div id="e-term" class="abs terminal mono" style="left: 340px; top: 520px; width: 600px; text-align: center">$ bun install &amp;&amp; bun run dev</div>
+      </section>
+
+      <canvas id="fx" width="1280" height="720"></canvas>
+      <div id="flash"></div>
+      <div id="scan"></div>
+      <div id="fade"></div>
+    </div>
+
+    <div id="ui">
+      <button id="play" type="button">▶ PLAY</button>
+      <button id="restart" type="button">⟲ RESTART</button>
+    </div>
+
+    <audio id="music" src="../../apps/client/public/audio/background-song.mp3" preload="auto"></audio>
+
+    <script>
+      // ── Beat grid (the soundtrack "Pixel Party Panic": 140 BPM, first beat at 0.357 s) ──────────────
+      const BPM = 140
+      const B = 60 / BPM
+      const T0 = 0.357
+      const beat = (n) => T0 + n * B
+      const bar = (n) => beat(n * 4)
+      const DURATION = bar(24) + 0.35
+      window.__duration = DURATION
+
+      const COLORS = ['#ff3e7f', '#29d3f2', '#8be94b', '#ffcf4b', '#ff7b3d', '#b06bff', '#4be3c3', '#ff5252', '#5b8cff', '#f062d0']
+
+      // ── Math helpers ────────────────────────────────────────────────────────────────────────────
+      const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v))
+      const prog = (t, a, b) => clamp((t - a) / (b - a))
+      const outCubic = (p) => 1 - (1 - p) ** 3
+      const outBack = (p) => {
+        const c = 1.9
+        return 1 + (c + 1) * (p - 1) ** 3 + c * (p - 1) ** 2
+      }
+      const stepped = (p, n) => Math.floor(p * n) / n // arcade-snappy motion
+      const lerp = (a, b, p) => a + (b - a) * p
+      // Deterministic pseudo-random in [0, 1) from an integer seed.
+      const rnd = (i) => {
+        const x = Math.sin(i * 127.1 + 311.7) * 43758.5453
+        return x - Math.floor(x)
+      }
+      // Time since the most recent beat and a 1→0 "kick" envelope for beat pulses.
+      const sinceBeat = (t) => (t < T0 ? 1e9 : (t - T0) % B)
+      const kick = (t, len = 0.18) => 1 - clamp(sinceBeat(t) / len)
+
+      const $ = (id) => document.getElementById(id)
+      function css(el, { x = 0, y = 0, s = 1, r = 0, o = 1 } = {}) {
+        el.style.transform = `translate(${x}px, ${y}px) scale(${s}) rotate(${r}deg)`
+        el.style.opacity = String(o)
+      }
+      // Slam-in: big → normal size in stepped frames, starting at `at`.
+      function slam(el, t, at, { from = 2.2, dur = 0.18, r = 0, x = 0, y = 0 } = {}) {
+        const p = prog(t, at, at + dur)
+        css(el, { x, y, s: lerp(from, 1, stepped(outCubic(p), 5)), r, o: t < at ? 0 : 1 })
+      }
+      // Pop-in with overshoot from below.
+      function pop(el, t, at, { dy = 60, dur = 0.3, x = 0, y = 0 } = {}) {
+        const p = prog(t, at, at + dur)
+        css(el, { x, y: y + dy * (1 - outBack(p)), s: lerp(0.6, 1, outBack(p)), o: t < at ? 0 : 1 })
+      }
+
+      // ── Logos ───────────────────────────────────────────────────────────────────────────────────
+      function buildLogo(el) {
+        el.innerHTML = ''
+        let c = 0
+        for (const ch of 'PIXEL PARTY') {
+          const span = document.createElement('span')
+          span.textContent = ch === ' ' ? ' ' : ch
+          if (ch !== ' ') span.style.color = COLORS[c++ % COLORS.length]
+          el.appendChild(span)
+        }
+        return [...el.children]
+      }
+      const logoIntro = buildLogo($('logo'))
+      const logoEnd = buildLogo($('e-logo'))
+
+      // ── Montage shots ───────────────────────────────────────────────────────────────────────────
+      const SHOTS = [
+        { img: 'm-masher', shout: 'MASH!', name: 'BUTTON MASHER', color: '#ffcf4b' },
+        { img: 'm-fruit', shout: 'CATCH!', name: 'FRUIT CATCH', color: '#8be94b' },
+        { img: 'm-bomb', shout: 'BOOM!', name: 'BOMB RELAY', color: '#ff7b3d' },
+        { img: 'p-quickdraw', shout: 'DRAW!', name: 'QUICK DRAW', color: '#ffcf4b', phone: true },
+        { img: 'm-tetris', shout: 'STACK!', name: 'LINE CLEAR SPRINT', color: '#29d3f2' },
+        { img: 'm-roulette', shout: 'SPIN!', name: 'PIXEL ROULETTE', color: '#ff3e7f' },
+        { img: 'p-pong', shout: 'RALLY!', name: 'PIXEL PONG', color: '#8be94b', phone: true },
+        { img: 'm-fleet', shout: 'FIRE!', name: 'SINK THE FLEET', color: '#ff5252' },
+        { img: 'm-bubble', shout: 'POP!', name: 'BUBBLE POP', color: '#29d3f2' },
+        { img: 'p-sumo', shout: 'SHOVE!', name: 'SUMO PUSH', color: '#ff7b3d', phone: true },
+        { img: 'm-trivia', shout: 'THINK FAST!', name: 'LIGHTNING QUIZ', color: '#b06bff' },
+        { img: 'm-maze', shout: 'RACE!', name: 'MAZE SPRINT', color: '#8be94b' },
+        { img: 'p-dash', shout: 'JUMP!', name: 'PIXEL DASH', color: '#ffcf4b', phone: true },
+        { img: 'm-pairs', shout: 'MATCH!', name: 'MATCH PAIRS', color: '#ff3e7f' },
+        { img: 'm-beat', shout: 'ON BEAT!', name: 'PIXEL BEAT', color: '#29d3f2' },
+        { img: 'm-tug', shout: 'PULL!', name: 'TUG OF WAR', color: '#5b8cff' },
+      ]
+      // One <img> per shot, already in its frame: a cut only toggles visibility, so no rendered frame
+      // can ever catch an image that is still decoding.
+      const shotImgs = SHOTS.map((s) => {
+        const im = document.createElement('img')
+        im.src = `assets/${s.img}.webp`
+        im.alt = ''
+        im.style.display = 'none'
+        $(s.phone ? 'm-phone' : 'm-crt').appendChild(im)
+        return im
+      })
+
+      // ── Feature chips ───────────────────────────────────────────────────────────────────────────
+      const FEATURES = [
+        ['NO INSTALL', '#8be94b'],
+        ['NO SIGN-UP', '#29d3f2'],
+        ['PHONE + DESKTOP', '#ffcf4b'],
+        ['UP TO 10 PLAYERS', '#ff3e7f'],
+        ['TEAMS + DUELS', '#ff7b3d'],
+        ['SKILL RADAR', '#b06bff'],
+        ['ENGLISH / ESPAÑOL', '#4be3c3'],
+        ['CHIPTUNE SOUND', '#f062d0'],
+      ]
+      const chipEls = FEATURES.map(([label, color], i) => {
+        const el = document.createElement('div')
+        el.className = 'chip'
+        el.innerHTML = `<i style="background:${color}"></i>${label}`
+        el.style.left = `${i % 2 === 0 ? 100 : 660}px`
+        el.style.top = `${170 + Math.floor(i / 2) * 118}px`
+        el.style.width = '520px'
+        $('x-chips').appendChild(el)
+        return el
+      })
+
+      // ── Canvas layers: starfield (bg) + confetti bursts (fx) ────────────────────────────────────
+      const bg = $('bg').getContext('2d')
+      const fx = $('fx').getContext('2d')
+      function drawStars(t) {
+        bg.clearRect(0, 0, 1280, 720)
+        for (let i = 0; i < 90; i++) {
+          const depth = 0.3 + rnd(i) * 0.7
+          const x = (rnd(i + 100) * 1280 - t * 60 * depth * 1.4 + 1280 * 10) % 1280
+          const y = rnd(i + 200) * 720
+          const size = depth > 0.8 ? 4 : 2
+          const tw = 0.35 + 0.65 * Math.abs(Math.sin(t * (1 + rnd(i + 300) * 3) + i))
+          bg.fillStyle = `rgba(200, 210, 255, ${(0.25 + depth * 0.55) * tw})`
+          bg.fillRect(Math.round(x), Math.round(y), size, size)
+        }
+        // A pixel horizon grid rolling toward the viewer.
+        bg.fillStyle = 'rgba(91, 98, 166, 0.18)'
+        for (let k = 0; k < 10; k++) {
+          const z = ((k + ((t * 1.2) % 1)) / 10) ** 2
+          bg.fillRect(0, Math.round(560 + z * 160), 1280, 2)
+        }
+      }
+      const BURSTS = [
+        { at: bar(2), x: 640, y: 300, n: 90 },
+        { at: bar(19), x: 900, y: 240, n: 110 },
+        { at: bar(22), x: 640, y: 250, n: 110 },
+      ]
+      function drawConfetti(t) {
+        fx.clearRect(0, 0, 1280, 720)
+        for (const [bi, b] of BURSTS.entries()) {
+          const dt = t - b.at
+          if (dt < 0 || dt > 3.2) continue
+          for (let i = 0; i < b.n; i++) {
+            const seed = bi * 1000 + i
+            const ang = rnd(seed) * Math.PI * 2
+            const sp = 260 + rnd(seed + 1) * 520
+            const x = b.x + Math.cos(ang) * sp * dt
+            const y = b.y + Math.sin(ang) * sp * dt * 0.8 + 420 * dt * dt
+            const size = 6 + Math.floor(rnd(seed + 2) * 3) * 2
+            fx.globalAlpha = clamp(1.4 - dt / 2.4)
+            fx.fillStyle = COLORS[i % COLORS.length]
+            fx.fillRect(Math.round(x), Math.round(y), size, size)
+          }
+        }
+        fx.globalAlpha = 1
+      }
+
+      // ── Scenes ──────────────────────────────────────────────────────────────────────────────────
+      const SCENES = [
+        { id: 's-intro', from: 0, to: bar(4), render: renderIntro },
+        { id: 's-join', from: bar(4), to: bar(6), render: renderJoin },
+        { id: 's-lobby', from: bar(6), to: bar(8), render: renderLobby },
+        { id: 's-montage', from: bar(8), to: bar(16), render: renderMontage },
+        { id: 's-formats', from: bar(16), to: bar(18), render: renderFormats },
+        { id: 's-podium', from: bar(18), to: bar(20), render: renderPodium },
+        { id: 's-features', from: bar(20), to: bar(22), render: renderFeatures },
+        { id: 's-end', from: bar(22), to: Number.POSITIVE_INFINITY, render: renderEnd },
+      ]
+      // Cut flashes: every scene change, and every montage cut.
+      const CUTS = [bar(4), bar(6), bar(16), bar(18), bar(20), bar(22), ...SHOTS.map((_, k) => bar(8) + k * 2 * B)]
+
+      function renderIntro(t) {
+        // CRT power-on: a horizontal line snaps open, then the screen fills.
+        const line = $('powerline')
+        const pOpen = prog(t, 0.05, 0.25)
+        css(line, { s: 1, o: t < 0.05 ? 0 : 1 - prog(t, 0.3, 0.45) })
+        line.style.transform = `scaleX(${stepped(pOpen, 6)}) scaleY(${1 + prog(t, 0.25, 0.4) * 40})`
+        // "INSERT COIN" blinks on the first beats.
+        const coin = $('coin')
+        css(coin, { o: t > T0 && t < beat(2) - 0.05 && sinceBeat(t) < B * 0.7 ? 1 : 0 })
+        // Logo letters drop in on eighth notes, then hop in a wave on every beat.
+        let li = 0
+        for (const span of logoIntro) {
+          const at = beat(2 + li * 0.5)
+          const p = prog(t, at, at + 0.32)
+          const wave = t > bar(2) ? -10 * kick(t - li * 0.04, 0.22) : 0
+          const pulse = t > bar(2) ? 1 + 0.12 * (1 - prog(t, bar(2), bar(2) + 0.25)) : 1
+          span.style.transform = `translateY(${-420 * (1 - outBack(p)) + wave}px) scale(${pulse})`
+          span.style.opacity = t < at ? '0' : '1'
+          if (span.textContent !== ' ') li++
+        }
+        // Tagline types on (one character per 32nd note, done within the bar), subline pops on bar 3.
+        const text = '35 MINI-GAMES · ONE ROOM · ENDLESS BRAGGING RIGHTS'
+        const n = Math.floor(clamp((t - bar(2)) / (B / 8), 0, text.length))
+        $('tagline').textContent = text.slice(0, n)
+        pop($('subline'), t, bar(3), { dy: 20 })
+      }
+
+      function renderJoin(t) {
+        slam($('j-h1'), t, bar(4), { from: 1.8 })
+        slam($('j-h2'), t, beat(18), { from: 1.8 })
+        const phone = $('j-phone')
+        const pp = prog(t, bar(4), bar(4) + 0.45)
+        css(phone, { y: 740 * (1 - outBack(pp)), r: -4 * (1 - pp) + 3 * Math.sin(t * 2) * 0.3 })
+        pop($('j-code'), t, beat(19), { dy: 40 })
+        const code = 'JCKD'
+        const typed = Math.floor(clamp((t - bar(5)) / B + 1, 0, code.length))
+        const caret = Math.floor(t / (B / 2)) % 2 === 0 && typed < code.length ? '<span class="caret"></span>' : ''
+        $('j-code-text').innerHTML = code.slice(0, t < bar(5) ? 0 : typed) + caret
+        pop($('j-stamp'), t, beat(23), { dy: 20 })
+      }
+
+      function renderLobby(t) {
+        const lp = prog(t, bar(6), bar(6) + 0.5)
+        css($('l-laptop'), { x: -900 * (1 - outCubic(lp)), s: lerp(0.9, 1, outCubic(lp)) })
+        slam($('l-h1'), t, beat(25), { from: 1.6 })
+        const count = Math.round(35 * outCubic(prog(t, beat(26), bar(7) + 2 * B)))
+        const cnt = $('l-count')
+        cnt.textContent = String(count)
+        css(cnt, { o: t < beat(26) ? 0 : 1, s: count === 35 ? 1 + 0.25 * kick(t) : 1 })
+        pop($('l-count-label'), t, beat(26), { dy: 10 })
+        for (let i = 0; i < 3; i++) pop($(`l-tag${i}`), t, beat(29 + i), { dy: 30 })
+      }
+
+      function renderMontage(t) {
+        const k = clamp(Math.floor((t - bar(8)) / (2 * B)), 0, SHOTS.length - 1)
+        const shot = SHOTS[k]
+        const at = bar(8) + k * 2 * B
+        const p = prog(t, at, at + 2 * B)
+        const crt = $('m-crt')
+        const phone = $('m-phone')
+        const shake = 10 * (1 - prog(t, at, at + 0.16)) * (Math.floor(t * 60) % 2 ? 1 : -1)
+        shotImgs.forEach((im, i) => {
+          im.style.display = i === k ? 'block' : 'none'
+        })
+        crt.style.display = shot.phone ? 'none' : ''
+        phone.style.display = shot.phone ? '' : 'none'
+        if (shot.phone) css(phone, { x: shake, s: lerp(1.06, 1, outCubic(p)), r: -2 + 4 * p })
+        else css(crt, { x: shake, s: lerp(1.07, 1, outCubic(p)) })
+        const shout = $('m-shout')
+        shout.textContent = shot.shout
+        shout.style.color = shot.color
+        const sx = shot.phone ? 620 : 700
+        const sy = shot.phone ? 300 : 540
+        slam(shout, t, at + 0.02, { from: 2.4, r: shot.phone ? -4 : -7, x: sx, y: sy })
+        const name = $('m-name')
+        name.textContent = shot.name
+        pop(name, t, at + B * 0.5, { dy: 16, x: shot.phone ? 624 : 180, y: shot.phone ? 420 : 70 })
+        // Closing slam over the last shot's second beat.
+        const more = $('m-more')
+        const mAt = bar(16) - B
+        css(more, { o: t < mAt ? 0 : 1, s: lerp(2, 1, stepped(outCubic(prog(t, mAt, mAt + 0.16)), 4)), r: -3 })
+      }
+
+      function renderFormats(t) {
+        slam($('f-h1'), t, bar(16), { from: 1.6 })
+        for (let i = 0; i < 3; i++) {
+          const at = beat(65 + i)
+          const card = $(`f-card${i}`)
+          const p = prog(t, at, at + 0.35)
+          const bounce = t > bar(17) ? -8 * kick(t - i * 0.07, 0.24) : 0
+          css(card, { y: 520 * (1 - outBack(p)) + bounce, r: (i - 1) * 3 * (1 - p), o: t < at ? 0 : 1 })
+        }
+      }
+
+      function renderPodium(t) {
+        const rp = prog(t, bar(18), bar(18) + 0.45)
+        css($('p-result'), { x: -700 * (1 - outCubic(rp)), r: -3 })
+        const fp = prog(t, beat(73), beat(73) + 0.45)
+        css($('p-final'), { x: 800 * (1 - outCubic(fp)), r: 2, s: t > bar(19) ? 1 + 0.02 * kick(t, 0.3) : 1 })
+        slam($('p-h1'), t, bar(18), { from: 1.6 })
+        slam($('p-h2'), t, bar(19), { from: 2.2 })
+      }
+
+      function renderFeatures(t) {
+        slam($('x-h1'), t, bar(20), { from: 1.6 })
+        chipEls.forEach((el, i) => pop(el, t, beat(80 + i * 0.5), { dy: 40 }))
+      }
+
+      function renderEnd(t) {
+        let li = 0
+        for (const span of logoEnd) {
+          const at = bar(22) + li * 0.03
+          const p = prog(t, at, at + 0.22)
+          const wave = -8 * kick(t - li * 0.04, 0.22)
+          span.style.transform = `translateY(${wave}px) scale(${lerp(2.4, 1, stepped(outCubic(p), 5))})`
+          span.style.opacity = t < at ? '0' : '1'
+          if (span.textContent !== ' ') li++
+        }
+        pop($('e-sub'), t, beat(90), { dy: 16 })
+        const play = $('e-play')
+        const blink = t > beat(91) && Math.floor((t - beat(91)) / (B / 2)) % 2 === 0
+        css(play, { o: blink ? 1 : t > beat(91) ? 0.25 : 0 })
+        pop($('e-term'), t, beat(92), { dy: 24 })
+      }
+
+      // ── The timeline: pure function of t ────────────────────────────────────────────────────────
+      function seek(t) {
+        for (const sc of SCENES) {
+          const on = t >= sc.from && t < sc.to
+          const el = $(sc.id)
+          el.style.display = on ? 'block' : 'none'
+          if (on) sc.render(t)
+        }
+        drawStars(t)
+        drawConfetti(t)
+        // White flash on every cut, fading over ~4 frames.
+        const lastCut = Math.max(-1, ...CUTS.filter((c) => c <= t))
+        $('flash').style.opacity = String(lastCut < 0 ? 0 : 0.55 * (1 - prog(t, lastCut, lastCut + 0.13)))
+        // A subtle whole-stage kick on every downbeat once the music is going.
+        const k = t > T0 ? kick(t, 0.12) : 0
+        $('stage').style.filter = `brightness(${1 + 0.06 * k})`
+        // Fade in from black at the very start, out at the very end.
+        $('fade').style.opacity = String(Math.max(1 - prog(t, 0, 0.05), prog(t, DURATION - 0.9, DURATION - 0.1)))
+      }
+      window.__seek = seek
+
+      // ── Fit the 1280x720 stage to the window ────────────────────────────────────────────────────
+      function fit() {
+        const s = Math.min(window.innerWidth / 1280, window.innerHeight / 720)
+        const stage = $('stage')
+        stage.style.transform = `translate(${(window.innerWidth - 1280 * s) / 2}px, ${(window.innerHeight - 720 * s) / 2}px) scale(${s})`
+      }
+      window.addEventListener('resize', fit)
+      fit()
+
+      // ── Live playback, clocked by the soundtrack ────────────────────────────────────────────────
+      const music = $('music')
+      let playing = false
+      function loop() {
+        if (!playing) return
+        const t = music.currentTime
+        seek(Math.min(t, DURATION))
+        if (t >= DURATION) {
+          playing = false
+          music.pause()
+          return
+        }
+        requestAnimationFrame(loop)
+      }
+      function play(from = 0) {
+        music.currentTime = from
+        music.volume = 0.9
+        music.play().then(() => {
+          playing = true
+          loop()
+        })
+      }
+      $('play').addEventListener('click', () => play(playing ? music.currentTime : 0))
+      $('restart').addEventListener('click', () => play(0))
+
+      // Render mode (?render=1): no controls; the renderer drives window.__seek frame by frame.
+      if (new URLSearchParams(location.search).has('render')) document.body.classList.add('rendering')
+      window.__ready = Promise.all([
+        document.fonts.load('32px PixelArcade'),
+        ...[...document.images].map((im) => im.decode().catch(() => undefined)),
+      ]).then(() => seek(0))
+    </script>
+  </body>
+</html>
