@@ -292,3 +292,46 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   size, and blank count are the three constants (`SIZE`, `BOX`, `BLANKS`) at the top of the domain
   module; a 6×6/3×2-box variant would need a different canonical base grid and box-shape-aware
   transforms, not just changed constants.
+
+### D19 — Polish pass: shared scene base, juice kit, shell split, real pixel font — DECIDED
+
+- **Date**: 2026-09-26. **Scope**: refactor + UI/game-feel only — **no new functionality** (no new
+  games, modes or messages; two gameplay-balance fixes listed below).
+- **What (client game layer)**:
+  - `game/scenes/MiniGameScene.ts` — common base for all 35 scenes: scene key = game id, `snap`
+    (the snapshot **only if it belongs to this game** — a stale scene reading the next round's
+    snapshot shape used to throw inside Phaser's step and freeze the canvas for the rest of the
+    session), a crash-guarded `frame()` hook, the arcade backdrop, the standard HUD, and a relayout
+    (scene restart) on real viewport changes. `GameClient` also stops the scene as soon as a round
+    ends, and re-measures the canvas container before starting the next scene.
+  - `game/scenes/index.ts` — the single id → scene map (`SCENES`); a spec keeps it in lock-step with
+    the `MINIGAMES` catalog. Replaces two hand-maintained lists in `GameClient`.
+  - `game/hud.ts` — standard HUD strip: score chip, seconds, segmented draining time bar that turns
+    amber/red and ticks in the final seconds (fed automatically from `snap.remainingMs`).
+  - `game/fx.ts` — fire-and-forget juice: `floatText`, `burst` (pixel particles), `ring`, `shake`,
+    `flash`, `punch`, slam-in banners. `RoundState.colors` exposes players' identity colors to scenes.
+  - Every scene migrated and polished (pixel-art sprites instead of flat primitives, event feedback,
+    player colors, clear end/waiting banners, no hardcoded English).
+- **What (Angular shell)**: `RoomComponent` (650 lines of state + protocol + five views) split into a
+  per-room `RoomStore` (signals, message handling, intents, Phaser bridge) and thin view components —
+  `lobby/`, `intro/`, `result/`, `final/`, `live-board/`. Lobby: two columns, big room code, ready
+  meter, action bar that never scrolls away, non-hosts see just the line-up. Intro: game card with
+  format, skill axes, how-to-play and team rosters. Result: winner + this round + standings (with rank
+  movement) on one screen. Final: podium with pixel confetti, highlights, per-round winners.
+- **What (server)**: `SCOREBOARD` is published together with `ROUND_RESULT` (the results screen shows
+  both; publishing it 4 s later left the screen on stale totals). Sudoku Race: digits come from a
+  number pad and a wrong digit starts a short server-side input cooldown (`cooldownMs` on the board)
+  — the correct-cell lock had made tap-cycling every cell the optimal strategy. Pixel Split: each
+  puzzle is varied with the seeded RNG so the ideal cut is no longer always in the same place.
+- **Round end**: the engine now always publishes the round's final snapshot (flagged `final`, an
+  additive optional field on `ROUND_STATE`) and holds the result back for `roundEndGraceMs` (1.5 s),
+  so the deciding moment is actually seen; scenes get a FINISH stamp in the HUD. Pixel Rain ends once
+  one player is left standing.
+- **Reconnect**: the server tracks the socket that holds each seat, so a reloaded page's REJOIN can't be
+  undone by the old socket's late close (WS integration test added).
+- **Font**: the shipped `press-start-2p.woff2` was the Cyrillic-only subset, so the UI and canvases
+  had always fallen back to Courier. Replaced with the full Press Start 2P (OFL; `OFL.txt` next to it,
+  unmodified glyph set — only converted to WOFF2) and a px type scale (`--fs-*` tokens) so the 8 px
+  bitmap design stays crisp.
+- **Revisit if**: a scene needs state the relayout-by-restart can't rebuild from the snapshot — give
+  that scene its own `onResize` instead of restarting.

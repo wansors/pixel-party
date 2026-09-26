@@ -75,15 +75,24 @@ index.ts                    # bootstrap().catch(...)
 ### apps/client/src
 ```
 app/
-  core/{net, ui, i18n, audio, a11y}     # GameSocketService, panel service, transloco…
-  features/{lobby, room, round, scoreboard, final-ranking, join}
-  shared/                                # reusable UI (frames, buttons, avatars)
+  core/{net, i18n, audio}                 # GameSocketService, Transloco language/catalog, AudioService
+  features/join/                          # entry screen (name, avatar, color, create/join)
+  features/room/                          # the whole room lifecycle
+    room.store.ts                         # per-room RoomStore: signals, ServerMsg handling, intents,
+                                          #   GameClient (Phaser) bridge
+    room.component.*                      # shell: header, persistent canvas + live board, view switch
+    lobby/ intro/ result/ final/ live-board/   # one thin view component per phase
+  shared/                                 # reusable UI (pixel avatar, skill radar, audio, language)
   app.config.ts, app.routes.ts
 game/                                     # Phaser, framework-agnostic
-  GameClient.ts                           # boots Phaser, ServerMsgRouter dispatch
+  GameClient.ts                           # boots Phaser, registers SCENES, ServerMsgRouter dispatch
   serverMsgRouter.ts                      # typed ServerMsg dispatch
-  RoundState.ts                           # server snapshots → scene reads
-  scenes/                                 # one Phaser scene per mini-game (or a host scene)
+  RoundState.ts                           # server snapshots + roster names/colors → scene reads
+  hud.ts, fx.ts, pixelStyle.ts            # standard HUD strip, juice kit, pixel-art texture helpers
+  netcode/SnapshotInterpolator.ts         # client interpolation for real-time scenes
+  scenes/MiniGameScene.ts                 # common scene base (snapshot guard, HUD, crash guard, relayout)
+  scenes/index.ts                         # SCENES: the one id → scene map
+  scenes/<Name>Scene.ts                   # one Phaser scene per mini-game
 environments/
 ```
 
@@ -194,9 +203,16 @@ decoupled and talk through one thin service.
 - `GameClient.ts` — `gameConfig()` factory returns a `Phaser.Types.Core.GameConfig`
   (`type: Phaser.AUTO`, `pixelArt: true`, arcade physics if needed); boots Phaser, owns `RoundState`,
   builds the `ServerMsgRouter`.
-- **One Phaser scene per mini-game** (or a host scene that swaps mini-game modules), loaded from a
-  declarative asset registry; unknown mini-game kind → neutral placeholder (new games don't break the
-  wire).
+- **One Phaser scene per mini-game**, all extending `MiniGameScene<Snapshot>` and registered in
+  `scenes/index.ts` (`SCENES`). The base owns the cross-cutting plumbing: `snap` returns the snapshot
+  only when it belongs to that scene's game (so a stale scene can never read another game's shape),
+  `frame()` runs crash-guarded, the standard HUD (`hud.ts`) is fed from `remainingMs`, and a real
+  viewport change restarts the scene (layouts are computed in `create()` and every scene rebuilds its
+  state from the authoritative snapshot). Visual feedback comes from `fx.ts`; textures are generated
+  procedurally from ASCII pixel grids (`pixelStyle.ts`) — no image assets.
+- **Room shell**: a per-room `RoomStore` (provided by `RoomComponent`) owns the socket subscription,
+  turns `ServerMsg`s into signals and sends intents; the phase views (`lobby/`, `intro/`, `result/`,
+  `final/`, `live-board/`) are thin OnPush templates over it.
 - `core/net/game-socket.service.ts` `GameSocketService` (root singleton) owns the raw `WebSocket`:
   `state$: Subject<ServerMsg>`, `connected$`, `reconnecting$`, `send(msg): boolean`. `connect()` is
   cookie/identity-resolved server-side.
@@ -237,9 +253,10 @@ interface MiniGame<State, Input, Result> {
   session (random or host-set), instantiates, runs the round, and consumes `getResult()`.
 
 ### Client side
-Each mini-game ships a Phaser scene (or render module) that reads `RoundState` snapshots and sends
-`MINIGAME_INPUT`. Adding a mini-game = one domain module + one client scene + one catalog entry; no
-engine changes.
+Each mini-game ships a Phaser scene extending `MiniGameScene` that reads its snapshot (`this.snap`)
+and sends `MINIGAME_INPUT` (`this.sendInput`). Adding a mini-game = one domain module + registry entry,
+wire types in `@pp/shared`, one scene + its `SCENES` entry, one `MINIGAMES` catalog entry and its
+`catalog.minigame.<id>` translations (EN + ES); no engine changes.
 
 ---
 

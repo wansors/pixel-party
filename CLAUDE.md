@@ -40,6 +40,8 @@ dropped, not built — scoring lever is the whole feature, see D14),
 + 6 games — `fruit-catch`, `pixel-rain`, `pixel-dash`, `snake-arena`, `pixel-pong`, `sumo-push`),
 **GitHub Actions CI**, the self-hosted pixel font + per-breakpoint responsive tuning, and the
 **retro arcade look & feel** (palette theme, arcade frame, pixel-art avatars, high-score tables).
+A **polish pass (2026-09-26, D19)** added the shared scene base/HUD/juice kit, split the room shell
+into a store + view components, fixed the never-loading pixel font and closed the open playtest bugs.
 **Phase 5 is the last numbered phase.** The project is **permanently stateless and anonymous by
 design** — no database, no accounts, no "Phase 6" (dropped, not deferred; see D15) — and there's no
 further social/polish phase either: no "Phase 7" (chat/emotes/avatar customization/public matchmaking,
@@ -73,17 +75,28 @@ Documentation lives in `docs/`:
 - `packages/shared` — `protocol.ts` (wire unions + `PROTOCOL_VERSION`), `catalog/minigames`, `theme.ts`
   (palette + `TEAMS`), `games/` (per-game wire snapshot/input types; `pixelObjects` holds the shared
   pixel-art set for weight/split; `tetrisSprint` is shared by `line-clear-sprint`/`quick-tetris`).
-- `apps/client` — Angular 20 shell; `features/{join,room}` (RoomComponent drives all phases);
-  `core/net/game-socket.service`; `game/` (Phaser, framework-agnostic): `GameClient`,
-  `serverMsgRouter`, `RoundState`,
+- `apps/client` — Angular 20 shell; `features/join`; `features/room` = `RoomStore` (per-room state,
+  ServerMsg handling, intents, Phaser bridge) + `RoomComponent` shell + one view component per phase
+  (`lobby/`, `intro/`, `result/`, `final/`, `live-board/`); `core/net/game-socket.service`; `game/`
+  (Phaser, framework-agnostic): `GameClient`, `serverMsgRouter`, `RoundState` (snapshot + roster
+  names/colors), `hud` (standard HUD strip), `fx` (juice kit), `pixelStyle` (pixel-art textures/text),
+  `scenes/MiniGameScene` (common base: own-snapshot guard, HUD, crash guard, relayout),
+  `scenes/index` (`SCENES` id → scene map),
   `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,BalloonChickenScene,NumberRushScene,QuickMathScene,OddOneOutScene,HigherLowerScene,BugSmashScene,StopClockScene,MemoryFlashScene,SimonScene,PixelHoopsScene,PixelWeightScene,PixelSplitScene,TugOfWarScene,SinkTheFleetScene,BombRelayScene,FruitCatchScene,PixelRainScene,PixelDashScene,SnakeArenaScene,PongScene,SumoScene,MatchPairsScene,QuickDrawScene,RouletteScene,SudokuRaceScene,PixelBeatScene,FleetBattleScene,MazeSprintScene,LineClearSprintScene,QuickTetrisScene,BubblePopScene}`
   (`TetrisSprintSceneBase` is the shared base behind the two Tetris-style scenes)
   + `netcode/SnapshotInterpolator` (client-side interpolation for real-time scenes).
 
 ### Adding a mini-game
 One domain module (`domain/minigames/<id>.ts` implementing `MiniGame`) + registry entry + shared wire
-types in `packages/shared/src/games/` + one Phaser scene (key === mini-game id) + a `MINIGAMES` catalog
-entry. The session engine and wire contract don't change.
+types in `packages/shared/src/games/` + one Phaser scene extending `MiniGameScene` (key === mini-game
+id) registered in `game/scenes/index.ts` + a `MINIGAMES` catalog entry + `catalog.minigame.<id>`
+name/blurb in both `en.json` and `es.json`. The session engine and wire contract don't change.
+
+### Project skills (`.claude/skills/`)
+`verify-all` (full quality gate; bootstraps Bun if missing), `playtest-screenshots` (bots + headless
+Chrome screenshot a whole session), `minigame-scene` (build/polish a scene on the shared base — the
+quality bar lives there), `add-i18n-keys` (locked EN+ES merge helper), `promo-video` (update/re-render
+`docs/promo/`). Use them instead of ad-hoc scripts.
 
 ## Project conventions
 

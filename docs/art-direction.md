@@ -51,6 +51,15 @@ shared visual language so all screens and mini-games read as one coherent system
 - For long-form/body text (rules, tooltips) a slightly more legible pixel/mono face may be used if the
   headline font hurts readability — legibility wins over theme for instructions.
 
+> **Implemented** — `apps/client/public/fonts/press-start-2p.woff2` is the full Press Start 2P (OFL,
+> `OFL.txt` alongside), exposed as the `PixelArcade` family. It is an 8 px bitmap design, so pixel-font
+> text uses the fixed type scale in `styles.scss` — `--fs-xs` 8 px, `--fs-sm` 12, `--fs-md` 16,
+> `--fs-lg` 24, `--fs-xl` 32, `--fs-xxl` 48, `--fs-huge` 64 (crisp at multiples of 8, and of 4 on 2x
+> screens) — while spacing stays rem-based. Longer sentences (blurbs, how-to-play, stats) use plain
+> monospace. On canvas: `headlineStyle()` (pixel font) vs `bodyStyle()` (monospace) in
+> `game/pixelStyle.ts`. The font has ★ ▲ ▼ ◀ ▶ ← → ↑ ↓ × but no ✔ ✕ ⇄: the UI draws its check mark
+> with CSS (`.tick`).
+
 ## 4. UI & motion language
 
 - **Framing**: windows/panels as arcade "sheets" with a thick pixel border and a title bar (reuse a
@@ -61,6 +70,11 @@ shared visual language so all screens and mini-games read as one coherent system
   rounds.
 - **Feedback**: small screen-shake on big moments, sprite flashes on hits, floating pixel "+10" score
   pops, confetti made of pixels on the podium.
+- **Implemented kit**: `game/fx.ts` (`floatText`, `burst`, `ring`, `shake`, `flash`, `punch`, banners)
+  and `game/hud.ts` (score chip + seconds + a segmented draining time bar that goes lime → amber →
+  red and ticks in the last seconds) are shared by every mini-game scene; the Angular shell uses
+  stepped CSS animations (`steps()`) for pops, podium bounce and pixel confetti, all disabled under
+  `prefers-reduced-motion`.
 - **Optional CRT layer**: a subtle scanline / vignette / slight curvature overlay, **toggleable** and
   off by default for accessibility and performance (must not hurt readability on mobile).
 

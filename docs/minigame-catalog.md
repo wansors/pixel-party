@@ -99,7 +99,9 @@ E9 Maze Sprint (`maze-sprint`), E10 Line Clear Sprint (`line-clear-sprint`), E13
 ### A7. ✅ Pixel rain ("Dodge") — implemented (`pixel-rain`)
 - **Concept**: move an avatar to dodge falling objects; survive as long as possible.
 - **Type**: FFA (own board, same seed) · **Input**: drag/keyboard · **Duration**: up to ~30 s · **Banter**: 💥💥
-- **Rules**: identical obstacle pattern (same seed); eliminated on collision.
+- **Rules**: identical obstacle pattern (same seed); eliminated on collision. In a multiplayer round
+  the round ends as soon as only one player is left standing (2026-09-26 — no more waiting out the
+  clock alone); a solo round runs until the player is out or time is up.
 - **Win condition**: longest survival. · **Result**: ranking by time.
 - **Latency**: medium (client sim, server validates final time). · **Complexity**: medium.
 
@@ -155,7 +157,9 @@ E9 Maze Sprint (`maze-sprint`), E10 Line Clear Sprint (`line-clear-sprint`), E13
 ### B3. ✅ Sumo Push — implemented (`sumo-push`)
 - **Concept**: two pixel sumos in a ring; shove the opponent out with timed pushes.
 - **Type**: Duel (1v1) or FFA arena (up to 10 in one ring) · **Input**: tap/direction · **Duration**: ~30 s · **Banter**: 💥💥💥
-- **Rules**: physics shove; last one in the ring wins. FFA variant = battle royale.
+- **Rules**: physics shove; last one in the ring wins. FFA variant = battle royale. Touch/mouse: hold
+  where you want to push — the direction is aimed from your own wrestler (2026-09-26; it used to be
+  measured from the ring centre); arrow keys also work.
 - **Win condition**: last standing / longest in-ring. · **Result**: ranking by survival.
 - **Latency**: high (FFA arena) / medium (1v1). · **Complexity**: high.
 
@@ -229,7 +233,8 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
 - **E1. ⭐ ✅ Color Trap (Stroop)** — implemented (`color-trap`); *full card below*.
 - **E2. ✅ Quick Math** — fast arithmetic; answer as many as possible before the timer. *Implemented
   (`quick-math`): seeded question pool (+ − ×), self-paced, ranked by correct count (tiebreak fewer
-  wrong).* FFA · tap · 30 s · low effort · low latency · banter 💥💥.
+  wrong); a wrong answer starts a 1.2 s answer cooldown (buttons greyed behind a draining bar), so
+  mashing one button is slower than doing the sums.* FFA · tap · 30 s · low effort · low latency · banter 💥💥.
 - **E3. ✅ Odd One Out** — spot the single different pixel/tile in a grid; grid grows each round.
   *Implemented (`odd-one-out`): seeded board sequence, grid grows + brightness gap shrinks per level;
   the odd tile differs in brightness (not hue alone) for accessibility; ranked by level reached.*
@@ -255,7 +260,7 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
   Ranked by finish time, then by BFS distance-remaining-to-exit for non-finishers.* FFA · arrow
   keys/WASD + on-screen buttons · up to 45 s · medium effort · low latency · banter 💥💥.
 - **E10. ✅ Line Clear Sprint** — Tetris-like: clear N lines fastest. *Implemented
-  (`line-clear-sprint`): a simplified no-rotation Tetris engine (shared with Quick Tetris, see E13) on a
+  (`line-clear-sprint`): a simplified Tetris engine (rotation + wall kicks; shared with Quick Tetris, see E13) on a
   6×12 board; maximize lines cleared in a fixed 60 s window, ranked by lines cleared (a survivor
   outranks a topped-out player at an equal score).* FFA · move/drop (keyboard + on-screen buttons) ·
   60 s · high effort · low latency · banter 💥.
@@ -263,23 +268,29 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
   shown; drag a vertical cut so both halves hold the **same number of filled pixels**. Scored against
   the best split the object allows (odd counts can't split perfectly), so the optimal cut always scores
   full points. Same seeded object set for everyone; server owns the per-column counts and scores the
-  cut. FFA · drag · ~30 s (several objects) · low/medium effort · low latency · banter 💥💥.
+  cut. Since 2026-09-26 each puzzle is also **placed with the seeded RNG** (mirrored on a coin flip and
+  dropped at a random offset inside a wider frame), so the ideal cut is no longer always in the same
+  spot; counts and the best possible split are recomputed from the placed grid. FFA · drag · ~30 s
+  (several objects) · low/medium effort · low latency · banter 💥💥.
 - **E12. ✅ Pixel Weight ("guess the weight")** — implemented (`pixel-weight`): a pixel-art object
   flashes briefly, then hides; guess **how many filled pixels** it had on a slider. Points scale with
   closeness (`max(0, 10 − |error|)`); several objects. Seeded objects; server owns the counts. *Pixel
   Balance variant not built.* FFA · slider · ~30 s · low effort · low latency · banter 💥💥.
 - **E13. ✅ Quick Tetris** — a short, fast Tetris sprint (compact variant of **E10**): identical seeded
   piece sequence for all; clear as many lines as possible in a fixed short window (or reach N lines
-  fastest). *Implemented (`quick-tetris`): the same shared no-rotation Tetris engine as Line Clear
-  Sprint, tuned to a 45 s window with a race to `TARGET_LINES = 8` — finishers ranked by time, others by
+  fastest). *Implemented (`quick-tetris`): the same shared Tetris engine as Line Clear Sprint (with
+  rotation + wall kicks), tuned to a 45 s window with a race to `TARGET_LINES = 8` — finishers ranked by time, others by
   lines cleared.* FFA · move/drop (keyboard + on-screen buttons) · ~45 s · high effort · low latency ·
   banter 💥💥.
 - **E14. ✅ Sudoku Race** — everyone solves the **same seeded** Sudoku. *Implemented (`sudoku-race`): a
-  4×4 grid (2×2 boxes), 8 of 16 cells blank; tap a blank to cycle 0→1→2→3→4→0. Winner is whoever
+  4×4 grid (2×2 boxes), 8 of 16 cells blank; select a cell, then enter a digit from the number pad
+  (or keys 1–4). A correct cell locks; a **wrong digit starts a 2 s input cooldown** for that player
+  (`cooldownMs` on the wire), so guessing digit after digit is slower than solving (2026-09-26 — the
+  old tap-to-cycle input plus the lock made brute-forcing every cell the best strategy). Winner is whoever
   completes it first; if nobody finishes in time, rank by **most correct cells placed** (server
   validates each cell, so a wrong entry never counts). The solved grid comes from a canonical valid
   sudoku via seeded digit relabeling + row/col/band/stack permutations — always valid, no backtracking
-  solver needed — and the solution never goes on the wire.* FFA · tap (cell cycles a value) · ~30 s ·
+  solver needed — and the solution never goes on the wire.* FFA · tap cell + number pad · ~30 s ·
   medium effort · low latency · banter 💥💥.
 - **E15. ✅ Bubble Pop ("Bust-a-Move")** — bubble-shooter puzzle: aim and shoot coloured bubbles upward at a
   hanging cluster; **3+ same-colour bubbles that touch pop**, and any bubbles left unattached drop for a

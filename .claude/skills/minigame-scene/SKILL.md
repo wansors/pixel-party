@@ -1,0 +1,81 @@
+---
+name: minigame-scene
+description: Build, migrate or polish a Pixel Party mini-game Phaser scene on the shared MiniGameScene base (HUD, juice kit, player colors, responsive layout, i18n), and wire a brand-new mini-game end to end. Use for any change under apps/client/src/game/scenes/ or when adding a game to the catalog.
+---
+
+# Mini-game scenes
+
+Read `CLAUDE.md` (layout + "Adding a mini-game") and `docs/art-direction.md` first. The server is
+authoritative: scenes render snapshots and send inputs — **never put game rules on the client**.
+
+## Anatomy
+```ts
+export class SimonScene extends MiniGameScene<SimonSnapshot> {
+  constructor(...deps: SceneDeps) {
+    super('simon', ...deps)               // scene key === mini-game id
+  }
+  override create(): void {
+    super.create()                        // backdrop + HUD; super.create({ hud: false }) = no HUD
+    // reset EVERY per-round field here (scene instances survive across rounds), lay out below this.top
+  }
+  protected frame(snap: SimonSnapshot | null, time: number, delta: number): void {
+    // per-frame render; snap is null until THIS game's first snapshot arrives
+  }
+}
+```
+Register it in `game/scenes/index.ts` (`SCENES`) — `scenes/index.spec.ts` fails if the map and the
+`MINIGAMES` catalog disagree.
+
+Base API (`game/scenes/MiniGameScene.ts`):
+- `this.snap` — this game's snapshot or null. Never read `this.state.state` directly (a stale scene
+  reading another game's snapshot froze the canvas).
+- `this.selfId`, `this.label(id)` ("you"/name), `this.state.nameOf(id)`, `this.state.colorOf(id, fb)`
+  (identity color, 0xRRGGBB — use it wherever other players appear).
+- `this.sendInput({ kind, ... })`, `this.sfx` (`click tick go correct wrong coin pop pad(i) win
+  fanfare`), `this.t(key, params)`.
+- HUD (`game/hud.ts`): time bar + seconds fed automatically from `snap.remainingMs`; override
+  `protected remainingMs(snap)` if the field differs (return null = no clock). Own score/progress:
+  `this.hud?.setScore(text)`. Don't draw a second timer.
+- Crash guard: `frame()` errors are logged once (`[<id>] frame failed`) instead of killing the loop.
+- Relayout: a real viewport change restarts the scene — keep layout in `create()` and rebuild state
+  from the snapshot.
+
+- FINISH moment: when the server flags the round's final snapshot (`ROUND_STATE.final`), the base
+  stamps FINISH! into the HUD and plays a whistle; the frozen last frame stays visible for the
+  server's grace period (~1.5 s) before the results screen — make sure your end state reads well.
+
+Shared kit — reuse before writing a private helper (duplicates were hoisted out of 20+ scenes):
+- `game/fx.ts`: `floatText` (clamped on screen), `burst`, `ring`, `shake`, `flash` (translucent wash,
+  not a blinding full-opacity frame), `punch`, `addBanner` + `showBanner` (32/24 px, auto-shrinks in
+  8 px steps to fit the width).
+- `game/pixelStyle.ts`: `ensurePixelGrid` (ASCII-art sprites), `ensurePixelOrb`, `ensurePixelBlock`
+  (square), `ensureBevelPanel(scene, w, h, color, bevel?, outline?)` (beveled panel at its exact size —
+  buttons, tiles, cards), `ensureCardTexture` (+ `CARD_FACE`/`CARD_INK`), `fitText(text, maxW, maxSize)`
+  / `fitFontSize(str, maxW, maxSize)` (crisp pixel-font sizes), `teamColor(team)` (0xRRGGBB), `shade`,
+  `hexToCss`, `headlineStyle` (Press Start 2P) / `bodyStyle` (monospace).
+- `game/playerStrip.ts`: `PlayerStrip` — wrapping row of "■ NAME stat" chips in identity colors (how
+  everyone else is doing).
+- `netcode/SnapshotInterpolator` for real-time motion (see `FruitCatchScene`).
+- `setColor` on a Text is cheap to repeat (a boot-time guard skips unchanged colors), but prefer
+  updating texts only when their value changes.
+
+## Quality bar
+1. Every meaningful event (hit/miss, correct/wrong, level up, knock-out, win/lose) gets a sound AND a
+   visual, derived from snapshot deltas — never spammed every frame, never hiding the game.
+2. Pixel-art sprites/beveled tiles over flat rectangles; PALETTE colors; identity colors for players;
+   one obvious "what do I do now" prompt.
+3. A clear end/waiting state (banner: `game.common.waiting`, `out`, `youWin`, `youLose`, `draw`…).
+4. No hardcoded user-facing English — add keys with the `add-i18n-keys` skill (EN + ES).
+5. Responsive: nothing clipped/overlapping at 1280x800 and 390x844 (`compact = min(w, h) < 520`),
+   touch targets ≥ 44 px. Press Start 2P is ~1 em per glyph and crispest at multiples of 8 px — keep
+   headline strings short, long sentences in `bodyStyle`. In-font symbols: ★ ▲ ▼ ◀ ▶ ← → ↑ ↓ ×.
+6. Cosmetic randomness that all players should see alike is derived from ids/indices (not
+   `Math.random`); domain code never uses `Math.random`/`Date.now` (`bun run lint:determinism`).
+7. Short header comment per scene; Biome style; no dead code / `any`.
+
+References: `ButtonMasherScene.ts` (tap game: arcade button + player-colored race lanes),
+`FruitCatchScene.ts` (real-time: interpolation, procedural sprites, catch/bomb feedback).
+
+## Verify
+`verify-all` skill (typecheck, lint, tests, **client build** — the only template/type check for the
+whole client bundle) + `playtest-screenshots` at 1280x800 and 390x844 for every scene you touched.
