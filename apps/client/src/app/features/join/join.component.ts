@@ -3,7 +3,7 @@ import { Component, inject, signal } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { ActivatedRoute, Router } from '@angular/router'
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco'
-import { AVATARS, type AvatarId, PLAYER_COLORS } from '@pp/shared'
+import { AVATARS, type AvatarId, MINIGAMES, PLAYER_COLORS } from '@pp/shared'
 import { firstValueFrom } from 'rxjs'
 import { environment } from '../../../environments/environment'
 import { AudioService } from '../../core/audio/audio.service'
@@ -25,6 +25,12 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
   template: `
     <main class="join">
       <div class="sound"><app-audio-controls /></div>
+      <h1 class="logo" aria-label="Pixel Party">
+        @for (ch of logo; track $index) {
+          <span [style.color]="ch.color" [style.animationDelay.ms]="$index * 90">{{ ch.char }}</span>
+        }
+      </h1>
+      <p class="tagline">{{ 'join.tagline' | transloco: { n: gameCount } }}</p>
       <div class="arcade-window cabinet">
         <div class="arcade-titlebar">{{ 'join.title' | transloco }}</div>
         <div class="body">
@@ -73,8 +79,9 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
           </div>
 
           <button type="button" class="arcade-btn primary" (click)="createRoom()">
-            {{ 'join.createRoom' | transloco }}
+            ▶ {{ 'join.createRoom' | transloco }}
           </button>
+          <span class="or">{{ 'join.or' | transloco }}</span>
           <div class="enter">
             <input [(ngModel)]="code" [placeholder]="'join.roomCode' | transloco" maxlength="6" />
             <button type="button" class="arcade-btn" (click)="joinRoom()">
@@ -91,20 +98,31 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
     </main>
   `,
   styles: `
-    .join { display: grid; place-content: center; min-height: 100vh; padding: 1rem; }
+    .join { display: grid; justify-content: center; align-content: safe center; height: 100dvh;
+      overflow-y: auto; padding: 3.5rem 1rem; gap: 0.75rem; }
+    .logo { margin: 0; text-align: center; font-size: var(--fs-xl); font-weight: normal;
+      letter-spacing: 0.08em; line-height: 1.2; text-shadow: 0 5px 0 rgba(0,0,0,0.45); }
+    .logo span { display: inline-block; animation: hop 2.4s steps(2, end) infinite; }
+    @keyframes hop { 0%, 90%, 100% { transform: none; } 95% { transform: translateY(-6px); } }
+    .tagline { margin: 0 0 0.5rem; text-align: center; color: var(--c-dim); font-size: var(--fs-xs);
+      letter-spacing: 0.08em; text-transform: uppercase; }
+    .or { text-align: center; color: var(--c-dim); font-size: var(--fs-xs); text-transform: uppercase; }
+    @media (prefers-reduced-motion: reduce) { .logo span { animation: none; } }
+    @media (max-width: 420px) { .logo { font-size: var(--fs-lg); } }
     .sound { position: fixed; top: 0.75rem; right: 0.75rem; z-index: 10; }
     footer { position: fixed; bottom: 0.75rem; left: 0; right: 0; display: flex;
       justify-content: center; z-index: 10; }
-    .cabinet { width: min(92vw, 380px); }
+    .cabinet { width: min(calc(100vw - 2rem), 380px); }
+    .body > * { min-width: 0; }
     .body { display: grid; gap: 0.9rem; padding: 1.1rem; }
     .me { display: grid; place-content: center; }
     .me app-pixel-avatar { filter: drop-shadow(0 4px 0 rgba(0,0,0,0.35)); }
-    input { text-align: center; padding: 0.6rem; font-family: var(--font-pixel); font-size: 0.8rem;
+    input { text-align: center; padding: 0.6rem; font-family: var(--font-pixel); font-size: var(--fs-sm);
       background: var(--c-bg); color: var(--c-text); border: 3px solid var(--c-frame);
       border-radius: 2px; }
     input::placeholder { color: var(--c-dim); }
     .picker { display: grid; gap: 0.4rem; }
-    .label { font-size: 0.7rem; color: var(--c-dim); text-transform: uppercase; letter-spacing: 0.1em; }
+    .label { font-size: var(--fs-xs); color: var(--c-dim); text-transform: uppercase; letter-spacing: 0.1em; }
     .row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
     .swatch { padding: 0.25rem; background: var(--c-bg); border: 3px solid var(--c-frame);
       border-radius: 2px; cursor: pointer; line-height: 0; }
@@ -113,8 +131,8 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
       cursor: pointer; }
     .chip.sel { border-color: var(--c-text); transform: scale(1.1); }
     .enter { display: flex; gap: 0.5rem; }
-    .enter input { flex: 1; text-transform: uppercase; }
-    .msg { margin: 0; color: var(--c-red); font-size: 0.75rem; text-align: center; }
+    .enter input { flex: 1; min-width: 0; text-transform: uppercase; }
+    .msg { margin: 0; color: var(--c-red); font-size: var(--fs-sm); text-align: center; }
   `,
 })
 export class JoinComponent {
@@ -133,6 +151,13 @@ export class JoinComponent {
 
   readonly avatars = AVATARS
   readonly colors = PLAYER_COLORS
+  readonly gameCount = MINIGAMES.length
+  // "PIXEL PARTY" with each letter in a player color (spaces stay uncolored).
+  readonly logo = [...'PIXEL PARTY'].map((char, i) => ({
+    // A plain space inside an inline-block span collapses to nothing — keep the gap with an nbsp.
+    char: char === ' ' ? '\u00a0' : char,
+    color: PLAYER_COLORS[i % PLAYER_COLORS.length] ?? '#ffcf4b',
+  }))
   private readonly nicknameAdjectives = [
     'Pixel',
     'Turbo',

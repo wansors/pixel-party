@@ -27,6 +27,17 @@
   --c-red: #ff5252;
 
   --font-pixel: 'PixelArcade', 'Courier New', ui-monospace, monospace;
+
+  // Pixel-font type scale. Press Start 2P is an 8 px bitmap design: it stays crisp at whole multiples
+  // of 8 px (and of 4 px on the ubiquitous 2x displays) and smears/garbles in between (an "8" at ~10 px
+  // reads as "&"). Pixel-font text uses these fixed px tokens; spacing stays rem-based and responsive.
+  --fs-xs: 8px;
+  --fs-sm: 12px;
+  --fs-md: 16px;
+  --fs-lg: 24px;
+  --fs-xl: 32px;
+  --fs-xxl: 48px;
+  --fs-huge: 64px;
 }
 
 * {
@@ -86,6 +97,13 @@ img {
   image-rendering: pixelated;
 }
 
+// Phaser creates its canvas outside any Angular template (no view-encapsulation attributes), so it is
+// styled here: pinned to the container box, never contributing to (and overflowing) the flex layout.
+#game-container > canvas {
+  position: absolute;
+  inset: 0;
+}
+
 // ── Arcade window frame ─────────────────────────────────────────────────────
 // A shared "sheet": thick pixel border + a title bar. Reused across features.
 .arcade-window {
@@ -104,14 +122,15 @@ img {
   letter-spacing: 0.15em;
   text-transform: uppercase;
   padding: 0.5rem 0.75rem;
-  font-size: 0.75rem;
+  font-size: var(--fs-sm);
+  line-height: 1.6; // long (Spanish) titles wrap onto a second line without the rows touching
   border-bottom: 3px solid var(--c-frame-lit);
 }
 
 // ── Chunky arcade buttons ───────────────────────────────────────────────────
 .arcade-btn {
   font-family: var(--font-pixel);
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 0.7rem 1rem;
@@ -142,6 +161,33 @@ img {
   &:disabled {
     opacity: 0.45;
     cursor: default;
+  }
+}
+
+// ── Pixel tick ──────────────────────────────────────────────────────────────
+// A 7x5 pixel check mark drawn with box-shadows (the pixel font has no ✔ glyph). Inherits
+// currentColor; place `<i class="tick"></i>` inside any inline/flex container.
+.tick {
+  display: inline-block;
+  position: relative;
+  width: 14px;
+  height: 10px;
+  vertical-align: middle;
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 4px;
+    width: 2px;
+    height: 2px;
+    background: currentColor;
+    box-shadow:
+      2px 2px currentColor,
+      4px 4px currentColor,
+      6px 2px currentColor,
+      8px 0 currentColor,
+      10px -2px currentColor,
+      12px -4px currentColor;
   }
 }
 

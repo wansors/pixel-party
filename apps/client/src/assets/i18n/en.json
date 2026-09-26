@@ -22,7 +22,9 @@
     "join": "Join",
     "cantReach": "Could not reach the server",
     "roomNotFound": "Room {{code}} not found",
-    "kicked": "You were removed from the room by the host"
+    "kicked": "You were removed from the room by the host",
+    "tagline": "{{n}} mini-games · one room · endless bragging rights",
+    "or": "or join a friend"
   },
   "room": {
     "code": "ROOM",
@@ -47,11 +49,23 @@
       "kick": "Kick",
       "swapTeam": "Swap team",
       "shuffleTeams": "Shuffle teams",
-      "handicap": "Catch-up (comebacks)"
+      "handicap": "Catch-up (comebacks)",
+      "roomCode": "Room code",
+      "share": "Share the code or the link",
+      "playersCount": "{{n}} players",
+      "readyCount": "{{n}}/{{total}} ready",
+      "selectedCount": "{{n}}/{{total}} selected",
+      "lineup": "Line-up",
+      "hostPicks": "The host picks the games",
+      "waitingHost": "Waiting for the host to start…",
+      "noGames": "Pick at least one game",
+      "you": "you"
     },
     "intro": {
       "round": "Round",
-      "go": "GO!"
+      "go": "GO!",
+      "howTo": "How to play",
+      "getReady": "GET READY!"
     },
     "result": {
       "roundWinner": "ROUND WINNER",
@@ -60,9 +74,10 @@
       "callout": {
         "streak": ["MONSTER KILL!!!", "UNSTOPPABLE!", "ON FIRE!", "RAMPAGE!"],
         "winner": ["You're the best!", "Champion!", "Nailed it!", "Top of the podium!"],
-        "loser": ["Looser!!", "Better luck next time.", "Ouch.", "Last place gang."],
+        "loser": ["Loser!!", "Better luck next time.", "Ouch.", "Last place gang."],
         "other": ["Solid effort.", "Middle of the pack.", "Keep grinding.", "Not bad!"]
-      }
+      },
+      "thisRound": "This round"
     },
     "scoreboard": {
       "title": "High Scores",
@@ -86,7 +101,19 @@
       "roundWinner": "won by"
     },
     "joinRejected": "Join rejected: {{reason}}",
-    "intentRejected": "{{intent}} rejected: {{reason}}"
+    "intentRejected": "{{intent}} rejected: {{reason}}",
+    "header": {
+      "round": "ROUND {{n}}/{{total}}"
+    },
+    "format": {
+      "ffa": "Free-for-all",
+      "team": "Team battle",
+      "duel": "1 vs 1 duel"
+    },
+    "live": {
+      "round": "RND",
+      "total": "PTS"
+    }
   },
   "team": {
     "red": "Red",
@@ -208,6 +235,46 @@
       "bubble-pop": {
         "name": "Bubble Pop",
         "blurb": "Shoot color-matched bubbles to pop clusters of three or more. Clear the board fastest."
+      },
+      "fruit-catch": {
+        "name": "Fruit Catch",
+        "blurb": "Slide your basket to catch the falling fruit — and dodge the bombs."
+      },
+      "pixel-rain": {
+        "name": "Pixel Rain",
+        "blurb": "Dodge the falling blocks. Last one standing wins."
+      },
+      "pixel-dash": {
+        "name": "Pixel Dash",
+        "blurb": "Tap to jump the obstacles as they rush in. Clear the most to win."
+      },
+      "snake-arena": {
+        "name": "Snake Arena",
+        "blurb": "Eat, grow, and do not crash. The longest snake wins."
+      },
+      "pixel-pong": {
+        "name": "Pixel Pong",
+        "blurb": "Head-to-head pong. First to five points takes the duel."
+      },
+      "sumo-push": {
+        "name": "Sumo Push",
+        "blurb": "Shove everyone else out of the ring. Last sumo standing wins."
+      },
+      "match-pairs": {
+        "name": "Match",
+        "blurb": "Flip the cards and clear every matching pair before anyone else."
+      },
+      "quick-draw": {
+        "name": "Quick Draw",
+        "blurb": "Wait for FIRE, then draw first. Flinch early and you lose."
+      },
+      "pixel-roulette": {
+        "name": "Pixel Roulette",
+        "blurb": "Spin for a random number. Highest wins — pure luck."
+      },
+      "sudoku-race": {
+        "name": "Sudoku Race",
+        "blurb": "Everyone solves the same mini sudoku. Fastest correct grid wins."
       }
     }
   },
@@ -217,7 +284,21 @@
       "correct": "{{n}} correct",
       "pts": "{{n}} pts",
       "level": "Level {{n}}",
-      "you": "you"
+      "you": "you",
+      "youWin": "YOU WIN!",
+      "youLose": "YOU LOSE",
+      "draw": "DRAW",
+      "out": "OUT!",
+      "combo": "x{{n}} COMBO",
+      "miss": "MISS",
+      "perfect": "PERFECT!",
+      "great": "GREAT!",
+      "good": "GOOD",
+      "wrong": "WRONG!",
+      "nice": "NICE!",
+      "waiting": "Waiting for the others…",
+      "finished": "FINISHED!",
+      "finish": "FINISH!"
     },
     "reaction": {
       "wait": "WAIT…",
@@ -227,7 +308,8 @@
       "tooEarly": "TOO EARLY",
       "falseStart": "False start — you are out this round",
       "nice": "Nice reaction!",
-      "ms": "{{ms}} ms"
+      "ms": "{{ms}} ms",
+      "falseStartTag": "FALSE START"
     },
     "buttonMasher": {
       "mash": "MASH!",
@@ -235,12 +317,20 @@
     },
     "colorTrap": {
       "instruction": "Tap the INK color — not the word",
-      "locked": "Locked in — wait for the next one"
+      "locked": "Locked in — wait for the next one",
+      "words": {
+        "red": "RED",
+        "green": "GREEN",
+        "blue": "BLUE",
+        "yellow": "YELLOW"
+      }
     },
     "trivia": {
       "progress": "Q {{index}} / {{total}}",
       "getReady": "Get ready…",
-      "locked": "Answer locked — hang tight"
+      "locked": "Answer locked — hang tight",
+      "hint": "Tap an answer — faster scores more",
+      "timeUp": "TIME UP!"
     },
     "balloon": {
       "pump": "PUMP",
@@ -251,7 +341,8 @@
     },
     "numberRush": {
       "done": "DONE!",
-      "find": "Find {{n}}"
+      "find": "Find {{n}}",
+      "hint": "Tap 1 → {{n}} in order"
     },
     "higherLower": {
       "higher": "▲ HIGHER",
@@ -265,27 +356,49 @@
       "doneBtn": "DONE",
       "info": "Try {{n}}/{{total}}   err {{err}}",
       "prompt": "Stop on the green target!",
-      "done": "All tries used — hang tight"
+      "done": "All tries used — hang tight",
+      "try": "Try {{n}}/{{total}}",
+      "off": "{{err}} off"
     },
     "simon": {
       "watch": "Watch...",
       "repeat": "Repeat!",
-      "out": "OUT — hang tight"
+      "out": "OUT — hang tight",
+      "yourTurn": "YOUR TURN!"
     },
     "memoryFlash": {
       "memorize": "Memorize!",
-      "howMany": "How many {{color}}?"
+      "howMany": "How many {{color}}?",
+      "colors": {
+        "RED": "RED",
+        "GREEN": "GREEN",
+        "BLUE": "BLUE",
+        "YELLOW": "YELLOW"
+      }
     },
     "pixelHoops": {
       "hint": "Hold to charge, release to shoot",
       "swish": "SWISH! x{{combo}}",
       "miss": "MISS",
-      "combo": "{{score}} pts   combo {{combo}}"
+      "combo": "{{score}} pts   combo {{combo}}",
+      "swishShort": "SWISH!"
     },
     "pixelWeight": {
       "weigh": "Weigh the {{object}}!",
       "howMany": "How many pixels?",
-      "guess": "GUESS"
+      "guess": "GUESS",
+      "actual": "It was {{n}}",
+      "objects": {
+        "HEART": "HEART",
+        "BANANA": "BANANA",
+        "CAR": "CAR",
+        "FISH": "FISH",
+        "TREE": "TREE",
+        "STAR": "STAR",
+        "MUSHROOM": "MUSHROOM",
+        "HOUSE": "HOUSE",
+        "CAT": "CAT"
+      }
     },
     "pixelSplit": {
       "prompt": "Split it evenly",
@@ -295,7 +408,10 @@
       "pull": "PULL!",
       "hint": "Tap / press SPACE to pull the rope your way",
       "team": "Your team",
-      "spectator": "No team — watching this round"
+      "spectator": "No team — watching this round",
+      "leads": "{{team}} LEADS!",
+      "almost": "ALMOST!",
+      "teamWins": "{{team}} WINS!"
     },
     "sinkTheFleet": {
       "yourTurn": "YOUR TURN — fire!",
@@ -306,7 +422,10 @@
       "lost": "Your fleet is gone...",
       "draw": "Time up — draw",
       "bye": "No rival this round — free win",
-      "hint": "Tap a cell in enemy waters to fire on your turn"
+      "hint": "Tap a cell in enemy waters to fire on your turn",
+      "hit": "HIT!",
+      "splash": "SPLASH!",
+      "hitsChip": "HITS {{n}}/{{total}}"
     },
     "bombRelay": {
       "mash": "MASH — pass it on!",
@@ -315,7 +434,10 @@
       "relays": "passes",
       "booms": "booms",
       "hint": "You can only mash while YOU hold the bomb",
-      "spectator": "No team — watching this round"
+      "spectator": "No team — watching this round",
+      "pass": "PASS!",
+      "boom": "BOOM!",
+      "getReady": "GET READY!"
     },
     "pixelBeat": {
       "tapHint": "Tap or press SPACE on the beat",
@@ -328,25 +450,102 @@
       "waitTurn": "Waiting on {{team}}...",
       "won": "FLEET SUNK — YOUR TEAM WINS!",
       "lost": "Your team's fleet is gone...",
-      "draw": "Time up — draw"
+      "draw": "Time up — draw",
+      "hit": "HIT!",
+      "splash": "SPLASH!",
+      "hitsChip": "HITS {{n}}/{{total}}",
+      "enemyWaters": "ENEMY WATERS",
+      "ourFleet": "OUR FLEET",
+      "teamWins": "{{team}} WINS!"
     },
     "mazeSprint": {
-      "steps": "{{n}} steps"
+      "steps": "{{n}} steps",
+      "hint": "Reach the flag! Arrows, WASD or the pad"
     },
     "bubblePop": {
-      "score": "{{n}} pts"
+      "score": "{{n}} pts",
+      "hint": "Aim a column, release to fire"
     },
     "lineClearSprint": {
       "lines": "{{n}} lines",
       "progress": "{{n}} lines",
       "win": "CLEARED!",
-      "toppedOut": "TOPPED OUT"
+      "toppedOut": "TOPPED OUT",
+      "hint": "← → move · ↑ rotate · ↓ / Space drop"
     },
     "quickTetris": {
       "lines": "{{n}} lines",
       "progress": "{{n}} / {{target}} lines",
       "win": "TARGET CLEARED!",
-      "toppedOut": "TOPPED OUT"
+      "toppedOut": "TOPPED OUT",
+      "hint": "← → move · ↑ rotate · ↓ / Space drop"
+    },
+    "fruitCatch": {
+      "hint": "Drag or use ◀ ▶ — catch fruit, dodge bombs!",
+      "bomb": "BOOM!"
+    },
+    "pixelRain": {
+      "hint": "Drag or use ◀ ▶ to dodge the blocks!",
+      "dodge": "DODGE!",
+      "alive": "{{n}}/{{total}} alive",
+      "lastStanding": "LAST ONE STANDING!"
+    },
+    "pixelDash": {
+      "hint": "Tap or press Space to jump!"
+    },
+    "bugSmash": {
+      "hint": "Smash the bugs — dodge the bombs!"
+    },
+    "snakeArena": {
+      "hint": "Swipe or use the arrow keys to steer",
+      "length": "Length {{n}}"
+    },
+    "oddOneOut": {
+      "prompt": "Tap the odd tile!"
+    },
+    "pixelPong": {
+      "hint": "Drag to move your paddle — first to {{n}} wins!",
+      "bye": "No rival this round — free win"
+    },
+    "quickDraw": {
+      "wait": "WAIT…",
+      "fire": "FIRE!",
+      "instruction": "Draw the moment the sign says FIRE!",
+      "tapNow": "Tap now — draw!",
+      "vs": "VS",
+      "bang": "BANG!",
+      "early": "EARLY!",
+      "yourTime": "You drew in {{ms}} ms",
+      "oppJumped": "{{name}} jumped the gun!",
+      "tooEarly": "Too early — you jumped the gun!",
+      "slower": "{{name}} drew first ({{ms}} ms)",
+      "noDraw": "Nobody drew in time",
+      "bye": "No opponent this round — free win!"
+    },
+    "matchPairs": {
+      "prompt": "Find the pairs!",
+      "pairs": "{{n}}/{{total}} pairs"
+    },
+    "sumoPush": {
+      "hint": "Hold & drag or use the arrows to shove!",
+      "alive": "{{n}}/{{total}} in"
+    },
+    "sudokuRace": {
+      "pickCell": "Pick a cell",
+      "pickDigit": "Pick a digit",
+      "rule": "Each row, column and box holds 1–{{n}} once",
+      "cooldown": "Wrong digit — wait!"
+    },
+    "roulette": {
+      "hint": "Highest number wins!",
+      "yours": "YOUR NUMBER",
+      "spin": "SPIN",
+      "spun": "{{n}}/{{total}} spun",
+      "jackpot": "JACKPOT!",
+      "ouch": "OUCH!"
+    },
+    "quickMath": {
+      "cooldown": "Wrong answer — wait!"
     }
   }
 }

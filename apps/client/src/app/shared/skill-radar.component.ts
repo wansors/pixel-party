@@ -10,6 +10,10 @@ const CX = 60
 const CY = 60
 const R = 40 // radius at value 1.0
 const RINGS = [1, 0.66, 0.33] // reference rings drawn behind the data polygon
+// Axis labels sit outside the shape and can be long ("Knowledge", "Conocimiento"), so the viewBox is
+// widened horizontally around the 120x120 chart instead of clipping them at the edges.
+const SIDE_MARGIN = 38
+const WIDE = (120 + SIDE_MARGIN * 2) / 120
 
 interface Pt {
   x: number
@@ -24,9 +28,9 @@ interface Pt {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <svg
-      [attr.width]="size()"
+      [attr.width]="size() * WIDE"
       [attr.height]="size()"
-      viewBox="0 0 120 120"
+      [attr.viewBox]="viewBox"
       class="skill-radar"
       role="img"
       [attr.aria-label]="ariaLabel()"
@@ -69,13 +73,17 @@ interface Pt {
       stroke-linejoin: round;
     }
     .axis-label {
-      fill: #9fb3c8;
+      fill: #c3cbdc;
       font-family: monospace;
-      font-size: 6px;
+      font-size: 7px;
+      dominant-baseline: middle;
     }
   `,
 })
 export class SkillRadarComponent {
+  readonly WIDE = WIDE
+  readonly viewBox = `${-SIDE_MARGIN} 0 ${120 + SIDE_MARGIN * 2} 120`
+
   readonly data = input<RadarAxis[]>([])
   readonly color = input<string>('#ffd166')
   readonly size = input<number>(200)
@@ -88,7 +96,7 @@ export class SkillRadarComponent {
     const spokes: Pt[] = axes.map((_, i) => this.point(i, n, R))
     const data = this.polygon(n, (i) => Math.max(0, Math.min(1, axes[i]?.value ?? 0)))
     const labels = axes.map((a, i) => {
-      const p = this.point(i, n, R + 13)
+      const p = this.point(i, n, R + 9)
       // Anchor by horizontal position so labels sit outside the shape without overlapping it.
       const anchor = p.x < CX - 1 ? 'end' : p.x > CX + 1 ? 'start' : 'middle'
       return { label: a.label, x: p.x, y: p.y, anchor }

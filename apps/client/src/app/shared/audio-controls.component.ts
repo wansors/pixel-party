@@ -40,7 +40,7 @@ import { AudioService } from '../core/audio/audio.service'
   `,
   styles: `
     .audio { position: relative; }
-    .snd { font-size: 0.65rem; padding: 0.35rem 0.5rem; }
+    .snd { font-size: var(--fs-sm); padding: 0.35rem 0.5rem; }
     .panel {
       position: absolute;
       right: 0;
@@ -56,7 +56,7 @@ import { AudioService } from '../core/audio/audio.service'
       grid-template-columns: 3.5rem 1fr;
       align-items: center;
       gap: 0.5rem;
-      font-size: 0.65rem;
+      font-size: var(--fs-sm);
       color: var(--c-dim);
       text-transform: uppercase;
     }

@@ -1,16 +1,8 @@
-import { PALETTE } from '@pp/shared'
-import type { ClientMsg, SimonSnapshot } from '@pp/shared'
+import { PALETTE, type SimonPlayerView, type SimonSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
-import type { RoundState } from '../RoundState'
-import type { Sfx } from '../Sfx'
-import type { Translate } from '../i18n'
-import {
-  addArcadeBackdrop,
-  bodyStyle,
-  ensurePixelBlock,
-  headlineStyle,
-  hexToCss,
-} from '../pixelStyle'
+import { addBanner, burst, flash, floatText, punch, ring, shake, showBanner } from '../fx'
+import { bodyStyle, headlineStyle, hexToCss, shade } from '../pixelStyle'
+import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 const PAD_COLORS = [PALETTE.red, 0x3a7bd5, 0x2a9d3f, PALETTE.amber]
 const PLAY_ON_MS = 420
@@ -18,6 +10,16 @@ const PLAY_GAP_MS = 180
 // A repeated pad (e.g. seq = [1, 1, 2]) needs a longer, clearer gap than a change of pad — with the
 // normal gap the second flash of the same color barely reads as a separate tap.
 const PLAY_REPEAT_GAP_MS = 420
+// Beat between "level up!" (or the round start) and the first pad of the playback.
+const PLAY_LEAD_IN_MS = 600
+const TAP_LIT_MS = 200
+// The device is drawn on a DEVICE_CELLS-wide pixel grid (each cell = one chunky art pixel).
+const DEVICE_CELLS = 48
+const HALO_CELLS = 3
+const MAX_RIVALS = 8
+// A create() within this long of the scene's own shutdown is a relayout restart mid-round (a new round
+// only starts seconds after the previous one stopped) — the one case where a memo may carry over.
+const RELAYOUT_GAP_MS = 1000
 
 interface PlaySlot {
   pad: number
@@ -29,7 +31,7 @@ interface PlaySlot {
 // pad repeats the previous one.
 function buildPlaySlots(seq: number[]): PlaySlot[] {
   const slots: PlaySlot[] = []
-  let t = 0
+  let t = PLAY_LEAD_IN_MS
   seq.forEach((pad, i) => {
     if (i > 0) t += pad === seq[i - 1] ? PLAY_REPEAT_GAP_MS : PLAY_GAP_MS
     slots.push({ pad, start: t, end: t + PLAY_ON_MS })
@@ -38,13 +40,27 @@ function buildPlaySlots(seq: number[]): PlaySlot[] {
   return slots
 }
 
-// Simon (sequence memory) canvas. When the player's sequence grows it plays the pads back (input
-// locked), then lets the player repeat them. Scene key === mini-game id.
-export class SimonScene extends Phaser.Scene {
-  private info?: Phaser.GameObjects.Text
-  private timer?: Phaser.GameObjects.Text
-  private status?: Phaser.GameObjects.Text
+type PadLook = 'off' | 'on' | 'halo'
+
+// Simon (sequence memory) canvas: a round pixel-art Simon device with four quarter-ring pads around a
+// count display. WATCH: the player's growing sequence plays back (input locked, device rim amber);
+// YOUR TURN: repeat it (rim lime, pips below track the replay). Pads have clearly distinct unlit/lit
+// states plus a glow halo; a level-up celebrates before the next playback; a wrong pad blinks the pad
+// that was expected. The server owns the sequence and the verdicts. Scene key === mini-game id.
+export class SimonScene extends MiniGameScene<SimonSnapshot> {
+  private prompt?: Phaser.GameObjects.Text
+  private shell?: Phaser.GameObjects.Image
+  private hubText?: Phaser.GameObjects.Text
   private pads: Phaser.GameObjects.Image[] = []
+  private halos: Phaser.GameObjects.Image[] = []
+  private pips?: Phaser.GameObjects.Graphics
+  private rivals: Phaser.GameObjects.Text[] = []
+  private waitText?: Phaser.GameObjects.Text
+  private banner?: Phaser.GameObjects.Text
+  private cellPx = 4
+  private cx = 0
+  private cy = 0
+  private pipsY = 0
   // Playback state.
   private shownLen = -1
   private playing = false
@@ -54,119 +70,410 @@ export class SimonScene extends Phaser.Scene {
   // Last sequence slot whose tone was played during playback, so each pad sounds once as it lights.
   private lastPlaySlot = -1
   private playSlots: PlaySlot[] = []
+  // pad -> time until which a tap keeps it lit.
+  private litUntil: number[] = []
+  // After a wrong pad: the pad that was expected blinks until this time.
+  private hintPad = -1
+  private hintUntil = 0
+  private pipsKey = ''
+  // The playback on screen, kept across a relayout restart (create() clears it only for a fresh
+  // round): an orientation flip or window resize resumes it where it was — or skips it if it already
+  // ended — instead of replaying the whole sequence, a second look for a player stuck mid-replay.
+  private playMemo = { round: -1, len: -1, start: 0 }
+  private stoppedAt = Number.NEGATIVE_INFINITY
 
-  constructor(
-    private readonly send: (msg: ClientMsg) => void,
-    private readonly state: RoundState,
-    private readonly sfx: Sfx,
-    private readonly t: Translate,
-  ) {
-    super('simon')
+  constructor(...deps: SceneDeps) {
+    super('simon', ...deps)
   }
 
-  create(): void {
+  override create(): void {
+    super.create()
+    if (this.game.getTime() - this.stoppedAt > RELAYOUT_GAP_MS) {
+      this.playMemo = { round: -1, len: -1, start: 0 }
+    }
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.stoppedAt = this.game.getTime()
+    })
     this.pads = []
+    this.halos = []
+    this.rivals = []
     this.shownLen = -1
     this.playing = false
     this.wasAlive = true
     this.playSlots = []
-    addArcadeBackdrop(this)
+    this.lastPlaySlot = -1
+    this.litUntil = [0, 0, 0, 0]
+    this.hintPad = -1
+    this.hintUntil = 0
+    this.pipsKey = ''
+
     const { width, height } = this.scale
-    const cx = width / 2
-    this.info = this.add.text(cx, height * 0.08, '', bodyStyle(20, PALETTE.dim)).setOrigin(0.5)
-    this.timer = this.add
-      .text(cx, height * 0.14, '', headlineStyle(22, PALETTE.lime))
-      .setOrigin(0.5)
-    this.status = this.add
-      .text(cx, height * 0.2, '', headlineStyle(22, PALETTE.text))
+    const compact = Math.min(width, height) < 520
+    const top = this.top
+    this.cx = width / 2
+    const promptSize = compact ? 16 : 24
+    const promptY = top + (compact ? 24 : 34)
+    this.prompt = this.add
+      .text(this.cx, promptY, '', headlineStyle(promptSize, PALETTE.amber, { align: 'center' }))
       .setOrigin(0.5)
 
-    // Four pads in a 2x2 block.
-    const area = Math.min(width * 0.8, height * 0.55)
-    const gap = area * 0.06
-    const size = (area - gap) / 2
-    const startX = cx - size - gap / 2 + size / 2
-    const startY = height * 0.6 - size - gap / 2 + size / 2
-    const padSize = Math.round(size)
+    // Bottom strip: everybody else's level, then the replay pips above it, then the device.
+    const rivalY = height - (compact ? 20 : 28)
+    this.pipsY = rivalY - (compact ? 36 : 46)
+    const areaTop = promptY + promptSize / 2 + (compact ? 20 : 28)
+    const areaBottom = this.pipsY - (compact ? 22 : 30)
+    const size = Math.max(160, Math.min(width - 48, areaBottom - areaTop, 440))
+    this.cellPx = Math.max(2, Math.floor(size / DEVICE_CELLS))
+    this.cy = (areaTop + areaBottom) / 2
+
+    this.shell = this.add.image(this.cx, this.cy, this.bodyKey(PALETTE.frame))
     for (let i = 0; i < 4; i++) {
-      const col = i % 2
-      const row = Math.floor(i / 2)
-      const x = startX + col * (size + gap)
-      const y = startY + row * (size + gap)
-      const padKey = ensurePixelBlock(
-        this,
-        `pp-simon-pad-${i}-${padSize}`,
-        padSize,
-        PAD_COLORS[i] ?? PALETTE.dim,
-      )
-      const pad = this.add.image(x, y, padKey).setAlpha(0.4).setInteractive({ useHandCursor: true })
+      const origin = { x: i % 2 === 0 ? 1 : 0, y: i < 2 ? 1 : 0 }
+      const halo = this.add
+        .image(this.cx, this.cy, this.padKey(i, 'halo'))
+        .setOrigin(origin.x, origin.y)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setVisible(false)
+      const pad = this.add
+        .image(this.cx, this.cy, this.padKey(i, 'off'))
+        .setOrigin(origin.x, origin.y)
+        .setInteractive({ useHandCursor: true })
       pad.on('pointerdown', () => this.tap(i))
+      this.halos.push(halo)
       this.pads.push(pad)
     }
+    this.add.image(this.cx, this.cy, this.hubKey()).setDepth(2)
+    this.hubText = this.add
+      .text(this.cx, this.cy, '', headlineStyle(compact ? 24 : 32, PALETTE.amber))
+      .setOrigin(0.5)
+      .setDepth(3)
+
+    this.pips = this.add.graphics()
+    for (let i = 0; i < MAX_RIVALS; i++) {
+      this.rivals.push(
+        this.add
+          .text(0, rivalY, '', bodyStyle(compact ? 12 : 14, PALETTE.text))
+          .setOrigin(0.5)
+          .setVisible(false),
+      )
+    }
+    this.waitText = this.add
+      .text(
+        this.cx,
+        height / 2 + (compact ? 44 : 56),
+        '',
+        bodyStyle(compact ? 14 : 18, PALETTE.text, { stroke: '#10121c', strokeThickness: 4 }),
+      )
+      .setOrigin(0.5)
+      .setDepth(951)
+    this.banner = addBanner(this)
+    // The kit's 34px banner overflows a phone on longer words ("¡TERMINADO!").
+    if (compact) this.banner.setFontSize(24)
   }
+
+  // --- Procedural pixel art -------------------------------------------------------------------------
+
+  // One quarter-ring pad (or its glow halo) as a texture whose inner corner is the device centre.
+  private padKey(pad: number, look: PadLook): string {
+    const key = `pp-simon-pad-${pad}-${look}-${this.cellPx}`
+    if (this.textures.exists(key)) return key
+    const c = PAD_COLORS[pad] ?? PALETTE.dim
+    const q = DEVICE_CELLS / 2
+    const margin = look === 'halo' ? HALO_CELLS : 0
+    const n = q + margin
+    const left = pad % 2 === 0
+    const upper = pad < 2
+    const rOut = q - 0.5
+    const rIn = q * 0.38
+    const gap = 1.2
+    const tones =
+      look === 'on'
+        ? { base: shade(c, 0.12), hi: shade(c, 0.62), lo: c, rim: shade(c, -0.3) }
+        : { base: shade(c, -0.5), hi: shade(c, -0.28), lo: shade(c, -0.64), rim: shade(c, -0.78) }
+    const g = this.make.graphics({ x: 0, y: 0 })
+    for (let ty = 0; ty < n; ty++) {
+      for (let tx = 0; tx < n; tx++) {
+        // Distance from the device centre (the texture's inner corner), in cells.
+        const ax = left ? n - tx - 0.5 : tx + 0.5
+        const ay = upper ? n - ty - 0.5 : ty + 0.5
+        const dist = Math.sqrt(ax * ax + ay * ay)
+        if (ax < gap || ay < gap || dist < rIn) continue
+        if (look === 'halo') {
+          if (dist > rOut + margin) continue
+          const alpha = dist <= rOut ? 0.28 : dist <= rOut + margin / 2 ? 0.4 : 0.18
+          g.fillStyle(c, alpha)
+        } else {
+          if (dist > rOut) continue
+          const edge = dist > rOut - 1 || dist < rIn + 1 || ax < gap + 1 || ay < gap + 1
+          // Light from the top-left: the rim band facing it is highlighted, the far one shaded.
+          const facing = ((left ? 1 : -1) * ax + (upper ? 1 : -1) * ay) / dist
+          const band = dist > rOut - 3
+          let color = tones.base
+          if (edge) color = tones.rim
+          else if (band && facing > 0.35) color = tones.hi
+          else if (band && facing < -0.35) color = tones.lo
+          // A lit pad gets a bright glint near its outer rim.
+          if (
+            look === 'on' &&
+            !edge &&
+            dist > rOut - 5 &&
+            dist < rOut - 3 &&
+            Math.abs(facing) < 0.3
+          )
+            color = 0xffffff
+          g.fillStyle(color, 1)
+        }
+        g.fillRect(tx * this.cellPx, ty * this.cellPx, this.cellPx, this.cellPx)
+      }
+    }
+    g.generateTexture(key, n * this.cellPx, n * this.cellPx)
+    g.destroy()
+    return key
+  }
+
+  // The dark round shell behind the pads, rimmed in the state colour (amber WATCH / lime YOUR TURN).
+  private bodyKey(rim: number): string {
+    const key = `pp-simon-body-${rim.toString(16)}-${this.cellPx}`
+    if (this.textures.exists(key)) return key
+    const n = DEVICE_CELLS + 4
+    const r = n / 2
+    const g = this.make.graphics({ x: 0, y: 0 })
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const d = Math.hypot(x + 0.5 - r, y + 0.5 - r)
+        if (d > r) continue
+        g.fillStyle(d > r - 1.2 ? rim : d > r - 2.2 ? shade(rim, -0.5) : shade(PALETTE.bg, -0.3), 1)
+        g.fillRect(x * this.cellPx, y * this.cellPx, this.cellPx, this.cellPx)
+      }
+    }
+    g.generateTexture(key, n * this.cellPx, n * this.cellPx)
+    g.destroy()
+    return key
+  }
+
+  // Centre hub: the classic count display.
+  private hubKey(): string {
+    const key = `pp-simon-hub-${this.cellPx}`
+    if (this.textures.exists(key)) return key
+    const r = DEVICE_CELLS * 0.19 - 1.5
+    const n = Math.ceil(r * 2)
+    const g = this.make.graphics({ x: 0, y: 0 })
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const d = Math.hypot(x + 0.5 - n / 2, y + 0.5 - n / 2)
+        if (d > r) continue
+        g.fillStyle(d > r - 1.1 ? PALETTE.frameLit : PALETTE.panel, 1)
+        g.fillRect(x * this.cellPx, y * this.cellPx, this.cellPx, this.cellPx)
+      }
+    }
+    g.generateTexture(key, n * this.cellPx, n * this.cellPx)
+    g.destroy()
+    return key
+  }
+
+  // Screen point in the middle of a pad's ring (for rings/bursts/labels).
+  private padCenter(pad: number): { x: number; y: number } {
+    const d = DEVICE_CELLS * this.cellPx * 0.24
+    return {
+      x: this.cx + (pad % 2 === 0 ? -d : d),
+      y: this.cy + (pad < 2 ? -d : d),
+    }
+  }
+
+  // --- Input ----------------------------------------------------------------------------------------
 
   private tap(pad: number): void {
-    const snap = this.state.state as SimonSnapshot | null
-    const me = snap?.players[this.state.selfId ?? '']
-    if (!snap || !me || !me.alive || this.playing) return
+    const me = this.snap?.players[this.selfId]
+    if (!me || !me.alive || this.playing) return
     if (this.time.now - this.lastTapAt < 120) return // debounce double taps
     this.lastTapAt = this.time.now
-    this.flash(pad, 200)
+    this.litUntil[pad] = this.time.now + TAP_LIT_MS
     this.sfx.pad(pad)
-    this.send({ type: 'MINIGAME_INPUT', input: { kind: 'pad', pad } })
+    const at = this.padCenter(pad)
+    ring(this, at.x, at.y, shade(PAD_COLORS[pad] ?? PALETTE.text, 0.4), 70)
+    this.sendInput({ kind: 'pad', pad })
   }
 
-  private flash(pad: number, ms: number): void {
-    const img = this.pads[pad]
-    if (!img) return
-    img.setAlpha(1)
-    this.time.delayedCall(ms, () => img.setAlpha(this.playing ? 0.4 : 0.4))
-  }
+  // --- Frame ----------------------------------------------------------------------------------------
 
-  override update(): void {
-    const snap = this.state.state as SimonSnapshot | null
+  protected frame(snap: SimonSnapshot | null): void {
     if (!snap) return
-    const me = snap.players[this.state.selfId ?? '']
-    this.timer?.setText(`${Math.ceil(snap.remainingMs / 1000)}s`)
-    this.info?.setText(
-      this.t('game.common.level', { n: snap.scores[this.state.selfId ?? ''] ?? 0 }),
-    )
+    const me = snap.players[this.selfId]
+    const score = snap.scores[this.selfId] ?? 0
+    this.hud?.setScore(this.t('game.common.level', { n: score }))
+    this.renderRivals(snap)
     if (!me) return
+    const now = this.time.now
 
-    // A longer sequence means the player advanced a level → play the new sequence back.
+    // A longer sequence means the player advanced a level → celebrate, then play the new sequence.
     if (me.seq.length !== this.shownLen && me.alive) {
+      const memo = this.playMemo
+      const resumed = memo.round === this.state.round && memo.len === me.seq.length
+      if (this.shownLen > 0 && me.seq.length > this.shownLen) this.levelUp(me.seq.length - 1)
       this.shownLen = me.seq.length
-      this.playing = true
-      this.playStart = this.time.now
-      this.lastPlaySlot = -1
       this.playSlots = buildPlaySlots(me.seq)
-    }
-
-    if (!me.alive) {
-      this.status?.setText(this.t('game.simon.out')).setColor(hexToCss(PALETTE.red))
-      if (this.wasAlive) {
-        this.sfx.wrong()
-        this.wasAlive = false
+      this.playStart = resumed ? memo.start : now
+      if (!resumed) this.playMemo = { round: this.state.round, len: me.seq.length, start: now }
+      const elapsed = now - this.playStart
+      this.playing = elapsed < (this.playSlots.at(-1)?.end ?? 0)
+      // Resuming mid-playback: pads already shown stay shown (and silent).
+      this.lastPlaySlot = -1
+      this.playSlots.forEach((slot, i) => {
+        if (resumed && elapsed >= slot.start) this.lastPlaySlot = i
+      })
+      if (this.hubText) {
+        this.hubText.setText(String(me.seq.length))
+        if (!resumed) punch(this, this.hubText, 0.3, 110)
       }
-      for (const p of this.pads) p.setAlpha(0.4)
+    }
+    if (!me.alive) {
+      this.renderEnded(me, score, now)
       return
     }
 
+    let active: PlaySlot | undefined
     if (this.playing) {
-      const elapsed = this.time.now - this.playStart
+      const elapsed = now - this.playStart
       const idx = this.playSlots.findIndex((s) => elapsed >= s.start && elapsed < s.end)
-      const active = idx >= 0 ? this.playSlots[idx] : undefined
-      this.status?.setText(this.t('game.simon.watch')).setColor(hexToCss(PALETTE.amber))
-      this.pads.forEach((p, i) => p.setAlpha(active?.pad === i ? 1 : 0.4))
+      active = idx >= 0 ? this.playSlots[idx] : undefined
       // Sound each pad once as it lights up during playback.
       if (active && idx !== this.lastPlaySlot) {
         this.lastPlaySlot = idx
         this.sfx.pad(active.pad)
       }
       const totalMs = this.playSlots.at(-1)?.end ?? 0
-      if (elapsed >= totalMs) this.playing = false
+      if (elapsed >= totalMs) {
+        this.playing = false
+        this.sfx.go()
+      }
+      this.renderPips(me.seq.length, this.lastPlaySlot + 1, -1, PALETTE.amber)
     } else {
-      this.status?.setText(this.t('game.simon.repeat')).setColor(hexToCss(PALETTE.lime))
+      this.renderPips(me.seq.length, me.pos, me.pos, PALETTE.lime)
     }
+    this.setState(
+      this.playing ? this.t('game.simon.watch') : this.t('game.simon.yourTurn'),
+      this.playing ? PALETTE.amber : PALETTE.lime,
+      // "YOUR TURN!" blinks arcade-style (stepped, not faded).
+      this.playing || Math.floor(now / 450) % 2 === 0,
+    )
+    this.pads.forEach((_, i) => this.setPad(i, active?.pad === i || now < (this.litUntil[i] ?? 0)))
+  }
+
+  private setPad(i: number, lit: boolean): void {
+    const pad = this.pads[i]
+    const key = this.padKey(i, lit ? 'on' : 'off')
+    if (pad && pad.texture.key !== key) pad.setTexture(key)
+    this.halos[i]?.setVisible(lit)
+  }
+
+  private setState(text: string, color: number, visible: boolean): void {
+    if (!this.prompt) return
+    if (this.prompt.text !== text) {
+      this.prompt.setText(text)
+      punch(this, this.prompt, 0.2, 90)
+    }
+    this.prompt.setColor(hexToCss(color)).setVisible(visible)
+    const key = this.bodyKey(color)
+    if (this.shell && this.shell.texture.key !== key) this.shell.setTexture(key)
+  }
+
+  private levelUp(completed: number): void {
+    this.sfx.correct()
+    ring(this, this.cx, this.cy, PALETTE.lime, DEVICE_CELLS * this.cellPx * 0.5)
+    burst(this, this.cx, this.cy, PALETTE.lime, 16, 240)
+    floatText(
+      this,
+      this.cx,
+      this.cy - DEVICE_CELLS * this.cellPx * 0.12,
+      completed % 5 === 0 ? this.t('game.common.great') : this.t('game.common.nice'),
+      PALETTE.lime,
+      24,
+    )
+  }
+
+  // Out (wrong pad) or cleared the whole sequence: say so, and on a miss blink the pad that was due.
+  private renderEnded(me: SimonPlayerView, score: number, now: number): void {
+    const clearedAll = me.seq.length <= score
+    if (this.wasAlive) {
+      this.wasAlive = false
+      this.playing = false
+      // The banner sits over the hub; keep the count from peeking out behind it.
+      this.hubText?.setVisible(false)
+      // A relayout restart after the run ended only restores the end state (no buzz/shake replay).
+      const quiet = this.firstSnapshot
+      if (clearedAll && !quiet) {
+        this.sfx.coin()
+        burst(this, this.cx, this.cy, PALETTE.amber, 30, 320)
+      } else if (!quiet) {
+        this.sfx.wrong()
+        shake(this, 0.012, 240)
+        flash(this, PALETTE.red, 160)
+        this.hintPad = me.seq[me.pos] ?? -1
+        this.hintUntil = now + 1500
+      }
+      if (this.banner) {
+        showBanner(
+          this,
+          this.banner,
+          clearedAll ? this.t('game.common.finished') : this.t('game.common.out'),
+          clearedAll ? PALETTE.lime : PALETTE.red,
+        )
+      }
+      this.waitText?.setText(this.t('game.common.waiting'))
+    }
+    this.setState(this.prompt?.text ?? '', clearedAll ? PALETTE.lime : PALETTE.red, false)
+    const blink = now < this.hintUntil && Math.floor(now / 180) % 2 === 0
+    this.pads.forEach((_, i) => this.setPad(i, blink && i === this.hintPad))
+    this.renderPips(
+      me.seq.length,
+      me.pos,
+      clearedAll ? -1 : me.pos,
+      clearedAll ? PALETTE.lime : PALETTE.red,
+    )
+  }
+
+  // One pip per pad in the current sequence: done (filled), next (outlined), still to go (dim).
+  private renderPips(len: number, done: number, next: number, color: number): void {
+    const key = `${len}:${done}:${next}:${color}`
+    if (!this.pips || key === this.pipsKey) return
+    this.pipsKey = key
+    const { width } = this.scale
+    const gap = 4
+    const s = Math.max(6, Math.min(16, Math.floor((width - 32 + gap) / Math.max(1, len) - gap)))
+    const total = len * s + (len - 1) * gap
+    const x0 = this.cx - total / 2
+    this.pips.clear()
+    for (let i = 0; i < len; i++) {
+      const x = Math.round(x0 + i * (s + gap))
+      const y = Math.round(this.pipsY - s / 2)
+      if (i < done) {
+        this.pips.fillStyle(color, 1).fillRect(x, y, s, s)
+        this.pips.fillStyle(shade(color, 0.5), 1).fillRect(x, y, s, 2)
+      } else {
+        this.pips.fillStyle(PALETTE.panelAlt, 1).fillRect(x, y, s, s)
+        if (i === next) this.pips.lineStyle(2, color, 1).strokeRect(x - 1, y - 1, s + 2, s + 2)
+      }
+    }
+  }
+
+  // Everyone else's level along the bottom, in their colours (✕ = out).
+  private renderRivals(snap: SimonSnapshot): void {
+    const others = Object.keys(snap.players)
+      .filter((id) => id !== this.selfId)
+      .sort((a, b) => (snap.scores[b] ?? 0) - (snap.scores[a] ?? 0))
+      .slice(0, Math.min(MAX_RIVALS, this.scale.width < 520 ? 4 : MAX_RIVALS))
+    const slot = (this.scale.width - 32) / Math.max(1, others.length)
+    this.rivals.forEach((text, i) => {
+      const id = others[i]
+      text.setVisible(id !== undefined)
+      if (id === undefined) return
+      const alive = snap.players[id]?.alive ?? false
+      const name = this.label(id).slice(0, 8)
+      text
+        .setText(`${name} ${snap.scores[id] ?? 0}${alive ? '' : ' ✕'}`)
+        .setColor(hexToCss(this.state.colorOf(id, PALETTE.text)))
+        .setAlpha(alive ? 1 : 0.5)
+        .setX(16 + slot * (i + 0.5))
+    })
   }
 }

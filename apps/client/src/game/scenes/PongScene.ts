@@ -1,138 +1,445 @@
-import { PALETTE } from '@pp/shared'
-import type { ClientMsg, PongSnapshot } from '@pp/shared'
+import { PALETTE, type PongPlayerView, type PongSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
-import type { RoundState } from '../RoundState'
-import type { Sfx } from '../Sfx'
-import type { Translate } from '../i18n'
+import { addBanner, burst, floatText, punch, ring, shake, showBanner } from '../fx'
 import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
-import { addArcadeBackdrop, ensurePixelOrb, headlineStyle, hexToCss } from '../pixelStyle'
+import {
+  bodyStyle,
+  ensurePixelGrid,
+  ensurePixelOrb,
+  fitFontSize,
+  headlineStyle,
+  hexToCss,
+  shade,
+} from '../pixelStyle'
+import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
-const BALL_ORB_DIAMETER = 10
+// Mirrors the server's pong.ts: paddles sit at x = 0.04 / 0.96 and return the ball when its centre is
+// within ±PAD_HALF of the paddle centre; first to WIN_SCORE takes the duel.
+const PAD_X = 0.04
+const PAD_HALF = 0.13
+const WIN_SCORE = 5
+const KEY_SPEED = 1.4 // normalized field heights per second with the keyboard
+const TRAIL = 8
 
-// Pixel Pong canvas (Phase 5). Your paddle is always drawn on the LEFT (the server mirrors the ball for
-// the right-side player), controlled locally for zero-lag feel; the ball + opponent paddle come from the
-// snapshot, smoothed by the interpolator. Scene key === mini-game id.
-export class PongScene extends Phaser.Scene {
-  private timer?: Phaser.GameObjects.Text
-  private scoreText?: Phaser.GameObjects.Text
-  private status?: Phaser.GameObjects.Text
-  private myPaddle?: Phaser.GameObjects.Rectangle
-  private oppPaddle?: Phaser.GameObjects.Rectangle
+// Pixel paddle, 4 cells thick: outlined pill with a lit and a shaded edge. Drawn upright; transposed
+// for the portrait (paddles-at-the-ends) layout.
+function paddleRows(): string[] {
+  const rows = ['_oo_', 'ohbo']
+  for (let i = 0; i < 14; i++) rows.push('ohbd')
+  rows.push('obdo', '_oo_')
+  return rows
+}
+
+function transpose(rows: string[]): string[] {
+  const w = rows[0]?.length ?? 0
+  return Array.from({ length: w }, (_, x) => rows.map((r) => r[x] ?? '_').join(''))
+}
+
+interface Side {
+  paddle: Phaser.GameObjects.Image
+  digit: Phaser.GameObjects.Text
+  name: Phaser.GameObjects.Text
+  color: number
+}
+
+// Pixel Pong canvas (Phase 5, duel). The server simulates the ball; "your" paddle is always on your
+// end (the server mirrors the ball for the right-side player) and is moved locally for zero-lag feel,
+// while the ball + opponent paddle come from the snapshot, smoothed by the interpolator. Landscape
+// screens play left↔right; portrait phones rotate the court so you defend the bottom edge and slide the
+// paddle with your thumb. The mapping is purely visual — the wire stays normalized (x along, y across).
+export class PongScene extends MiniGameScene<PongSnapshot> {
+  private me?: Side
+  private opp?: Side
   private ball?: Phaser.GameObjects.Image
-  private ballKey = ''
+  private trailGfx?: Phaser.GameObjects.Graphics
+  private banner?: Phaser.GameObjects.Text
+  private subline?: Phaser.GameObjects.Text
+  private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
   private readonly interp = new SnapshotInterpolator<PongSnapshot>(100)
+  private trail: { x: number; y: number }[] = []
   private lastTick = -1
   private padY = 0.5
   private lastSentY = -1
   private lastSentAt = 0
+  private synced = false
   private lastScoreYou = 0
   private lastScoreOpp = 0
-  private readonly padHalf = 0.13
+  private lastBallX = 0.5
+  private lastBallY = 0.5
+  private lastDir = 0
+  private wasDone = false
+  // undefined = not applied yet, so the first view (even a bye's null) always runs setOpponent.
+  private oppId: string | null | undefined = undefined
+  private vertical = false
+  private compact = false
+  // Court geometry. "Along" = the server's x axis (your paddle → theirs), "across" = its y axis.
+  private court = { x: 0, y: 0, w: 0, h: 0 }
+  private alongStart = 0
+  private alongLen = 0
+  private acrossStart = 0
+  private acrossLen = 0
+  private ballR = 0
+  private padT = 0
 
-  constructor(
-    private readonly send: (msg: ClientMsg) => void,
-    private readonly state: RoundState,
-    private readonly sfx: Sfx,
-    private readonly t: Translate,
-  ) {
-    super('pixel-pong')
+  constructor(...deps: SceneDeps) {
+    super('pixel-pong', ...deps)
   }
 
-  create(): void {
+  protected override remainingMs(snap: PongSnapshot): number | null {
+    return snap.roundRemainingMs
+  }
+
+  override create(): void {
+    super.create()
     this.interp.reset()
+    this.trail = []
     this.lastTick = -1
     this.padY = 0.5
     this.lastSentY = -1
+    this.synced = false
     this.lastScoreYou = 0
     this.lastScoreOpp = 0
-    addArcadeBackdrop(this)
-    this.ballKey = ensurePixelOrb(this, 'pp-pong-ball', BALL_ORB_DIAMETER, PALETTE.amber)
+    this.lastBallX = 0.5
+    this.lastBallY = 0.5
+    this.lastDir = 0
+    this.wasDone = false
+    this.oppId = undefined
+
     const { width, height } = this.scale
+    this.compact = Math.min(width, height) < 520
+    this.vertical = height > width * 1.1
+    const pad = this.compact ? 10 : 18
+    const hintH = this.compact ? 24 : 30
+    this.court = {
+      x: pad,
+      y: this.top + 6,
+      w: width - pad * 2,
+      h: height - this.top - 6 - hintH,
+    }
+    const { x, y, w, h } = this.court
+    this.ballR = Math.max(5, Math.round(Math.min(w, h) * 0.02))
+    this.padT = Math.max(8, Math.round(Math.min(w, h) * 0.024))
+    const wall = this.compact ? 6 : 8
+    const alongSize = this.vertical ? h : w
+    const acrossSize = this.vertical ? w : h
+    // Paddle faces land exactly at x = PAD_X / 1 - PAD_X; walls stop the ball's edge at y = 0 / 1.
+    const margin = this.padT + this.ballR + 4
+    this.alongLen = (alongSize - margin * 2) / (1 - PAD_X * 2)
+    this.alongStart = margin - PAD_X * this.alongLen
+    this.acrossStart = wall + this.ballR
+    this.acrossLen = acrossSize - (wall + this.ballR) * 2
 
-    this.timer = this.add
-      .text(width / 2, height * 0.05, '', headlineStyle(20, PALETTE.lime))
-      .setOrigin(0.5)
-    this.scoreText = this.add
-      .text(width / 2, height * 0.11, '', headlineStyle(28, PALETTE.text))
-      .setOrigin(0.5)
-    this.status = this.add
-      .text(width / 2, height * 0.5, '', headlineStyle(32, PALETTE.amber))
-      .setOrigin(0.5)
-      .setDepth(10)
+    this.drawCourt(wall)
 
-    const padW = width * 0.02
-    const padH = height * this.padHalf * 2
-    this.myPaddle = this.add.rectangle(width * 0.05, height * 0.5, padW, padH, PALETTE.lime)
-    this.oppPaddle = this.add.rectangle(width * 0.95, height * 0.5, padW, padH, PALETTE.red)
+    const selfColor = this.state.colorOf(this.selfId, PALETTE.lime)
+    this.me = this.makeSide(selfColor, 'me', this.t('game.common.you'))
+    this.opp = this.makeSide(PALETTE.red, 'opp', '')
+
+    this.trailGfx = this.add.graphics().setDepth(18)
+    const ballKey = ensurePixelOrb(this, 'pp-pong-ball', 10, PALETTE.amber)
     this.ball = this.add
-      .image(width / 2, height / 2, this.ballKey)
-      .setDisplaySize(Math.min(width, height) * 0.04, Math.min(width, height) * 0.04)
+      .image(x + w / 2, y + h / 2, ballKey)
+      .setDisplaySize(this.ballR * 2, this.ballR * 2)
+      .setDepth(20)
 
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.aim(p.y))
+    this.add
+      .text(
+        width / 2,
+        height - hintH / 2,
+        this.t('game.pixelPong.hint', { n: WIN_SCORE }),
+        bodyStyle(this.compact ? 11 : 14, PALETTE.dim),
+      )
+      .setOrigin(0.5)
+
+    this.banner = addBanner(this)
+    this.subline = this.add
+      .text(
+        width / 2,
+        height / 2 + (this.compact ? 34 : 46),
+        '',
+        headlineStyle(this.compact ? 8 : 16, PALETTE.text, {
+          stroke: '#10121c',
+          strokeThickness: 4,
+          align: 'center',
+          wordWrap: { width: width * 0.9 },
+        }),
+      )
+      .setOrigin(0.5)
+      .setDepth(950)
+      .setVisible(false)
+
+    this.cursors = this.input.keyboard?.createCursorKeys()
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.aim(p))
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (p.isDown) this.aim(p.y)
+      if (p.isDown) this.aim(p)
     })
   }
 
-  private aim(py: number): void {
-    this.padY = Phaser.Math.Clamp(py / this.scale.height, 0, 1)
+  // Screen position of a normalized court point (along = server x, across = server y).
+  private toScreen(along: number, across: number): { x: number; y: number } {
+    const a = this.alongStart + along * this.alongLen
+    const c = this.acrossStart + across * this.acrossLen
+    const { x, y, h } = this.court
+    return this.vertical ? { x: x + c, y: y + h - a } : { x: x + a, y: y + c }
+  }
+
+  private drawCourt(wall: number): void {
+    const { x, y, w, h } = this.court
+    const g = this.add.graphics()
+    g.fillStyle(shade(PALETTE.panel, -0.15), 1)
+    g.fillRect(x, y, w, h)
+    // Side walls (the across bounds) as beveled bars.
+    const bar = (bx: number, by: number, bw: number, bh: number): void => {
+      g.fillStyle(PALETTE.frame, 1)
+      g.fillRect(bx, by, bw, bh)
+      g.fillStyle(PALETTE.frameLit, 1)
+      g.fillRect(bx, by, bw, Math.min(bh, 2))
+      g.fillRect(bx, by, Math.min(bw, 2), bh)
+    }
+    if (this.vertical) {
+      bar(x, y, wall, h)
+      bar(x + w - wall, y, wall, h)
+    } else {
+      bar(x, y, w, wall)
+      bar(x, y + h - wall, w, wall)
+    }
+    // Dashed centre net.
+    g.fillStyle(PALETTE.dim, 0.55)
+    const dash = this.compact ? 10 : 14
+    if (this.vertical) {
+      for (let dx = x + wall + 4; dx < x + w - wall - dash / 2; dx += dash * 2) {
+        g.fillRect(dx, y + h / 2 - 2, dash, 4)
+      }
+    } else {
+      for (let dy = y + wall + 4; dy < y + h - wall - dash / 2; dy += dash * 2) {
+        g.fillRect(x + w / 2 - 2, dy, 4, dash)
+      }
+    }
+  }
+
+  private makeSide(color: number, which: 'me' | 'opp', label: string): Side {
+    const key = this.paddleKey(color)
+    const len = PAD_HALF * 2 * this.acrossLen
+    const paddle = this.add
+      .image(0, 0, key)
+      .setDisplaySize(this.vertical ? len : this.padT, this.vertical ? this.padT : len)
+      .setDepth(15)
+    // Big translucent score digit in each half of the court, the player's label under it.
+    const along = which === 'me' ? 0.28 : 0.72
+    const pos = this.toScreen(along, this.vertical ? 0.5 : 0.18)
+    const digit = this.add
+      .text(pos.x, pos.y, '0', headlineStyle(this.compact ? 40 : 64, color))
+      .setOrigin(0.5)
+      .setAlpha(0.45)
+      .setDepth(2)
+    const name = this.add
+      .text(
+        pos.x,
+        pos.y + (this.compact ? 34 : 52),
+        label,
+        headlineStyle(this.compact ? 8 : 16, color),
+      )
+      .setOrigin(0.5)
+      .setAlpha(0.8)
+      .setDepth(2)
+    return { paddle, digit, name, color }
+  }
+
+  private paddleKey(color: number): string {
+    const rows = this.vertical ? transpose(paddleRows()) : paddleRows()
+    return ensurePixelGrid(this, {
+      key: `pp-pong-paddle-${color.toString(16)}-${this.vertical ? 'v' : 'h'}`,
+      rows,
+      legend: { o: shade(color, -0.6), h: shade(color, 0.45), b: color, d: shade(color, -0.3) },
+    })
+  }
+
+  // Paddle centre on screen: its face sits exactly one ball radius short of the contact line.
+  private paddlePos(mine: boolean, across: number): { x: number; y: number } {
+    const along = mine ? PAD_X : 1 - PAD_X
+    const offset = (this.ballR + this.padT / 2) / this.alongLen
+    return this.toScreen(mine ? along - offset : along + offset, across)
+  }
+
+  private aim(p: Phaser.Input.Pointer): void {
+    const { x, y } = this.court
+    const c = this.vertical ? p.x - x : p.y - y
+    this.padY = Phaser.Math.Clamp((c - this.acrossStart) / this.acrossLen, 0, 1)
   }
 
   private maybeSend(now: number): void {
     if (now - this.lastSentAt < 60 || Math.abs(this.padY - this.lastSentY) < 0.01) return
     this.lastSentAt = now
     this.lastSentY = this.padY
-    this.send({ type: 'MINIGAME_INPUT', input: { kind: 'move', y: this.padY } })
+    this.sendInput({ kind: 'move', y: this.padY })
   }
 
-  override update(): void {
+  protected frame(snap: PongSnapshot | null, _time: number, delta: number): void {
     const now = this.time.now
-    const snap = this.state.state as PongSnapshot | null
     if (snap && this.state.tick !== this.lastTick) {
       this.lastTick = this.state.tick
       this.interp.push(snap, now)
+      const view = snap.players[this.selfId]
+      if (view) this.onView(view)
     }
+
+    const step = (KEY_SPEED * delta) / 1000
+    const back = this.vertical ? this.cursors?.left : this.cursors?.up
+    const fwd = this.vertical ? this.cursors?.right : this.cursors?.down
+    if (back?.isDown) this.padY -= step
+    if (fwd?.isDown) this.padY += step
+    this.padY = Phaser.Math.Clamp(this.padY, 0, 1)
     this.maybeSend(now)
 
-    const { width, height } = this.scale
-    this.myPaddle?.setPosition(width * 0.05, this.padY * height)
+    const mePos = this.paddlePos(true, this.padY)
+    this.me?.paddle.setPosition(mePos.x, mePos.y)
 
-    const latest = this.interp.latest()
-    const me = latest?.players[this.state.selfId ?? '']
-    if (latest) this.timer?.setText(`${Math.ceil(latest.roundRemainingMs / 1000)}s`)
-    if (!me) return
-
-    if (me.scoreYou > this.lastScoreYou) this.sfx.correct()
-    if (me.scoreOpp > this.lastScoreOpp) this.sfx.wrong()
-    this.lastScoreYou = me.scoreYou
-    this.lastScoreOpp = me.scoreOpp
-    this.scoreText?.setText(`${me.scoreYou} : ${me.scoreOpp}`)
-
-    if (me.done) {
-      const color = me.won ? PALETTE.lime : me.won === null ? PALETTE.amber : PALETTE.red
-      this.status
-        ?.setText(me.won === null ? 'DRAW' : me.won ? 'YOU WIN!' : 'YOU LOSE')
-        .setColor(hexToCss(color))
-    } else {
-      this.status?.setText('')
-    }
-
-    // Interpolate ball + opponent paddle from the snapshot pair.
+    const latest = this.interp.latest()?.players[this.selfId]
+    if (!latest) return
+    // Interpolate ball + opponent paddle — except across a point (the ball teleports back to serve).
+    let ballX = latest.ballX
+    let ballY = latest.ballY
+    let oppY = latest.oppY
     const sample = this.interp.sample(now)
-    let ballX = me.ballX
-    let ballY = me.ballY
-    let oppY = me.oppY
-    if (sample) {
-      const selfId = this.state.selfId ?? ''
-      const from = sample.from.players[selfId]
-      const to = sample.to.players[selfId]
-      if (from && to) {
-        ballX = lerp(from.ballX, to.ballX, sample.t)
-        ballY = lerp(from.ballY, to.ballY, sample.t)
-        oppY = lerp(from.oppY, to.oppY, sample.t)
-      }
+    const from = sample?.from.players[this.selfId]
+    const to = sample?.to.players[this.selfId]
+    if (sample && from && to) {
+      oppY = lerp(from.oppY, to.oppY, sample.t)
+      const served = from.scoreYou !== to.scoreYou || from.scoreOpp !== to.scoreOpp
+      ballX = served ? to.ballX : lerp(from.ballX, to.ballX, sample.t)
+      ballY = served ? to.ballY : lerp(from.ballY, to.ballY, sample.t)
     }
-    this.ball?.setPosition(ballX * width, ballY * height)
-    this.oppPaddle?.setPosition(width * 0.95, oppY * height)
+    const oppPos = this.paddlePos(false, oppY)
+    this.opp?.paddle.setPosition(oppPos.x, oppPos.y)
+    const b = this.toScreen(ballX, ballY)
+    this.ball?.setPosition(b.x, b.y).setVisible(!latest.done)
+    this.drawTrail(b, !latest.done)
+  }
+
+  private drawTrail(b: { x: number; y: number }, live: boolean): void {
+    const g = this.trailGfx
+    if (!g) return
+    const last = this.trail[this.trail.length - 1]
+    // A jump of more than a quarter court means a serve reset: start a fresh trail.
+    if (last && Math.hypot(b.x - last.x, b.y - last.y) > this.alongLen * 0.25) this.trail = []
+    this.trail.push(b)
+    if (this.trail.length > TRAIL) this.trail.shift()
+    g.clear()
+    if (!live) return
+    this.trail.forEach((p, i) => {
+      const k = (i + 1) / this.trail.length
+      const s = this.ballR * 2 * (0.3 + 0.5 * k)
+      g.fillStyle(shade(PALETTE.amber, 0.3), 0.45 * k)
+      g.fillRect(p.x - s / 2, p.y - s / 2, s, s)
+    })
+  }
+
+  // Discrete events from each fresh snapshot: points, paddle returns, the final result.
+  private onView(view: PongPlayerView): void {
+    if (view.opponentId !== this.oppId) this.setOpponent(view.opponentId)
+    this.hud?.setScore(this.t('game.common.pts', { n: view.scoreYou }))
+    this.me?.digit.setText(String(view.scoreYou))
+    this.opp?.digit.setText(String(view.scoreOpp))
+    if (!this.synced) {
+      this.synced = true
+      this.lastScoreYou = view.scoreYou
+      this.lastScoreOpp = view.scoreOpp
+      this.lastBallX = view.ballX
+      this.lastBallY = view.ballY
+      this.wasDone = view.done
+      if (view.done) this.showResult(view, false)
+      return
+    }
+
+    const scored = view.scoreYou > this.lastScoreYou
+    const conceded = view.scoreOpp > this.lastScoreOpp
+    if (scored) this.onPoint(true)
+    if (conceded) this.onPoint(false)
+    if (!scored && !conceded) {
+      const dx = view.ballX - this.lastBallX
+      const dir = Math.abs(dx) < 0.002 ? this.lastDir : Math.sign(dx)
+      if (this.lastDir < 0 && dir > 0) this.onReturn(true, view.ballY)
+      else if (this.lastDir > 0 && dir < 0) this.onReturn(false, view.ballY)
+      this.lastDir = dir
+    } else {
+      this.lastDir = 0
+    }
+    this.lastScoreYou = view.scoreYou
+    this.lastScoreOpp = view.scoreOpp
+    this.lastBallX = view.ballX
+    this.lastBallY = view.ballY
+
+    if (view.done && !this.wasDone) this.showResult(view, true)
+    this.wasDone = view.done
+  }
+
+  private setOpponent(id: string | null): void {
+    this.oppId = id
+    const opp = this.opp
+    if (!opp) return
+    const color = id ? this.state.colorOf(id, PALETTE.red) : PALETTE.frame
+    opp.color = color
+    opp.paddle.setTexture(this.paddleKey(color)).setVisible(id !== null)
+    opp.digit.setColor(hexToCss(color))
+    opp.name.setText(id ? this.state.nameOf(id) : '—').setColor(hexToCss(color))
+  }
+
+  private onPoint(mine: boolean): void {
+    const side = mine ? this.me : this.opp
+    // The ball left the court past the loser's paddle, at its last known height.
+    const exit = this.toScreen(mine ? 1 - PAD_X : PAD_X, this.lastBallY)
+    this.trail = []
+    if (side) punch(this, side.digit, 0.5, 140)
+    if (mine) {
+      this.sfx.correct()
+      burst(this, exit.x, exit.y, this.me?.color ?? PALETTE.lime, 20, 260)
+      floatText(
+        this,
+        exit.x + (this.vertical ? 0 : -40),
+        exit.y + (this.vertical ? 40 : 0),
+        '+1',
+        PALETTE.lime,
+        24,
+      )
+    } else {
+      this.sfx.wrong()
+      shake(this, 0.008, 200)
+      burst(this, exit.x, exit.y, this.opp?.color ?? PALETTE.red, 20, 260)
+    }
+  }
+
+  private onReturn(mine: boolean, across: number): void {
+    const side = mine ? this.me : this.opp
+    if (!side) return
+    this.sfx.pad(mine ? 2 : 1)
+    const hit = this.toScreen(mine ? PAD_X : 1 - PAD_X, across)
+    ring(this, hit.x, hit.y, side.color, this.ballR * 4)
+    punch(this, side.paddle, 0.15, 70)
+  }
+
+  private showResult(view: PongPlayerView, withFx: boolean): void {
+    const banner = this.banner
+    if (!banner) return
+    const text =
+      view.won === null
+        ? this.t('game.common.draw')
+        : view.won
+          ? this.t('game.common.youWin')
+          : this.t('game.common.youLose')
+    const color = view.won === null ? PALETTE.amber : view.won ? PALETTE.lime : PALETTE.red
+    banner.setFontSize(fitFontSize(text, this.scale.width * 0.9, this.compact ? 24 : 40))
+    showBanner(this, banner, text, color)
+    const sub =
+      view.opponentId === null ? this.t('game.pixelPong.bye') : this.t('game.common.waiting')
+    this.subline?.setText(sub).setVisible(true)
+    if (!withFx) return
+    if (view.won) {
+      this.sfx.coin()
+      const { width, height } = this.scale
+      burst(this, width / 2, height / 2, PALETTE.amber, 24, 300)
+      burst(this, width / 2, height / 2, this.me?.color ?? PALETTE.lime, 18, 240)
+    } else if (view.won === null) {
+      this.sfx.tick()
+    }
   }
 }

@@ -22,7 +22,9 @@
     "join": "Entrar",
     "cantReach": "No se pudo conectar con el servidor",
     "roomNotFound": "Sala {{code}} no encontrada",
-    "kicked": "El anfitrión te ha expulsado de la sala"
+    "kicked": "El anfitrión te ha expulsado de la sala",
+    "tagline": "{{n}} minijuegos · una sala · piques sin fin",
+    "or": "o únete a un amigo"
   },
   "room": {
     "code": "SALA",
@@ -47,11 +49,23 @@
       "kick": "Expulsar",
       "swapTeam": "Cambiar equipo",
       "shuffleTeams": "Rebarajar equipos",
-      "handicap": "Remontada (catch-up)"
+      "handicap": "Remontada (catch-up)",
+      "roomCode": "Código de sala",
+      "share": "Comparte el código o el enlace",
+      "playersCount": "{{n}} jugadores",
+      "readyCount": "{{n}}/{{total}} listos",
+      "selectedCount": "{{n}}/{{total}} elegidos",
+      "lineup": "Selección",
+      "hostPicks": "El anfitrión elige los juegos",
+      "waitingHost": "Esperando a que el anfitrión empiece…",
+      "noGames": "Elige al menos un juego",
+      "you": "tú"
     },
     "intro": {
       "round": "Ronda",
-      "go": "¡YA!"
+      "go": "¡YA!",
+      "howTo": "Cómo se juega",
+      "getReady": "¡PREPÁRATE!"
     },
     "result": {
       "roundWinner": "GANADOR DE RONDA",
@@ -62,7 +76,8 @@
         "winner": ["¡Eres el mejor!", "¡Campeón!", "¡Lo clavaste!", "¡A la cima!"],
         "loser": ["¡Perdedor!!", "Mejor suerte la próxima.", "Auch.", "Farolillo rojo."],
         "other": ["Buen esfuerzo.", "En la media.", "Sigue así.", "¡No está mal!"]
-      }
+      },
+      "thisRound": "Esta ronda"
     },
     "scoreboard": {
       "title": "Puntuaciones",
@@ -86,7 +101,19 @@
       "roundWinner": "ganó"
     },
     "joinRejected": "Entrada rechazada: {{reason}}",
-    "intentRejected": "{{intent}} rechazado: {{reason}}"
+    "intentRejected": "{{intent}} rechazado: {{reason}}",
+    "header": {
+      "round": "RONDA {{n}}/{{total}}"
+    },
+    "format": {
+      "ffa": "Todos contra todos",
+      "team": "Por equipos",
+      "duel": "Duelo 1 contra 1"
+    },
+    "live": {
+      "round": "RON",
+      "total": "PTS"
+    }
   },
   "team": {
     "red": "Rojo",
@@ -208,6 +235,46 @@
       "bubble-pop": {
         "name": "Explota Burbujas",
         "blurb": "Dispara burbujas del mismo color para explotar grupos de tres o más. Vacía el tablero el primero."
+      },
+      "fruit-catch": {
+        "name": "Atrapa Frutas",
+        "blurb": "Mueve la cesta para atrapar la fruta que cae… y esquiva las bombas."
+      },
+      "pixel-rain": {
+        "name": "Lluvia de Píxeles",
+        "blurb": "Esquiva los bloques que caen. Gana el último en pie."
+      },
+      "pixel-dash": {
+        "name": "Carrera Pixel",
+        "blurb": "Toca para saltar los obstáculos que se te echan encima. Gana quien supere más."
+      },
+      "snake-arena": {
+        "name": "Arena Serpiente",
+        "blurb": "Come, crece y no te estrelles. Gana la serpiente más larga."
+      },
+      "pixel-pong": {
+        "name": "Pixel Pong",
+        "blurb": "Pong cara a cara. El primero en llegar a cinco puntos gana el duelo."
+      },
+      "sumo-push": {
+        "name": "Empuje Sumo",
+        "blurb": "Echa a todos del círculo. Gana el último luchador en pie."
+      },
+      "match-pairs": {
+        "name": "Parejas",
+        "blurb": "Da la vuelta a las cartas y encuentra todas las parejas antes que nadie."
+      },
+      "quick-draw": {
+        "name": "Desenfunda",
+        "blurb": "Espera a FUEGO y desenfunda primero. Si te adelantas, pierdes."
+      },
+      "pixel-roulette": {
+        "name": "Ruleta Pixel",
+        "blurb": "Gira para sacar un número al azar. Gana el más alto: pura suerte."
+      },
+      "sudoku-race": {
+        "name": "Sudoku Exprés",
+        "blurb": "Todos resuelven el mismo mini sudoku. Gana la cuadrícula correcta más rápida."
       }
     }
   },
@@ -217,7 +284,21 @@
       "correct": "{{n}} aciertos",
       "pts": "{{n}} pts",
       "level": "Nivel {{n}}",
-      "you": "tú"
+      "you": "tú",
+      "youWin": "¡GANASTE!",
+      "youLose": "PERDISTE",
+      "draw": "EMPATE",
+      "out": "¡FUERA!",
+      "combo": "x{{n}} COMBO",
+      "miss": "FALLO",
+      "perfect": "¡PERFECTO!",
+      "great": "¡GENIAL!",
+      "good": "BIEN",
+      "wrong": "¡ERROR!",
+      "nice": "¡BIEN!",
+      "waiting": "Esperando al resto…",
+      "finished": "¡TERMINADO!",
+      "finish": "¡FIN!"
     },
     "reaction": {
       "wait": "ESPERA…",
@@ -227,7 +308,8 @@
       "tooEarly": "DEMASIADO PRONTO",
       "falseStart": "Te precipitaste — fuera esta ronda",
       "nice": "¡Buen reflejo!",
-      "ms": "{{ms}} ms"
+      "ms": "{{ms}} ms",
+      "falseStartTag": "SALIDA NULA"
     },
     "buttonMasher": {
       "mash": "¡MACHACA!",
@@ -235,12 +317,20 @@
     },
     "colorTrap": {
       "instruction": "Toca el color de la TINTA, no la palabra",
-      "locked": "Bloqueado — espera al siguiente"
+      "locked": "Bloqueado — espera al siguiente",
+      "words": {
+        "red": "ROJO",
+        "green": "VERDE",
+        "blue": "AZUL",
+        "yellow": "AMARILLO"
+      }
     },
     "trivia": {
       "progress": "P {{index}} / {{total}}",
       "getReady": "Prepárate…",
-      "locked": "Respuesta bloqueada — espera"
+      "locked": "Respuesta bloqueada — espera",
+      "hint": "Toca una respuesta — rápido suma más",
+      "timeUp": "¡TIEMPO!"
     },
     "balloon": {
       "pump": "INFLAR",
@@ -251,7 +341,8 @@
     },
     "numberRush": {
       "done": "¡FIN!",
-      "find": "Busca {{n}}"
+      "find": "Busca {{n}}",
+      "hint": "Toca del 1 al {{n}} en orden"
     },
     "higherLower": {
       "higher": "▲ MAYOR",
@@ -265,27 +356,49 @@
       "doneBtn": "FIN",
       "info": "Intento {{n}}/{{total}}   err {{err}}",
       "prompt": "¡Para en el objetivo verde!",
-      "done": "Sin intentos — espera"
+      "done": "Sin intentos — espera",
+      "try": "Intento {{n}}/{{total}}",
+      "off": "{{err}} de error"
     },
     "simon": {
       "watch": "Observa...",
       "repeat": "¡Repite!",
-      "out": "FUERA — espera"
+      "out": "FUERA — espera",
+      "yourTurn": "¡TU TURNO!"
     },
     "memoryFlash": {
       "memorize": "¡Memoriza!",
-      "howMany": "¿Cuántos {{color}}?"
+      "howMany": "¿Cuántos {{color}}?",
+      "colors": {
+        "RED": "ROJOS",
+        "GREEN": "VERDES",
+        "BLUE": "AZULES",
+        "YELLOW": "AMARILLOS"
+      }
     },
     "pixelHoops": {
       "hint": "Mantén para cargar, suelta para lanzar",
       "swish": "¡CANASTA! x{{combo}}",
       "miss": "FALLO",
-      "combo": "{{score}} pts   combo {{combo}}"
+      "combo": "{{score}} pts   combo {{combo}}",
+      "swishShort": "¡CANASTA!"
     },
     "pixelWeight": {
-      "weigh": "¡Pesa el {{object}}!",
+      "weigh": "¡Pesa {{object}}!",
       "howMany": "¿Cuántos píxeles?",
-      "guess": "ADIVINA"
+      "guess": "ADIVINA",
+      "actual": "Eran {{n}}",
+      "objects": {
+        "HEART": "el CORAZÓN",
+        "BANANA": "el PLÁTANO",
+        "CAR": "el COCHE",
+        "FISH": "el PEZ",
+        "TREE": "el ÁRBOL",
+        "STAR": "la ESTRELLA",
+        "MUSHROOM": "la SETA",
+        "HOUSE": "la CASA",
+        "CAT": "el GATO"
+      }
     },
     "pixelSplit": {
       "prompt": "Divídelo por igual",
@@ -295,7 +408,10 @@
       "pull": "¡TIRA!",
       "hint": "Toca / pulsa ESPACIO para tirar de la cuerda hacia tu lado",
       "team": "Tu equipo",
-      "spectator": "Sin equipo — miras esta ronda"
+      "spectator": "Sin equipo — miras esta ronda",
+      "leads": "¡{{team}} EN CABEZA!",
+      "almost": "¡CASI!",
+      "teamWins": "¡GANA {{team}}!"
     },
     "sinkTheFleet": {
       "yourTurn": "TU TURNO — ¡dispara!",
@@ -306,7 +422,10 @@
       "lost": "Tu flota ha caído...",
       "draw": "Tiempo agotado — empate",
       "bye": "Sin rival esta ronda — victoria directa",
-      "hint": "Toca una celda en aguas enemigas para disparar en tu turno"
+      "hint": "Toca una celda en aguas enemigas para disparar en tu turno",
+      "hit": "¡TOCADO!",
+      "splash": "¡AGUA!",
+      "hitsChip": "IMPACTOS {{n}}/{{total}}"
     },
     "bombRelay": {
       "mash": "¡MACHACA — pásala!",
@@ -315,7 +434,10 @@
       "relays": "pases",
       "booms": "explosiones",
       "hint": "Solo puedes machacar mientras TÚ tienes la bomba",
-      "spectator": "Sin equipo — miras esta ronda"
+      "spectator": "Sin equipo — miras esta ronda",
+      "pass": "¡PASE!",
+      "boom": "¡BUM!",
+      "getReady": "¡PREPÁRATE!"
     },
     "pixelBeat": {
       "tapHint": "Toca o pulsa ESPACIO al ritmo",
@@ -328,25 +450,102 @@
       "waitTurn": "Esperando a {{team}}...",
       "won": "FLOTA HUNDIDA — ¡TU EQUIPO GANA!",
       "lost": "La flota de tu equipo ha caído...",
-      "draw": "Se acabó el tiempo — empate"
+      "draw": "Se acabó el tiempo — empate",
+      "hit": "¡TOCADO!",
+      "splash": "¡AGUA!",
+      "hitsChip": "IMPACTOS {{n}}/{{total}}",
+      "enemyWaters": "AGUAS ENEMIGAS",
+      "ourFleet": "NUESTRA FLOTA",
+      "teamWins": "¡GANA {{team}}!"
     },
     "mazeSprint": {
-      "steps": "{{n}} pasos"
+      "steps": "{{n}} pasos",
+      "hint": "¡Llega a la bandera! Flechas, WASD o el mando"
     },
     "bubblePop": {
-      "score": "{{n}} pts"
+      "score": "{{n}} pts",
+      "hint": "Apunta una columna y suelta para disparar"
     },
     "lineClearSprint": {
       "lines": "{{n}} líneas",
       "progress": "{{n}} líneas",
       "win": "¡COMPLETADO!",
-      "toppedOut": "TABLERO LLENO"
+      "toppedOut": "TABLERO LLENO",
+      "hint": "← → mover · ↑ girar · ↓ / Espacio soltar"
     },
     "quickTetris": {
       "lines": "{{n}} líneas",
       "progress": "{{n}} / {{target}} líneas",
       "win": "¡OBJETIVO CUMPLIDO!",
-      "toppedOut": "TABLERO LLENO"
+      "toppedOut": "TABLERO LLENO",
+      "hint": "← → mover · ↑ girar · ↓ / Espacio soltar"
+    },
+    "fruitCatch": {
+      "hint": "Arrastra o usa ◀ ▶: atrapa fruta, esquiva bombas",
+      "bomb": "¡BUM!"
+    },
+    "pixelRain": {
+      "hint": "Arrastra o usa ◀ ▶ para esquivar los bloques",
+      "dodge": "¡ESQUIVA!",
+      "alive": "{{n}}/{{total}} vivos",
+      "lastStanding": "¡ÚLTIMO EN PIE!"
+    },
+    "pixelDash": {
+      "hint": "¡Toca o pulsa Espacio para saltar!"
+    },
+    "bugSmash": {
+      "hint": "¡Aplasta los bichos y esquiva las bombas!"
+    },
+    "snakeArena": {
+      "hint": "Desliza o usa las flechas para girar",
+      "length": "Longitud {{n}}"
+    },
+    "oddOneOut": {
+      "prompt": "¡Toca la casilla distinta!"
+    },
+    "pixelPong": {
+      "hint": "Arrastra para mover tu pala: ¡gana quien llegue a {{n}}!",
+      "bye": "Sin rival esta ronda: victoria gratis"
+    },
+    "quickDraw": {
+      "wait": "ESPERA…",
+      "fire": "¡FUEGO!",
+      "instruction": "¡Desenfunda en cuanto el cartel diga FUEGO!",
+      "tapNow": "¡Toca ya, desenfunda!",
+      "vs": "VS",
+      "bang": "¡BANG!",
+      "early": "¡PRONTO!",
+      "yourTime": "Desenfundaste en {{ms}} ms",
+      "oppJumped": "¡{{name}} se precipitó!",
+      "tooEarly": "Demasiado pronto: te precipitaste",
+      "slower": "{{name}} desenfundó antes ({{ms}} ms)",
+      "noDraw": "Nadie desenfundó a tiempo",
+      "bye": "Sin rival esta ronda: ¡victoria gratis!"
+    },
+    "matchPairs": {
+      "prompt": "¡Encuentra las parejas!",
+      "pairs": "{{n}}/{{total}} parejas"
+    },
+    "sumoPush": {
+      "hint": "Mantén y arrastra o usa las flechas para empujar",
+      "alive": "{{n}}/{{total}} dentro"
+    },
+    "sudokuRace": {
+      "pickCell": "Elige una casilla",
+      "pickDigit": "Elige una cifra",
+      "rule": "Cada fila, columna y caja lleva del 1 al {{n}} una vez",
+      "cooldown": "Cifra incorrecta — ¡espera!"
+    },
+    "roulette": {
+      "hint": "¡Gana el número más alto!",
+      "yours": "TU NÚMERO",
+      "spin": "GIRAR",
+      "spun": "{{n}}/{{total}} han girado",
+      "jackpot": "¡BOTE!",
+      "ouch": "¡AY!"
+    },
+    "quickMath": {
+      "cooldown": "Respuesta incorrecta — ¡espera!"
     }
   }
 }

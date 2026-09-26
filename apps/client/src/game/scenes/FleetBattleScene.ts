@@ -1,217 +1,317 @@
-import { PALETTE } from '@pp/shared'
-import type { ClientMsg, FleetBattleSnapshot, TeamId } from '@pp/shared'
-import Phaser from 'phaser'
-import type { RoundState } from '../RoundState'
-import type { Sfx } from '../Sfx'
-import type { Translate } from '../i18n'
-import { addArcadeBackdrop, bodyStyle, ensurePixelBlock, headlineStyle } from '../pixelStyle'
+import { type FleetBattleSnapshot, PALETTE, type TeamId } from '@pp/shared'
+import type Phaser from 'phaser'
+import { burst, floatText, punch, shake } from '../fx'
+import { bodyStyle, headlineStyle, hexToCss, teamColor } from '../pixelStyle'
+import { MiniGameScene, type SceneDeps } from './MiniGameScene'
+import {
+  NavalBoard,
+  NavalEndCard,
+  type NavalShot,
+  drawSegmentBar,
+  layoutBoards,
+  setFittedText,
+  setTextColor,
+} from './navalGrid'
 
-const RED = PALETTE.red
-const BLUE = 0x5b8cff
+const MAX_CREW_SHOWN = 5
+// Lets the wreck reveal play before the end card covers the middle of the screen.
+const END_CARD_DELAY_MS = 1100
 
-const CELL_NEUTRAL_KEY = 'pp-fleet-cell-neutral'
-const CELL_HIT_KEY = 'pp-fleet-cell-hit'
-const CELL_MISS_KEY = 'pp-fleet-cell-miss'
+const otherTeam = (team: TeamId): TeamId => (team === 'red' ? 'blue' : 'red')
 
-// Fleet Battle (team Battleship) canvas. Renders two grids: the ENEMY grid (fire at the enemy team's
-// fleet, on your team's turn) and OUR FLEET grid (incoming damage). Fires only when it's your team's
-// turn. The snapshot is server-authoritative and never carries ship positions. Scene key === id.
-export class FleetBattleScene extends Phaser.Scene {
+// Fleet Battle (team Battleship) canvas. Two pixel seas: ENEMY WATERS (any teammate taps a cell to fire
+// on the team's turn — the first shot uses the turn) and OUR FLEET (the enemy team's shots at us, both
+// splashes and hits). Players without a team watch both fleets. The snapshot never carries ship
+// positions, only shot results. The turn banner + bar and the glowing board in play show whose shot it
+// is; each board lists its crew in their own identity colors.
+export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
+  private target?: NavalBoard
+  private own?: NavalBoard
+  private card?: NavalEndCard
   private turnText?: Phaser.GameObjects.Text
-  private infoText?: Phaser.GameObjects.Text
-  private resultText?: Phaser.GameObjects.Text
-  private targetLabel?: Phaser.GameObjects.Text
-  private fleetLabel?: Phaser.GameObjects.Text
-  private waitText?: Phaser.GameObjects.Text
-  private targetCells: Phaser.GameObjects.Image[] = []
-  private fleetCells: Phaser.GameObjects.Image[] = []
-  private built = false
+  private subText?: Phaser.GameObjects.Text
+  private hint?: Phaser.GameObjects.Text
+  private turnBar?: Phaser.GameObjects.Graphics
+  private bar = { x: 0, y: 0, w: 0, h: 0 }
+  private boardsTop = 0
+  private boardsBottom = 0
+  private turnSizes: number[] = []
+  private turnMax = 0
+  private lastTurn: TeamId | null = null
+  private endedAt = -1
+  // Which team's fleet each board shows (the target board is the enemy fleet for team members; for
+  // spectators it's simply red on one board, blue on the other).
+  private targetFleet: TeamId = 'blue'
+  private ownFleet: TeamId = 'red'
+  private team: TeamId | undefined
 
-  constructor(
-    private readonly send: (msg: ClientMsg) => void,
-    private readonly state: RoundState,
-    private readonly sfx: Sfx,
-    private readonly t: Translate,
-  ) {
-    super('fleet-battle')
+  constructor(...deps: SceneDeps) {
+    super('fleet-battle', ...deps)
   }
 
-  create(): void {
-    this.built = false
-    this.targetCells = []
-    this.fleetCells = []
-    addArcadeBackdrop(this)
-    ensurePixelBlock(this, CELL_NEUTRAL_KEY, 32, PALETTE.panel)
-    ensurePixelBlock(this, CELL_HIT_KEY, 32, RED)
-    ensurePixelBlock(this, CELL_MISS_KEY, 32, PALETTE.dim)
+  override create(): void {
+    super.create()
+    this.target = undefined
+    this.own = undefined
+    this.turnMax = 0
+    this.lastTurn = null
+    this.endedAt = -1
+    this.team = undefined
     const { width, height } = this.scale
+    const compact = Math.min(width, height) < 520
     const cx = width / 2
+
+    const turnSize = compact ? 16 : 24
+    this.turnSizes = compact ? [16, 12, 8] : [24, 16]
     this.turnText = this.add
-      .text(cx, height * 0.05, '', headlineStyle(24, PALETTE.amber))
+      .text(cx, this.top + turnSize / 2 + 4, '', headlineStyle(turnSize, PALETTE.amber))
       .setOrigin(0.5)
-    this.infoText = this.add
-      .text(cx, height * 0.11, '', bodyStyle(16, PALETTE.text, { align: 'center' }))
-      .setOrigin(0.5)
-    this.resultText = this.add
-      .text(cx, height * 0.05, '', headlineStyle(28, PALETTE.amber))
-      .setOrigin(0.5)
-      .setVisible(false)
-    this.waitText = this.add
-      .text(cx, height / 2, '...', headlineStyle(24, PALETTE.text))
-      .setOrigin(0.5)
-      .setVisible(false)
-    this.add
-      .text(cx, height * 0.95, this.t('game.fleetBattle.hint'), bodyStyle(14, PALETTE.dim))
-      .setOrigin(0.5)
+    this.bar = {
+      w: Math.min(width * (compact ? 0.7 : 0.4), 380),
+      h: compact ? 6 : 8,
+      x: 0,
+      y: this.top + turnSize + (compact ? 12 : 16),
+    }
+    this.bar.x = cx - this.bar.w / 2
+    this.turnBar = this.add.graphics()
+    this.subText = this.add
+      .text(cx, this.bar.y + this.bar.h + 6, '', bodyStyle(compact ? 12 : 14, PALETTE.dim))
+      .setOrigin(0.5, 0)
+    this.boardsTop = this.bar.y + this.bar.h + (compact ? 6 : 10)
+
+    const hintSize = compact ? 11 : 14
+    this.hint = this.add
+      .text(
+        cx,
+        height - 8,
+        this.t('game.fleetBattle.hint'),
+        bodyStyle(hintSize, PALETTE.dim, { align: 'center', wordWrap: { width: width * 0.92 } }),
+      )
+      .setOrigin(0.5, 1)
+    this.boardsBottom = height - hintSize * (compact ? 2.6 : 1.8) - 8
+    this.card = new NavalEndCard(this)
   }
 
-  // Both grids are built once, when the first snapshot (with a grid side length) arrives.
+  protected override remainingMs(snap: FleetBattleSnapshot): number {
+    return snap.roundRemainingMs
+  }
+
+  // Both boards (and the crew rows) are built once, from the first snapshot: team membership is fixed
+  // for the round.
   private build(snap: FleetBattleSnapshot): void {
     const { width, height } = this.scale
-    const n = snap.grid
-    const sideBySide = width > height
-    if (sideBySide) {
-      const area = Math.min(width * 0.42, height * 0.55)
-      this.buildGrid(this.targetCells, width * 0.28, height * 0.55, area, n, true)
-      this.buildGrid(this.fleetCells, width * 0.72, height * 0.55, area, n, false)
-      const labelY = height * 0.55 - area / 2 - 18
-      this.targetLabel = this.gridLabel(width * 0.28, labelY, '')
-      this.fleetLabel = this.gridLabel(width * 0.72, labelY, '')
-    } else {
-      const area = Math.min(width * 0.82, height * 0.34)
-      this.buildGrid(this.targetCells, width / 2, height * 0.38, area, n, true)
-      this.buildGrid(this.fleetCells, width / 2, height * 0.74, area, n, false)
-      this.targetLabel = this.gridLabel(width / 2, height * 0.38 - area / 2 - 18, '')
-      this.fleetLabel = this.gridLabel(width / 2, height * 0.74 - area / 2 - 18, '')
+    this.team = snap.playerTeams[this.selfId]
+    this.targetFleet = this.team ? otherTeam(this.team) : 'blue'
+    this.ownFleet = this.team ?? 'red'
+    // Spectators get a little headroom for the "watching" line under the turn bar.
+    const top = this.boardsTop + (this.team ? 0 : 16)
+    const rects = layoutBoards(width, height, top, this.boardsBottom)
+    const fleetCells = snap.teams.red.fleetCells
+    this.target = new NavalBoard(this, rects.target, snap.grid, fleetCells, (cell) =>
+      this.fire(cell),
+    )
+    this.own = new NavalBoard(this, rects.own, snap.grid, fleetCells)
+    this.target.setLabels(
+      this.team ? this.t('game.fleetBattle.enemyWaters') : this.teamName(this.targetFleet),
+      teamColor(this.targetFleet),
+    )
+    this.own.setLabels(
+      this.team ? this.t('game.fleetBattle.ourFleet') : this.teamName(this.ownFleet),
+      teamColor(this.ownFleet),
+    )
+    this.crewRow(this.target, this.targetFleet, snap)
+    this.crewRow(this.own, this.ownFleet, snap)
+    if (!this.team) {
+      this.subText?.setText(this.t('game.fleetBattle.spectator'))
+      this.hint?.setVisible(false) // spectators have nothing to tap
     }
-    this.built = true
   }
 
-  private gridLabel(x: number, y: number, text: string): Phaser.GameObjects.Text {
-    return this.add.text(x, y, text, bodyStyle(16, PALETTE.text)).setOrigin(0.5)
-  }
-
-  private buildGrid(
-    into: Phaser.GameObjects.Image[],
-    ccx: number,
-    ccy: number,
-    area: number,
-    n: number,
-    interactive: boolean,
-  ): void {
-    const gap = area * 0.02
-    const size = (area - gap * (n - 1)) / n
-    const startX = ccx - area / 2 + size / 2
-    const startY = ccy - area / 2 + size / 2
-    for (let i = 0; i < n * n; i++) {
-      const col = i % n
-      const row = Math.floor(i / n)
-      const x = startX + col * (size + gap)
-      const y = startY + row * (size + gap)
-      const img = this.add.image(x, y, CELL_NEUTRAL_KEY).setDisplaySize(size, size)
-      if (interactive) {
-        img.setInteractive({ useHandCursor: true })
-        img.on('pointerdown', () => this.fire(i))
+  // A team's crew on the board's tag line: each member's name in their own identity color (self first),
+  // trimmed to what fits over the board with a "+N" for the rest.
+  private crewRow(board: NavalBoard, team: TeamId, snap: FleetBattleSnapshot): void {
+    const ids = Object.keys(snap.playerTeams)
+      .filter((id) => snap.playerTeams[id] === team)
+      .sort((a, b) => (a === this.selfId ? -1 : b === this.selfId ? 1 : a.localeCompare(b)))
+    const style = bodyStyle(board.tagSize)
+    const gap = 10
+    const maxW = Math.min(this.scale.width - 24, board.size * 1.15)
+    const parts: Phaser.GameObjects.Text[] = []
+    let total = 0
+    for (const [i, id] of ids.slice(0, MAX_CREW_SHOWN).entries()) {
+      const name = this.add
+        .text(0, board.tag.y, this.label(id).toUpperCase(), style)
+        .setColor(hexToCss(this.state.colorOf(id, PALETTE.text)))
+        .setOrigin(0, 1)
+      // Leave room for a "+N" chip if anyone is left after this name.
+      const reserve = i < ids.length - 1 ? 40 : 0
+      if (parts.length > 0 && total + gap + name.width + reserve > maxW) {
+        name.destroy()
+        break
       }
-      into.push(img)
+      total += (parts.length > 0 ? gap : 0) + name.width
+      parts.push(name)
     }
-  }
-
-  private myTeam(): TeamId | undefined {
-    const snap = this.state.state as FleetBattleSnapshot | null
-    if (!snap) return undefined
-    return snap.playerTeams[this.state.selfId ?? '']
-  }
-
-  private fire(cell: number): void {
-    const snap = this.state.state as FleetBattleSnapshot | null
-    if (!snap || snap.done) return
-    const team = this.myTeam()
-    if (!team || snap.turn !== team) return
-    const mine = snap.teams[team]
-    if (mine.shots.some((s) => s.cell === cell)) return
-    this.sfx.click()
-    this.send({ type: 'MINIGAME_INPUT', input: { kind: 'fire', cell } })
+    if (ids.length > parts.length) {
+      const more = this.add.text(0, board.tag.y, `+${ids.length - parts.length}`, style)
+      total += gap + more.setOrigin(0, 1).width
+      parts.push(more)
+    }
+    let x = board.tag.x - total / 2
+    for (const p of parts) {
+      p.setX(x)
+      x += p.width + gap
+    }
   }
 
   private teamName(team: TeamId): string {
-    return team === 'red' ? this.t('team.red') : this.t('team.blue')
+    return this.t(`team.${team}`).toUpperCase()
   }
 
-  private teamColorCss(team: TeamId): string {
-    return `#${(team === 'red' ? RED : BLUE).toString(16).padStart(6, '0')}`
+  private fire(cell: number): void {
+    const snap = this.snap
+    if (!snap || snap.done || !this.team || snap.turn !== this.team) return
+    if (snap.teams[this.team].shots.some((s) => s.cell === cell)) return
+    this.sfx.click()
+    this.sendInput({ kind: 'fire', cell })
+    this.target?.setPending(cell)
   }
 
-  override update(): void {
-    const snap = this.state.state as FleetBattleSnapshot | null
+  protected frame(snap: FleetBattleSnapshot | null, time: number): void {
     if (!snap) return
-    if (!this.built) this.build(snap)
-    const team = this.myTeam()
+    if (!this.target) this.build(snap)
+    const target = this.target
+    const own = this.own
+    if (!target || !own) return
 
-    if (!team) {
-      this.setGridsVisible(false)
-      this.waitText?.setVisible(true).setText(this.t('game.fleetBattle.spectator'))
+    // A board shows the shots fired AT that fleet, i.e. by the other team.
+    const atTarget = snap.teams[otherTeam(this.targetFleet)]
+    const atOwn = snap.teams[otherTeam(this.ownFleet)]
+    const fleetCells = atTarget.fleetCells
+    const sunk = (fleet: TeamId): boolean => snap.teams[fleet].damage.length >= fleetCells
+    for (const s of target.sync(atTarget.shots, sunk(this.targetFleet)))
+      this.onShot(target, s, true)
+    for (const s of own.sync(atOwn.shots, sunk(this.ownFleet))) this.onShot(own, s, false)
+
+    if (this.team) {
+      const hits = snap.teams[this.targetFleet].damage.length
+      this.hud?.setScore(this.t('game.fleetBattle.hitsChip', { n: hits, total: fleetCells }))
+    }
+    this.updateTurn(snap)
+    this.updateEnd(snap, time)
+    target.tick(time)
+    own.tick(time)
+  }
+
+  private updateTurn(snap: FleetBattleSnapshot): void {
+    const target = this.target
+    const own = this.own
+    if (!target || !own) return
+    if (snap.done) {
+      target.setFocus('idle')
+      own.setFocus('idle')
+      target.setAimable(false)
       this.turnText?.setText('')
-      this.infoText?.setText('')
-      this.resultText?.setVisible(false)
+      this.turnBar?.clear()
       return
     }
-    this.waitText?.setVisible(false)
-    this.setGridsVisible(true)
-
-    const enemy: TeamId = team === 'red' ? 'blue' : 'red'
-    const mine = snap.teams[team]
-    const theirs = snap.teams[enemy]
-    this.targetLabel?.setText(this.teamName(enemy))
-    this.fleetLabel?.setText(this.teamName(team))
-
-    const roundSecs = Math.ceil(snap.roundRemainingMs / 1000)
-    const turnSecs = Math.ceil(snap.turnRemainingMs / 1000)
-    const hitsOnEnemy = theirs.damage.length
-    const hitsOnUs = mine.damage.length
-    this.infoText?.setText(
-      `${hitsOnEnemy}/${mine.fleetCells}  vs  ${hitsOnUs}/${mine.fleetCells}\n${turnSecs}s / ${roundSecs}s`,
-    )
-
-    if (snap.done) {
-      this.turnText?.setVisible(false)
-      const key =
-        snap.winner === null
-          ? 'game.fleetBattle.draw'
-          : snap.winner === team
-            ? 'game.fleetBattle.won'
-            : 'game.fleetBattle.lost'
-      this.resultText?.setText(this.t(key)).setVisible(true)
-    } else {
-      this.resultText?.setVisible(false)
-      const yourTurn = snap.turn === team
-      this.turnText
-        ?.setVisible(true)
-        .setText(
-          yourTurn
-            ? this.t('game.fleetBattle.yourTurn', { team: this.teamName(team) })
-            : this.t('game.fleetBattle.waitTurn', { team: this.teamName(snap.turn) }),
-        )
-        .setColor(this.teamColorCss(snap.turn))
+    const turn = snap.turn
+    const ours = this.team === turn
+    if (turn !== this.lastTurn) {
+      if (this.lastTurn !== null && ours) this.sfx.go()
+      this.turnMax = 0
+      this.lastTurn = turn
+      if (this.turnText) punch(this, this.turnText, 0.2, 110)
+    }
+    // The turn team fires at the other team's fleet: that board is the one in play.
+    const firedAt = otherTeam(turn)
+    const color = teamColor(turn)
+    target.setFocus(firedAt === this.targetFleet ? 'active' : this.team ? 'dim' : 'idle', color)
+    own.setFocus(firedAt === this.ownFleet ? 'active' : this.team ? 'dim' : 'idle', color)
+    target.setAimable(ours)
+    if (this.turnText) {
+      const key = ours ? 'game.fleetBattle.yourTurn' : 'game.fleetBattle.waitTurn'
+      const text = this.t(key, { team: this.teamName(turn) })
+      setFittedText(this.turnText, text, this.scale.width - 24, this.turnSizes)
+      setTextColor(this.turnText, color)
     }
 
-    const shotByCell = new Map<number, boolean>()
-    for (const s of mine.shots) shotByCell.set(s.cell, s.hit)
-    this.targetCells.forEach((img, i) => {
-      if (shotByCell.has(i)) img.setTexture(shotByCell.get(i) ? CELL_HIT_KEY : CELL_MISS_KEY)
-      else img.setTexture(CELL_NEUTRAL_KEY)
-    })
-
-    const damaged = new Set(mine.damage)
-    this.fleetCells.forEach((img, i) => {
-      img.setTexture(damaged.has(i) ? CELL_HIT_KEY : CELL_NEUTRAL_KEY)
-    })
+    this.turnMax = Math.max(this.turnMax, snap.turnRemainingMs)
+    const frac = this.turnMax > 0 ? snap.turnRemainingMs / this.turnMax : 0
+    const urgent = ours && snap.turnRemainingMs < 1500
+    if (this.turnBar) {
+      const { x, y, w, h } = this.bar
+      drawSegmentBar(this.turnBar, x, y, w, h, frac, urgent ? PALETTE.amber : color)
+    }
   }
 
-  private setGridsVisible(v: boolean): void {
-    for (const r of this.targetCells) r.setVisible(v)
-    for (const r of this.fleetCells) r.setVisible(v)
-    this.targetLabel?.setVisible(v)
-    this.fleetLabel?.setVisible(v)
+  // Battle over: fanfare at once, then (after the wreck reveal) a WIN / LOSE card.
+  private updateEnd(snap: FleetBattleSnapshot, time: number): void {
+    if (!snap.done) {
+      if (this.card?.visible) this.card.hide()
+      return
+    }
+    const won = this.team !== undefined && snap.winner === this.team
+    const lost = this.team !== undefined && snap.winner !== null && snap.winner !== this.team
+    // Already over on the first snapshot (a relayout restart): straight to the card, no replay.
+    if (this.endedAt < 0 && this.firstSnapshot) this.endedAt = Math.max(0, time - END_CARD_DELAY_MS)
+    if (this.endedAt < 0) {
+      this.endedAt = time
+      const c = this.target?.center()
+      if (won || (!this.team && snap.winner)) {
+        this.sfx.coin()
+        const color = snap.winner ? teamColor(snap.winner) : PALETTE.amber
+        if (c) {
+          burst(this, c.x, c.y, PALETTE.amber, 28, 320)
+          burst(this, c.x, c.y, color, 20, 260)
+        }
+      } else if (lost) {
+        this.sfx.wrong()
+        shake(this, 0.012, 260)
+      } else {
+        this.sfx.tick()
+      }
+    }
+    if (time - this.endedAt < END_CARD_DELAY_MS) return
+    if (snap.winner === null) {
+      this.card?.show(this.t('game.fleetBattle.draw'), PALETTE.amber)
+    } else if (!this.team) {
+      const team = this.teamName(snap.winner)
+      this.card?.show(this.t('game.fleetBattle.teamWins', { team }), teamColor(snap.winner))
+    } else if (won) {
+      this.card?.show(this.t('game.fleetBattle.won'), PALETTE.lime)
+    } else {
+      this.card?.show(this.t('game.fleetBattle.lost'), PALETTE.red)
+    }
+  }
+
+  // Shot feedback. For team members the target board is "our shot" (good news on a hit) and the own
+  // board is "incoming" (bad news on a hit); spectators get neutral feedback on both.
+  private onShot(board: NavalBoard, s: NavalShot, onTarget: boolean): void {
+    const incoming = this.team !== undefined && !onTarget
+    board.shotFx(s, s.hit)
+    const { x, y } = board.cellXY(s.cell)
+    const ty = y - board.cell * 0.4
+    if (!s.hit) {
+      this.sfx.pop()
+      floatText(
+        this,
+        x,
+        ty,
+        this.t('game.fleetBattle.splash'),
+        incoming ? PALETTE.dim : PALETTE.cyan,
+        14,
+      )
+      return
+    }
+    floatText(this, x, ty, this.t('game.fleetBattle.hit'), incoming ? PALETTE.red : PALETTE.orange)
+    if (incoming) {
+      this.sfx.wrong()
+      shake(this, 0.012, 220)
+      board.pulse(PALETTE.red)
+    } else {
+      this.sfx.correct()
+      shake(this, 0.006, 140)
+    }
   }
 }

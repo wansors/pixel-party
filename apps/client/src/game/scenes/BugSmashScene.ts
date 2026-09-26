@@ -1,126 +1,440 @@
-import { type BugSmashSnapshot, type ClientMsg, PALETTE } from '@pp/shared'
+import { type BugSmashLiveBug, type BugSmashSnapshot, PALETTE } from '@pp/shared'
 import Phaser from 'phaser'
-import type { RoundState } from '../RoundState'
-import type { Sfx } from '../Sfx'
-import type { Translate } from '../i18n'
-import {
-  addArcadeBackdrop,
-  bodyStyle,
-  ensurePixelBlock,
-  ensurePixelGrid,
-  ensurePixelOrb,
-  headlineStyle,
-} from '../pixelStyle'
+import { addBanner, burst, flash, floatText, punch, ring, shake, showBanner } from '../fx'
+import { bodyStyle, ensurePixelGrid, hexToCss, shade } from '../pixelStyle'
+import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
-const HOLE_COLOR = 0x14100c
-const BUG_BODY = 0x2a9d3f
-const BUG_DARK = 0x0f2a15
+const GRASS = 0x24502e
+// A create() within this long of the scene's own shutdown is a relayout restart mid-round (a new round
+// only starts seconds after the previous one stopped) — the one case where localHit may carry over.
+const RELAYOUT_GAP_MS = 1000
+const GOO = 0x5fcf3a
+const BUG_LEGEND = {
+  o: 0x0f2a15,
+  b: 0x2a9d3f,
+  h: PALETTE.lime,
+  k: 0x173a20,
+  e: PALETTE.text,
+  l: 0x0f2a15,
+}
 
-const HOLE_KEY = 'pp-bugsmash-hole'
-const BUG_KEY = 'pp-bugsmash-bug'
-const BOMB_KEY = 'pp-bugsmash-bomb'
+// 15x14 beetle: round shell with a centre seam + highlight, dark head with white eyes, antennae and
+// three legs a side. The two frames swap the leg pose so live bugs visibly scuttle.
+function bugRows(frame: 0 | 1): string[] {
+  const w = 15
+  const h = 14
+  const grid = Array.from({ length: h }, () => new Array<string>(w).fill('_'))
+  const set = (x: number, y: number, c: string): void => {
+    const row = grid[y]
+    if (row && x >= 0 && x < w) row[x] = c
+  }
+  for (const [i, ly] of [7, 9, 11].entries()) {
+    const dy = (i % 2 === 0) === (frame === 0) ? -1 : 1
+    for (const [inner, outer] of [
+      [2, 1],
+      [w - 3, w - 2],
+    ] as const) {
+      set(inner, ly, 'l')
+      set(outer, ly + dy, 'l')
+    }
+  }
+  set(4, 0, 'l')
+  set(5, 1, 'l')
+  set(10, 0, 'l')
+  set(9, 1, 'l')
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const sx = (x + 0.5 - 7.5) / 5.2
+      const sy = (y + 0.5 - 8.9) / 4.6
+      const shell = sx * sx + sy * sy
+      if (shell <= 1) {
+        const highlight = sx < -0.15 && sy < -0.05 && shell < 0.5
+        set(x, y, shell > 0.7 || (x === 7 && y > 5) ? 'o' : highlight ? 'h' : 'b')
+        continue
+      }
+      const hx = x + 0.5 - 7.5
+      const hy = y + 0.5 - 3.6
+      const head = Math.sqrt(hx * hx + hy * hy)
+      if (head <= 2.6) set(x, y, head > 1.8 ? 'o' : 'k')
+    }
+  }
+  set(6, 3, 'e')
+  set(8, 3, 'e')
+  return grid.map((row) => row.join(''))
+}
 
-const BUG_ROWS = [
-  'D______D',
-  '_D____D_',
-  '__BBBB__',
-  '_BBBBBB_',
-  'BBBBBBBB',
-  'BBDBDBBB',
-  '_BBBBBB_',
-  '__B__B__',
+// 13x13 cartoon bomb: dark body, hot red rim, fuse curling up-right, spark on the tip ('S').
+function bombRows(): string[] {
+  const rows = ['__________S__', '_________f___', '________f____']
+  const r = 5
+  for (let y = 0; y < 10; y++) {
+    let row = ''
+    for (let x = 0; x < 13; x++) {
+      const dx = x + 0.5 - 6.5
+      const dy = y + 0.5 - r
+      const d = Math.sqrt(dx * dx + dy * dy)
+      if (d > r) row += y === 0 && x === 7 ? 'f' : '_'
+      else if (d > r - 1.1) row += 'R'
+      else if (dx < -1 && dy < -1 && d < r * 0.55) row += 'w'
+      else row += 'b'
+    }
+    rows.push(row)
+  }
+  return rows
+}
+
+// Squashed-bug goo splat (16x8), fixed drop pattern so every splat reads the same.
+const SPLAT_ROWS = [
+  '__g_______G___g_',
+  '_____gggggg_____',
+  '_g_gggGGgggggg__',
+  '__gggGGggggGggg_',
+  '_ggggggggGGgggg_',
+  '__gggoogggggg_g_',
+  'g___gggggggg____',
+  '______g____g____',
 ]
 
-// Bug Smash (whack-a-mole) canvas. Renders a grid of holes; live bugs/bombs from the shared snapshot
-// pop up, and tapping a hole smashes whatever is there. A bug just smashed by this player is hidden
-// optimistically until it expires. Scene key === mini-game id.
-export class BugSmashScene extends Phaser.Scene {
-  private timer?: Phaser.GameObjects.Text
-  private score?: Phaser.GameObjects.Text
-  private markers: { rect: Phaser.GameObjects.Image; face: Phaser.GameObjects.Image }[] = []
+// Dirt hole (16x8): lit mound rim, darker dirt, near-black opening.
+const HOLE_ROWS = [
+  '____rrrrrrrr____',
+  '__rrddddddddrr__',
+  '_rddkkkkkkkkddr_',
+  'rddkkkkkkkkkkddr',
+  'dddkkkkkkkkkkddd',
+  '_dddkkkkkkkkddd_',
+  '__dddddddddddd__',
+  '____dddddddd____',
+]
+
+// Mallet (12x16): wooden head with a steel band, handle below. Pivot = bottom of the handle.
+const MALLET_ROWS = [
+  '_oooooooooo_',
+  'ohhhhssshhho',
+  'obbbbsssbbbo',
+  'obbbbsssbbbo',
+  'obbbbsssbbbo',
+  '_oooooooooo_',
+  '_____oo_____',
+  '_____hb_____',
+  '_____hb_____',
+  '_____hb_____',
+  '_____hb_____',
+  '_____hb_____',
+  '_____hb_____',
+  '_____hb_____',
+  '_____hb_____',
+  '_____oo_____',
+]
+
+// Beveled grass tile at its real size with a few deterministic tufts.
+function ensureGrassTile(scene: Phaser.Scene, key: string, w: number, h: number): string {
+  if (scene.textures.exists(key)) return key
+  const g = scene.make.graphics({ x: 0, y: 0 })
+  const bevel = 4
+  g.fillStyle(shade(GRASS, -0.45), 1).fillRect(0, 0, w, h)
+  g.fillStyle(shade(GRASS, 0.3), 1).fillRect(0, 0, w - bevel, h - bevel)
+  g.fillStyle(GRASS, 1).fillRect(bevel, bevel, w - bevel * 2, h - bevel * 2)
+  g.fillStyle(shade(GRASS, 0.35), 1)
+  for (let i = 0; i < 9; i++) {
+    const x = bevel + ((i * 37 + 11) % Math.max(1, w - bevel * 2 - 6))
+    const y = bevel + ((i * 53 + 7) % Math.max(1, h - bevel * 2 - 6))
+    g.fillRect(x, y + 2, 2, 4).fillRect(x + 3, y, 2, 6)
+  }
+  g.generateTexture(key, w, h)
+  g.destroy()
+  return key
+}
+
+interface Hole {
+  x: number
+  y: number
+  sprite: Phaser.GameObjects.Image
+  // Spawn index currently drawn in this hole (null = empty).
+  shown: number | null
+}
+
+interface Chip {
+  id: string
+  text: Phaser.GameObjects.Text
+  score: number
+}
+
+// Bug Smash (whack-a-mole) canvas. A 3x3 lawn of dirt holes; the shared seeded timeline pops pixel
+// beetles (and the odd bomb) out of them. Tap a hole to swing the mallet: a bug squashes into goo
+// (+1), a bomb blows up in your face (-1). A bug this player just smashed is hidden optimistically
+// (the server confirms through the score). Other players' scores run along the top in their colors.
+export class BugSmashScene extends MiniGameScene<BugSmashSnapshot> {
+  private holes: Hole[] = []
+  private chips: Chip[] = []
+  private banner?: Phaser.GameObjects.Text
+  private keys = { bugA: '', bugB: '', bombA: '', bombB: '', splat: '', mallet: '', hole: '' }
+  private cell = { w: 0, h: 0 }
+  private spriteSize = 0
   private built = false
-  // Spawn indices this player has already smashed (optimistic local hide).
+  // Spawn indices this player has already smashed (optimistic local hide). Kept across a relayout
+  // restart, or a bug smashed a moment ago would pop back up — and "score" again, locally.
   private readonly localHit = new Set<number>()
+  private stoppedAt = Number.NEGATIVE_INFINITY
 
-  constructor(
-    private readonly send: (msg: ClientMsg) => void,
-    private readonly state: RoundState,
-    private readonly sfx: Sfx,
-    private readonly t: Translate,
-  ) {
-    super('bug-smash')
+  constructor(...deps: SceneDeps) {
+    super('bug-smash', ...deps)
   }
 
-  create(): void {
+  override create(): void {
+    super.create()
     this.built = false
-    this.markers = []
-    this.localHit.clear()
-    addArcadeBackdrop(this)
-    const { width, height } = this.scale
-    const cx = width / 2
-    this.timer = this.add
-      .text(cx, height * 0.06, '', headlineStyle(24, PALETTE.lime))
-      .setOrigin(0.5)
-    this.score = this.add.text(cx, height * 0.12, '', bodyStyle(18, PALETTE.dim)).setOrigin(0.5)
-  }
-
-  private build(snap: BugSmashSnapshot): void {
-    const { width, height } = this.scale
-    const cx = width / 2
-    const n = Math.round(Math.sqrt(snap.holes))
-    const area = Math.min(width * 0.9, height * 0.72)
-    const gap = area * 0.04
-    const cell = (area - gap * (n - 1)) / n
-    const startX = cx - area / 2 + cell / 2
-    const startY = height * 0.2 + cell / 2
-    ensurePixelBlock(this, HOLE_KEY, 32, HOLE_COLOR)
-    ensurePixelGrid(this, { key: BUG_KEY, rows: BUG_ROWS, legend: { B: BUG_BODY, D: BUG_DARK } })
-    ensurePixelOrb(this, BOMB_KEY, 10, PALETTE.red)
-    const faceSize = cell * 0.64
-    for (let i = 0; i < snap.holes; i++) {
-      const col = i % n
-      const row = Math.floor(i / n)
-      const x = startX + col * (cell + gap)
-      const y = startY + row * (cell + gap)
-      const rect = this.add
-        .image(x, y, HOLE_KEY)
-        .setDisplaySize(cell, cell)
-        .setInteractive({ useHandCursor: true })
-      rect.on('pointerdown', () => this.smash(i))
-      const face = this.add
-        .image(x, y, BUG_KEY)
-        .setDisplaySize(faceSize, faceSize)
-        .setVisible(false)
-      this.markers.push({ rect, face })
+    this.holes = []
+    this.chips = []
+    if (this.game.getTime() - this.stoppedAt > RELAYOUT_GAP_MS) this.localHit.clear()
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.stoppedAt = this.game.getTime()
+    })
+    this.keys = {
+      bugA: ensurePixelGrid(this, { key: 'pp-bug-a', rows: bugRows(0), legend: BUG_LEGEND }),
+      bugB: ensurePixelGrid(this, { key: 'pp-bug-b', rows: bugRows(1), legend: BUG_LEGEND }),
+      bombA: this.bombKey(PALETTE.amber, 0),
+      bombB: this.bombKey(PALETTE.red, 1),
+      splat: ensurePixelGrid(this, {
+        key: 'pp-bug-splat',
+        rows: SPLAT_ROWS,
+        legend: { g: GOO, G: shade(GOO, 0.45), o: 0x0f2a15 },
+      }),
+      mallet: ensurePixelGrid(this, {
+        key: 'pp-bug-mallet',
+        rows: MALLET_ROWS,
+        legend: { o: 0x3b2413, h: 0xc98d52, b: 0x8a5a2e, s: 0xaab2cc },
+      }),
+      hole: ensurePixelGrid(this, {
+        key: 'pp-bug-hole',
+        rows: HOLE_ROWS,
+        legend: { r: 0x8a5a2e, d: 0x5a3a1e, k: 0x120c08 },
+      }),
     }
+    const { width, height } = this.scale
+    const compact = Math.min(width, height) < 520
+    this.add
+      .text(width / 2, height - 10, this.t('game.bugSmash.hint'), bodyStyle(compact ? 12 : 15))
+      .setOrigin(0.5, 1)
+    this.banner = addBanner(this)
+    this.banner.setFontSize(compact ? 24 : 34).setWordWrapWidth(width * 0.9)
+  }
+
+  private bombKey(spark: number, i: number): string {
+    return ensurePixelGrid(this, {
+      key: `pp-bug-bomb-${i}`,
+      rows: bombRows(),
+      legend: { R: PALETTE.red, b: 0x3a3d56, w: 0x9aa2cc, f: 0xc9a36b, S: spark },
+    })
+  }
+
+  // Lays the lawn out once the first snapshot says how many holes (and which players) there are.
+  private build(snap: BugSmashSnapshot): void {
     this.built = true
+    const { width, height } = this.scale
+    const compact = Math.min(width, height) < 520
+    const chipsBottom = this.buildChips(Object.keys(snap.scores))
+    const n = Math.max(1, Math.round(Math.sqrt(snap.holes)))
+    const rows = Math.ceil(snap.holes / n)
+    const gap = compact ? 8 : 14
+    const areaTop = chipsBottom + (compact ? 10 : 14)
+    const areaH = height - areaTop - (compact ? 30 : 40)
+    const maxCellH = (areaH - gap * (rows - 1)) / rows
+    const maxCellW = (width * 0.94 - gap * (n - 1)) / n
+    const cw = Math.floor(Math.min(maxCellW, maxCellH * 1.25))
+    const ch = Math.floor(Math.min(maxCellH, cw * 1.35))
+    this.cell = { w: cw, h: ch }
+    const gridW = n * cw + gap * (n - 1)
+    const gridH = rows * ch + gap * (rows - 1)
+    const x0 = width / 2 - gridW / 2 + cw / 2
+    const y0 = areaTop + (areaH - gridH) / 2 + ch / 2
+    const tile = ensureGrassTile(this, `pp-bug-grass-${cw}x${ch}`, cw, ch)
+    const holeW = cw * 0.82
+    this.spriteSize = Math.min(cw * 0.66, ch * 0.62)
+    for (let i = 0; i < snap.holes; i++) {
+      const cx = x0 + (i % n) * (cw + gap)
+      const cy = y0 + Math.floor(i / n) * (ch + gap)
+      this.add.image(cx, cy, tile)
+      // Hole a little below centre so hole + popped-up bug sit centred in the tile.
+      const hy = cy + this.spriteSize * 0.32
+      this.add.image(cx, hy, this.keys.hole).setDisplaySize(holeW, holeW / 2)
+      const sprite = this.add
+        .image(cx, hy + holeW * 0.08, this.keys.bugA)
+        .setOrigin(0.5, 0.92)
+        .setVisible(false)
+        .setDepth(5)
+      this.holes.push({ x: cx, y: hy, sprite, shown: null })
+      this.add
+        .zone(cx, cy, cw + gap, ch + gap)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => this.smash(i))
+    }
   }
 
-  private smash(hole: number): void {
-    const snap = this.state.state as BugSmashSnapshot | null
-    if (!snap) return
-    const bug = snap.live.find((b) => b.hole === hole && !this.localHit.has(b.index))
-    if (!bug) return
+  // One chip per player (own included) with the live score, in the player's color. Returns its
+  // bottom.
+  private buildChips(ids: string[]): number {
+    const { width, height } = this.scale
+    const compact = Math.min(width, height) < 520
+    const perRow = Math.max(
+      1,
+      Math.min(ids.length, Math.floor((width * 0.94) / (compact ? 96 : 150))),
+    )
+    const chipW = (width * 0.94) / perRow
+    const rowH = compact ? 20 : 26
+    ids.forEach((id, i) => {
+      const row = Math.floor(i / perRow)
+      const inRow = Math.min(perRow, ids.length - row * perRow)
+      const x = width / 2 - (inRow * chipW) / 2 + (i % perRow) * chipW + chipW / 2
+      const y = this.top + row * rowH + rowH / 2
+      const text = this.add
+        .text(x, y, '', bodyStyle(compact ? 12 : 15, this.state.colorOf(id, PALETTE.dim)))
+        .setOrigin(0.5)
+      if (id === this.selfId) text.setBackgroundColor(hexToCss(PALETTE.panelAlt))
+      this.chips.push({ id, text, score: -1 })
+    })
+    return this.top + Math.ceil(ids.length / perRow) * rowH
+  }
+
+  private smash(i: number): void {
+    const snap = this.snap
+    const hole = this.holes[i]
+    if (!snap || !hole || snap.remainingMs <= 0) return
+    this.swingMallet(hole)
+    const bug = snap.live.find((b) => b.hole === i && !this.localHit.has(b.index))
+    if (!bug) {
+      this.sfx.click()
+      burst(this, hole.x, hole.y, 0x8a5a2e, 5, 90)
+      return
+    }
     this.localHit.add(bug.index)
-    if (bug.kind === 'bug') this.sfx.correct()
-    else this.sfx.wrong()
-    this.send({ type: 'MINIGAME_INPUT', input: { kind: 'smash', hole } })
+    this.sendInput({ kind: 'smash', hole: i })
+    this.tweens.killTweensOf(hole.sprite)
+    hole.sprite.setVisible(false)
+    const top = hole.y - this.spriteSize * 0.7
+    if (bug.kind === 'bug') {
+      this.sfx.correct()
+      this.splat(hole)
+      burst(this, hole.x, hole.y - this.spriteSize * 0.3, GOO, 16, 200)
+      ring(this, hole.x, hole.y - this.spriteSize * 0.3, PALETTE.lime, this.spriteSize * 0.8)
+      floatText(this, hole.x, top, '+1', PALETTE.lime, 22)
+    } else {
+      this.sfx.wrong()
+      burst(this, hole.x, hole.y - this.spriteSize * 0.3, PALETTE.orange, 26, 320)
+      burst(this, hole.x, hole.y - this.spriteSize * 0.3, PALETTE.red, 12, 200)
+      shake(this, 0.014, 260)
+      flash(this, PALETTE.red, 160)
+      floatText(this, hole.x, top, '-1', PALETTE.red, 24)
+    }
   }
 
-  override update(): void {
-    const snap = this.state.state as BugSmashSnapshot | null
+  private swingMallet(hole: Hole): void {
+    const h = Math.min(this.cell.w, this.cell.h) * 0.72
+    const reach = h * 0.8
+    const angle = -35
+    const rad = (angle * Math.PI) / 180
+    const px = hole.x - Math.sin(rad) * reach
+    const py = hole.y - this.spriteSize * 0.3 + Math.cos(rad) * reach
+    const mallet = this.add
+      .image(px, py, this.keys.mallet)
+      .setOrigin(0.5, 1)
+      .setDisplaySize(h * 0.75, h)
+      .setAngle(25)
+      .setDepth(20)
+    this.tweens.add({
+      targets: mallet,
+      angle,
+      duration: 70,
+      ease: 'Quad.easeIn',
+      onComplete: () =>
+        this.tweens.add({
+          targets: mallet,
+          alpha: 0,
+          delay: 90,
+          duration: 140,
+          onComplete: () => mallet.destroy(),
+        }),
+    })
+  }
+
+  private splat(hole: Hole): void {
+    const s = this.spriteSize
+    const goo = this.add
+      .image(hole.x, hole.y - s * 0.1, this.keys.splat)
+      .setDisplaySize(s * 1.2, s * 0.6)
+      .setDepth(4)
+    this.tweens.add({
+      targets: goo,
+      alpha: 0,
+      delay: 350,
+      duration: 300,
+      onComplete: () => goo.destroy(),
+    })
+  }
+
+  protected frame(snap: BugSmashSnapshot | null, time: number): void {
     if (!snap) return
     if (!this.built) this.build(snap)
-    const selfId = this.state.selfId ?? ''
-    this.timer?.setText(`${Math.ceil(snap.remainingMs / 1000)}s`)
-    this.score?.setText(this.t('game.common.pts', { n: snap.scores[selfId] ?? 0 }))
-    // Reset all faces, then show the live bug per hole (skipping ones this player already smashed).
-    for (const m of this.markers) m.face.setVisible(false)
+    this.hud?.setScore(this.t('game.common.pts', { n: snap.scores[this.selfId] ?? 0 }))
+    this.renderChips(snap)
+
+    const live = new Map<number, BugSmashLiveBug>()
     for (const b of snap.live) {
-      if (this.localHit.has(b.index)) continue
-      const marker = this.markers[b.hole]
-      if (!marker) continue
-      marker.face.setTexture(b.kind === 'bug' ? BUG_KEY : BOMB_KEY).setVisible(true)
+      if (!this.localHit.has(b.index)) live.set(b.hole, b)
+    }
+    this.holes.forEach((hole, i) => {
+      const bug = live.get(i)
+      const next = bug?.index ?? null
+      if (next !== hole.shown) {
+        // A spawn this player didn't smash ducks back down; a new one pops up out of the dirt.
+        if (hole.shown !== null && !this.localHit.has(hole.shown)) this.duck(hole)
+        hole.shown = next
+        if (bug) this.popUp(hole, bug.kind)
+      }
+      if (!bug || !hole.sprite.visible) return
+      if (bug.kind === 'bug') {
+        hole.sprite.setTexture(Math.floor(time / 140 + i) % 2 ? this.keys.bugA : this.keys.bugB)
+      } else {
+        hole.sprite.setTexture(Math.floor(time / 110) % 2 ? this.keys.bombA : this.keys.bombB)
+        hole.sprite.setAngle(Math.sin(time / 90 + i) * 7)
+      }
+    })
+
+    if (snap.remainingMs <= 0 && this.banner) {
+      showBanner(this, this.banner, this.t('game.common.finished'), PALETTE.lime)
+    }
+  }
+
+  private popUp(hole: Hole, kind: BugSmashLiveBug['kind']): void {
+    const sprite = hole.sprite
+    this.tweens.killTweensOf(sprite)
+    sprite.setTexture(kind === 'bug' ? this.keys.bugA : this.keys.bombA).setAngle(0)
+    const scale = this.spriteSize / sprite.frame.width
+    sprite.setVisible(true).setAlpha(1).setScale(scale, 0)
+    this.tweens.add({ targets: sprite, scaleY: scale, duration: 120, ease: 'Back.easeOut' })
+  }
+
+  private duck(hole: Hole): void {
+    const sprite = hole.sprite
+    this.tweens.killTweensOf(sprite)
+    this.tweens.add({
+      targets: sprite,
+      scaleY: 0,
+      duration: 90,
+      ease: 'Quad.easeIn',
+      onComplete: () => sprite.setVisible(false),
+    })
+  }
+
+  private renderChips(snap: BugSmashSnapshot): void {
+    const compact = Math.min(this.scale.width, this.scale.height) < 520
+    for (const chip of this.chips) {
+      const score = snap.scores[chip.id] ?? 0
+      if (score === chip.score) continue
+      const gained = chip.score >= 0 && score > chip.score
+      chip.score = score
+      chip.text.setText(` ${this.label(chip.id).slice(0, compact ? 6 : 10)} ${score} `)
+      if (gained && chip.id !== this.selfId) punch(this, chip.text, 0.2, 80)
     }
   }
 }

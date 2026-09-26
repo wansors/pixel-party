@@ -1,196 +1,528 @@
-import { PALETTE, hexToCss } from '@pp/shared'
-import type { BombRelaySnapshot, ClientMsg } from '@pp/shared'
-import Phaser from 'phaser'
-import type { RoundState } from '../RoundState'
-import type { Sfx } from '../Sfx'
-import type { Translate } from '../i18n'
-import { addArcadeBackdrop, bodyStyle, ensurePixelOrb, headlineStyle } from '../pixelStyle'
+import { type BombRelaySnapshot, type BombRelayTeamView, PALETTE, type TeamId } from '@pp/shared'
+import type Phaser from 'phaser'
+import { burst, flash, floatText, punch, ring, shake } from '../fx'
+import {
+  bodyStyle,
+  ensurePixelGrid,
+  headlineStyle,
+  hexToCss,
+  shade,
+  teamColor,
+} from '../pixelStyle'
+import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
-// Bespoke team colors — kept as-is, not PALETTE tokens (see pixelStyle.ts task notes).
-const RED = 0xff5252
-const BLUE = 0x5b8cff
+const TEAM_ORDER: readonly TeamId[] = ['red', 'blue']
 
-// Bomb Relay canvas. Scene key === the mini-game id so GameClient can start it by id. Team hot-potato
-// relay: only the current holder may mash. Reads authoritative snapshots from RoundState and sends one
-// MINIGAME_INPUT per press when the local player holds the bomb.
-export class BombRelayScene extends Phaser.Scene {
-  private side?: Phaser.GameObjects.Rectangle
-  private bombBody?: Phaser.GameObjects.Image
-  private bomb?: Phaser.GameObjects.Graphics
+// Mirrors bombRelay.ts's FUSE_MIN_MS: a fresh fuse never blows sooner than this. The real fuse length is
+// hidden (never on the wire), so the drawn fuse burns down over this guaranteed-safe window and then
+// just sputters — "it could go any moment now" — without leaking anything the server keeps secret.
+const SAFE_FUSE_MS = 2500
+const FUSE_STUB = 0.15
+const MAX_CHAIN = 8
+
+// Classic cartoon bomb, 14 cells wide: metal cap, dark body with a highlight and a band in the team's
+// color so each side's bomb reads as theirs.
+function bombRows(): string[] {
+  const rows = ['_____mmmm_____', '_____MMMM_____']
+  const r = 7
+  for (let y = 0; y < 14; y++) {
+    let row = ''
+    for (let x = 0; x < 14; x++) {
+      const dx = x + 0.5 - r
+      const dy = y + 0.5 - r
+      const d = Math.sqrt(dx * dx + dy * dy)
+      if (d > r) row += '_'
+      else if (d > r - 1.1) row += 'o'
+      else if (y === 7 || y === 8) row += 'c'
+      else if (dx < -1 && dy < -1 && d < r * 0.62) row += 'w'
+      else row += 'b'
+    }
+    rows.push(row)
+  }
+  return rows
+}
+
+// Fuse spark: two flicker frames.
+const SPARK_ROWS = [
+  ['__a__', '_aya_', 'ayyya', '_aya_', '__a__'],
+  ['a___a', '_aya_', '_yyy_', '_aya_', 'a___a'],
+]
+
+interface Column {
+  team: TeamId
+  cx: number
+  w: number
+  panel: Phaser.GameObjects.Graphics
+  panelRect: { x: number; y: number; w: number; h: number }
+  panelMode?: 'ours' | 'theirs'
+  bomb: Phaser.GameObjects.Image
+  bombY: number
+  bombSize: number
+  fuse: Phaser.GameObjects.Graphics
+  spark: Phaser.GameObjects.Image
+  holder: Phaser.GameObjects.Text
+  stats: Phaser.GameObjects.Text
+  bar: Phaser.GameObjects.Graphics
+  barX: number
+  barY: number
+  barW: number
+  chain: Phaser.GameObjects.Graphics
+  chainY: number
+  legStartedAt: number
+  relays: number
+  explosions: number
+  progress: number
+  holderId: string
+  respawnUntil: number
+}
+
+// Bomb Relay (team hot potato) canvas: each team's bomb side by side — red left, blue right — with a
+// fuse that burns while its holder mashes (tap / SPACE) to fill the leg and pass it on. Shows who holds
+// each bomb (name in their identity color + the relay chain), the leg progress, passes and booms, and
+// a big explosion + shake when a fuse blows. Only the current holder's mashes count (server-checked).
+export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
+  private columns: Column[] = []
   private prompt?: Phaser.GameObjects.Text
-  private status?: Phaser.GameObjects.Text
-  private bar?: Phaser.GameObjects.Graphics
-  private redScore?: Phaser.GameObjects.Text
-  private blueScore?: Phaser.GameObjects.Text
-  private timer?: Phaser.GameObjects.Text
-  private cx = 0
-  private cy = 0
-  private barX = 0
-  private barY = 0
-  private barW = 0
-  private prevRelays = 0
-  private prevExplosions = 0
+  private sub?: Phaser.GameObjects.Text
+  private hint?: Phaser.GameObjects.Text
+  private sparkKeys: string[] = []
+  private primed = false
+  private promptMode = ''
 
-  constructor(
-    private readonly send: (msg: ClientMsg) => void,
-    private readonly state: RoundState,
-    private readonly sfx: Sfx,
-    private readonly t: Translate,
-  ) {
-    super('bomb-relay')
+  constructor(...deps: SceneDeps) {
+    super('bomb-relay', ...deps)
   }
 
-  create(): void {
-    addArcadeBackdrop(this)
+  override create(): void {
+    super.create()
+    this.columns = []
+    this.primed = false
+    this.promptMode = ''
     const { width, height } = this.scale
-    this.cx = width / 2
-    this.cy = height * 0.44
-    this.barW = width * 0.6
-    this.barX = (width - this.barW) / 2
-    this.barY = height * 0.66
+    const compact = Math.min(width, height) < 520
+    const top = this.top
+    const avail = height - top
 
-    this.side = this.add.rectangle(this.cx, height / 2, width, height, RED, 0)
-
-    this.timer = this.add
-      .text(this.cx, height * 0.12, '', headlineStyle(28, PALETTE.lime))
-      .setOrigin(0.5)
-
-    this.bombBody = this.add.image(
-      this.cx,
-      this.cy,
-      ensurePixelOrb(this, 'pp-bomb-body-dim', 20, PALETTE.dim),
+    this.sparkKeys = SPARK_ROWS.map((rows, i) =>
+      ensurePixelGrid(this, {
+        key: `pp-bomb-spark-${i}`,
+        rows,
+        legend: { a: PALETTE.amber, y: 0xfff1a8 },
+        pixelSize: 1,
+      }),
     )
-    this.bomb = this.add.graphics()
 
+    const colTop = top + (compact ? 6 : 12)
+    const colH = avail * (compact ? 0.66 : 0.68)
+    const colW = width / 2 - (compact ? 12 : 28)
+    for (const [i, team] of TEAM_ORDER.entries()) {
+      const cx = i === 0 ? width / 4 + (compact ? 2 : 8) : (width * 3) / 4 - (compact ? 2 : 8)
+      this.columns.push(this.buildColumn(team, cx, colTop, colW, colH, compact))
+    }
+
+    const colBottom = Math.max(...this.columns.map((c) => c.panelRect.y + c.panelRect.h))
+    const promptY = colBottom + (height - colBottom) * 0.3
     this.prompt = this.add
-      .text(this.cx, height * 0.24, '', headlineStyle(40, PALETTE.amber))
+      .text(
+        width / 2,
+        promptY,
+        '',
+        headlineStyle(compact ? 24 : 32, PALETTE.amber, {
+          align: 'center',
+          wordWrap: { width: width * 0.92 },
+        }),
+      )
       .setOrigin(0.5)
-
-    this.bar = this.add.graphics()
-
-    this.status = this.add
-      .text(this.cx, height * 0.74, '', bodyStyle(18, PALETTE.dim, { align: 'center' }))
-      .setOrigin(0.5)
-
-    this.redScore = this.add.text(this.cx, height * 0.82, '', bodyStyle(18, RED)).setOrigin(0.5)
-    this.blueScore = this.add.text(this.cx, height * 0.86, '', bodyStyle(18, BLUE)).setOrigin(0.5)
-
-    this.add
-      .text(this.cx, height * 0.94, this.t('game.bombRelay.hint'), bodyStyle(16, PALETTE.dim))
-      .setOrigin(0.5)
+    this.sub = this.add
+      .text(
+        width / 2,
+        promptY + 44,
+        '',
+        bodyStyle(compact ? 13 : 16, PALETTE.dim, { align: 'center' }),
+      )
+      .setOrigin(0.5, 0)
+    this.hint = this.add
+      .text(
+        width / 2,
+        height - 10,
+        this.t('game.bombRelay.hint'),
+        bodyStyle(compact ? 12 : 15, PALETTE.dim, {
+          align: 'center',
+          wordWrap: { width: width * 0.92 },
+        }),
+      )
+      .setOrigin(0.5, 1)
 
     this.input.on('pointerdown', () => this.mash())
-    this.input.keyboard?.on('keydown-SPACE', () => this.mash())
+    this.onKey('SPACE', () => this.mash())
   }
 
-  private myTeam(): 'red' | 'blue' | undefined {
-    const snap = this.state.state as BombRelaySnapshot | null
-    if (!snap) return undefined
-    return snap.playerTeam[this.state.selfId ?? '']
+  private buildColumn(
+    team: TeamId,
+    cx: number,
+    y: number,
+    w: number,
+    h: number,
+    compact: boolean,
+  ): Column {
+    const color = teamColor(team)
+    const panel = this.add.graphics()
+
+    this.add
+      .text(
+        cx,
+        y + (compact ? 16 : 24),
+        this.t(`team.${team}`).toUpperCase(),
+        headlineStyle(16, color),
+      )
+      .setOrigin(0.5)
+    const statsY = y + (compact ? 34 : 48)
+    const stats = this.add
+      .text(cx, statsY, '', bodyStyle(compact ? 11 : 15, PALETTE.text))
+      .setOrigin(0.5)
+
+    const bombKey = ensurePixelGrid(this, {
+      key: `pp-bomb-body-${team}`,
+      rows: bombRows(),
+      legend: {
+        m: 0x9aa2cc,
+        M: 0x5b6280,
+        o: 0x10121c,
+        b: 0x3a3d56,
+        w: 0x9aa2cc,
+        c: color,
+      },
+      pixelSize: 1,
+    })
+    // The fuse curls up above the cap, so the bomb sits one fuse-height below the stats line.
+    const bombSize = Math.min(w * (compact ? 0.58 : 0.46), h * 0.3, 140)
+    const bombY = statsY + (compact ? 14 : 20) + bombSize * 0.62 + (bombSize * 8) / 14
+    const bomb = this.add
+      .image(cx, bombY, bombKey)
+      .setDisplaySize(bombSize, bombSize * (16 / 14))
+      .setDepth(5)
+    const fuse = this.add.graphics().setDepth(4)
+    const spark = this.add
+      .image(0, 0, this.sparkKeys[0] ?? '')
+      .setScale(Math.max(3, Math.round(bombSize / 22)))
+      .setDepth(6)
+
+    const holder = this.add
+      .text(cx, bombY + bombSize * 0.66 + 6, '', headlineStyle(16, PALETTE.text))
+      .setOrigin(0.5, 0)
+    const barW = w * 0.8
+    const barY = holder.y + (compact ? 20 : 30)
+    const bar = this.add.graphics()
+    const chain = this.add.graphics()
+    const chainY = barY + (compact ? 26 : 34)
+    return {
+      team,
+      cx,
+      w,
+      panel,
+      // The panel hugs its content (bounded by the space it was given).
+      panelRect: { x: cx - w / 2, y, w, h: Math.min(h, chainY + (compact ? 22 : 30) - y) },
+      bomb,
+      bombY,
+      bombSize,
+      fuse,
+      spark,
+      holder,
+      stats,
+      bar,
+      barX: cx - barW / 2,
+      barY,
+      barW,
+      chain,
+      chainY,
+      legStartedAt: 0,
+      relays: 0,
+      explosions: 0,
+      progress: 0,
+      holderId: '',
+      respawnUntil: 0,
+    }
+  }
+
+  protected override remainingMs(snap: BombRelaySnapshot): number {
+    return snap.roundRemainingMs
+  }
+
+  private myTeam(): TeamId | undefined {
+    return this.snap?.playerTeam[this.selfId]
   }
 
   private amHolder(): boolean {
-    const snap = this.state.state as BombRelaySnapshot | null
+    const snap = this.snap
     const team = this.myTeam()
-    if (!snap || !team) return false
-    return snap.teams[team].holderId === (this.state.selfId ?? '')
+    return !!snap && !!team && snap.teams[team]?.holderId === this.selfId
   }
 
   private mash(): void {
-    if (!this.amHolder()) return
-    const snap = this.state.state as BombRelaySnapshot | null
-    if (!snap || snap.roundRemainingMs <= 0) return
+    const snap = this.snap
+    if (!snap || snap.roundRemainingMs <= 0 || !this.amHolder()) return
     this.sfx.click()
-    this.send({ type: 'MINIGAME_INPUT', input: { kind: 'mash' } })
+    this.sendInput({ kind: 'mash' })
+    const col = this.columns.find((c) => c.team === this.myTeam())
+    if (col) punch(this, col.bomb, 0.06, 50)
   }
 
-  private drawBomb(color: number, prominent: boolean): void {
-    if (!this.bomb || !this.bombBody) return
-    const g = this.bomb
-    g.clear()
-    const r = prominent ? 46 : 30
-    // fuse
-    g.lineStyle(4, PALETTE.dim, 1)
-    g.beginPath()
-    g.moveTo(this.cx, this.cy - r)
-    g.lineTo(this.cx + r * 0.5, this.cy - r - 22)
-    g.strokePath()
-    // spark
-    g.fillStyle(PALETTE.amber, 1)
-    g.fillCircle(this.cx + r * 0.5, this.cy - r - 22, prominent ? 6 : 4)
-    // body
-    const key = ensurePixelOrb(this, `pp-bomb-body-${color}`, 20, color)
-    this.bombBody
-      .setTexture(key)
-      .setDisplaySize(r * 2, r * 2)
-      .setPosition(this.cx, this.cy)
-  }
-
-  private drawBar(progress: number, color: number): void {
-    if (!this.bar) return
-    const g = this.bar
-    g.clear()
-    const h = 20
-    g.fillStyle(PALETTE.panelAlt, 1)
-    g.fillRect(this.barX, this.barY, this.barW, h)
-    const clamped = Math.max(0, Math.min(1, progress))
-    g.fillStyle(color, 1)
-    g.fillRect(this.barX, this.barY, this.barW * clamped, h)
-    g.lineStyle(2, PALETTE.dim, 1)
-    g.strokeRect(this.barX, this.barY, this.barW, h)
-  }
-
-  override update(): void {
-    const snap = this.state.state as BombRelaySnapshot | null
-    if (!snap || typeof snap.roundRemainingMs !== 'number') return
-
-    this.timer?.setText(`${Math.max(0, Math.ceil(snap.roundRemainingMs / 1000))}s`)
-
-    const red = snap.teams.red
-    const blue = snap.teams.blue
-    this.redScore?.setText(
-      `${this.t('team.red')}  ${this.t('game.bombRelay.relays')} ${red.relays}  ${this.t('game.bombRelay.booms')} ${red.explosions}`,
-    )
-    this.blueScore?.setText(
-      `${this.t('team.blue')}  ${this.t('game.bombRelay.relays')} ${blue.relays}  ${this.t('game.bombRelay.booms')} ${blue.explosions}`,
-    )
-
-    const team = this.myTeam()
-    if (!team) {
-      this.side?.setFillStyle(RED, 0)
-      this.drawBomb(PALETTE.dim, false)
-      this.prompt?.setText(this.t('game.bombRelay.spectator'))
-      this.prompt?.setColor(hexToCss(PALETTE.dim))
-      this.status?.setText('')
-      this.bar?.clear()
-      return
+  protected frame(snap: BombRelaySnapshot | null, time: number): void {
+    if (!snap) return
+    const mine = this.myTeam()
+    this.hint?.setVisible(mine !== undefined) // spectators have nothing to press
+    for (const col of this.columns) {
+      const view = snap.teams[col.team]
+      if (!view) continue
+      this.trackColumn(col, view, time, col.team === mine)
+      this.drawColumn(col, view, time, col.team === mine)
     }
+    const myView = mine ? snap.teams[mine] : undefined
+    if (myView) {
+      this.hud?.setScore(`${this.t('game.bombRelay.relays')}: ${myView.relays}`)
+    }
+    this.updatePrompt(myView)
+    // Primed only after the first prompt, so the opening (or post-relayout) MASH doesn't play "go".
+    this.primed = true
+  }
 
-    const view = snap.teams[team]
-    const color = team === 'red' ? RED : BLUE
-    this.side?.setFillStyle(color, 0.08)
+  // Snapshot deltas for one team → pass / boom feedback (louder for the local player's own team).
+  private trackColumn(col: Column, view: BombRelayTeamView, time: number, ours: boolean): void {
+    if (!this.primed) {
+      col.relays = view.relays
+      col.explosions = view.explosions
+      col.legStartedAt = time
+    }
+    if (view.relays > col.relays) {
+      col.legStartedAt = time
+      burst(this, col.cx, col.bombY, teamColor(col.team), 16, 220)
+      ring(this, col.cx, col.bombY, PALETTE.lime, col.bombSize * 0.8)
+      floatText(
+        this,
+        col.cx,
+        col.bombY - col.bombSize * 0.7,
+        this.t('game.bombRelay.pass'),
+        PALETTE.lime,
+      )
+      this.tweens.add({
+        targets: col.bomb,
+        y: col.bombY - col.bombSize * 0.25,
+        duration: 110,
+        yoyo: true,
+      })
+      punch(this, col.holder, 0.3, 90)
+      if (ours) this.sfx.coin()
+    }
+    if (view.explosions > col.explosions) {
+      col.legStartedAt = time
+      col.respawnUntil = time + 450
+      this.explode(col, ours, col.holderId === this.selfId)
+    }
+    if (ours && view.legProgress > col.progress && view.holderId === this.selfId) {
+      punch(this, col.bomb, 0.04, 40)
+    }
+    col.relays = view.relays
+    col.explosions = view.explosions
+    col.progress = view.legProgress
+    col.holderId = view.holderId
+  }
 
-    // Sound feedback when the local team relays or explodes.
-    if (view.relays > this.prevRelays) this.sfx.coin()
-    if (view.explosions > this.prevExplosions) this.sfx.wrong()
-    this.prevRelays = view.relays
-    this.prevExplosions = view.explosions
-
-    const over = snap.roundRemainingMs <= 0
-    const holder = this.amHolder()
-
-    this.drawBomb(color, holder && !over)
-
-    if (holder && !over) {
-      this.prompt?.setText(this.t('game.bombRelay.mash'))
-      this.prompt?.setColor(hexToCss(PALETTE.amber))
-      this.status?.setText('')
-      this.drawBar(view.legProgress / Math.max(1, view.legTarget), color)
+  private explode(col: Column, ours: boolean, wasMe: boolean): void {
+    const { cx, bombY: y, bombSize: s } = col
+    burst(this, cx, y, PALETTE.orange, 34, 380)
+    burst(this, cx, y, PALETTE.red, 18, 260)
+    burst(this, cx, y, PALETTE.amber, 14, 200)
+    burst(this, cx, y, PALETTE.dim, 10, 90)
+    ring(this, cx, y, PALETTE.orange, s * 1.2)
+    ring(this, cx, y, PALETTE.amber, s * 0.7)
+    floatText(this, cx, y - s * 0.3, this.t('game.bombRelay.boom'), PALETTE.red, 28)
+    this.sfx.pop()
+    if (ours) {
+      this.sfx.wrong()
+      shake(this, wasMe ? 0.022 : 0.014, 320)
+      if (wasMe) flash(this, PALETTE.orange, 180)
     } else {
-      this.prompt?.setText(this.t('game.bombRelay.waiting'))
-      this.prompt?.setColor(hexToCss(PALETTE.dim))
-      this.status?.setText(this.t('game.bombRelay.teammateHolds'))
-      this.bar?.clear()
+      shake(this, 0.006, 160)
     }
+    // A fresh bomb pops back in for the next holder.
+    const base = col.bomb.getData('pp-base-sx') ?? col.bomb.scaleX
+    col.bomb.setData('pp-base-sx', base).setData('pp-base-sy', base)
+    this.tweens.killTweensOf(col.bomb)
+    col.bomb.setScale(0).setY(y)
+    this.tweens.add({
+      targets: col.bomb,
+      scale: base,
+      delay: 300,
+      duration: 220,
+      ease: 'Back.easeOut',
+    })
+  }
+
+  private drawColumn(col: Column, view: BombRelayTeamView, time: number, ours: boolean): void {
+    const color = teamColor(col.team)
+    const panelMode = ours ? 'ours' : 'theirs'
+    if (col.panelMode !== panelMode) {
+      // The local player's team gets the lit frame.
+      col.panelMode = panelMode
+      const { x, y, w, h } = col.panelRect
+      col.panel.clear()
+      col.panel.fillStyle(shade(color, ours ? -0.74 : -0.85), 1)
+      col.panel.fillRect(x, y, w, h)
+      col.panel.lineStyle(ours ? 4 : 2, ours ? color : shade(color, -0.4), 1)
+      col.panel.strokeRect(x, y, w, h)
+    }
+    const elapsed = time - col.legStartedAt
+    const danger = elapsed > SAFE_FUSE_MS && time > col.respawnUntil
+    const respawning = time < col.respawnUntil
+
+    // Hot bomb: the last stretch blinks red and trembles.
+    const hot = danger && Math.floor(time / 110) % 2 === 0
+    col.bomb.setTint(hot ? 0xff9a8a : 0xffffff)
+    if (!this.tweens.isTweening(col.bomb)) {
+      const jitter = danger ? Math.round(Math.sin(time / 23) * 2) : 0
+      col.bomb.setPosition(col.cx + jitter, col.bombY)
+    }
+
+    // The fuse burns down over the guaranteed-safe window, then sputters as a short stub.
+    const frac = danger
+      ? FUSE_STUB * (0.8 + 0.2 * Math.sin(time / 40))
+      : 1 - (1 - FUSE_STUB) * Math.min(1, elapsed / SAFE_FUSE_MS)
+    const g = col.fuse
+    g.clear()
+    col.spark.setVisible(!respawning)
+    if (!respawning) this.drawFuse(col, frac, danger, time)
+
+    // Who holds it: name in their identity color (YOU for the local player).
+    const holderColor = this.state.colorOf(view.holderId, PALETTE.text)
+    const label = view.holderId ? `▲ ${this.label(view.holderId).toUpperCase()}` : ''
+    if (col.holder.text !== label) {
+      col.holder.setText(label).setFontSize(16)
+      if (col.holder.width > col.w * 0.92) col.holder.setFontSize(8)
+    }
+    const holderCss = hexToCss(holderColor)
+    if (col.holder.style.color !== holderCss) col.holder.setColor(holderCss)
+
+    const stats = `${this.t('game.bombRelay.relays')}: ${view.relays} · ${this.t('game.bombRelay.booms')}: ${view.explosions}`
+    if (col.stats.text !== stats) col.stats.setText(stats)
+
+    // Leg progress: one segment per mash still needed to pass.
+    const segs = Math.max(1, view.legTarget)
+    const gap = 2
+    const h = this.scale.width < 520 ? 10 : 14
+    const segW = (col.barW - gap * (segs - 1)) / segs
+    col.bar.clear()
+    for (let i = 0; i < segs; i++) {
+      const lit = i < view.legProgress
+      col.bar.fillStyle(lit ? color : PALETTE.panelAlt, 1)
+      col.bar.fillRect(
+        Math.round(col.barX + i * (segW + gap)),
+        col.barY,
+        Math.max(1, Math.round(segW)),
+        h,
+      )
+    }
+    if (ours && view.holderId === this.selfId) {
+      col.bar.lineStyle(2, PALETTE.amber, 0.6 + 0.4 * Math.abs(Math.sin(time / 150)))
+      col.bar.strokeRect(col.barX - 3, col.barY - 3, col.barW + 6, h + 6)
+    }
+
+    // Relay chain: every member in pass order; the holder's pip is big and lit, the next one outlined.
+    const members = view.members.slice(0, MAX_CHAIN)
+    const pip = this.scale.width < 520 ? 12 : 16
+    const step = pip + 8
+    const x0 = col.cx - ((members.length - 1) * step) / 2
+    const holderIdx = view.members.indexOf(view.holderId)
+    const nextIdx = members.length > 1 ? (holderIdx + 1) % view.members.length : -1
+    col.chain.clear()
+    members.forEach((id, i) => {
+      const x = x0 + i * step
+      const c = this.state.colorOf(id, PALETTE.dim)
+      const isHolder = i === holderIdx
+      const size = isHolder ? pip + 4 : pip
+      col.chain.fillStyle(shade(c, -0.6), 1)
+      col.chain.fillRect(
+        Math.round(x - size / 2),
+        Math.round(col.chainY - size / 2) + 2,
+        size,
+        size,
+      )
+      col.chain.fillStyle(c, isHolder ? 1 : 0.75)
+      col.chain.fillRect(Math.round(x - size / 2), Math.round(col.chainY - size / 2), size, size)
+      if (isHolder) {
+        col.chain.lineStyle(2, PALETTE.amber, 1)
+        col.chain.strokeRect(x - size / 2 - 3, col.chainY - size / 2 - 3, size + 6, size + 6)
+      } else if (i === nextIdx) {
+        col.chain.lineStyle(2, PALETTE.text, 0.5)
+        col.chain.strokeRect(x - size / 2 - 2, col.chainY - size / 2 - 2, size + 4, size + 4)
+      }
+      if (id === this.selfId) {
+        col.chain.fillStyle(PALETTE.text, 1)
+        col.chain.fillRect(Math.round(x - 2), Math.round(col.chainY + size / 2 + 5), 4, 4)
+      }
+    })
+  }
+
+  // Fuse: a pixel cord curling up from the cap (shorter as it burns) with a flickering spark at its tip.
+  private drawFuse(col: Column, frac: number, danger: boolean, time: number): void {
+    const g = col.fuse
+    const cell = Math.max(3, Math.round(col.bombSize / 22))
+    const capX = col.bomb.x
+    const capY = col.bomb.y - col.bomb.displayHeight / 2
+    const len = col.bombSize * 0.7
+    let tip = { x: capX, y: capY }
+    const steps = Math.max(2, Math.round((len * frac) / cell))
+    for (let i = 0; i <= steps; i++) {
+      const t = (i / steps) * frac
+      const x = capX + Math.sin(t * 2.4) * len * 0.42
+      const y = capY - t * len * 0.8
+      g.fillStyle(0x4a3520, 1)
+      g.fillRect(Math.round(x - cell / 2), Math.round(y - cell / 2) + 1, cell, cell)
+      g.fillStyle(0xc9a36b, 1)
+      g.fillRect(Math.round(x - cell / 2), Math.round(y - cell / 2), cell, cell - 1)
+      tip = { x, y }
+    }
+    const flicker = Math.floor(time / (danger ? 50 : 90)) % 2
+    col.spark
+      .setTexture(this.sparkKeys[flicker] ?? '')
+      .setPosition(Math.round(tip.x), Math.round(tip.y))
+      .setScale(Math.max(3, Math.round(col.bombSize / 22)) * (danger ? 1.4 : 1))
+  }
+
+  // The one "what do I do now" line: MASH while you hold it, get ready if you're next, else wait.
+  private updatePrompt(view: BombRelayTeamView | undefined): void {
+    const prompt = this.prompt
+    const sub = this.sub
+    if (!prompt || !sub) return
+    let mode: string
+    if (!view) mode = 'spectator'
+    else if (view.holderId === this.selfId) mode = 'mash'
+    else {
+      const idx = view.members.indexOf(view.holderId)
+      const next = view.members[(idx + 1) % view.members.length]
+      mode = next === this.selfId ? 'next' : 'wait'
+    }
+    if (mode === 'mash') {
+      prompt.setAlpha(0.75 + 0.25 * Math.abs(Math.sin(this.time.now / 120)))
+    } else {
+      prompt.setAlpha(1)
+    }
+    if (mode === this.promptMode) return
+    this.promptMode = mode
+    const waiting = this.t('game.bombRelay.teammateHolds')
+    const [text, color, detail] =
+      mode === 'spectator'
+        ? [this.t('game.bombRelay.spectator'), PALETTE.dim, '']
+        : mode === 'mash'
+          ? [this.t('game.bombRelay.mash'), PALETTE.amber, '']
+          : mode === 'next'
+            ? [this.t('game.bombRelay.getReady'), PALETTE.lime, waiting]
+            : [this.t('game.bombRelay.waiting'), PALETTE.text, waiting]
+    // The spectator line is a sentence, not a call to action: smaller so it stays on one or two lines.
+    const compact = Math.min(this.scale.width, this.scale.height) < 520
+    const size = mode === 'spectator' ? (compact ? 16 : 24) : compact ? 24 : 32
+    prompt.setText(text).setColor(hexToCss(color)).setFontSize(size)
+    sub.setText(detail)
+    punch(this, prompt, 0.2, 100)
+    if (mode === 'mash' && this.primed) this.sfx.go()
   }
 }

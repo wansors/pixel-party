@@ -1,0 +1,266 @@
+<section class="lobby arcade-window">
+  <div class="arcade-titlebar">
+    {{ 'room.lobby.title' | transloco }} ·
+    {{ 'room.lobby.playersCount' | transloco: { n: store.players().length } }}
+  </div>
+
+  <div class="body">
+    <!-- ── Left: code, roster, readiness ─────────────────────────────── -->
+    <div class="col side">
+      <div class="code-card">
+        <span class="label">{{ 'room.lobby.roomCode' | transloco }}</span>
+        <span class="code">{{ store.code() }}</span>
+        <span class="share">{{ 'room.lobby.share' | transloco }}</span>
+        <div class="invite">
+          <span class="url">{{ store.inviteUrl }}</span>
+          <button type="button" class="arcade-btn small" (click)="copyInvite()">
+            {{ (copied() ? 'common.copied' : 'common.copyLink') | transloco }}
+          </button>
+        </div>
+      </div>
+
+      <ul class="players">
+        @for (p of store.players(); track p.id) {
+          <li [class.off]="!p.connected" [class.me]="p.id === store.selfId()" [class.ready]="p.ready">
+            <app-pixel-avatar [avatar]="$any(p.avatar)" [color]="p.color" [size]="28" />
+            <span class="who">
+              <span class="pname" [style.color]="p.color">{{ p.name }}</span>
+              <span class="tags">
+                @if (p.id === store.selfId()) {
+                  <span class="tag you">{{ 'room.lobby.you' | transloco }}</span>
+                }
+                @if (p.id === store.hostId()) {
+                  <span class="tag host">★ {{ 'room.lobby.host' | transloco }}</span>
+                }
+                @if (store.usesTeams() && p.team) {
+                  <span class="tag team" [style.color]="store.teamColor(p.team)">
+                    {{ store.teamName(p.team) }}
+                  </span>
+                }
+                @if (!p.connected) {
+                  <span class="tag off">{{ 'room.lobby.off' | transloco }}</span>
+                }
+              </span>
+            </span>
+            @if (p.connected && p.ready) {
+              <span class="ready-mark"><i class="tick" aria-hidden="true"></i>{{ 'room.lobby.ready' | transloco }}</span>
+            }
+            @if (store.isHost()) {
+              <span class="host-actions">
+                @if (store.usesTeams() && p.team) {
+                  <button
+                    type="button"
+                    class="mini"
+                    [title]="'room.lobby.swapTeam' | transloco"
+                    [attr.aria-label]="'room.lobby.swapTeam' | transloco"
+                    (click)="store.swapTeam(p)"
+                  >
+                    ←→
+                  </button>
+                }
+                @if (p.id !== store.selfId() && p.id !== store.hostId()) {
+                  <button
+                    type="button"
+                    class="mini"
+                    [title]="'room.lobby.makeHost' | transloco"
+                    [attr.aria-label]="'room.lobby.makeHost' | transloco"
+                    (click)="store.makeHost(p.id)"
+                  >
+                    ★
+                  </button>
+                }
+                @if (p.id !== store.selfId()) {
+                  <button
+                    type="button"
+                    class="mini danger"
+                    [title]="'room.lobby.kick' | transloco"
+                    [attr.aria-label]="'room.lobby.kick' | transloco"
+                    (click)="store.kick(p.id)"
+                  >
+                    ×
+                  </button>
+                }
+              </span>
+            }
+          </li>
+        }
+      </ul>
+
+      <div class="ready-meter">
+        <span>
+          {{
+            'room.lobby.readyCount'
+              | transloco: { n: store.readyCount(), total: store.connectedCount() }
+          }}
+        </span>
+        <span class="segments" aria-hidden="true">
+          @for (on of readySegments(); track $index) {
+            <span class="seg" [class.on]="on"></span>
+          }
+        </span>
+      </div>
+    </div>
+
+    <!-- ── Right: game line-up ───────────────────────────────────────── -->
+    <div class="col games">
+      <div class="games-header">
+        <h3>
+          {{ (store.isHost() ? 'room.lobby.games' : 'room.lobby.lineup') | transloco }}
+          <span class="count">
+            {{
+              'room.lobby.selectedCount'
+                | transloco: { n: store.selectedGameIds().length, total: totalGames }
+            }}
+          </span>
+        </h3>
+        @if (store.isHost()) {
+          <div class="bulk">
+            <button type="button" (click)="selectShown()">
+              {{ 'room.lobby.selectAll' | transloco }}
+            </button>
+            <button type="button" (click)="deselectShown()">
+              {{ 'room.lobby.selectNone' | transloco }}
+            </button>
+          </div>
+        }
+      </div>
+
+      <ul class="axis-filter">
+        <li>
+          <button
+            type="button"
+            class="axis-chip"
+            [class.active]="axisFilter() === null"
+            (click)="axisFilter.set(null)"
+          >
+            {{ 'room.lobby.allGames' | transloco }}
+          </button>
+        </li>
+        @for (axis of skillAxes; track axis) {
+          <li>
+            <button
+              type="button"
+              class="axis-chip"
+              [class.active]="axisFilter() === axis"
+              [style.--chip-color]="axisColor(axis)"
+              (click)="toggleAxis(axis)"
+            >
+              <span class="dot" [style.background]="axisColor(axis)"></span>
+              {{ catalog.axisLabel(axis) }}
+            </button>
+          </li>
+        }
+      </ul>
+
+      <ul class="game-grid">
+        @for (g of shownGames(); track g.id) {
+          <li>
+            <button
+              type="button"
+              class="game-card"
+              [class.selected]="store.isSelected(g.id)"
+              [disabled]="!store.isHost()"
+              [attr.aria-pressed]="store.isSelected(g.id)"
+              (click)="store.toggleGame(g.id)"
+            >
+              <span class="gname">{{ catalog.minigameName(g.id) }}</span>
+              @if (store.isHost()) {
+                <span class="check" aria-hidden="true"><i class="tick"></i></span>
+              }
+              <span class="blurb">{{ catalog.minigameBlurb(g.id) }}</span>
+              <span class="meta">
+                @for (a of g.axes; track a) {
+                  <span class="axis-dot" [style.background]="axisColor(a)" [title]="catalog.axisLabel(a)"></span>
+                }
+                @if (g.format !== 'ffa') {
+                  <span class="format">{{ 'room.format.' + g.format | transloco }}</span>
+                }
+              </span>
+            </button>
+          </li>
+        } @empty {
+          <li class="empty">{{ 'room.lobby.hostPicks' | transloco }}</li>
+        }
+      </ul>
+
+      <div class="config">
+        <div class="rounds">
+          <span class="label">{{ 'room.lobby.rounds' | transloco }}</span>
+          @if (store.isHost()) {
+            <button
+              type="button"
+              class="mini step"
+              [disabled]="store.rounds() <= 1"
+              (click)="stepRounds(-1)"
+            >
+              −
+            </button>
+          }
+          <span class="value">{{ store.rounds() }}</span>
+          @if (store.isHost()) {
+            <button
+              type="button"
+              class="mini step"
+              [disabled]="store.rounds() >= store.selectedGameIds().length"
+              (click)="stepRounds(1)"
+            >
+              +
+            </button>
+          }
+        </div>
+        <label class="handicap" [class.disabled]="!store.isHost()">
+          <input
+            type="checkbox"
+            [checked]="store.handicap()"
+            [disabled]="!store.isHost()"
+            (change)="store.toggleHandicap($any($event.target).checked)"
+          />
+          <span class="box" aria-hidden="true"><i class="tick"></i></span>
+          {{ 'room.lobby.handicap' | transloco }}
+        </label>
+        @if (store.selectedGameIds().length > 0) {
+          <div class="coverage" [title]="'room.lobby.coverage' | transloco">
+            <app-skill-radar
+              [data]="coverage()"
+              [color]="coverageColor"
+              [size]="96"
+              [ariaLabel]="'room.lobby.coverage' | transloco"
+            />
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Always-visible action bar ───────────────────────────────────── -->
+  <div class="actions">
+    <button
+      type="button"
+      class="arcade-btn"
+      [class.ready-on]="store.myReady()"
+      (click)="store.toggleReady()"
+    >
+      {{ (store.myReady() ? 'room.lobby.notReady' : 'room.lobby.imReady') | transloco }}
+    </button>
+    @if (store.isHost() && store.usesTeams()) {
+      <button type="button" class="arcade-btn" (click)="store.shuffleTeams()">
+        {{ 'room.lobby.shuffleTeams' | transloco }}
+      </button>
+    }
+    @if (store.isHost()) {
+      <button
+        type="button"
+        class="arcade-btn primary start"
+        [disabled]="store.selectedGameIds().length === 0"
+        (click)="store.start()"
+      >
+        ▶ {{ 'room.lobby.start' | transloco }}
+      </button>
+      @if (store.selectedGameIds().length === 0) {
+        <span class="hint">{{ 'room.lobby.noGames' | transloco }}</span>
+      }
+    } @else {
+      <span class="hint blink">{{ 'room.lobby.waitingHost' | transloco }}</span>
+    }
+  </div>
+</section>

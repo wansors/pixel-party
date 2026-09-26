@@ -1,0 +1,153 @@
+<section class="final arcade-window">
+  <div class="arcade-titlebar">{{ 'room.final.title' | transloco }}</div>
+
+  <div class="body">
+    <div class="col main">
+      <div class="stage">
+        <div class="confetti" aria-hidden="true">
+          @for (c of confetti; track $index) {
+            <span
+              [style.left.%]="c.left"
+              [style.width.px]="c.size"
+              [style.height.px]="c.size"
+              [style.background]="c.color"
+              [style.animationDelay.ms]="c.delay"
+              [style.animationDuration.ms]="c.duration"
+            ></span>
+          }
+        </div>
+        <div class="podium">
+          @for (s of podium(); track s.playerId) {
+            <div class="step" [class]="'step p' + place(s)" [class.me]="s.playerId === store.selfId()">
+              @if (place(s) === 1) {
+                <span class="crown" aria-hidden="true"></span>
+              }
+              <app-pixel-avatar
+                [class.bounce]="place(s) === 1"
+                [avatar]="store.playerAvatar(s.playerId)"
+                [color]="store.playerColor(s.playerId)"
+                [size]="place(s) === 1 ? 56 : 40"
+              />
+              <span class="pname" [style.color]="store.playerColor(s.playerId)">
+                {{ store.playerName(s.playerId) }}
+              </span>
+              <span class="block">
+                <span class="num">{{ place(s) }}</span>
+                <span class="pts">{{ s.points | pts }}</span>
+              </span>
+            </div>
+          }
+        </div>
+      </div>
+
+      @if (store.final().length) {
+        <p class="winner blink">
+          {{ 'room.final.newHighScore' | transloco }} — {{ store.playerName(store.final()[0].playerId) }}!
+        </p>
+      }
+
+      @if (store.final().length > 3) {
+        <ol class="hs" start="4">
+          @for (s of store.final().slice(3); track s.playerId) {
+            <li [class.me]="s.playerId === store.selfId()">
+              <span class="rank">{{ s.rank }}</span>
+              <app-pixel-avatar
+                [avatar]="store.playerAvatar(s.playerId)"
+                [color]="store.playerColor(s.playerId)"
+                [size]="22"
+              />
+              <span class="who">
+                <span class="name" [style.color]="store.playerColor(s.playerId)">
+                  {{ store.playerName(s.playerId) }}
+                </span>
+              </span>
+              <span class="pts">{{ s.points | pts }}</span>
+            </li>
+          }
+        </ol>
+      }
+    </div>
+
+    <div class="col side">
+      @if (store.hasProfile()) {
+        <div class="profile">
+          <h3>{{ 'room.summary.profileTitle' | transloco }}</h3>
+          <app-skill-radar
+            [data]="store.myRadar()"
+            [color]="store.playerColor(store.selfId())"
+            [size]="190"
+            [ariaLabel]="'room.summary.profileTitle' | transloco"
+          />
+        </div>
+      }
+
+      @if (store.summary(); as sum) {
+        <div class="summary">
+          <h3>{{ 'room.summary.title' | transloco }}</h3>
+          <div class="highlights">
+            @if (sum.mostRoundWins; as mvp) {
+              <div class="card">
+                <span class="tag">{{ 'room.summary.mvp' | transloco }}</span>
+                <app-pixel-avatar
+                  [avatar]="store.playerAvatar(mvp.playerId)"
+                  [color]="store.playerColor(mvp.playerId)"
+                  [size]="24"
+                />
+                <span class="who" [style.color]="store.playerColor(mvp.playerId)">
+                  {{ store.playerName(mvp.playerId) }}
+                </span>
+                <span class="detail">{{ 'room.summary.wins' | transloco: { n: mvp.wins } }}</span>
+              </div>
+            }
+            @if (sum.biggestComeback; as cb) {
+              <div class="card">
+                <span class="tag">{{ 'room.summary.comeback' | transloco }}</span>
+                <app-pixel-avatar
+                  [avatar]="store.playerAvatar(cb.playerId)"
+                  [color]="store.playerColor(cb.playerId)"
+                  [size]="24"
+                />
+                <span class="who" [style.color]="store.playerColor(cb.playerId)">
+                  {{ store.playerName(cb.playerId) }}
+                </span>
+                <span class="detail">
+                  {{ 'room.summary.positions' | transloco: { n: cb.positionsGained } }}
+                </span>
+              </div>
+            }
+          </div>
+          <ol class="rounds">
+            @for (r of sum.perRound; track $index) {
+              <li>
+                <span class="n">{{ $index + 1 }}</span>
+                <span class="game">{{ store.gameName(r.minigameId) }}</span>
+                @if (r.winnerId) {
+                  <app-pixel-avatar
+                    [avatar]="store.playerAvatar(r.winnerId)"
+                    [color]="store.playerColor(r.winnerId)"
+                    [size]="16"
+                  />
+                  <span class="who" [style.color]="store.playerColor(r.winnerId)">
+                    {{ store.playerName(r.winnerId) }}
+                  </span>
+                } @else {
+                  <span class="who">—</span>
+                }
+              </li>
+            }
+          </ol>
+        </div>
+      }
+    </div>
+  </div>
+
+  <div class="actions">
+    @if (store.isHost()) {
+      <button type="button" class="arcade-btn primary" (click)="store.playAgain()">
+        ▶ {{ 'room.final.playAgain' | transloco }}
+      </button>
+    } @else {
+      <span class="hint blink">{{ 'room.final.waitingHost' | transloco }}</span>
+    }
+  </div>
+</section>

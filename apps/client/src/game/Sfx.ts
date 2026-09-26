@@ -60,6 +60,28 @@ export class Sfx {
     this.tone(1319, 200, { delayMs: 70 })
   }
 
+  // Short rising arpeggio for winning a round.
+  win(): void {
+    const notes = [523.25, 659.25, 783.99, 1046.5] // C5 E5 G5 C6
+    notes.forEach((f, i) => this.tone(f, i === notes.length - 1 ? 260 : 90, { delayMs: i * 90 }))
+  }
+
+  // Session-end fanfare: a triumphant two-voice phrase for the final podium.
+  fanfare(): void {
+    const lead: [number, number, number][] = [
+      [392.0, 0, 120],
+      [392.0, 130, 120],
+      [392.0, 260, 120],
+      [523.25, 390, 420],
+      [466.16, 830, 160],
+      [523.25, 1000, 520],
+    ]
+    for (const [f, at, dur] of lead) this.tone(f, dur, { delayMs: at, gain: 0.22 })
+    for (const [f, at, dur] of lead) {
+      this.tone(f / 2, dur, { delayMs: at, type: 'triangle', gain: 0.18 })
+    }
+  }
+
   // Balloon burst: fast downward sweep.
   pop(): void {
     this.tone(400, 180, { slideTo: 50, gain: 0.35 })

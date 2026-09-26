@@ -1,0 +1,127 @@
+:host {
+  display: contents;
+}
+
+.live-board {
+  flex-shrink: 0;
+  width: 12rem;
+  background: var(--c-panel);
+  border: 3px solid var(--c-frame);
+  padding: 0.5rem 0.45rem;
+  overflow-y: auto;
+}
+
+h4 {
+  display: flex;
+  gap: 0.3rem;
+  margin: 0 0 0.4rem;
+  padding: 0 0.15rem 0.35rem;
+  border-bottom: 2px solid var(--c-frame);
+  color: var(--c-amber);
+  font-size: var(--fs-xs);
+  font-weight: normal;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+
+  span:first-child {
+    flex: 1;
+  }
+  .col {
+    color: var(--c-dim);
+    width: 2.1rem;
+    text-align: right;
+  }
+  .col:last-child {
+    margin-right: 0.95rem; // clears the arrow column
+  }
+}
+
+ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+li {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.15rem;
+  font-size: var(--fs-xs);
+  border-bottom: 1px solid var(--c-panel-alt);
+
+  .rank {
+    width: 0.8rem;
+    color: var(--c-dim);
+    text-align: right;
+  }
+  .name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .round {
+    width: 2.1rem;
+    text-align: right;
+    color: var(--c-dim);
+    font-variant-numeric: tabular-nums;
+    &.leader {
+      color: var(--c-amber);
+    }
+  }
+  .pts {
+    width: 2.1rem;
+    text-align: right;
+    color: var(--c-lime);
+    font-variant-numeric: tabular-nums;
+  }
+  .delta {
+    width: 0.65rem;
+    text-align: center;
+    &.up {
+      color: var(--c-lime);
+    }
+    &.down {
+      color: var(--c-red);
+    }
+  }
+  &.me {
+    background: var(--c-panel-alt);
+    box-shadow: inset 3px 0 0 var(--c-cyan);
+  }
+  &.lead .rank {
+    color: var(--c-amber);
+  }
+}
+
+// Phones in portrait: a horizontal strip of compact chips above the canvas.
+@media (max-width: 600px) and (orientation: portrait) {
+  .live-board {
+    width: auto;
+    padding: 0.3rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  h4 {
+    display: none;
+  }
+  ol {
+    display: flex;
+    gap: 0.3rem;
+  }
+  li {
+    flex-shrink: 0;
+    gap: 0.25rem;
+    padding: 0.2rem 0.4rem;
+    border: 1px solid var(--c-frame);
+    .name,
+    .round {
+      display: none;
+    }
+    .pts {
+      width: auto;
+    }
+  }
+}

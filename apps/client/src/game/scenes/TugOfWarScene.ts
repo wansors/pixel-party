@@ -1,152 +1,569 @@
-import { PALETTE } from '@pp/shared'
-import type { ClientMsg, TugOfWarSnapshot } from '@pp/shared'
+import { PALETTE, type TeamId, type TugOfWarSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
-import type { RoundState } from '../RoundState'
-import type { Sfx } from '../Sfx'
-import type { Translate } from '../i18n'
-import {
-  addArcadeBackdrop,
-  bodyStyle,
-  ensurePixelBlock,
-  headlineStyle,
-  hexToCss,
-} from '../pixelStyle'
+import { addBanner, burst, floatText, punch, ring, showBanner } from '../fx'
+import { bodyStyle, ensurePixelGrid, headlineStyle, shade, teamColor } from '../pixelStyle'
+import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
-const RED = 0xff5252
-const BLUE = 0x5b8cff
-const AMBER = PALETTE.amber
+const ROPE = 0xc9a36b
+const ROPE_DARK = 0x8a6a3e
+const ROPE_EDGE = 0x4a3520
+const SKIN = 0xf2c79a
+const PANTS = 0x3a3f66
+const SHOES = 0x23263a
+const LEAD_DEADZONE = 0.08 // offsets this close to 0 don't count as a lead change
+const DANGER = 0.7 // knot this close to a post = "almost there"
 
-// Tug of War canvas. Scene key === the mini-game id so GameClient can start it by id. Reads
-// authoritative snapshots from RoundState and sends one MINIGAME_INPUT per pull (team members only).
-export class TugOfWarScene extends Phaser.Scene {
+// Pullers face right (red side); blue pullers are the same sprite flipped. Brace = digging in, heave =
+// leaning further back with arms at full stretch (played on each of the team's pulls).
+const PULLER_ROWS = {
+  brace: [
+    '__oooo___',
+    '_ossseo__',
+    '_osssso__',
+    '__oooo___',
+    '__obbbo__',
+    '_obhbbbss',
+    '_obhbbo__',
+    '__obbbo__',
+    '__oddo___',
+    '_odo_do__',
+    'od____do_',
+    'kk____kk_',
+  ],
+  heave: [
+    '_oooo____',
+    'ossseo___',
+    'osssso___',
+    '_oooo____',
+    '_obbbo___',
+    'obhbbbbss',
+    'obhbbo___',
+    '_obbbo___',
+    '__oddo___',
+    '__od_do__',
+    '_od___do_',
+    '_kk____kk',
+  ],
+}
+const HAND_ROW = 5.5 // rope passes through the hands (row 5 of 12)
+
+// Knot pennant hanging from the middle of the rope, colored by whoever is ahead.
+const PENNANT_ROWS = [
+  '_kkkkk_',
+  'ktttttk',
+  '_kkkkk_',
+  '__kfk__',
+  '_kfffk_',
+  '_kfhfk_',
+  '_kfffk_',
+  '_kfhfk_',
+  '_kfffk_',
+  '_kf_fk_',
+  '_k___k_',
+]
+
+// Candy-striped goal post with a team flag pointing at the middle of the field.
+function postRows(): string[] {
+  const rows = ['pp______', 'ppffff__', 'ppfffff_', 'ppfhff__', 'pp______']
+  for (let y = 0; y < 13; y++) rows.push(Math.floor(y / 2) % 2 === 0 ? 'pp______' : 'qq______')
+  rows.push('oooo____')
+  return rows
+}
+
+interface Puller {
+  id: string
+  team: TeamId
+  sprite: Phaser.GameObjects.Image
+  brace: string
+  heave: string
+  heaveUntil: number
+}
+
+// Tug of War (team) canvas: a pixel rope with a pennant on its knot, red pullers on the left and blue on
+// the right (each member drawn in their own identity color), goal posts in the team colors. The rope
+// springs toward the server's offset so every change in balance lurches visibly; the team that drags
+// the knot to its own post wins. Tap / SPACE = one pull (team members only).
+export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
   private rope?: Phaser.GameObjects.Graphics
+  private pennant?: Phaser.GameObjects.Image
+  private pennantKeys: Record<TeamId | 'even', string> = { red: '', blue: '', even: '' }
+  private posts: Partial<Record<TeamId, Phaser.GameObjects.Image>> = {}
+  private counts: Partial<Record<TeamId, Phaser.GameObjects.Text>> = {}
   private prompt?: Phaser.GameObjects.Text
-  private teamText?: Phaser.GameObjects.Text
-  private scoreText?: Phaser.GameObjects.Text
-  private timer?: Phaser.GameObjects.Text
-  private trackX = 0
-  private trackW = 0
-  private trackY = 0
-  private knot?: Phaser.GameObjects.Image
-  private knotSide: 'red' | 'blue' | 'amber' | undefined
-  private knotKeys: Record<'red' | 'blue' | 'amber', string> = { red: '', blue: '', amber: '' }
+  private hint?: Phaser.GameObjects.Text
+  private marker?: Phaser.GameObjects.Text
+  private banner?: Phaser.GameObjects.Text
+  private pullers: Puller[] = []
+  private extra: Partial<Record<TeamId, Phaser.GameObjects.Text>> = {}
+  private built = false
+  private cx = 0
+  private reach = 0 // px from the center line to a goal post (= offset ±1)
+  private groundY = 0
+  private ropeY = 0
+  private ps = 4
+  private spacing = 0
+  private gapFromKnot = 0
+  private disp = 0 // displayed (spring-smoothed) rope offset
+  private vel = 0
+  private wobble = 0
+  private lastOffset = 0
+  private lastTotals: Record<TeamId, number> = { red: 0, blue: 0 }
+  private leader: TeamId | null = null
+  private danger: TeamId | null = null
+  private lastDust: Record<TeamId, number> = { red: 0, blue: 0 }
+  private ended = false
+  private pulls = 0
 
-  constructor(
-    private readonly send: (msg: ClientMsg) => void,
-    private readonly state: RoundState,
-    private readonly sfx: Sfx,
-    private readonly t: Translate,
-  ) {
-    super('tug-of-war')
+  constructor(...deps: SceneDeps) {
+    super('tug-of-war', ...deps)
   }
 
-  create(): void {
-    addArcadeBackdrop(this)
+  override create(): void {
+    super.create()
+    this.pullers = []
+    this.extra = {}
+    this.posts = {}
+    this.counts = {}
+    this.built = false
+    this.disp = 0
+    this.vel = 0
+    this.wobble = 0
+    this.lastOffset = 0
+    this.lastTotals = { red: 0, blue: 0 }
+    this.leader = null
+    this.danger = null
+    this.ended = false
+    this.pulls = 0
+
     const { width, height } = this.scale
-    const cx = width / 2
-    this.trackW = width * 0.8
-    this.trackX = (width - this.trackW) / 2
-    this.trackY = height * 0.5
-    this.knot = undefined
-    this.knotSide = undefined
+    const compact = Math.min(width, height) < 520
+    const top = this.top
+    const avail = height - top
+    this.cx = width / 2
+    this.reach = width * (compact ? 0.24 : 0.2)
+    this.ps = compact ? 5 : 7
+    this.spacing = 9 * this.ps * (compact ? 1.05 : 1.2)
+    this.gapFromKnot = 9 * this.ps * 0.9
+    this.groundY = Math.round(top + avail * (compact ? 0.5 : 0.56))
+    this.ropeY = this.groundY - (12 - HAND_ROW) * this.ps
 
-    this.add
-      .text(this.trackX, height * 0.3, this.t('team.red'), headlineStyle(28, RED))
-      .setOrigin(0, 0.5)
-    this.add
-      .text(this.trackX + this.trackW, height * 0.3, this.t('team.blue'), headlineStyle(28, BLUE))
-      .setOrigin(1, 0.5)
+    this.drawPlates(compact)
+    this.drawField(width, compact)
 
-    this.scoreText = this.add
-      .text(cx, height * 0.3, '0 — 0', headlineStyle(24, PALETTE.text))
-      .setOrigin(0.5)
-
-    this.rope = this.add.graphics()
-
-    const knotSize = 32
-    this.knotKeys = {
-      red: ensurePixelBlock(this, 'pp-tug-knot-red', knotSize, RED),
-      blue: ensurePixelBlock(this, 'pp-tug-knot-blue', knotSize, BLUE),
-      amber: ensurePixelBlock(this, 'pp-tug-knot-amber', knotSize, AMBER),
+    this.rope = this.add.graphics().setDepth(10)
+    this.pennantKeys = {
+      red: this.pennantKey('red', teamColor('red')),
+      blue: this.pennantKey('blue', teamColor('blue')),
+      even: this.pennantKey('even', PALETTE.amber),
     }
-    this.knot = this.add.image(cx, this.trackY, this.knotKeys.amber).setDisplaySize(24, 32)
+    this.pennant = this.add
+      .image(this.cx, this.ropeY, this.pennantKeys.even)
+      .setOrigin(0.5, 1.5 / PENNANT_ROWS.length)
+      .setScale(Math.max(3, this.ps - 1))
+      .setDepth(11)
 
+    const groundH = compact ? 16 : 24
+    const below = this.groundY + groundH
     this.prompt = this.add
-      .text(cx, height * 0.68, this.t('game.tugOfWar.pull'), headlineStyle(48, PALETTE.text))
+      .text(
+        this.cx,
+        below + (height - below) * 0.36,
+        '',
+        headlineStyle(compact ? 32 : 40, PALETTE.text, {
+          align: 'center',
+          wordWrap: { width: width * 0.9 },
+        }),
+      )
       .setOrigin(0.5)
-
-    this.teamText = this.add.text(cx, height * 0.8, '', bodyStyle(18, PALETTE.dim)).setOrigin(0.5)
-
-    this.timer = this.add
-      .text(cx, height * 0.14, '', headlineStyle(28, PALETTE.lime))
-      .setOrigin(0.5)
-
-    this.add
-      .text(cx, height * 0.9, this.t('game.tugOfWar.hint'), bodyStyle(16, PALETTE.dim))
-      .setOrigin(0.5)
+    this.hint = this.add
+      .text(
+        this.cx,
+        height - 10,
+        this.t('game.tugOfWar.hint'),
+        bodyStyle(compact ? 12 : 15, PALETTE.dim, {
+          align: 'center',
+          wordWrap: { width: width * 0.92 },
+        }),
+      )
+      .setOrigin(0.5, 1)
+    this.marker = this.add
+      .text(
+        0,
+        0,
+        '▼',
+        headlineStyle(compact ? 16 : 24, this.state.colorOf(this.selfId, PALETTE.text)),
+      )
+      .setOrigin(0.5, 1)
+      .setDepth(12)
+      .setVisible(false)
+    // The finish banner takes the prompt's place under the field, so the rope stays in view.
+    this.banner = addBanner(this)
+      .setFontSize(compact ? 24 : 40)
+      .setWordWrapWidth(width * 0.9)
+      .setY(this.prompt.y)
 
     this.input.on('pointerdown', () => this.pull())
-    this.input.keyboard?.on('keydown-SPACE', () => this.pull())
+    this.onKey('SPACE', () => this.pull())
   }
 
-  private myTeam(): 'red' | 'blue' | undefined {
-    const snap = this.state.state as TugOfWarSnapshot | null
-    if (!snap) return undefined
-    return snap.teams[this.state.selfId ?? '']
+  // Team plates: name + running pull total, red top-left, blue top-right.
+  private drawPlates(compact: boolean): void {
+    const { width } = this.scale
+    const w = Math.min(width * 0.4, 240)
+    const h = compact ? 48 : 64
+    const y = this.top + (compact ? 6 : 12)
+    const margin = compact ? 10 : 24
+    for (const team of ['red', 'blue'] as const) {
+      const color = teamColor(team)
+      const x = team === 'red' ? margin : width - margin - w
+      const g = this.add.graphics()
+      g.fillStyle(shade(color, -0.75), 1)
+      g.fillRect(x, y, w, h)
+      g.fillStyle(shade(color, -0.45), 1)
+      g.fillRect(x, y + h - 4, w, 4)
+      g.lineStyle(3, color, 1)
+      g.strokeRect(x, y, w, h)
+      const align = team === 'red' ? 0 : 1
+      const tx = team === 'red' ? x + 12 : x + w - 12
+      this.add
+        .text(tx, y + h / 2, this.t(`team.${team}`).toUpperCase(), headlineStyle(16, color))
+        .setOrigin(align, 0.5)
+      this.counts[team] = this.add
+        .text(
+          team === 'red' ? x + w - 12 : x + 12,
+          y + h / 2,
+          '0',
+          headlineStyle(compact ? 16 : 24, PALETTE.text),
+        )
+        .setOrigin(1 - align, 0.5)
+    }
+  }
+
+  // Grass field, home zones behind each goal post, the center mark and the posts themselves.
+  private drawField(width: number, compact: boolean): void {
+    const groundH = compact ? 16 : 24
+    const g = this.add.graphics()
+    g.fillStyle(0x1d3a24, 1)
+    g.fillRect(0, this.groundY, width, groundH)
+    for (const team of ['red', 'blue'] as const) {
+      const color = teamColor(team)
+      const x0 = team === 'red' ? 0 : this.cx + this.reach
+      g.fillStyle(shade(color, -0.6), 1)
+      g.fillRect(x0, this.groundY, this.cx - this.reach, groundH)
+    }
+    g.fillStyle(PALETTE.lime, 0.55)
+    for (let x = 6; x < width; x += 22) g.fillRect(x, this.groundY - 3, 4, 3)
+    g.fillStyle(shade(PALETTE.lime, -0.35), 1)
+    g.fillRect(0, this.groundY, width, 3)
+    for (const team of ['red', 'blue'] as const) {
+      g.fillStyle(teamColor(team), 1)
+      g.fillRect(team === 'red' ? 0 : this.cx + this.reach, this.groundY, this.cx - this.reach, 3)
+    }
+    g.fillStyle(PALETTE.text, 0.8)
+    for (let y = this.groundY + 5; y < this.groundY + groundH; y += 6)
+      g.fillRect(this.cx - 2, y, 4, 3)
+
+    for (const team of ['red', 'blue'] as const) {
+      const color = teamColor(team)
+      const key = ensurePixelGrid(this, {
+        key: `pp-tug-post-${team}-${this.ps}`,
+        rows: postRows(),
+        legend: { p: PALETTE.text, q: color, f: color, h: shade(color, 0.45), o: 0x2b2f45 },
+        pixelSize: this.ps,
+      })
+      const x = team === 'red' ? this.cx - this.reach : this.cx + this.reach
+      this.posts[team] = this.add
+        .image(x, this.groundY + 2, key)
+        .setOrigin(team === 'red' ? 0.125 : 0.875, 1)
+        .setFlipX(team === 'blue')
+        .setDepth(5)
+    }
+  }
+
+  private pennantKey(name: string, color: number): string {
+    return ensurePixelGrid(this, {
+      key: `pp-tug-pennant-${name}`,
+      rows: PENNANT_ROWS,
+      legend: { k: ROPE_EDGE, t: ROPE, f: color, h: shade(color, 0.4) },
+      pixelSize: 1,
+    })
+  }
+
+  private pullerKeys(color: number): { brace: string; heave: string } {
+    const legend = {
+      o: shade(color, -0.6),
+      s: SKIN,
+      e: 0x10121c,
+      b: color,
+      h: shade(color, 0.4),
+      d: PANTS,
+      k: SHOES,
+    }
+    const hex = color.toString(16)
+    return {
+      brace: ensurePixelGrid(this, {
+        key: `pp-tug-brace-${hex}`,
+        rows: PULLER_ROWS.brace,
+        legend,
+        pixelSize: 1,
+      }),
+      heave: ensurePixelGrid(this, {
+        key: `pp-tug-heave-${hex}`,
+        rows: PULLER_ROWS.heave,
+        legend,
+        pixelSize: 1,
+      }),
+    }
+  }
+
+  // Team membership is fixed for the round: build each side's line of pullers from the first snapshot.
+  private build(snap: TugOfWarSnapshot): void {
+    this.built = true
+    const compact = Math.min(this.scale.width, this.scale.height) < 520
+    const maxShown = compact ? 3 : 4
+    for (const team of ['red', 'blue'] as const) {
+      const ids = Object.keys(snap.teams)
+        .filter((id) => snap.teams[id] === team)
+        .sort((a, b) => (a === this.selfId ? -1 : b === this.selfId ? 1 : a.localeCompare(b)))
+      for (const id of ids.slice(0, maxShown)) {
+        const keys = this.pullerKeys(this.state.colorOf(id, teamColor(team)))
+        const sprite = this.add
+          .image(0, this.groundY + 1, keys.brace)
+          .setOrigin(0.5, 1)
+          .setScale(this.ps)
+          .setFlipX(team === 'blue')
+          .setDepth(8)
+        this.pullers.push({ id, team, sprite, ...keys, heaveUntil: 0 })
+      }
+      if (ids.length > maxShown) {
+        this.extra[team] = this.add
+          .text(0, this.groundY - 12 * this.ps - 4, `+${ids.length - maxShown}`, bodyStyle(14))
+          .setOrigin(0.5, 1)
+          .setDepth(8)
+      }
+    }
+  }
+
+  private myTeam(): TeamId | undefined {
+    return this.snap?.teams[this.selfId]
   }
 
   private pull(): void {
-    if (!this.myTeam()) return
+    const snap = this.snap
+    if (!snap || snap.done || snap.remainingMs <= 0 || !this.myTeam()) return
     this.sfx.click()
-    this.send({ type: 'MINIGAME_INPUT', input: { kind: 'pull' } })
-  }
-
-  private drawRope(offset: number): void {
-    if (!this.rope) return
-    const g = this.rope
-    g.clear()
-    const cx = this.trackX + this.trackW / 2
-    g.lineStyle(6, PALETTE.dim, 1)
-    g.beginPath()
-    g.moveTo(this.trackX, this.trackY)
-    g.lineTo(this.trackX + this.trackW, this.trackY)
-    g.strokePath()
-    // center line
-    g.lineStyle(2, PALETTE.dim, 1)
-    g.beginPath()
-    g.moveTo(cx, this.trackY - 30)
-    g.lineTo(cx, this.trackY + 30)
-    g.strokePath()
-    // knot marker driven by offset in [-1, 1]
-    const clamped = Math.max(-1, Math.min(1, offset))
-    const knotX = cx + (clamped * this.trackW) / 2
-    const side = clamped < 0 ? 'red' : clamped > 0 ? 'blue' : 'amber'
-    if (side !== this.knotSide) {
-      this.knotSide = side
-      this.knot?.setTexture(this.knotKeys[side])
+    this.sendInput({ kind: 'pull' })
+    const me = this.pullers.find((p) => p.id === this.selfId)
+    if (me) {
+      me.heaveUntil = this.time.now + 120
+      if (++this.pulls % 3 === 0) burst(this, me.sprite.x, this.groundY, 0x8a7a5a, 4, 70)
     }
-    this.knot?.setPosition(knotX, this.trackY)
+    if (this.prompt) punch(this, this.prompt, 0.08, 60)
   }
 
-  override update(): void {
-    const snap = this.state.state as TugOfWarSnapshot | null
-    if (!snap || typeof snap.remainingMs !== 'number') return
+  protected frame(snap: TugOfWarSnapshot | null, time: number, delta: number): void {
+    if (!snap) return
+    if (!this.built) this.build(snap)
+    const team = snap.teams[this.selfId]
+    this.hint?.setVisible(team !== undefined) // spectators have nothing to press
+    this.trackEvents(snap, time, team)
 
-    this.drawRope(snap.offset)
-    this.scoreText?.setText(`${snap.red} — ${snap.blue}`)
-    this.timer?.setText(`${Math.ceil(snap.remainingMs / 1000)}s`)
+    // Spring toward the authoritative offset: slight overshoot = the rope lurches, then settles.
+    const dt = Math.min(0.05, delta / 1000)
+    const acc = 90 * (snap.offset - this.disp) - 12 * this.vel
+    this.vel += acc * dt
+    this.disp = Phaser.Math.Clamp(this.disp + this.vel * dt, -1.08, 1.08)
+    this.wobble *= 0.9
+    const knotX = this.cx + this.disp * this.reach
 
-    const team = this.myTeam()
-    if (team) {
-      const color = team === 'red' ? RED : BLUE
-      this.prompt?.setText(this.t('game.tugOfWar.pull'))
-      this.prompt?.setColor(hexToCss(color))
-      const name = team === 'red' ? this.t('team.red') : this.t('team.blue')
-      this.teamText?.setText(`${this.t('game.tugOfWar.team')} ${name}`)
+    this.drawRope(knotX, time)
+    this.placePullers(knotX, time)
+    this.updatePrompt(snap, team)
+  }
+
+  // Snapshot deltas → feedback: totals (pull pops), lurches, lead changes, near-win, the finish.
+  private trackEvents(snap: TugOfWarSnapshot, time: number, team: TeamId | undefined): void {
+    this.hud?.setScore(
+      team ? `${this.t('game.tugOfWar.team')}: ${this.t(`team.${team}`).toUpperCase()}` : '',
+    )
+    // First snapshot (fresh round or relayout restart): adopt the state as the baseline — the rope
+    // sits where it is, the totals show, and no "RED LEADS!" / "ALMOST!" replays.
+    if (this.firstSnapshot) {
+      for (const t of ['red', 'blue'] as const) {
+        this.lastTotals[t] = snap[t]
+        this.counts[t]?.setText(String(snap[t]))
+      }
+      this.disp = snap.offset
+      this.lastOffset = snap.offset
+      this.leader =
+        snap.offset < -LEAD_DEADZONE ? 'red' : snap.offset > LEAD_DEADZONE ? 'blue' : null
+      this.danger = snap.offset <= -DANGER ? 'red' : snap.offset >= DANGER ? 'blue' : null
+    }
+    for (const t of ['red', 'blue'] as const) {
+      const total = snap[t]
+      const text = this.counts[t]
+      if (total > this.lastTotals[t]) {
+        text?.setText(String(total))
+        if (text) punch(this, text, 0.18, 70)
+        for (const p of this.pullers) if (p.team === t) p.heaveUntil = time + 110
+      }
+      this.lastTotals[t] = total
+    }
+
+    const change = snap.offset - this.lastOffset
+    if (Math.abs(change) > 0.03) {
+      this.wobble = Math.min(10, this.wobble + Math.abs(change) * 70)
+      // The side being dragged kicks up dust.
+      const dragged: TeamId = change < 0 ? 'blue' : 'red'
+      if (time - this.lastDust[dragged] > 260) {
+        this.lastDust[dragged] = time
+        for (const p of this.pullers) {
+          if (p.team === dragged) burst(this, p.sprite.x, this.groundY, 0x8a7a5a, 5, 90)
+        }
+      }
+    }
+    this.lastOffset = snap.offset
+
+    const leader: TeamId | null =
+      snap.offset < -LEAD_DEADZONE ? 'red' : snap.offset > LEAD_DEADZONE ? 'blue' : this.leader
+    if (leader && leader !== this.leader) {
+      const x = this.cx + snap.offset * this.reach
+      floatText(
+        this,
+        x,
+        this.ropeY - 12 * this.ps,
+        this.t('game.tugOfWar.leads', { team: this.t(`team.${leader}`).toUpperCase() }),
+        teamColor(leader),
+        16,
+      )
+      if (team) {
+        if (leader === team) this.sfx.correct()
+        else this.sfx.tick()
+      }
+    }
+    this.leader = leader
+    this.pennant?.setTexture(this.pennantKeys[leader ?? 'even'])
+
+    const danger: TeamId | null =
+      snap.offset <= -DANGER ? 'red' : snap.offset >= DANGER ? 'blue' : null
+    if (danger && danger !== this.danger) {
+      const post = this.posts[danger]
+      if (post) {
+        ring(this, post.x, this.ropeY, teamColor(danger), 48)
+        floatText(
+          this,
+          post.x,
+          post.y - post.displayHeight - 8,
+          this.t('game.tugOfWar.almost'),
+          teamColor(danger),
+          16,
+        )
+      }
+      this.sfx.tick()
+    }
+    this.danger = danger
+    for (const t of ['red', 'blue'] as const) {
+      const post = this.posts[t]
+      post?.setAlpha(this.danger === t ? 0.55 + 0.45 * Math.abs(Math.sin(time / 90)) : 1)
+    }
+
+    if (snap.done && !this.ended) this.finish(snap, team)
+  }
+
+  private finish(snap: TugOfWarSnapshot, team: TeamId | undefined): void {
+    this.ended = true
+    const winner: TeamId | null = snap.offset < 0 ? 'red' : snap.offset > 0 ? 'blue' : null
+    if (!this.banner) return
+    if (winner === null) {
+      showBanner(this, this.banner, this.t('game.common.draw'), PALETTE.amber)
+      this.sfx.tick()
+      return
+    }
+    const color = teamColor(winner)
+    const post = this.posts[winner]
+    if (post) {
+      burst(this, post.x, this.ropeY, color, 28, 300)
+      burst(this, post.x, this.ropeY, PALETTE.amber, 16, 240)
+    }
+    if (!team) {
+      const name = this.t(`team.${winner}`).toUpperCase()
+      showBanner(this, this.banner, this.t('game.tugOfWar.teamWins', { team: name }), color)
+      this.sfx.coin()
+    } else if (team === winner) {
+      showBanner(this, this.banner, this.t('game.common.youWin'), PALETTE.lime)
+      this.sfx.coin()
     } else {
-      this.prompt?.setText(this.t('game.tugOfWar.spectator'))
-      this.prompt?.setColor(hexToCss(PALETTE.dim))
-      this.teamText?.setText('')
+      showBanner(this, this.banner, this.t('game.common.youLose'), PALETTE.red)
+      this.sfx.wrong()
+    }
+  }
+
+  // Twisted rope (alternating strands) across the whole field; it sags and ripples after a lurch.
+  private drawRope(knotX: number, time: number): void {
+    const g = this.rope
+    if (!g) return
+    g.clear()
+    const { width } = this.scale
+    const seg = this.ps * 2
+    const thick = Math.max(4, this.ps + 1)
+    const phase = Math.floor(knotX / seg)
+    for (let x = -seg; x < width + seg; x += seg) {
+      const d = (x - knotX) / Math.max(1, this.scale.width)
+      const y =
+        this.ropeY +
+        this.wobble * Math.sin(d * 18 + time / 45) * (1 - Math.min(1, Math.abs(d) * 1.4))
+      const idx = Math.floor(x / seg) - phase
+      g.fillStyle(ROPE_EDGE, 1)
+      g.fillRect(Math.round(x), Math.round(y - thick / 2) + 1, seg, thick + 1)
+      g.fillStyle(idx % 2 === 0 ? ROPE : ROPE_DARK, 1)
+      g.fillRect(Math.round(x), Math.round(y - thick / 2), seg, thick - 1)
+    }
+    this.pennant?.setPosition(Math.round(knotX), this.ropeY)
+  }
+
+  private placePullers(knotX: number, time: number): void {
+    const idx: Record<TeamId, number> = { red: 0, blue: 0 }
+    for (const p of this.pullers) {
+      const i = idx[p.team]++
+      const dir = p.team === 'red' ? -1 : 1
+      const x = knotX + dir * (this.gapFromKnot + i * this.spacing)
+      p.sprite.setX(Math.round(x)).setTexture(time < p.heaveUntil ? p.heave : p.brace)
+    }
+    for (const t of ['red', 'blue'] as const) {
+      const label = this.extra[t]
+      if (!label) continue
+      const dir = t === 'red' ? -1 : 1
+      label.setX(knotX + dir * (this.gapFromKnot + (idx[t] - 0.5) * this.spacing))
+    }
+    const me = this.pullers.find((p) => p.id === this.selfId)
+    if (me && this.marker) {
+      const bob = Math.round(Math.sin(time / 160) * 3)
+      this.marker.setVisible(true).setPosition(me.sprite.x, this.groundY - 12 * this.ps - 4 + bob)
+    }
+  }
+
+  private updatePrompt(snap: TugOfWarSnapshot, team: TeamId | undefined): void {
+    const prompt = this.prompt
+    if (!prompt) return
+    if (snap.done) {
+      prompt.setVisible(false)
+      return
+    }
+    const compact = Math.min(this.scale.width, this.scale.height) < 520
+    const mode = team ?? 'spectator'
+    if (prompt.getData('mode') === mode) return
+    prompt.setData('mode', mode)
+    if (team) {
+      prompt
+        .setText(this.t('game.tugOfWar.pull'))
+        .setStyle(headlineStyle(compact ? 32 : 40, teamColor(team), { align: 'center' }))
+    } else {
+      prompt.setText(this.t('game.tugOfWar.spectator')).setStyle(
+        bodyStyle(compact ? 15 : 20, PALETTE.text, {
+          align: 'center',
+          wordWrap: { width: this.scale.width * 0.9 },
+        }),
+      )
     }
   }
 }

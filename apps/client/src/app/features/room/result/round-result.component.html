@@ -1,0 +1,124 @@
+@if (store.roundResult(); as rr) {
+  <section class="result arcade-window">
+    <div class="arcade-titlebar">
+      <span>{{ store.gameName(rr.result.minigameId) }}</span>
+      @if (store.intro(); as intro) {
+        <span class="round-no">
+          {{ 'room.header.round' | transloco: { n: rr.round, total: intro.total } }}
+        </span>
+      }
+    </div>
+
+    <div class="body">
+      <div class="col">
+        @if (store.winningTeam(); as wt) {
+          <div class="winner team" [style.--accent]="store.teamColor(wt.id)">
+            <span class="label">{{ 'room.result.teamWinner' | transloco }}</span>
+            <span class="wname">{{ store.teamName(wt.id) }}</span>
+            <span class="members">
+              @for (id of wt.memberIds; track id) {
+                <app-pixel-avatar
+                  [avatar]="store.playerAvatar(id)"
+                  [color]="store.playerColor(id)"
+                  [size]="28"
+                />
+              }
+            </span>
+          </div>
+        } @else if (store.roundWinnerId(); as wid) {
+          <div class="winner" [style.--accent]="store.playerColor(wid)">
+            <span class="label">{{ 'room.result.roundWinner' | transloco }}</span>
+            <span class="crown" aria-hidden="true"></span>
+            <app-pixel-avatar
+              class="bounce"
+              [avatar]="store.playerAvatar(wid)"
+              [color]="store.playerColor(wid)"
+              [size]="56"
+            />
+            <span class="wname">{{ store.playerName(wid) }}</span>
+            @if (store.roundStat(wid); as stat) {
+              <span class="wstat">{{ stat }}</span>
+            }
+          </div>
+        }
+
+        <h3>{{ 'room.result.thisRound' | transloco }}</h3>
+        <ol class="hs">
+          @for (s of rr.result.scores; track s.playerId) {
+            <li [class.me]="s.playerId === store.selfId()">
+              <span class="rank" [class]="'rank r' + s.rank">{{ s.rank }}</span>
+              <app-pixel-avatar
+                [avatar]="store.playerAvatar(s.playerId)"
+                [color]="store.playerColor(s.playerId)"
+                [size]="22"
+              />
+              <span class="who">
+                <span class="name" [style.color]="store.playerColor(s.playerId)">
+                  {{ store.playerName(s.playerId) }}
+                </span>
+                @if (store.calloutFor(s.playerId); as callout) {
+                  <span class="callout">{{ callout }}</span>
+                }
+              </span>
+              @if (store.roundStat(s.playerId); as stat) {
+                <span class="stat">{{ stat }}</span>
+              }
+              @if (store.roundHandicap(s.playerId); as bonus) {
+                <span class="catchup">{{ 'room.result.catchup' | transloco: { n: bonus } }}</span>
+              }
+              <span class="pts">+{{ s.points | pts }}</span>
+            </li>
+          }
+        </ol>
+      </div>
+
+      <div class="col">
+        <h3>{{ 'room.scoreboard.title' | transloco }}</h3>
+        <ol class="hs">
+          @for (s of store.scoreboard(); track s.playerId) {
+            <li [class.me]="s.playerId === store.selfId()">
+              <span class="rank" [class]="'rank r' + s.rank">{{ s.rank }}</span>
+              <app-pixel-avatar
+                [avatar]="store.playerAvatar(s.playerId)"
+                [color]="store.playerColor(s.playerId)"
+                [size]="22"
+              />
+              <span class="who">
+                <span class="name" [style.color]="store.playerColor(s.playerId)">
+                  {{ store.playerName(s.playerId) }}
+                </span>
+              </span>
+              @switch (sign(store.rankDelta(s.playerId))) {
+                @case (1) {
+                  <span class="delta up">▲</span>
+                }
+                @case (-1) {
+                  <span class="delta down">▼</span>
+                }
+                @default {
+                  <span class="delta"></span>
+                }
+              }
+              <span class="gain">+{{ store.roundPoints(s.playerId) | pts }}</span>
+              <span class="pts">{{ s.points | pts }}</span>
+            </li>
+          }
+        </ol>
+
+        @if (store.hasProfile()) {
+          <div class="profile">
+            <h3>{{ 'room.summary.profileTitle' | transloco }}</h3>
+            <app-skill-radar
+              [data]="store.myRadar()"
+              [color]="store.playerColor(store.selfId())"
+              [size]="150"
+              [ariaLabel]="'room.summary.profileTitle' | transloco"
+            />
+          </div>
+        }
+      </div>
+    </div>
+
+    <p class="next blink">{{ 'room.scoreboard.nextRound' | transloco }}</p>
+  </section>
+}

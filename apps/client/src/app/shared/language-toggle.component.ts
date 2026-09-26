@@ -24,7 +24,7 @@ import { LanguageService } from '../core/i18n/language.service'
   `,
   styles: `
     .lang { display: inline-flex; gap: 0.25rem; }
-    .seg { font-size: 0.6rem; padding: 0.3rem 0.4rem; opacity: 0.6; }
+    .seg { font-size: var(--fs-xs); padding: 0.3rem 0.4rem; opacity: 0.6; }
     .seg.on { opacity: 1; border-color: var(--c-amber); color: var(--c-amber); }
   `,
 })

@@ -1,434 +1,58 @@
-<main class="room">
-  <header>
-    <span class="code">{{ 'room.code' | transloco }} {{ code() }}</span>
-    @if (reconnecting()) {
-      <span class="reconnect blink">{{ 'room.reconnecting' | transloco }}</span>
+<main class="room" [class.in-round]="store.view() === 'round'">
+  <header class="topbar">
+    <span class="room-code">
+      {{ 'room.code' | transloco }} <b>{{ store.code() }}</b>
+    </span>
+    @if (store.currentRound(); as r) {
+      <span class="round-info">
+        <span class="round-no">{{ 'room.header.round' | transloco: { n: r.round, total: r.total } }}</span>
+        <span class="round-game">{{ store.gameName(r.game) }}</span>
+        <span class="pips" aria-hidden="true">
+          @for (i of pips(r.total); track i) {
+            <span class="pip" [class.done]="i < r.round" [class.now]="i === r.round"></span>
+          }
+        </span>
+      </span>
     }
-    <app-audio-controls />
+    <span class="right">
+      @if (store.reconnecting()) {
+        <span class="reconnect blink">{{ 'room.reconnecting' | transloco }}</span>
+      }
+      <app-audio-controls />
+    </span>
   </header>
 
-  @if (message()) {
-    <p class="msg">{{ message() }}</p>
+  @if (store.message()) {
+    <p class="msg" role="alert">{{ store.message() }}</p>
   }
 
-  <!-- Kept out of the @switch: the Phaser canvas must survive scoreboard/intro views. -->
-  <section class="round" [class.active]="view() === 'round'">
+  <!-- Kept out of the @switch: the Phaser canvas must survive the intro/result views. -->
+  <section class="round" [class.active]="store.view() === 'round'">
     <div class="round-layout">
       <div id="game-container"></div>
-      <aside class="live-board" [attr.aria-label]="'room.scoreboard.live' | transloco">
-        <h4>{{ 'room.scoreboard.live' | transloco }}</h4>
-        <ol>
-          @for (s of liveStandings(); track s.playerId) {
-            <li [class.me]="s.playerId === selfId()" [class.lead]="s.rank === 1">
-              <span class="rank">{{ s.rank }}</span>
-              <app-pixel-avatar
-                [avatar]="playerAvatar(s.playerId)"
-                [color]="playerColor(s.playerId)"
-                [size]="18"
-              />
-              <span class="name" [style.color]="playerColor(s.playerId)">{{
-                playerName(s.playerId)
-              }}</span>
-              <span class="pts">{{ s.points }}</span>
-              @if (rankDelta(s.playerId) > 0) {
-                <span class="delta up">▲</span>
-              } @else if (rankDelta(s.playerId) < 0) {
-                <span class="delta down">▼</span>
-              } @else {
-                <span class="delta"></span>
-              }
-            </li>
-          }
-        </ol>
-      </aside>
+      <app-live-board />
     </div>
   </section>
 
-  @switch (view()) {
+  @switch (store.view()) {
     @case ('connecting') {
-      <p class="center blink">{{ 'room.connecting' | transloco }}</p>
+      <p class="connecting blink">{{ 'room.connecting' | transloco }}</p>
     }
-
     @case ('lobby') {
-      <section class="lobby arcade-window">
-        <div class="arcade-titlebar">
-          {{ 'room.lobby.title' | transloco }} — {{ players().length }}
-          {{ 'room.lobby.players' | transloco }}
-        </div>
-        <div class="pad">
-          <div class="invite">
-            <span class="url">{{ inviteUrl }}</span>
-            <button type="button" class="arcade-btn" (click)="copyInvite()">
-              {{ (copied() ? 'common.copied' : 'common.copyLink') | transloco }}
-            </button>
-          </div>
-          <ul class="players">
-            @for (p of players(); track p.id) {
-              <li [class.off]="!p.connected">
-                <app-pixel-avatar [avatar]="$any(p.avatar)" [color]="p.color" [size]="28" />
-                <span class="pname" [style.color]="p.color">{{ p.name }}</span>
-                @if (usesTeams() && p.team) {
-                  <span class="team-badge" [style.borderColor]="teamColor(p.team)"
-                    [style.color]="teamColor(p.team)">{{ teamName(p.team) }}</span>
-                }
-                @if (p.id === hostId()) {
-                  <span class="tag">{{ 'room.lobby.host' | transloco }}</span>
-                }
-                @if (!p.connected) {
-                  <span class="tag off">{{ 'room.lobby.off' | transloco }}</span>
-                } @else if (p.ready) {
-                  <span class="ready">{{ 'room.lobby.ready' | transloco }}</span>
-                }
-                @if (isHost()) {
-                  <span class="host-actions">
-                    @if (usesTeams() && p.team) {
-                      <button
-                        type="button"
-                        class="mini"
-                        [title]="'room.lobby.swapTeam' | transloco"
-                        (click)="swapTeam(p)"
-                      >
-                        ⇄
-                      </button>
-                    }
-                    @if (p.id !== selfId() && p.id !== hostId()) {
-                      <button
-                        type="button"
-                        class="mini"
-                        [title]="'room.lobby.makeHost' | transloco"
-                        (click)="makeHost(p.id)"
-                      >
-                        {{ 'room.lobby.makeHost' | transloco }}
-                      </button>
-                    }
-                    @if (p.id !== selfId()) {
-                      <button
-                        type="button"
-                        class="mini danger"
-                        [title]="'room.lobby.kick' | transloco"
-                        (click)="kick(p.id)"
-                      >
-                        {{ 'room.lobby.kick' | transloco }}
-                      </button>
-                    }
-                  </span>
-                }
-              </li>
-            }
-          </ul>
-
-          <div class="games">
-            <div class="games-header">
-              <h3>{{ 'room.lobby.games' | transloco }}</h3>
-              @if (isHost()) {
-                <div class="bulk">
-                  <button type="button" (click)="selectAllGames()">
-                    {{ 'room.lobby.selectAll' | transloco }}
-                  </button>
-                  <button type="button" (click)="deselectAllGames()">
-                    {{ 'room.lobby.selectNone' | transloco }}
-                  </button>
-                </div>
-              }
-            </div>
-
-            <ul class="axis-filter">
-              <li>
-                <button
-                  type="button"
-                  class="axis-chip"
-                  [class.active]="axisFilter() === null"
-                  (click)="axisFilter.set(null)"
-                >
-                  {{ 'room.lobby.allGames' | transloco }}
-                </button>
-              </li>
-              @for (axis of skillAxes; track axis) {
-                <li>
-                  <button
-                    type="button"
-                    class="axis-chip"
-                    [class.active]="axisFilter() === axis"
-                    [style.--chip-color]="axisColor(axis)"
-                    (click)="toggleAxisFilter(axis)"
-                  >
-                    <span class="dot" [style.background]="axisColor(axis)"></span>
-                    {{ catalog.axisLabel(axis) }}
-                  </button>
-                </li>
-              }
-            </ul>
-
-            <ul class="game-grid">
-              @for (g of filteredGames(); track g.id) {
-                <li>
-                  <label class="game-card" [class.selected]="isSelected(g.id)" [class.disabled]="!isHost()">
-                    <input
-                      type="checkbox"
-                      class="check"
-                      [checked]="isSelected(g.id)"
-                      [disabled]="!isHost()"
-                      (change)="toggleGame(g.id)"
-                    />
-                    <span class="gname">{{ catalog.minigameName(g.id) }}</span>
-                    <span class="blurb">{{ catalog.minigameBlurb(g.id) }}</span>
-                    <span class="axes">
-                      @for (a of g.axes; track a) {
-                        <span
-                          class="axis-dot"
-                          [style.background]="axisColor(a)"
-                          [title]="catalog.axisLabel(a)"
-                        ></span>
-                      }
-                    </span>
-                  </label>
-                </li>
-              }
-            </ul>
-
-            @if (selectedGameIds().length > 0) {
-              <div class="coverage">
-                <h4>{{ 'room.lobby.coverage' | transloco }}</h4>
-                <app-skill-radar
-                  [data]="selectionCoverage()"
-                  color="#29d3f2"
-                  [size]="130"
-                  [ariaLabel]="'room.lobby.coverage' | transloco"
-                />
-              </div>
-            }
-
-            <label class="rounds">
-              {{ 'room.lobby.rounds' | transloco }}
-              <input
-                type="number"
-                min="1"
-                [max]="selectedGameIds().length || 1"
-                [value]="rounds()"
-                [disabled]="!isHost()"
-                (change)="setRounds($any($event.target).value)"
-              />
-            </label>
-            <label class="handicap-toggle">
-              <input
-                type="checkbox"
-                [checked]="handicap()"
-                [disabled]="!isHost()"
-                (change)="toggleHandicap($any($event.target).checked)"
-              />
-              {{ 'room.lobby.handicap' | transloco }}
-            </label>
-          </div>
-
-          <div class="actions">
-            <button type="button" class="arcade-btn" (click)="toggleReady()">
-              {{ (myReady ? 'room.lobby.notReady' : 'room.lobby.imReady') | transloco }}
-            </button>
-            @if (isHost() && usesTeams()) {
-              <button type="button" class="arcade-btn" (click)="shuffleTeams()">
-                {{ 'room.lobby.shuffleTeams' | transloco }}
-              </button>
-            }
-            @if (isHost()) {
-              <button
-                type="button"
-                class="arcade-btn primary"
-                [disabled]="selectedGameIds().length === 0"
-                (click)="start()"
-              >
-                {{ 'room.lobby.start' | transloco }}
-              </button>
-            }
-          </div>
-        </div>
-      </section>
+      <app-lobby />
     }
-
     @case ('intro') {
-      <section class="center intro">
-        <h2>{{ 'room.intro.round' | transloco }} {{ intro()?.round }} / {{ intro()?.total }}</h2>
-        <p class="game">{{ gameName(intro()?.game ?? '') }}</p>
-        @if (countdown() !== null) {
-          <p class="count">{{ countdown() }}</p>
-        } @else {
-          <p class="count go">{{ 'room.intro.go' | transloco }}</p>
-        }
-      </section>
+      <app-round-intro />
     }
-
     @case ('round-result') {
-      <section class="board arcade-window">
-        <div class="arcade-titlebar">{{ gameName(roundResult()?.result?.minigameId ?? '') }}</div>
-        <div class="pad">
-          @if (winningTeam(); as wt) {
-            <div class="team-winner" [style.borderColor]="teamColor(wt.id)">
-              <span class="label">{{ 'room.result.teamWinner' | transloco }}</span>
-              <span class="tname" [style.color]="teamColor(wt.id)">{{ teamName(wt.id) }}</span>
-            </div>
-          } @else if (roundWinnerId(); as wid) {
-            <div class="round-winner">
-              <span class="label">{{ 'room.result.roundWinner' | transloco }}</span>
-              <app-pixel-avatar
-                [avatar]="playerAvatar(wid)"
-                [color]="playerColor(wid)"
-                [size]="48"
-              />
-              <span class="wname" [style.color]="playerColor(wid)">{{ playerName(wid) }}</span>
-            </div>
-          }
-          <ol class="highscore">
-            @for (s of roundResult()?.result?.scores ?? []; track s.playerId) {
-              <li [class.me]="s.playerId === selfId()" [class.lead]="s.rank === 1">
-                <span class="rank">{{ s.rank }}</span>
-                <app-pixel-avatar
-                  [avatar]="playerAvatar(s.playerId)"
-                  [color]="playerColor(s.playerId)"
-                  [size]="24"
-                />
-                <span class="name" [style.color]="playerColor(s.playerId)">{{
-                  playerName(s.playerId)
-                }}</span>
-                @if (roundStat(s.playerId); as stat) {
-                  <span class="stat">{{ stat }}</span>
-                }
-                @if (roundHandicap(s.playerId); as bonus) {
-                  <span class="catchup">{{ 'room.result.catchup' | transloco: { n: bonus } }}</span>
-                }
-                <span class="pts">+{{ s.points }}</span>
-                @if (calloutFor(s.playerId); as callout) {
-                  <span class="callout">{{ callout }}</span>
-                }
-              </li>
-            }
-          </ol>
-          @if (hasProfile()) {
-            <div class="profile">
-              <h3>{{ 'room.summary.profileTitle' | transloco }}</h3>
-              <app-skill-radar
-                [data]="myRadar()"
-                [color]="playerColor(selfId())"
-                [size]="140"
-                [ariaLabel]="'room.summary.profileTitle' | transloco"
-              />
-            </div>
-          }
-          @if (scoreboard().length) {
-            <h3>{{ 'room.scoreboard.title' | transloco }}</h3>
-            <ol class="highscore">
-              @for (s of scoreboard(); track s.playerId) {
-                <li [class.me]="s.playerId === selfId()" [class.lead]="s.rank === 1">
-                  <span class="rank">{{ s.rank }}</span>
-                  <app-pixel-avatar
-                    [avatar]="playerAvatar(s.playerId)"
-                    [color]="playerColor(s.playerId)"
-                    [size]="24"
-                  />
-                  <span class="name" [style.color]="playerColor(s.playerId)">{{
-                    playerName(s.playerId)
-                  }}</span>
-                  <span class="pts">{{ s.points }}</span>
-                </li>
-              }
-            </ol>
-          }
-          <p class="hint blink">{{ 'room.scoreboard.nextRound' | transloco }}</p>
-        </div>
-      </section>
+      <app-round-result />
     }
-
     @case ('final') {
-      <section class="board arcade-window">
-        <div class="arcade-titlebar">{{ 'room.final.title' | transloco }}</div>
-        <div class="pad">
-          <ol class="highscore">
-            @for (s of final(); track s.playerId) {
-              <li [class.me]="s.playerId === selfId()" [class.lead]="s.rank === 1">
-                <span class="rank">{{ s.rank === 1 ? ('room.final.first' | transloco) : s.rank }}</span>
-                <app-pixel-avatar
-                  [avatar]="playerAvatar(s.playerId)"
-                  [color]="playerColor(s.playerId)"
-                  [size]="24"
-                />
-                <span class="name" [style.color]="playerColor(s.playerId)">{{
-                  playerName(s.playerId)
-                }}</span>
-                <span class="pts">{{ s.points }}</span>
-              </li>
-            }
-          </ol>
-          @if (final().length) {
-            <p class="winner blink">
-              {{ 'room.final.newHighScore' | transloco }} - {{ playerName(final()[0].playerId) }}!
-            </p>
-          }
-
-          @if (hasProfile()) {
-            <div class="profile">
-              <h3>{{ 'room.summary.profileTitle' | transloco }}</h3>
-              <app-skill-radar
-                [data]="myRadar()"
-                [color]="playerColor(selfId())"
-                [size]="220"
-                [ariaLabel]="'room.summary.profileTitle' | transloco"
-              />
-            </div>
-          }
-
-          @if (summary(); as sum) {
-            <div class="summary">
-              <h3>{{ 'room.summary.title' | transloco }}</h3>
-              <ul class="highlights">
-                @if (sum.mostRoundWins; as mvp) {
-                  <li>
-                    <span class="tag">{{ 'room.summary.mvp' | transloco }}</span>
-                    <span class="who" [style.color]="playerColor(mvp.playerId)">{{
-                      playerName(mvp.playerId)
-                    }}</span>
-                    <span class="detail">{{
-                      'room.summary.wins' | transloco: { n: mvp.wins }
-                    }}</span>
-                  </li>
-                }
-                @if (sum.biggestComeback; as cb) {
-                  <li>
-                    <span class="tag">{{ 'room.summary.comeback' | transloco }}</span>
-                    <span class="who" [style.color]="playerColor(cb.playerId)">{{
-                      playerName(cb.playerId)
-                    }}</span>
-                    <span class="detail">{{
-                      'room.summary.positions' | transloco: { n: cb.positionsGained }
-                    }}</span>
-                  </li>
-                }
-              </ul>
-              <ol class="rounds">
-                @for (r of sum.perRound; track $index) {
-                  <li>
-                    <span class="game">{{ gameName(r.minigameId) }}</span>
-                    @if (r.winnerId) {
-                      <span class="who" [style.color]="playerColor(r.winnerId)">{{
-                        playerName(r.winnerId)
-                      }}</span>
-                    }
-                  </li>
-                }
-              </ol>
-            </div>
-          }
-
-          @if (isHost()) {
-            <div class="actions">
-              <button type="button" class="arcade-btn primary" (click)="playAgain()">
-                {{ 'room.final.playAgain' | transloco }}
-              </button>
-            </div>
-          } @else {
-            <p class="hint">{{ 'room.final.waitingHost' | transloco }}</p>
-          }
-        </div>
-      </section>
+      <app-final />
     }
   }
 
-  <footer><app-language-toggle /></footer>
+  @if (store.view() !== 'round') {
+    <footer><app-language-toggle /></footer>
+  }
 </main>

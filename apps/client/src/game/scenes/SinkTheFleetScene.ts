@@ -1,207 +1,277 @@
-import { PALETTE } from '@pp/shared'
-import type { ClientMsg, SinkTheFleetSnapshot } from '@pp/shared'
-import Phaser from 'phaser'
-import type { RoundState } from '../RoundState'
-import type { Sfx } from '../Sfx'
-import type { Translate } from '../i18n'
-import { addArcadeBackdrop, bodyStyle, ensurePixelBlock, headlineStyle } from '../pixelStyle'
+import { PALETTE, type SinkTheFleetDuelView, type SinkTheFleetSnapshot } from '@pp/shared'
+import type Phaser from 'phaser'
+import { burst, floatText, punch, shake } from '../fx'
+import { bodyStyle, headlineStyle } from '../pixelStyle'
+import { MiniGameScene, type SceneDeps } from './MiniGameScene'
+import {
+  NavalBoard,
+  NavalEndCard,
+  type NavalShot,
+  drawSegmentBar,
+  layoutBoards,
+  setFittedText,
+  setTextColor,
+} from './navalGrid'
 
-const HIT = PALETTE.red
-const MISS = PALETTE.dim
-const NEUTRAL = PALETTE.panel
+// Lets the wreck reveal play before the end card covers the middle of the screen.
+const END_CARD_DELAY_MS = 1100
 
-// Sink the Fleet (Battleship duel) canvas. Renders two grids: the TARGET grid (fire at the opponent)
-// and YOUR FLEET grid (incoming damage). Fires on the local player's turn only. The snapshot is
-// server-authoritative and never carries ship positions. Scene key === mini-game id.
-export class SinkTheFleetScene extends Phaser.Scene {
+// Sink the Fleet (Battleship duel) canvas. Two pixel seas: ENEMY WATERS (tap a cell to fire, on your
+// turn only) and YOUR FLEET (the rival's shots at you). The snapshot never carries ship positions —
+// only shot results — so every splash, fire and wreck here is exactly what the server resolved. A turn
+// banner + draining turn bar and a glowing frame on the board in play make whose-shot-it-is obvious.
+export class SinkTheFleetScene extends MiniGameScene<SinkTheFleetSnapshot> {
+  private target?: NavalBoard
+  private own?: NavalBoard
+  private card?: NavalEndCard
   private turnText?: Phaser.GameObjects.Text
-  private infoText?: Phaser.GameObjects.Text
-  private resultText?: Phaser.GameObjects.Text
-  private targetLabel?: Phaser.GameObjects.Text
-  private fleetLabel?: Phaser.GameObjects.Text
-  private waitText?: Phaser.GameObjects.Text
-  private targetCells: Phaser.GameObjects.Image[] = []
-  private fleetCells: Phaser.GameObjects.Image[] = []
-  private built = false
-  private neutralKey = ''
-  private hitKey = ''
-  private missKey = ''
+  private turnBar?: Phaser.GameObjects.Graphics
+  private hint?: Phaser.GameObjects.Text
+  private bar = { x: 0, y: 0, w: 0, h: 0 }
+  private boardsTop = 0
+  private boardsBottom = 0
+  private turnSizes: number[] = []
+  private turnMax = 0
+  private wasMyTurn: boolean | null = null
+  private endedAt = -1
+  private boardsHidden = false
 
-  constructor(
-    private readonly send: (msg: ClientMsg) => void,
-    private readonly state: RoundState,
-    private readonly sfx: Sfx,
-    private readonly t: Translate,
-  ) {
-    super('sink-the-fleet')
+  constructor(...deps: SceneDeps) {
+    super('sink-the-fleet', ...deps)
   }
 
-  create(): void {
-    addArcadeBackdrop(this)
-    this.built = false
-    this.targetCells = []
-    this.fleetCells = []
+  override create(): void {
+    super.create()
+    this.target = undefined
+    this.own = undefined
+    this.turnMax = 0
+    this.wasMyTurn = null
+    this.endedAt = -1
+    this.boardsHidden = false
     const { width, height } = this.scale
+    const compact = Math.min(width, height) < 520
     const cx = width / 2
+
+    const turnSize = compact ? 16 : 24
+    this.turnSizes = compact ? [16, 12, 8] : [24, 16]
     this.turnText = this.add
-      .text(cx, height * 0.05, '', headlineStyle(24, PALETTE.amber))
+      .text(cx, this.top + turnSize / 2 + 4, '', headlineStyle(turnSize, PALETTE.amber))
       .setOrigin(0.5)
-    this.infoText = this.add
-      .text(cx, height * 0.11, '', bodyStyle(16, PALETTE.text, { align: 'center' }))
-      .setOrigin(0.5)
-    this.resultText = this.add
-      .text(cx, height * 0.05, '', headlineStyle(28, PALETTE.amber))
-      .setOrigin(0.5)
-      .setVisible(false)
-    this.waitText = this.add
-      .text(cx, height / 2, '...', headlineStyle(24, PALETTE.text))
-      .setOrigin(0.5)
-      .setVisible(false)
-    this.add
-      .text(cx, height * 0.95, this.t('game.sinkTheFleet.hint'), bodyStyle(14, PALETTE.dim))
-      .setOrigin(0.5)
+    this.bar = {
+      w: Math.min(width * (compact ? 0.7 : 0.4), 380),
+      h: compact ? 6 : 8,
+      x: 0,
+      y: this.top + turnSize + (compact ? 12 : 16),
+    }
+    this.bar.x = cx - this.bar.w / 2
+    this.turnBar = this.add.graphics()
+    this.boardsTop = this.bar.y + this.bar.h + (compact ? 6 : 10)
+
+    const hintSize = compact ? 11 : 14
+    this.hint = this.add
+      .text(
+        cx,
+        height - 8,
+        this.t('game.sinkTheFleet.hint'),
+        bodyStyle(hintSize, PALETTE.dim, { align: 'center', wordWrap: { width: width * 0.92 } }),
+      )
+      .setOrigin(0.5, 1)
+    this.boardsBottom = height - hintSize * (compact ? 2.6 : 1.8) - 8
+    this.card = new NavalEndCard(this)
   }
 
-  // Both grids are built once, when the first snapshot (with a grid side length) arrives.
-  private build(snap: SinkTheFleetSnapshot): void {
+  // Both boards are built once the first snapshot says how big the sea is.
+  private build(snap: SinkTheFleetSnapshot, fleetCells: number): void {
     const { width, height } = this.scale
-    const n = snap.grid
-    const sideBySide = width > height
-    if (sideBySide) {
-      const area = Math.min(width * 0.42, height * 0.55)
-      this.buildGrid(this.targetCells, width * 0.28, height * 0.55, area, n, true)
-      this.buildGrid(this.fleetCells, width * 0.72, height * 0.55, area, n, false)
-      const labelY = height * 0.55 - area / 2 - 18
-      this.targetLabel = this.gridLabel(width * 0.28, labelY, this.t('game.sinkTheFleet.target'))
-      this.fleetLabel = this.gridLabel(width * 0.72, labelY, this.t('game.sinkTheFleet.yourFleet'))
-    } else {
-      const area = Math.min(width * 0.82, height * 0.34)
-      this.buildGrid(this.targetCells, width / 2, height * 0.38, area, n, true)
-      this.buildGrid(this.fleetCells, width / 2, height * 0.74, area, n, false)
-      this.targetLabel = this.gridLabel(
-        width / 2,
-        height * 0.38 - area / 2 - 18,
-        this.t('game.sinkTheFleet.target'),
-      )
-      this.fleetLabel = this.gridLabel(
-        width / 2,
-        height * 0.74 - area / 2 - 18,
-        this.t('game.sinkTheFleet.yourFleet'),
-      )
-    }
-    this.built = true
+    const rects = layoutBoards(width, height, this.boardsTop, this.boardsBottom)
+    this.target = new NavalBoard(this, rects.target, snap.grid, fleetCells, (cell) =>
+      this.fire(cell),
+    )
+    this.own = new NavalBoard(this, rects.own, snap.grid, fleetCells)
   }
 
-  private gridLabel(x: number, y: number, text: string): Phaser.GameObjects.Text {
-    return this.add.text(x, y, text, bodyStyle(16, PALETTE.text)).setOrigin(0.5)
-  }
-
-  private buildGrid(
-    into: Phaser.GameObjects.Image[],
-    ccx: number,
-    ccy: number,
-    area: number,
-    n: number,
-    interactive: boolean,
-  ): void {
-    const gap = area * 0.02
-    const size = (area - gap * (n - 1)) / n
-    const cellPx = Math.max(4, Math.round(size))
-    this.neutralKey = ensurePixelBlock(this, `pp-fleet-cell-neutral-${cellPx}`, cellPx, NEUTRAL)
-    this.hitKey = ensurePixelBlock(this, `pp-fleet-cell-hit-${cellPx}`, cellPx, HIT)
-    this.missKey = ensurePixelBlock(this, `pp-fleet-cell-miss-${cellPx}`, cellPx, MISS)
-    const startX = ccx - area / 2 + size / 2
-    const startY = ccy - area / 2 + size / 2
-    for (let i = 0; i < n * n; i++) {
-      const col = i % n
-      const row = Math.floor(i / n)
-      const x = startX + col * (size + gap)
-      const y = startY + row * (size + gap)
-      const img = this.add.image(x, y, this.neutralKey).setDisplaySize(size, size)
-      if (interactive) {
-        img.setInteractive({ useHandCursor: true })
-        img.on('pointerdown', () => this.fire(i))
-      }
-      into.push(img)
-    }
+  protected override remainingMs(snap: SinkTheFleetSnapshot): number {
+    return snap.roundRemainingMs
   }
 
   private fire(cell: number): void {
-    const snap = this.state.state as SinkTheFleetSnapshot | null
-    if (!snap) return
-    const me = snap.players[this.state.selfId ?? '']
-    if (!me || me.done || !me.yourTurn) return
-    if (me.opponentId === null) return
+    const me = this.snap?.players[this.selfId]
+    if (!me || me.done || !me.yourTurn || me.opponentId === null) return
     if (me.shots.some((s) => s.cell === cell)) return
     this.sfx.click()
-    this.send({ type: 'MINIGAME_INPUT', input: { kind: 'fire', cell } })
+    this.sendInput({ kind: 'fire', cell })
+    this.target?.setPending(cell)
   }
 
-  override update(): void {
-    const snap = this.state.state as SinkTheFleetSnapshot | null
+  protected frame(snap: SinkTheFleetSnapshot | null, time: number): void {
     if (!snap) return
-    if (!this.built) this.build(snap)
-    const me = snap.players[this.state.selfId ?? '']
+    const me = snap.players[this.selfId]
+    this.hint?.setVisible(!!me && !me.done) // nothing to tap once the duel is over (or on a bye)
     if (!me) {
-      this.setGridsVisible(false)
-      this.waitText?.setVisible(true)
-      this.turnText?.setText('')
-      this.infoText?.setText('')
-      this.resultText?.setVisible(false)
+      this.hideBoards()
+      this.card?.show(this.t('game.common.waiting'), PALETTE.dim)
       return
     }
-    this.waitText?.setVisible(false)
-    this.setGridsVisible(true)
-
     if (me.opponentId === null) {
-      this.turnText?.setText(this.t('game.sinkTheFleet.bye'))
-      this.infoText?.setText('')
-      this.resultText?.setVisible(false)
+      this.hideBoards()
+      this.hud?.setScore('')
+      this.card?.show(this.t('game.common.youWin'), PALETTE.lime, this.t('game.sinkTheFleet.bye'))
       return
     }
-
-    const roundSecs = Math.ceil(snap.roundRemainingMs / 1000)
-    const turnSecs = Math.ceil(me.turnRemainingMs / 1000)
-    this.infoText?.setText(
-      `${me.hitsOnOpponent}/${me.fleetCells}  vs  ${me.hitsOnYou}/${me.fleetCells}\n${turnSecs}s / ${roundSecs}s`,
-    )
-
-    if (me.done) {
-      this.turnText?.setVisible(false)
-      const key =
-        me.won === true
-          ? 'game.sinkTheFleet.won'
-          : me.won === false
-            ? 'game.sinkTheFleet.lost'
-            : 'game.sinkTheFleet.draw'
-      this.resultText?.setText(this.t(key)).setVisible(true)
-    } else {
-      this.resultText?.setVisible(false)
-      this.turnText
-        ?.setVisible(true)
-        .setText(
-          me.yourTurn ? this.t('game.sinkTheFleet.yourTurn') : this.t('game.sinkTheFleet.waitTurn'),
-        )
+    if (!this.target) this.build(snap, me.fleetCells)
+    const target = this.target
+    const own = this.own
+    if (!target || !own) return
+    if (this.boardsHidden) {
+      this.boardsHidden = false
+      target.setVisible(true)
+      own.setVisible(true)
     }
 
-    const shotByCell = new Map<number, boolean>()
-    for (const s of me.shots) shotByCell.set(s.cell, s.hit)
-    this.targetCells.forEach((img, i) => {
-      img.setTexture(
-        shotByCell.has(i) ? (shotByCell.get(i) ? this.hitKey : this.missKey) : this.neutralKey,
-      )
-    })
+    this.hud?.setScore(
+      this.t('game.sinkTheFleet.hitsChip', { n: me.hitsOnOpponent, total: me.fleetCells }),
+    )
+    const rivalColor = this.state.colorOf(me.opponentId, PALETTE.red)
+    const selfColor = this.state.colorOf(this.selfId, PALETTE.cyan)
+    target.setLabels(
+      this.t('game.sinkTheFleet.target'),
+      PALETTE.text,
+      this.state.nameOf(me.opponentId),
+      rivalColor,
+    )
+    own.setLabels(this.t('game.sinkTheFleet.yourFleet'), selfColor)
 
-    const damaged = new Set(me.damage)
-    this.fleetCells.forEach((img, i) => {
-      img.setTexture(damaged.has(i) ? this.hitKey : this.neutralKey)
-    })
+    // Shots: mine land on the rival's sea, theirs (from the public snapshot) on mine.
+    const incoming: readonly NavalShot[] =
+      snap.players[me.opponentId]?.shots ?? me.damage.map((cell) => ({ cell, hit: true }))
+    for (const s of target.sync(me.shots, me.hitsOnOpponent >= me.fleetCells)) this.onMyShot(s)
+    for (const s of own.sync(incoming, me.hitsOnYou >= me.fleetCells)) this.onIncoming(s)
+
+    this.updateTurn(me, rivalColor)
+    this.updateEnd(snap, me, time)
+    target.tick(time)
+    own.tick(time)
   }
 
-  private setGridsVisible(v: boolean): void {
-    for (const r of this.targetCells) r.setVisible(v)
-    for (const r of this.fleetCells) r.setVisible(v)
-    this.targetLabel?.setVisible(v)
-    this.fleetLabel?.setVisible(v)
+  private updateTurn(me: SinkTheFleetDuelView, rivalColor: number): void {
+    const target = this.target
+    const own = this.own
+    if (!target || !own) return
+    if (me.done) {
+      target.setFocus('idle')
+      own.setFocus('idle')
+      target.setAimable(false)
+      this.turnText?.setText('')
+      this.turnBar?.clear()
+      return
+    }
+    const mine = me.yourTurn
+    if (mine !== this.wasMyTurn) {
+      if (this.wasMyTurn !== null && mine) this.sfx.go()
+      this.turnMax = 0
+      this.wasMyTurn = mine
+      if (this.turnText) punch(this, this.turnText, 0.2, 110)
+    }
+    target.setFocus(mine ? 'active' : 'dim', PALETTE.amber)
+    own.setFocus(mine ? 'idle' : 'active', PALETTE.red)
+    target.setAimable(mine)
+    if (this.turnText) {
+      const text = mine
+        ? this.t('game.sinkTheFleet.yourTurn')
+        : this.t('game.sinkTheFleet.waitTurn')
+      setFittedText(this.turnText, text, this.scale.width - 24, this.turnSizes)
+      setTextColor(this.turnText, mine ? PALETTE.amber : rivalColor)
+    }
+
+    this.turnMax = Math.max(this.turnMax, me.turnRemainingMs)
+    const frac = this.turnMax > 0 ? me.turnRemainingMs / this.turnMax : 0
+    const urgent = mine && me.turnRemainingMs < 1500
+    const color = mine ? (urgent ? PALETTE.red : PALETTE.amber) : PALETTE.frameLit
+    if (this.turnBar) {
+      const { x, y, w, h } = this.bar
+      drawSegmentBar(this.turnBar, x, y, w, h, frac, color)
+    }
+  }
+
+  // Duel over (others may still be playing): celebrate / commiserate at once, then — after the wreck
+  // reveal has had a moment to play — hold a WIN / LOSE card until the round ends.
+  private updateEnd(snap: SinkTheFleetSnapshot, me: SinkTheFleetDuelView, time: number): void {
+    if (!me.done) {
+      if (this.card?.visible) this.card.hide()
+      return
+    }
+    // Already over on the first snapshot (a relayout restart): straight to the card, no replay.
+    if (this.endedAt < 0 && this.firstSnapshot) this.endedAt = Math.max(0, time - END_CARD_DELAY_MS)
+    if (this.endedAt < 0) {
+      this.endedAt = time
+      const c = this.target?.center()
+      if (me.won === true) {
+        this.sfx.coin()
+        if (c) {
+          burst(this, c.x, c.y, PALETTE.amber, 28, 320)
+          burst(this, c.x, c.y, PALETTE.lime, 20, 260)
+        }
+      } else if (me.won === false) {
+        this.sfx.wrong()
+        shake(this, 0.012, 260)
+      } else {
+        this.sfx.tick()
+      }
+    }
+    if (time - this.endedAt < END_CARD_DELAY_MS) return
+    const [key, color] =
+      me.won === true
+        ? ['game.sinkTheFleet.won', PALETTE.lime]
+        : me.won === false
+          ? ['game.sinkTheFleet.lost', PALETTE.red]
+          : ['game.sinkTheFleet.draw', PALETTE.amber]
+    const waiting = snap.roundRemainingMs > 0 ? this.t('game.common.waiting') : ''
+    this.card?.show(this.t(key), color, waiting)
+  }
+
+  private onMyShot(s: NavalShot): void {
+    const target = this.target
+    if (!target) return
+    target.shotFx(s, true)
+    const { x, y } = target.cellXY(s.cell)
+    if (s.hit) {
+      this.sfx.correct()
+      shake(this, 0.006, 140)
+      floatText(this, x, y - target.cell * 0.4, this.t('game.sinkTheFleet.hit'), PALETTE.orange)
+    } else {
+      this.sfx.pop()
+      floatText(
+        this,
+        x,
+        y - target.cell * 0.4,
+        this.t('game.sinkTheFleet.splash'),
+        PALETTE.cyan,
+        16,
+      )
+    }
+  }
+
+  private onIncoming(s: NavalShot): void {
+    const own = this.own
+    if (!own) return
+    own.shotFx(s, s.hit)
+    const { x, y } = own.cellXY(s.cell)
+    if (s.hit) {
+      this.sfx.wrong()
+      shake(this, 0.012, 220)
+      own.pulse(PALETTE.red)
+      floatText(this, x, y - own.cell * 0.4, this.t('game.sinkTheFleet.hit'), PALETTE.red)
+    } else {
+      this.sfx.pop()
+      floatText(this, x, y - own.cell * 0.4, this.t('game.sinkTheFleet.splash'), PALETTE.dim, 14)
+    }
+  }
+
+  private hideBoards(): void {
+    this.boardsHidden = true
+    this.target?.setVisible(false)
+    this.own?.setVisible(false)
+    this.turnText?.setText('')
+    this.turnBar?.clear()
   }
 }

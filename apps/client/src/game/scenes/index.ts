@@ -1,0 +1,79 @@
+import type Phaser from 'phaser'
+import { BalloonChickenScene } from './BalloonChickenScene'
+import { BombRelayScene } from './BombRelayScene'
+import { BubblePopScene } from './BubblePopScene'
+import { BugSmashScene } from './BugSmashScene'
+import { ButtonMasherScene } from './ButtonMasherScene'
+import { ColorTrapScene } from './ColorTrapScene'
+import { FleetBattleScene } from './FleetBattleScene'
+import { FruitCatchScene } from './FruitCatchScene'
+import { HigherLowerScene } from './HigherLowerScene'
+import { LineClearSprintScene } from './LineClearSprintScene'
+import { MatchPairsScene } from './MatchPairsScene'
+import { MazeSprintScene } from './MazeSprintScene'
+import { MemoryFlashScene } from './MemoryFlashScene'
+import type { SceneDeps } from './MiniGameScene'
+import { NumberRushScene } from './NumberRushScene'
+import { OddOneOutScene } from './OddOneOutScene'
+import { PixelBeatScene } from './PixelBeatScene'
+import { PixelDashScene } from './PixelDashScene'
+import { PixelHoopsScene } from './PixelHoopsScene'
+import { PixelRainScene } from './PixelRainScene'
+import { PixelSplitScene } from './PixelSplitScene'
+import { PixelWeightScene } from './PixelWeightScene'
+import { PongScene } from './PongScene'
+import { QuickDrawScene } from './QuickDrawScene'
+import { QuickMathScene } from './QuickMathScene'
+import { QuickTetrisScene } from './QuickTetrisScene'
+import { ReactionScene } from './ReactionScene'
+import { RouletteScene } from './RouletteScene'
+import { SimonScene } from './SimonScene'
+import { SinkTheFleetScene } from './SinkTheFleetScene'
+import { SnakeArenaScene } from './SnakeArenaScene'
+import { StopClockScene } from './StopClockScene'
+import { SudokuRaceScene } from './SudokuRaceScene'
+import { SumoScene } from './SumoScene'
+import { TriviaScene } from './TriviaScene'
+import { TugOfWarScene } from './TugOfWarScene'
+
+export type SceneCtor = new (...deps: SceneDeps) => Phaser.Scene
+
+// The one place a mini-game id maps to its Phaser scene. GameClient registers every entry and a round
+// starts its scene by id; the spec checks this stays in lock-step with the shared MINIGAMES catalog.
+export const SCENES: Readonly<Record<string, SceneCtor>> = {
+  'reaction-duel': ReactionScene,
+  'button-masher': ButtonMasherScene,
+  'color-trap': ColorTrapScene,
+  trivia: TriviaScene,
+  'balloon-chicken': BalloonChickenScene,
+  'number-rush': NumberRushScene,
+  'quick-math': QuickMathScene,
+  'odd-one-out': OddOneOutScene,
+  'higher-lower': HigherLowerScene,
+  'bug-smash': BugSmashScene,
+  'stop-clock': StopClockScene,
+  'memory-flash': MemoryFlashScene,
+  simon: SimonScene,
+  'pixel-hoops': PixelHoopsScene,
+  'pixel-weight': PixelWeightScene,
+  'pixel-split': PixelSplitScene,
+  'fruit-catch': FruitCatchScene,
+  'pixel-rain': PixelRainScene,
+  'pixel-dash': PixelDashScene,
+  'snake-arena': SnakeArenaScene,
+  'pixel-pong': PongScene,
+  'sumo-push': SumoScene,
+  'match-pairs': MatchPairsScene,
+  'quick-draw': QuickDrawScene,
+  'pixel-roulette': RouletteScene,
+  'sudoku-race': SudokuRaceScene,
+  'pixel-beat': PixelBeatScene,
+  'maze-sprint': MazeSprintScene,
+  'line-clear-sprint': LineClearSprintScene,
+  'quick-tetris': QuickTetrisScene,
+  'bubble-pop': BubblePopScene,
+  'tug-of-war': TugOfWarScene,
+  'bomb-relay': BombRelayScene,
+  'fleet-battle': FleetBattleScene,
+  'sink-the-fleet': SinkTheFleetScene,
+}

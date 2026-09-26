@@ -1,0 +1,120 @@
+// High-score table rows shared by the round-result and final views (@use '../score-table' as *).
+@mixin score-table {
+  .hs {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0.3rem;
+  }
+  .hs li {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.35rem 0.55rem;
+    background: var(--c-panel-alt);
+    font-size: var(--fs-sm);
+    animation: row-in 240ms steps(3, end) both;
+
+    &.me {
+      box-shadow: inset 4px 0 0 var(--c-cyan);
+      background: #22304a;
+    }
+  }
+  @for $i from 1 through 10 {
+    .hs li:nth-child(#{$i}) {
+      animation-delay: #{($i - 1) * 60}ms;
+    }
+  }
+  .rank {
+    width: 1.6rem;
+    height: 1.6rem;
+    flex-shrink: 0;
+    display: grid;
+    place-content: center;
+    color: var(--c-dim);
+    background: var(--c-bg);
+    font-size: var(--fs-sm);
+    &.r1 {
+      color: var(--c-bg);
+      background: var(--c-amber);
+    }
+    &.r2 {
+      color: var(--c-bg);
+      background: #c3cbdc;
+    }
+    &.r3 {
+      color: var(--c-bg);
+      background: #d08a4a;
+    }
+  }
+  .who {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    gap: 0.15rem;
+  }
+  .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .callout {
+    color: var(--c-amber);
+    font-family: monospace;
+    font-size: 0.72rem;
+    font-style: italic;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .stat {
+    color: var(--c-dim);
+    font-family: monospace;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+  .catchup {
+    color: var(--c-cyan);
+    font-size: var(--fs-xs);
+    white-space: nowrap;
+  }
+  .pts {
+    min-width: 2.6rem;
+    text-align: right;
+    color: var(--c-lime);
+    font-variant-numeric: tabular-nums;
+  }
+  .gain {
+    min-width: 2.4rem;
+    text-align: right;
+    color: var(--c-lime);
+    font-size: var(--fs-xs);
+  }
+  .delta {
+    width: 0.8rem;
+    text-align: center;
+    font-size: var(--fs-xs);
+    &.up {
+      color: var(--c-lime);
+    }
+    &.down {
+      color: var(--c-red);
+    }
+  }
+  @keyframes row-in {
+    from {
+      transform: translateX(-12px);
+      opacity: 0;
+    }
+    to {
+      transform: none;
+      opacity: 1;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hs li {
+      animation: none;
+    }
+  }
+}

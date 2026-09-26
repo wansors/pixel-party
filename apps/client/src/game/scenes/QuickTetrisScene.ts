@@ -1,11 +1,9 @@
-import type { ClientMsg } from '@pp/shared'
-import type { RoundState } from '../RoundState'
-import type { Sfx } from '../Sfx'
-import type { Translate } from '../i18n'
+import type { SceneDeps } from './MiniGameScene'
 import { TetrisSprintSceneBase } from './TetrisSprintSceneBase'
 
+// Quick Tetris: the shared Tetris sprint canvas, first to clear the target lines.
 export class QuickTetrisScene extends TetrisSprintSceneBase {
-  constructor(send: (msg: ClientMsg) => void, state: RoundState, sfx: Sfx, t: Translate) {
-    super(send, state, sfx, t, 'quick-tetris')
+  constructor(...deps: SceneDeps) {
+    super('quick-tetris', ...deps)
   }
 }
