@@ -46,6 +46,9 @@ Roulette (D3 `pixel-roulette`); then (2026-08-21) E14 Sudoku Race (`sudoku-race`
 rest of the `minigame-ideas.md` backlog: E6 Pixel Beat (`pixel-beat`), C3 Fleet Battle (`fleet-battle`),
 E9 Maze Sprint (`maze-sprint`), E10 Line Clear Sprint (`line-clear-sprint`), E13 Quick Tetris
 (`quick-tetris`) and E15 Bubble Pop (`bubble-pop`). **35 mini-games total — the full backlog is built.**
+Then (2026-09-28) a new sports wave (section F): F1 100 m Dash (`dash-100m`), F2 110 m Hurdles
+(`hurdles-110m`), F3 Long Jump (`long-jump`), F4 Javelin (`javelin-throw`) and F5 Micro Race
+(`micro-race`). **40 mini-games total.**
 
 ---
 
@@ -327,19 +330,78 @@ scoring lever alone meets the catch-up goal without a bespoke rule change in any
 is naturally fair to uneven groups by construction (e.g. Tug of War's per-member average, see C1), that
 stays as ordinary game design, not a handicap hook.
 
+## F. Sports — track & field and racing (2026-09-28)
+
+Arcade sports classics, reskinned for the party. The four athletics events share one server sprint
+model (`athleticsCore`): **alternate LEFT/RIGHT taps to build speed** — the same foot twice adds
+nothing, speed bleeds off continuously, and strides faster than 20/s are ignored — so the steady speed
+tracks the alternating tap rate (~7 m/s at 6 strides/s, ~9.3 at 10, ~10.8 at 15). Clients dead-reckon
+every runner from the snapshot's `x` + `v`, so what a player sees lines up with the server's present
+(this matters for jumping a hurdle or taking off at the board). See `implementation-decisions.md` D20.
+
+### F1. ✅ 100 m Dash — implemented (`dash-100m`)
+- **Concept**: Konami *Track & Field* sprint. Everyone side by side in their own lane; "SET…", then the
+  gun — alternate the two buttons as fast as you can.
+- **Type**: FFA · **Input**: two alternating buttons (◀ L / R ▶, or ← → / A D) · **Duration**: ~10–20 s
+  (30 s cap) · **Banter**: 💥💥💥
+- **Rules**: the gun fires at a seeded, unannounced moment 1.6–3.0 s after SET. A stride before it is a
+  **false start**: that runner is held in the blocks for 1 s after the gun. Once the first runner
+  finishes, the rest get 10 s.
+- **Win condition / Result**: fastest race time; unfinished runners by distance (`10.42s` / `87m`).
+- **Latency**: medium (tap rate matters, not exact timing). · **Complexity**: medium (shared with F2).
+
+### F2. ✅ 110 m Hurdles — implemented (`hurdles-110m`)
+- **Concept**: the dash plus a JUMP button and the regulation layout (first hurdle at 13.72 m, then every
+  9.14 m, ten in all).
+- **Type**: FFA · **Input**: L/R + JUMP (SPACE / ↑) · **Duration**: ~15–25 s (35 s cap) · **Banter**: 💥💥💥
+- **Rules**: a jump is airborne for 480 ms (≈4.5 m at a good sprint) and strides don't count in the air.
+  A hurdle is cleared only if the runner is airborne at the moment of crossing (server back-dates the
+  crossing within the tick); otherwise it is knocked flat and the runner keeps just 40% of their speed.
+- **Win condition / Result**: as F1. · **Latency**: medium/high (jump timing; mitigated by dead
+  reckoning + an immediately predicted local hop).
+
+### F3. ✅ Long Jump — implemented (`long-jump`)
+- **Concept**: sprint down a 30 m runway, **hold JUMP at the board** — the take-off angle climbs while
+  held (110°/s, arc gauge with the 45° sweet spot) — and release to fly into the sand.
+- **Type**: FFA, everyone takes their own attempts in parallel · **Input**: L/R + hold/release JUMP ·
+  **Duration**: 3 attempts, ~25–35 s (45 s cap) · **Banter**: 💥💥
+- **Rules**: READY → RUN → AIM → FLIGHT → MARK per attempt. Taking off past the board, running through
+  it, or never taking off within 9 s is a **foul**. Range is projectile motion (`v² sin 2θ / g`, scaled to
+  ~8 m for a sharp run-up at 45°), **measured from the board** — an early take-off wastes distance.
+  Holding past 85° auto-releases.
+- **Win condition / Result**: best mark (`7.85m`, `NM` = no valid mark). Every player's best is planted
+  as a flag in their color in the pit.
+
+### F4. ✅ Javelin — implemented (`javelin-throw`)
+- **Concept**: same run-up engine as F3 with a 28 m runway to the throwing arc; hold THROW to aim,
+  release, and the camera follows the javelin down the field (~80 m for a sharp run-up at 45°).
+- **Type / Input / Duration / Result**: as F3 (`72.49m`). Marks shown on a grass sector with 10 m lines.
+
+### F5. ✅ Micro Race — implemented (`micro-race`)
+- **Concept**: *Micro Machines*-style top-down racer on tabletop circuits — three seeded layouts (kitchen
+  table, desk mat, pool table) with props, three laps, bumping encouraged.
+- **Type**: FFA · **Input**: hold where you want to drive (touch/mouse) or arrows/WASD · **Duration**:
+  ~40–60 s (90 s cap) · **Banter**: 💥💥💥
+- **Rules**: start lights (2.4 s), staggered grid in seeded order. Arcade car physics: slight drift, much
+  slower off the road, steering loosens at top speed (brake for hairpins), punchy car-to-car bumps.
+  Lap progress only advances near the road you were on; straying for 1.5 s puts you back where you left
+  it (no shortcuts). Once the first car takes the flag the rest get 12 s.
+- **Win condition / Result**: finishers by time (`1:02.3`), the rest by laps + progress (`LAP 2`).
+- **Latency**: high (continuous steering) — snapshot interpolation for every car.
+
 ---
 
 ## Variety coverage
 
 | Axis | Covered by |
 |------|------------|
-| Reflexes / reaction | A1, A6, B1, E7 |
+| Reflexes / reaction | A1, A6, B1, E7, F5 |
 | Attention / focus (inhibition) | E1, E3, E4 |
-| Speed / endurance | A2, A9, C1 |
+| Speed / endurance | A2, A9, C1, F1, F2 |
 | Knowledge | A3 |
 | Mental math | E2 |
 | Memory | A4, A11, E8 |
-| Precision / aim / timing | A5, A10, B2, E6 |
+| Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4 |
 | Survival / dodging | A7, A8, B3 |
 | Nerve / chance | D1, D3, E5 |
 | Teamwork | C1, C2, C3 |
@@ -349,7 +411,7 @@ stays as ordinary game design, not a handicap hook.
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7 |
 | Team | C1, C2, C3 |
 

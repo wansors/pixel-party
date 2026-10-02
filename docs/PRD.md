@@ -179,8 +179,11 @@ outcomes. See `minigame-catalog.md` §H and `scoring-system.md`.
 
 - **NFR-1 Performance**: sync latency < 150 ms p95; 60 FPS target on the client for action mini-games.
 - **NFR-2 Concurrency**: support multiple simultaneous rooms; initial target ≥ 100 active rooms.
-- **NFR-3 Compatibility**: modern browsers (Chrome, Firefox, Safari, Edge) on desktop and mobile.
-- **NFR-4 Responsive**: UI and mini-games must adapt to mobile (portrait) and desktop.
+- **NFR-3 Compatibility**: modern browsers (Chrome, Firefox, Safari, Edge); **PC-first** (desktop with
+  keyboard/mouse), phones supported.
+- **NFR-4 Responsive**: the UI adapts to mobile (portrait) and desktop, and no mini-game may break on a
+  phone; but only mini-games flagged `mobileFriendly` in the catalog promise a comfortable phone
+  experience (see `implementation-decisions.md` D21).
 - **NFR-5 Resilience**: tolerate transient disconnections (reconnection, FR-2.3) without breaking the
   session.
 - **NFR-6 Fairness / anti-cheat**: result and input validation on the server; never trust the client.

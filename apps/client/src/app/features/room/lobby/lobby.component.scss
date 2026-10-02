@@ -297,6 +297,25 @@
   }
 }
 
+// The mobile filter sits apart from the skill axes (it narrows by device, not by skill).
+.mobile-filter {
+  margin-left: auto;
+  .axis-chip {
+    --chip-color: var(--c-cyan);
+  }
+}
+
+// Tiny pixel phone: a tall outlined rectangle with a thicker "chin".
+.phone {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.7rem;
+  border: 2px solid currentColor;
+  border-bottom-width: 3px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
 .game-grid {
   flex: 1;
   min-height: 0;
@@ -403,6 +422,11 @@
     width: 0.5rem;
     height: 0.5rem;
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+  }
+  .mobile-tag {
+    display: inline-flex;
+    margin-left: 0.2rem;
+    color: var(--c-cyan);
   }
   .format {
     margin-left: auto;

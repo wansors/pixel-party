@@ -6,8 +6,8 @@ import { PixelAvatarComponent } from '../../../shared/pixel-avatar.component'
 import { RoomStore } from '../room.store'
 
 // Round intro card shown during the pre-round countdown: which game is next, how it's played (the
-// catalog blurb), its format and skill axes, and — for team rounds — who's on which side. The
-// countdown number is re-created on every tick so its pop animation replays.
+// catalog blurb), its format, skill axes and whether it plays well on a phone, and — for team rounds —
+// who's on which side. The countdown number is re-created on every tick so its pop animation replays.
 @Component({
   selector: 'app-round-intro',
   imports: [PixelAvatarComponent, TranslocoPipe],
@@ -24,6 +24,11 @@ import { RoomStore } from '../room.store'
             <span class="badge format">{{ 'room.format.' + intro.format | transloco }}</span>
             @for (a of axes(); track a) {
               <span class="badge" [style.color]="axisColor(a)">{{ catalog.axisLabel(a) }}</span>
+            }
+            @if (mobileFriendly(); as mobile) {
+              <span class="badge device" [class.mobile]="mobile === 'yes'">
+                {{ (mobile === 'yes' ? 'room.intro.mobileFriendly' : 'room.intro.bestOnPc') | transloco }}
+              </span>
             }
           </div>
 
@@ -74,6 +79,13 @@ export class RoundIntroComponent {
   readonly axes = computed<readonly SkillAxis[]>(() => {
     const id = this.store.intro()?.game
     return (id && MINIGAMES_BY_ID.get(id)?.axes) || []
+  })
+
+  // PC-first: tell phone players up front whether this round plays well on their device.
+  readonly mobileFriendly = computed<'yes' | 'no' | null>(() => {
+    const id = this.store.intro()?.game
+    const meta = id ? MINIGAMES_BY_ID.get(id) : undefined
+    return meta ? (meta.mobileFriendly ? 'yes' : 'no') : null
   })
 
   readonly teams = computed(() =>

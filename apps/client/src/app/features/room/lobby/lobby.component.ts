@@ -35,14 +35,18 @@ export class LobbyComponent {
   // Game-picker axis filter (client-only UI state): null = every game; an axis narrows the grid so a
   // host can build a themed line-up.
   readonly axisFilter = signal<SkillAxis | null>(null)
+  // Mobile filter (client-only, combines with the axis filter): Pixel Party is PC-first, so when some
+  // players joined from their phones the host can narrow the grid to the games that play well there.
+  readonly mobileOnly = signal(false)
 
-  // Host sees the whole catalog (narrowed by the filter); everyone else just sees the line-up.
+  // Host sees the whole catalog (narrowed by the filters); everyone else just sees the line-up.
   readonly shownGames = computed<readonly MiniGameMeta[]>(() => {
     const axis = this.axisFilter()
+    const mobile = this.mobileOnly()
     const pool = this.store.isHost()
       ? MINIGAMES
       : MINIGAMES.filter((g) => this.store.selectedGameIds().includes(g.id))
-    return axis ? pool.filter((g) => g.axes.includes(axis)) : pool
+    return pool.filter((g) => (!axis || g.axes.includes(axis)) && (!mobile || g.mobileFriendly))
   })
 
   // Aggregate skill coverage of the current line-up, as a 0..1 radar per axis (relative to whichever

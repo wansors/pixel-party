@@ -17,13 +17,14 @@ D15–D17). Don't propose features that assume an internet-facing, multi-tenant,
 scaffolded and the game is playable end-to-end. Run it with `bun run dev` (see `README.md`). Live now:
 rooms + lobby (ready/host), host game selector + round count, server-authoritative session engine (intro
 countdown → play → per-round result → cumulative scoreboard → final), scoring/scoreboard/final ranking,
-**Phases 0–5 complete** (2026-08-21). **35 mini-games** — 29 FFA
+**Phases 0–5 complete** (2026-08-21). **40 mini-games** — 34 FFA
 (`button-masher`, `reaction-duel`, `color-trap`, `trivia`, `balloon-chicken`, `number-rush`,
 `quick-math`, `odd-one-out`, `higher-lower`, `bug-smash`, `stop-clock`, `memory-flash`, `simon`,
 `pixel-hoops`, `pixel-weight`, `pixel-split`, `fruit-catch`, `pixel-rain`, `pixel-dash`, `snake-arena`,
 `sumo-push`, `match-pairs`, `pixel-roulette`, `sudoku-race`, `pixel-beat`, `maze-sprint`,
-`line-clear-sprint`, `quick-tetris`, `bubble-pop`) + 3 team (`tug-of-war`, `bomb-relay`, `fleet-battle`)
-+ 3 duel (`sink-the-fleet`, `pixel-pong`, `quick-draw`) — with **no-repeat
+`line-clear-sprint`, `quick-tetris`, `bubble-pop`, and the 2026-09-28 sports wave `dash-100m`,
+`hurdles-110m`, `long-jump`, `javelin-throw`, `micro-race` — D20) + 3 team (`tug-of-war`,
+`bomb-relay`, `fleet-battle`) + 3 duel (`sink-the-fleet`, `pixel-pong`, `quick-draw`) — with **no-repeat
 seeded line-ups** (also avoids repeating a game's primary skill axis back-to-back when possible),
 **mid-session reconnect/rejoin** + **host transfer (auto-on-disconnect + manual) /
 kick / idle-room reaper**, **observability** (structured JSON logs + `GET /api/metrics`),
@@ -47,8 +48,8 @@ design** — no database, no accounts, no "Phase 6" (dropped, not deferred; see 
 further social/polish phase either: no "Phase 7" (chat/emotes/avatar customization/public matchmaking,
 dropped; see D16 — audio and i18n already shipped in Phase 0). All ~35 candidates from
 `minigame-ideas.md` are now built — growing the catalog further means adding brand-new ideas, not
-picking up existing backlog rows. Design decisions from the clear-out pass live in
-`docs/implementation-decisions.md`. See `docs/backlog.md` → *Current status* for the authoritative
+picking up existing backlog rows (the sports wave, D20, was the first such batch). Design decisions
+from the clear-out pass live in `docs/implementation-decisions.md`. See `docs/backlog.md` → *Current status* for the authoritative
 checklist.
 
 Documentation lives in `docs/`:
@@ -64,8 +65,10 @@ Documentation lives in `docs/`:
 ## Code layout (implemented)
 
 - `apps/server` — hexagonal: `domain/` (entities `Room`/`Player`, `minigames/` pluggable contract +
-  `buttonMasher`/`reactionDuel`/`colorTrap`/`trivia`/`balloonChicken`/`numberRush`/`quickMath`/`oddOneOut`/`higherLower`/`bugSmash`/`stopClock`/`memoryFlash`/`simon`/`pixelHoops`/`pixelWeight`/`pixelSplit`/`tugOfWar`/`sinkTheFleet`/`bombRelay`/`fruitCatch`/`pixelRain`/`pixelDash`/`snakeArena`/`pong`/`sumo`/`matchPairs`/`quickDraw`/`roulette`/`sudokuRace`/`pixelBeat`/`fleetBattle`/`mazeSprint`/`lineClearSprint`/`quickTetris`/`bubblePop`
-  (`tetrisCore` holds the shared engine behind `lineClearSprint`/`quickTetris`)
+  `buttonMasher`/`reactionDuel`/`colorTrap`/`trivia`/`balloonChicken`/`numberRush`/`quickMath`/`oddOneOut`/`higherLower`/`bugSmash`/`stopClock`/`memoryFlash`/`simon`/`pixelHoops`/`pixelWeight`/`pixelSplit`/`tugOfWar`/`sinkTheFleet`/`bombRelay`/`fruitCatch`/`pixelRain`/`pixelDash`/`snakeArena`/`pong`/`sumo`/`matchPairs`/`quickDraw`/`roulette`/`sudokuRace`/`pixelBeat`/`fleetBattle`/`mazeSprint`/`lineClearSprint`/`quickTetris`/`bubblePop`/`trackRace`/`fieldEvent`/`microRace`
+  (`tetrisCore` holds the shared engine behind `lineClearSprint`/`quickTetris`; `athleticsCore` the
+  sprint model behind `trackRace` (`Dash100m`, `Hurdles110m`) and `fieldEvent` (`LongJump`,
+  `JavelinThrow`))
   + `registry`, `services/{scoring,teamAssignment,pairing,sessionAnalysis,handicap,finalRanking}`,
   `ports/Random`), `application/`
   (`session/SessionEngine`+`SessionManager`, `use-cases/`, `ports/`), `infrastructure/`
@@ -74,7 +77,8 @@ Documentation lives in `docs/`:
   `index.ts`.
 - `packages/shared` — `protocol.ts` (wire unions + `PROTOCOL_VERSION`), `catalog/minigames`, `theme.ts`
   (palette + `TEAMS`), `games/` (per-game wire snapshot/input types; `pixelObjects` holds the shared
-  pixel-art set for weight/split; `tetrisSprint` is shared by `line-clear-sprint`/`quick-tetris`).
+  pixel-art set for weight/split; `tetrisSprint` is shared by `line-clear-sprint`/`quick-tetris`;
+  `athletics` by the four track & field events; `microRace` also holds the circuit layouts).
 - `apps/client` — Angular 20 shell; `features/join`; `features/room` = `RoomStore` (per-room state,
   ServerMsg handling, intents, Phaser bridge) + `RoomComponent` shell + one view component per phase
   (`lobby/`, `intro/`, `result/`, `final/`, `live-board/`); `core/net/game-socket.service`; `game/`
@@ -82,15 +86,17 @@ Documentation lives in `docs/`:
   names/colors), `hud` (standard HUD strip), `fx` (juice kit), `pixelStyle` (pixel-art textures/text),
   `scenes/MiniGameScene` (common base: own-snapshot guard, HUD, crash guard, relayout),
   `scenes/index` (`SCENES` id → scene map),
-  `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,BalloonChickenScene,NumberRushScene,QuickMathScene,OddOneOutScene,HigherLowerScene,BugSmashScene,StopClockScene,MemoryFlashScene,SimonScene,PixelHoopsScene,PixelWeightScene,PixelSplitScene,TugOfWarScene,SinkTheFleetScene,BombRelayScene,FruitCatchScene,PixelRainScene,PixelDashScene,SnakeArenaScene,PongScene,SumoScene,MatchPairsScene,QuickDrawScene,RouletteScene,SudokuRaceScene,PixelBeatScene,FleetBattleScene,MazeSprintScene,LineClearSprintScene,QuickTetrisScene,BubblePopScene}`
-  (`TetrisSprintSceneBase` is the shared base behind the two Tetris-style scenes)
+  `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,BalloonChickenScene,NumberRushScene,QuickMathScene,OddOneOutScene,HigherLowerScene,BugSmashScene,StopClockScene,MemoryFlashScene,SimonScene,PixelHoopsScene,PixelWeightScene,PixelSplitScene,TugOfWarScene,SinkTheFleetScene,BombRelayScene,FruitCatchScene,PixelRainScene,PixelDashScene,SnakeArenaScene,PongScene,SumoScene,MatchPairsScene,QuickDrawScene,RouletteScene,SudokuRaceScene,PixelBeatScene,FleetBattleScene,MazeSprintScene,LineClearSprintScene,QuickTetrisScene,BubblePopScene,Dash100mScene,Hurdles110mScene,LongJumpScene,JavelinThrowScene,MicroRaceScene}`
+  (`TetrisSprintSceneBase` is the shared base behind the two Tetris-style scenes; `TrackRaceSceneBase`
+  / `FieldEventSceneBase` + `athleticsKit` behind the athletics scenes; `microRaceArt` paints the
+  racer's tracks and cars)
   + `netcode/SnapshotInterpolator` (client-side interpolation for real-time scenes).
 
 ### Adding a mini-game
 One domain module (`domain/minigames/<id>.ts` implementing `MiniGame`) + registry entry + shared wire
 types in `packages/shared/src/games/` + one Phaser scene extending `MiniGameScene` (key === mini-game
-id) registered in `game/scenes/index.ts` + a `MINIGAMES` catalog entry + `catalog.minigame.<id>`
-name/blurb in both `en.json` and `es.json`. The session engine and wire contract don't change.
+id) registered in `game/scenes/index.ts` + a `MINIGAMES` catalog entry (incl. the required
+`mobileFriendly` call) + `catalog.minigame.<id>` name/blurb in both `en.json` and `es.json`. The session engine and wire contract don't change.
 
 ### Project skills (`.claude/skills/`)
 `verify-all` (full quality gate; bootstraps Bun if missing), `playtest-screenshots` (bots + headless
@@ -134,4 +140,6 @@ blueprint in `docs/technical-architecture.md`.
 - Real-time, low latency; server-authoritative state.
 - Mini-games as pluggable modules (common contract); the engine stays game-agnostic.
 - No install, no mandatory sign-up; entry via room code/link.
-- Responsive: mobile + desktop.
+- **PC-first** (keyboard/mouse on a big screen, D21). Every scene still has touch controls and must not
+  break at phone sizes, but only games flagged `mobileFriendly` in the catalog promise a good phone
+  experience (lobby badge + "Mobile" filter, "Best on PC" on the round intro).

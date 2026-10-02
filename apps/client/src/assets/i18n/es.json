@@ -59,13 +59,17 @@
       "hostPicks": "El anfitrión elige los juegos",
       "waitingHost": "Esperando a que el anfitrión empiece…",
       "noGames": "Elige al menos un juego",
-      "you": "tú"
+      "you": "tú",
+      "mobileFilter": "Móvil",
+      "mobileHint": "Se juega bien en el móvil"
     },
     "intro": {
       "round": "Ronda",
       "go": "¡YA!",
       "howTo": "Cómo se juega",
-      "getReady": "¡PREPÁRATE!"
+      "getReady": "¡PREPÁRATE!",
+      "mobileFriendly": "Apto para móvil",
+      "bestOnPc": "Mejor en PC"
     },
     "result": {
       "roundWinner": "GANADOR DE RONDA",
@@ -275,6 +279,26 @@
       "sudoku-race": {
         "name": "Sudoku Exprés",
         "blurb": "Todos resuelven el mismo mini sudoku. Gana la cuadrícula correcta más rápida."
+      },
+      "micro-race": {
+        "name": "Micro Carreras",
+        "blurb": "Coches diminutos, circuitos de mesa. Tres vueltas, empuja a tus rivales y cruza la meta primero."
+      },
+      "dash-100m": {
+        "name": "100 metros lisos",
+        "blurb": "Alterna IZQUIERDA y DERECHA lo más rápido que puedas. ¡Espera al disparo!"
+      },
+      "hurdles-110m": {
+        "name": "110 metros vallas",
+        "blurb": "Corre con IZQ/DER y SALTA cada valla. Si la tocas, pierdes velocidad."
+      },
+      "long-jump": {
+        "name": "Salto de longitud",
+        "blurb": "Corre por la pista, mantén SALTA en la tabla para fijar el ángulo y suelta para volar. 3 intentos."
+      },
+      "javelin-throw": {
+        "name": "Jabalina",
+        "blurb": "Coge velocidad, mantén LANZA antes de la línea para apuntar y suelta. Gana el lanzamiento más largo."
       }
     }
   },
@@ -546,6 +570,46 @@
     },
     "quickMath": {
       "cooldown": "Respuesta incorrecta — ¡espera!"
+    },
+    "microRace": {
+      "hint": "Mantén pulsado hacia donde quieras ir  ·  o ←→ girar, ↑ acelerar, ↓ frenar",
+      "hintTouch": "Mantén pulsado hacia donde quieras ir",
+      "status": "VUELTA {{lap}}/{{laps}} · P{{pos}}",
+      "lap": "VUELTA {{n}}",
+      "finalLap": "¡ÚLTIMA VUELTA!",
+      "go": "¡YA!",
+      "finished": "¡META! P{{pos}}",
+      "time": "TIEMPO {{time}}",
+      "hurry": "¡CORRE!",
+      "rescued": "¡FUERA DE PISTA!",
+      "wrongWay": "¡AL REVÉS!",
+      "bump": "¡PUM!",
+      "outOfTime": "¡SIN TIEMPO!"
+    },
+    "athletics": {
+      "set": "LISTOS...",
+      "go": "¡YA!",
+      "falseStart": "¡SALIDA NULA!",
+      "wait": "¡SANCIÓN, ESPERA!",
+      "ouch": "¡AY!",
+      "place": "P{{n}}",
+      "jump": "SALTA",
+      "speed": "VELOCIDAD",
+      "foul": "NULO",
+      "best": "MEJOR",
+      "newBest": "¡NUEVA MARCA!",
+      "noMark": "SIN MARCA",
+      "attempt": "INTENTO {{n}}/{{total}}",
+      "hintDash": "Alterna ← → (o A / D) para correr. ¡No te muevas antes del disparo!",
+      "hintHurdles": "Alterna ← → para correr · ESPACIO / ↑ para saltar cada valla"
+    },
+    "longJump": {
+      "action": "SALTA",
+      "hint": "Alterna ← → para correr · mantén ESPACIO en la tabla y suelta cerca de 45°"
+    },
+    "javelinThrow": {
+      "action": "LANZA",
+      "hint": "Alterna ← → para correr · mantén ESPACIO antes de la línea y suelta cerca de 45°"
     }
   }
 }

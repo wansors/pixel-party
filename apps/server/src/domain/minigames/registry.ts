@@ -6,6 +6,7 @@ import { BubblePop } from './bubblePop'
 import { BugSmash } from './bugSmash'
 import { ButtonMasher } from './buttonMasher'
 import { ColorTrap } from './colorTrap'
+import { JavelinThrow, LongJump } from './fieldEvent'
 import { FleetBattle } from './fleetBattle'
 import { FruitCatch } from './fruitCatch'
 import { HigherLower } from './higherLower'
@@ -13,6 +14,7 @@ import { LineClearSprint } from './lineClearSprint'
 import { MatchPairs } from './matchPairs'
 import { MazeSprint } from './mazeSprint'
 import { MemoryFlash } from './memoryFlash'
+import { MicroRace } from './microRace'
 import { NumberRush } from './numberRush'
 import { OddOneOut } from './oddOneOut'
 import { PixelBeat } from './pixelBeat'
@@ -33,6 +35,7 @@ import { SnakeArena } from './snakeArena'
 import { StopClock } from './stopClock'
 import { SudokuRace } from './sudokuRace'
 import { Sumo } from './sumo'
+import { Dash100m, Hurdles110m } from './trackRace'
 import { Trivia } from './trivia'
 import { TugOfWar } from './tugOfWar'
 
@@ -74,6 +77,11 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'line-clear-sprint': () => new LineClearSprint() as unknown as MiniGame<unknown, unknown>,
   'quick-tetris': () => new QuickTetris() as unknown as MiniGame<unknown, unknown>,
   'bubble-pop': () => new BubblePop() as unknown as MiniGame<unknown, unknown>,
+  'micro-race': () => new MicroRace() as unknown as MiniGame<unknown, unknown>,
+  'dash-100m': () => new Dash100m() as unknown as MiniGame<unknown, unknown>,
+  'hurdles-110m': () => new Hurdles110m() as unknown as MiniGame<unknown, unknown>,
+  'long-jump': () => new LongJump() as unknown as MiniGame<unknown, unknown>,
+  'javelin-throw': () => new JavelinThrow() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

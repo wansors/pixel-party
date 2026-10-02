@@ -59,13 +59,17 @@
       "hostPicks": "The host picks the games",
       "waitingHost": "Waiting for the host to start…",
       "noGames": "Pick at least one game",
-      "you": "you"
+      "you": "you",
+      "mobileFilter": "Mobile",
+      "mobileHint": "Plays well on a phone"
     },
     "intro": {
       "round": "Round",
       "go": "GO!",
       "howTo": "How to play",
-      "getReady": "GET READY!"
+      "getReady": "GET READY!",
+      "mobileFriendly": "Mobile-friendly",
+      "bestOnPc": "Best on PC"
     },
     "result": {
       "roundWinner": "ROUND WINNER",
@@ -275,6 +279,26 @@
       "sudoku-race": {
         "name": "Sudoku Race",
         "blurb": "Everyone solves the same mini sudoku. Fastest correct grid wins."
+      },
+      "micro-race": {
+        "name": "Micro Race",
+        "blurb": "Tiny cars, tabletop tracks. Three laps, bump your rivals, first across the line wins."
+      },
+      "dash-100m": {
+        "name": "100m Dash",
+        "blurb": "Alternate LEFT and RIGHT as fast as you can to sprint. Wait for the gun!"
+      },
+      "hurdles-110m": {
+        "name": "110m Hurdles",
+        "blurb": "Sprint with LEFT/RIGHT and JUMP each hurdle. Clip one and you lose your speed."
+      },
+      "long-jump": {
+        "name": "Long Jump",
+        "blurb": "Sprint down the runway, hold JUMP at the board to set the angle, release to fly. 3 tries."
+      },
+      "javelin-throw": {
+        "name": "Javelin",
+        "blurb": "Build speed, hold THROW before the line to aim, release to launch. Longest throw wins."
       }
     }
   },
@@ -546,6 +570,46 @@
     },
     "quickMath": {
       "cooldown": "Wrong answer — wait!"
+    },
+    "microRace": {
+      "hint": "Hold where you want to drive  ·  or ←→ steer, ↑ gas, ↓ brake",
+      "hintTouch": "Hold where you want to drive",
+      "status": "LAP {{lap}}/{{laps}} · P{{pos}}",
+      "lap": "LAP {{n}}",
+      "finalLap": "FINAL LAP!",
+      "go": "GO!",
+      "finished": "FINISHED P{{pos}}",
+      "time": "TIME {{time}}",
+      "hurry": "HURRY UP!",
+      "rescued": "OFF TRACK!",
+      "wrongWay": "WRONG WAY!",
+      "bump": "BUMP!",
+      "outOfTime": "OUT OF TIME"
+    },
+    "athletics": {
+      "set": "SET...",
+      "go": "GO!",
+      "falseStart": "FALSE START!",
+      "wait": "HELD - WAIT!",
+      "ouch": "OUCH!",
+      "place": "P{{n}}",
+      "jump": "JUMP",
+      "speed": "SPEED",
+      "foul": "FOUL",
+      "best": "BEST",
+      "newBest": "NEW BEST!",
+      "noMark": "NO MARK",
+      "attempt": "ATTEMPT {{n}}/{{total}}",
+      "hintDash": "Alternate ← → (or A / D) to run. Don't move before the gun!",
+      "hintHurdles": "Alternate ← → to run · SPACE / ↑ to jump each hurdle"
+    },
+    "longJump": {
+      "action": "JUMP",
+      "hint": "Alternate ← → to run · hold SPACE at the board, release near 45° to jump"
+    },
+    "javelinThrow": {
+      "action": "THROW",
+      "hint": "Alternate ← → to run · hold SPACE before the line, release near 45° to throw"
     }
   }
 }

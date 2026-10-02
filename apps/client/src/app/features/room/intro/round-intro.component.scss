@@ -45,6 +45,12 @@
   &.format {
     color: var(--c-magenta);
   }
+  &.device {
+    color: var(--c-dim);
+    &.mobile {
+      color: var(--c-cyan);
+    }
+  }
 }
 
 .howto {

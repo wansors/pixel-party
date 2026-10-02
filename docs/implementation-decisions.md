@@ -335,3 +335,60 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   bitmap design stays crisp.
 - **Revisit if**: a scene needs state the relayout-by-restart can't rebuild from the snapshot — give
   that scene its own `onResize` instead of restarting.
+
+### D20 — Catalog growth: sports wave (track & field + Micro Race) — DECIDED
+
+- **Date**: 2026-09-28. **What**: five new FFA real-time games (catalog **40**, section F of
+  `minigame-catalog.md`): `dash-100m`, `hurdles-110m`, `long-jump`, `javelin-throw` and `micro-race`.
+- **Track & field — one engine, four events** (mirrors the `tetrisCore` pattern):
+  - `domain/minigames/athleticsCore.ts` — the Konami two-button sprint: a stride only counts on the
+    opposite foot, adds `2.2·(1 − v/16)` m/s, speed decays `e^(−1·t)`, strides under 50 ms apart are
+    ignored. Steady speed therefore tracks the alternating tap rate, and single-button mashing or an
+    auto-repeat key gets nothing.
+  - `trackRace.ts` (`Dash100m`, `Hurdles110m`) — side-by-side lanes, a seeded unannounced gun
+    (1.6–3.0 s after SET), false start = held 1 s after the gun (party-friendly, not a DQ), hurdle
+    crossings resolved at the back-dated crossing time against a 480 ms airborne window, a 10 s finish
+    window after the first finisher.
+  - `fieldEvent.ts` (`LongJump`, `JavelinThrow`) — three parallel attempts per player with a
+    READY → RUN → AIM → FLIGHT → MARK state machine; the angle is how long JUMP/THROW was held (server
+    time, 110°/s, auto-release at 85°); range is `reach · v² sin 2θ / g` measured from the foul line.
+    The mark is pushed at release (so a round ending mid-flight still counts); clients hide it until the
+    MARK phase.
+  - Wire types in `packages/shared/src/games/athletics.ts`; client `athleticsKit.ts` (procedural
+    rig athlete with 13 poses rasterized to pixel grids in each player's color, the two-foot `StridePad`
+    with next-foot glow + speed meter, stadium textures, `RunnerTracker`) behind `TrackRaceSceneBase`
+    and `FieldEventSceneBase`.
+- **Why dead reckoning, not interpolation, for runners**: interpolated positions render ~100–250 ms in
+  the past, i.e. 1–2 m behind the server at sprint speed — enough to make every hurdle jump or board
+  take-off feel early. Runners move in 1D with a known speed, so extrapolating `x + v·age` (capped at
+  350 ms, corrections blended over ~140 ms) keeps the picture aligned with the server's present; all
+  runners use it so side-by-side lanes stay comparable. The own hurdle hop is also predicted on press.
+- **Micro Race**: `microRace.ts` + shared track layouts in `games/microRace.ts` (three tabletop circuits,
+  Catmull-Rom smoothed, only the track index goes on the wire); arcade car physics with sub-steps
+  inside the 50 ms tick, drift/grip, off-road slowdown, restitution > 1 bumps; lap progress only
+  advances near the road the car was on and a 1.5 s stray triggers a rescue (no shortcut laps);
+  finishers by time, the rest by laps + progress, 12 s finish window, 90 s cap. Client
+  `MicroRaceScene` + `microRaceArt.ts` (pre-rendered track, 32-heading pixel cars, minimap, standings).
+- **Revisit if**: the portrait phone view of the lanes feels cramped (tune `viewMin` in
+  `TrackRaceSceneBase`), the field events' angle rate is too forgiving/harsh (`ANGLE_RATE`), or a unified
+  character style lands (see the backlog's visual-consistency audit) — the rig athlete should then be
+  replaced by the shared avatar sprites.
+
+### D21 — PC-first, with per-game `mobileFriendly` tags — DECIDED
+
+- **Date**: 2026-09-28. **Context**: the game is played at LAN parties mostly on PCs; several games
+  (continuous steering, several buttons at once, fine timing on a narrow view) are just not comfortable
+  on a portrait phone, even though every scene has touch controls.
+- **What**: `MiniGameMeta.mobileFriendly: boolean` (required, so every new game has to decide). The
+  lobby shows a small cyan phone icon on mobile-friendly game cards and a **Mobile** filter chip
+  (client-only, combines with the skill-axis filters, so "Select all" picks just those); the round
+  intro card adds a **Mobile-friendly** / **Best on PC** badge. Scoring, line-ups and the server are
+  untouched.
+- **Initial tagging** — 31 mobile-friendly; **9 PC-only**: `snake-arena` (swipes lag in a real-time
+  arena), `sumo-push` and `micro-race` (continuous steering with the finger over the action),
+  `maze-sprint`, `line-clear-sprint`, `quick-tetris` (d-pad / rotate spam — keyboard is far better),
+  `hurdles-110m`, `long-jump`, `javelin-throw` (two feet + a third timed button on a narrow view).
+  The 100 m dash stays mobile-friendly (two thumbs alternating is natural).
+- **Not done (KISS)**: no device detection or automatic filtering — the host knows who's on a phone.
+  Revisit if hosts keep picking PC-only games for phone players: the client could report a coarse
+  "touch device" hint on JOIN and the lobby could warn.

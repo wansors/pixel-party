@@ -5,13 +5,18 @@ import { BubblePopScene } from './BubblePopScene'
 import { BugSmashScene } from './BugSmashScene'
 import { ButtonMasherScene } from './ButtonMasherScene'
 import { ColorTrapScene } from './ColorTrapScene'
+import { Dash100mScene } from './Dash100mScene'
 import { FleetBattleScene } from './FleetBattleScene'
 import { FruitCatchScene } from './FruitCatchScene'
 import { HigherLowerScene } from './HigherLowerScene'
+import { Hurdles110mScene } from './Hurdles110mScene'
+import { JavelinThrowScene } from './JavelinThrowScene'
 import { LineClearSprintScene } from './LineClearSprintScene'
+import { LongJumpScene } from './LongJumpScene'
 import { MatchPairsScene } from './MatchPairsScene'
 import { MazeSprintScene } from './MazeSprintScene'
 import { MemoryFlashScene } from './MemoryFlashScene'
+import { MicroRaceScene } from './MicroRaceScene'
 import type { SceneDeps } from './MiniGameScene'
 import { NumberRushScene } from './NumberRushScene'
 import { OddOneOutScene } from './OddOneOutScene'
@@ -72,6 +77,11 @@ export const SCENES: Readonly<Record<string, SceneCtor>> = {
   'line-clear-sprint': LineClearSprintScene,
   'quick-tetris': QuickTetrisScene,
   'bubble-pop': BubblePopScene,
+  'dash-100m': Dash100mScene,
+  'hurdles-110m': Hurdles110mScene,
+  'long-jump': LongJumpScene,
+  'javelin-throw': JavelinThrowScene,
+  'micro-race': MicroRaceScene,
   'tug-of-war': TugOfWarScene,
   'bomb-relay': BombRelayScene,
   'fleet-battle': FleetBattleScene,

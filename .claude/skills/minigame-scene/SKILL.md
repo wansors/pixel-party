@@ -67,7 +67,8 @@ Shared kit — reuse before writing a private helper (duplicates were hoisted ou
 3. A clear end/waiting state (banner: `game.common.waiting`, `out`, `youWin`, `youLose`, `draw`…).
 4. No hardcoded user-facing English — add keys with the `add-i18n-keys` skill (EN + ES).
 5. Responsive: nothing clipped/overlapping at 1280x800 and 390x844 (`compact = min(w, h) < 520`),
-   touch targets ≥ 44 px. Press Start 2P is ~1 em per glyph and crispest at multiples of 8 px — keep
+   touch targets ≥ 44 px. The game is PC-first: set the catalog's `mobileFriendly` honestly (true only
+   if it plays comfortably with touch on a portrait phone), but never let a scene break on one. Press Start 2P is ~1 em per glyph and crispest at multiples of 8 px — keep
    headline strings short, long sentences in `bodyStyle`. In-font symbols: ★ ▲ ▼ ◀ ▶ ← → ↑ ↓ ×.
 6. Cosmetic randomness that all players should see alike is derived from ids/indices (not
    `Math.random`); domain code never uses `Math.random`/`Date.now` (`bun run lint:determinism`).

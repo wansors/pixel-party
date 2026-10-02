@@ -150,6 +150,19 @@
             </button>
           </li>
         }
+        <li class="mobile-filter">
+          <button
+            type="button"
+            class="axis-chip"
+            [class.active]="mobileOnly()"
+            [attr.aria-pressed]="mobileOnly()"
+            [title]="'room.lobby.mobileHint' | transloco"
+            (click)="mobileOnly.set(!mobileOnly())"
+          >
+            <i class="phone" aria-hidden="true"></i>
+            {{ 'room.lobby.mobileFilter' | transloco }}
+          </button>
+        </li>
       </ul>
 
       <ul class="game-grid">
@@ -171,6 +184,15 @@
               <span class="meta">
                 @for (a of g.axes; track a) {
                   <span class="axis-dot" [style.background]="axisColor(a)" [title]="catalog.axisLabel(a)"></span>
+                }
+                @if (g.mobileFriendly) {
+                  <span
+                    class="mobile-tag"
+                    role="img"
+                    [title]="'room.lobby.mobileHint' | transloco"
+                    [attr.aria-label]="'room.lobby.mobileHint' | transloco"
+                    ><i class="phone"></i
+                  ></span>
                 }
                 @if (g.format !== 'ffa') {
                   <span class="format">{{ 'room.format.' + g.format | transloco }}</span>
