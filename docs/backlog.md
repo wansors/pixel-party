@@ -368,7 +368,8 @@ cluster below. Catalog section F.
   - [ ] **Vertical shooter** (bullet-hell shmup) — a vertically scrolling ship: dodge bullet patterns and
         destroy targets. Same seeded waves for everyone (own lane/viewport each, so it's a fair race);
         ranked by score, hits taken cost points/lives.
-  - [ ] **Pang** (Buster Bros style) — fire a harpoon straight up to split bouncing balloons into
+  - [x] **Pang** (`pang`, Buster Bros style) — *Shipped 2026-10-02 (catalog I2, D22; own arena per
+        player, same seeded waves).* Fire a harpoon straight up to split bouncing balloons into
         smaller ones until they vanish; touching a balloon costs a life. Seeded balloon sets; ranked
         by balloons popped (shared arena variant: steal each other's pops).
   - [ ] **Competitive Asteroids** — shared wrap-around arena: rotate, thrust and shoot; points for

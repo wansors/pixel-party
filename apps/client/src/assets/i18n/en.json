@@ -315,6 +315,10 @@
       "sumo-ice": {
         "name": "Sumo ICE",
         "blurb": "Sumo on a melting ice floe: slide, shove and stay on the ice. Last one dry wins!"
+      },
+      "pang": {
+        "name": "Pang",
+        "blurb": "Harpoon the bouncing balloons: each hit splits them smaller. Most pops wins, dodge them all!"
       }
     }
   },
@@ -674,6 +678,14 @@
     "sumoIce": {
       "splash": "SPLASH!",
       "lifebuoy": "LIFEBUOY!"
+    },
+    "pang": {
+      "fire": "FIRE",
+      "pops": "{{n}} POPS",
+      "wave": "WAVE {{n}}",
+      "waveUp": "WAVE {{n}}!",
+      "hint": "← → walk · SPACE fires the harpoon",
+      "popped": "{{n}} POPPED"
     }
   }
 }

@@ -493,6 +493,17 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     blurb: 'Sumo on a melting ice floe: slide, shove and stay on the ice. Last one dry wins!',
     axes: ['reflexes', 'precision'],
   },
+  {
+    id: 'pang',
+    name: 'Pang',
+    format: 'ffa',
+    realtime: true,
+    mobileFriendly: false,
+    durationSec: 50,
+    blurb:
+      'Harpoon the bouncing balloons: each hit splits them smaller. Most pops wins, dodge them all!',
+    axes: ['precision', 'reflexes'],
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

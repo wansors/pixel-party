@@ -22,6 +22,7 @@ import { MicroRaceScene } from './MicroRaceScene'
 import type { SceneDeps } from './MiniGameScene'
 import { NumberRushScene } from './NumberRushScene'
 import { OddOneOutScene } from './OddOneOutScene'
+import { PangScene } from './PangScene'
 import { PixelBeatScene } from './PixelBeatScene'
 import { PixelDashScene } from './PixelDashScene'
 import { PixelHoopsScene } from './PixelHoopsScene'
@@ -90,6 +91,7 @@ export const SCENES: Readonly<Record<string, SceneCtor>> = {
   'freeze-doll': FreezeDollScene,
   'room-rush': RoomRushScene,
   'sumo-ice': SumoIceScene,
+  pang: PangScene,
   'tug-of-war': TugOfWarScene,
   'bomb-relay': BombRelayScene,
   'fleet-battle': FleetBattleScene,

@@ -50,8 +50,8 @@ Then (2026-09-28) a new sports wave (section F): F1 100 m Dash (`dash-100m`), F2
 (`hurdles-110m`), F3 Long Jump (`long-jump`), F4 Javelin (`javelin-throw`) and F5 Micro Race
 (`micro-race`). **40 mini-games total.**
 Then (2026-10-02) the roadmap wave (D22), one game at a time: G1 Glass Bridge (`glass-bridge`), G2
-Freeze Doll (`freeze-doll`), G3 Room Rush (`room-rush`), I1 Sumo ICE (`sumo-ice`). **44 mini-games
-total.**
+Freeze Doll (`freeze-doll`), G3 Room Rush (`room-rush`), I1 Sumo ICE (`sumo-ice`), I2 Pang (`pang`).
+**45 mini-games total.**
 
 ---
 
@@ -463,6 +463,20 @@ avatar. See `implementation-decisions.md` D22.
 - **Win condition / Result**: last one standing; the rest by survival time (`21s`).
 - **Latency**: high (continuous steering) — snapshot interpolation for every body.
 
+### I2. ✅ Pang — implemented (`pang`)
+- **Concept**: *Buster Bros* — walk along the floor and fire a harpoon straight up; a hit splits a
+  balloon into two smaller ones until the tiniest just pops.
+- **Type**: FFA, everyone in their own arena with the **same seeded waves** (a fair race) · **Input**:
+  ← → / A D to walk, SPACE / ↑ to fire, or ◀ FIRE ▶ buttons · **Duration**: 50 s · **Banter**: 💥💥 ·
+  **Mobile-friendly**: no
+- **Rules**: four balloon sizes, each bouncing back to its own fixed height (bigger = higher); one
+  harpoon at a time, fired from where you stand (the wire pops the first balloon it touches). Clear a
+  wave and the next, bigger one drops in 1.2 s later. A balloon touching you costs one of 3 lives
+  (1.5 s of blinking invulnerability follows); out of lives, you're out.
+- **Win condition / Result**: most pops (`23`), then lives left, then whoever got there first.
+- **Latency**: medium — the client runs the same balloon physics between snapshots (`PANG` constants
+  are shared), and on wide screens shows everyone else's arena as a live thumbnail.
+
 ---
 
 ## Variety coverage
@@ -475,7 +489,7 @@ avatar. See `implementation-decisions.md` D22.
 | Knowledge | A3 |
 | Mental math | E2 |
 | Memory | A4, A11, E8 |
-| Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4 |
+| Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4, I2 |
 | Survival / dodging | A7, A8, B3, I1 |
 | Nerve / chance | D1, D3, E5, G1, G2, G3 |
 | Teamwork | C1, C2, C3 |
@@ -485,7 +499,7 @@ avatar. See `implementation-decisions.md` D22.
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1–G3, I1 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1–G3, I1–I2 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7 |
 | Team | C1, C2, C3 |
 

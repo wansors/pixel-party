@@ -440,3 +440,9 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   time. Added a **lifebuoy** (2 lives, a 1.2 s collision-free ghost after the respawn on the core) after
   the first playtest: aggressive bots shoved a player into the water 1.5 s into a 45 s round — same
   "nobody is out in the first seconds" rule as the elimination cluster.
+- **I2 Pang** (`pang`, PC-first): the backlog's main design — one arena per player, identical seeded
+  waves (the "shared arena, steal pops" variant was not built). The wire carries each balloon's
+  velocity and the physics constants live in `@pp/shared`, so the scene simulates the balloons between
+  snapshots (gravity, walls, a fixed bounce height per size) instead of interpolating — balloons split
+  and vanish, so an id-less list can't be lerped. Snapshots carry every arena (~3 KB at 10 players),
+  which also feeds the thumbnails of the others on wide screens.

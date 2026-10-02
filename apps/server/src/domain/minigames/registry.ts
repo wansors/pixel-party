@@ -19,6 +19,7 @@ import { MemoryFlash } from './memoryFlash'
 import { MicroRace } from './microRace'
 import { NumberRush } from './numberRush'
 import { OddOneOut } from './oddOneOut'
+import { Pang } from './pang'
 import { PixelBeat } from './pixelBeat'
 import { PixelDash } from './pixelDash'
 import { PixelHoops } from './pixelHoops'
@@ -90,6 +91,7 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'freeze-doll': () => new FreezeDoll() as unknown as MiniGame<unknown, unknown>,
   'room-rush': () => new RoomRush() as unknown as MiniGame<unknown, unknown>,
   'sumo-ice': () => new SumoIce() as unknown as MiniGame<unknown, unknown>,
+  pang: () => new Pang() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

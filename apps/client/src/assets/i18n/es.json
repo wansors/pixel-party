@@ -315,6 +315,10 @@
       "sumo-ice": {
         "name": "Sumo en Hielo",
         "blurb": "Sumo sobre un témpano que se derrite: resbala, empuja y no te caigas. ¡Gana el último que quede seco!"
+      },
+      "pang": {
+        "name": "Pang",
+        "blurb": "Arponea los globos que rebotan: cada impacto los divide en otros más pequeños. Gana quien más reviente, ¡y esquívalos!"
       }
     }
   },
@@ -674,6 +678,14 @@
     "sumoIce": {
       "splash": "¡CHOF!",
       "lifebuoy": "¡FLOTADOR!"
+    },
+    "pang": {
+      "fire": "DISPARA",
+      "pops": "{{n}} GLOBOS",
+      "wave": "OLEADA {{n}}",
+      "waveUp": "¡OLEADA {{n}}!",
+      "hint": "← → andar · ESPACIO lanza el arpón",
+      "popped": "{{n}} REVENTADOS"
     }
   }
 }
