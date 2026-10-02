@@ -1,71 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core'
 import type { AvatarId } from '@pp/shared'
+import { AVATAR_SPRITES } from '../../game/avatars'
 
-// Preset 8x8 "monigote" sprites. Legend: '_' transparent · 'B' body (tinted with the player color) ·
-// 'D' dark detail (outline / eyes). Kept tiny and self-hosted (rendered as crisp SVG rects, CSP-safe)
-// so every player reads as color + avatar + name, never color alone (art-direction §6).
-const SPRITES: Record<AvatarId, string[]> = {
-  cat: [
-    'B_____B_',
-    'BB___BB_',
-    'BBBBBBB_',
-    'BDBBBDB_',
-    'BBBBBBB_',
-    'BDDDDDB_',
-    '_BBBBB__',
-    '__B_B___',
-  ],
-  dog: [
-    'BB___BB_',
-    'BBB_BBB_',
-    '_BBBBB__',
-    '_BDBDB__',
-    '_BBBBB__',
-    '_BDDDB__',
-    '_BBBBB__',
-    '__B_B___',
-  ],
-  fox: [
-    'B_____B_',
-    'BB___BB_',
-    'BDB_BDB_',
-    'BBBBBBB_',
-    '_BBBBB__',
-    '_BDBDB__',
-    '__BBB___',
-    '__B_B___',
-  ],
-  owl: [
-    '_BBBBB__',
-    'BB_B_BB_',
-    'BDBBBDB_',
-    'BBBBBBB_',
-    'BBBBBBB_',
-    '_BBBBB__',
-    '_B_B_B__',
-    '__B_B___',
-  ],
-  frog: [
-    '_B___B__',
-    'BDB_BDB_',
-    'BBBBBBB_',
-    'BBBBBBB_',
-    '_BBBBB__',
-    'BBBBBBB_',
-    'B_BBB_B_',
-    '________',
-  ],
-  bear: [
-    'BB___BB_',
-    'BBB_BBB_',
-    '_BBBBB__',
-    '_BDBDB__',
-    '_BBBBB__',
-    '_BBDBB__',
-    '_BBBBB__',
-    '__BBB___',
-  ],
-}
+// Preset 8x8 "monigote" sprite (grids in game/avatars.ts, shared with the Phaser scenes), rendered as
+// crisp SVG rects (self-hosted, CSP-safe) so every player reads as color + avatar + name, never color
+// alone (art-direction §6).
 
 interface Cell {
   x: number
@@ -107,7 +46,7 @@ export class PixelAvatarComponent {
   readonly size = input<number>(32)
 
   readonly cells = computed<Cell[]>(() => {
-    const grid = SPRITES[this.avatar()] ?? SPRITES.cat
+    const grid = AVATAR_SPRITES[this.avatar()] ?? AVATAR_SPRITES.cat
     const body = this.color()
     const out: Cell[] = []
     grid.forEach((row, y) => {

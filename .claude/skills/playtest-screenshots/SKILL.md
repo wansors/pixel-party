@@ -33,7 +33,10 @@ cd "$WORK" && timeout 180 bun shoot.ts <tag>-phone 390x844 fruit-catch
 ```
 - Flags: `--join` also shoots the entry screen, `--lobby` the lobby, `--me-host` makes the browser
   player the host (host-only lobby controls; it presses START itself), `--lang=es` runs the UI in
-  Spanish (check that longer Spanish strings still fit).
+  Spanish (check that longer Spanish strings still fit), `--keys=ArrowRight,Space*800` replaces the
+  default interaction (four canvas clicks + Space) with key taps / holds (`Key*ms`; puppeteer key names),
+  `--more=N` adds N more in-play shots (`-play3`…), one every 3 s, re-running the interaction first —
+  use them to exercise a game's real controls (hold-to-move, LEFT/RIGHT choices) instead of junk.
 - Output: `$WORK/shots/<tag>/NNN-<phase>.png` — look at them with the Read tool.
 - Per game: `-intro` (≈1.8 s into the countdown), `-play1` (≈1.5 s into the round), `-play2` (after a
   few clicks + Space, ≈4 s later), `-finish` (the frozen last frame with the FINISH stamp),

@@ -299,6 +299,10 @@
       "javelin-throw": {
         "name": "Jabalina",
         "blurb": "Coge velocidad, mantén LANZA antes de la línea para apuntar y suelta. Gana el lanzamiento más largo."
+      },
+      "glass-bridge": {
+        "name": "Puente de Cristal",
+        "blurb": "Cruzad de uno en uno: ¿cristal IZQUIERDO o DERECHO? Uno aguanta, el otro se rompe. Atento al destello."
       }
     }
   },
@@ -322,7 +326,10 @@
       "nice": "¡BIEN!",
       "waiting": "Esperando al resto…",
       "finished": "¡TERMINADO!",
-      "finish": "¡FIN!"
+      "finish": "¡FIN!",
+      "eliminated": "¡ELIMINADO!",
+      "left": "QUEDAN {{n}}/{{total}}",
+      "spectating": "Estás fuera: disfruta del espectáculo"
     },
     "reaction": {
       "wait": "ESPERA…",
@@ -610,6 +617,23 @@
     "javelinThrow": {
       "action": "LANZA",
       "hint": "Alterna ← → para correr · mantén ESPACIO antes de la línea y suelta cerca de 45°"
+    },
+    "glassBridge": {
+      "vest": "DORSAL #{{n}}",
+      "yourJump": "¡SALTAS TÚ! ¿IZQ. O DCHA.?",
+      "walking": "Cruzando el cristal seguro…",
+      "waitTurn": "Tienes {{n}} delante · ¡señala (o miente)!",
+      "nextUp": "Vas después · ¡estudia el puente!",
+      "crossedHint": "¡Lo lograste! Sigue señalando…",
+      "fallenHint": "Has caído · sigue liando",
+      "jumpLeft": "◀ SALTA",
+      "jumpRight": "SALTA ▶",
+      "pointLeft": "◀ SEÑALA",
+      "pointRight": "SEÑALA ▶",
+      "safe": "¡A SALVO!",
+      "start": "SALIDA",
+      "goal": "META",
+      "timeUp": "¡TIEMPO!"
     }
   }
 }

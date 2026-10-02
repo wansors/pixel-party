@@ -299,6 +299,10 @@
       "javelin-throw": {
         "name": "Javelin",
         "blurb": "Build speed, hold THROW before the line to aim, release to launch. Longest throw wins."
+      },
+      "glass-bridge": {
+        "name": "Glass Bridge",
+        "blurb": "Cross one by one: LEFT or RIGHT panel? One holds, one shatters. Watch for the glint."
       }
     }
   },
@@ -322,7 +326,10 @@
       "nice": "NICE!",
       "waiting": "Waiting for the others…",
       "finished": "FINISHED!",
-      "finish": "FINISH!"
+      "finish": "FINISH!",
+      "eliminated": "ELIMINATED!",
+      "left": "{{n}}/{{total}} LEFT",
+      "spectating": "You are out — enjoy the show"
     },
     "reaction": {
       "wait": "WAIT…",
@@ -610,6 +617,23 @@
     "javelinThrow": {
       "action": "THROW",
       "hint": "Alternate ← → to run · hold SPACE before the line, release near 45° to throw"
+    },
+    "glassBridge": {
+      "vest": "VEST #{{n}}",
+      "yourJump": "YOUR JUMP! LEFT OR RIGHT?",
+      "walking": "Crossing the safe glass…",
+      "waitTurn": "{{n}} ahead of you · point the way (or lie)",
+      "nextUp": "You are next · study the bridge!",
+      "crossedHint": "You made it! Keep pointing…",
+      "fallenHint": "You fell · keep heckling",
+      "jumpLeft": "◀ JUMP",
+      "jumpRight": "JUMP ▶",
+      "pointLeft": "◀ POINT",
+      "pointRight": "POINT ▶",
+      "safe": "SAFE!",
+      "start": "START",
+      "goal": "GOAL",
+      "timeUp": "TIME UP!"
     }
   }
 }

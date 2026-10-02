@@ -453,6 +453,16 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     blurb: 'Build speed, hold THROW before the line to aim, release to launch. Longest throw wins.',
     axes: ['precision', 'speed'],
   },
+  {
+    id: 'glass-bridge',
+    name: 'Glass Bridge',
+    format: 'ffa',
+    realtime: true,
+    mobileFriendly: true,
+    durationSec: 75,
+    blurb: 'Cross one by one: LEFT or RIGHT panel? One holds, one shatters. Watch for the glint.',
+    axes: ['nerve', 'focus'],
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

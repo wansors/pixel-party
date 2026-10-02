@@ -19,6 +19,7 @@ import {
   type TeamRoundResult,
 } from '@pp/shared'
 import { GameClient } from '../../../game/GameClient'
+import { toAvatarId } from '../../../game/avatars'
 import { AudioService } from '../../core/audio/audio.service'
 import { CatalogI18nService } from '../../core/i18n/catalog-i18n.service'
 import { GameSocketService } from '../../core/net/game-socket.service'
@@ -377,7 +378,7 @@ export class RoomStore {
     })
   }
 
-  // Mirrors the roster's display names + colors into the Phaser-side RoundState, so mini-game scenes
+  // Mirrors the roster's display names, colors and avatars into the Phaser-side RoundState, so mini-game scenes
   // can show real names/colors instead of falling back to a slice of the player id.
   private syncRoster(): void {
     if (!this.game) return
@@ -386,6 +387,7 @@ export class RoomStore {
     this.game.state.colors = Object.fromEntries(
       players.map((p) => [p.id, Number.parseInt(p.color.slice(1), 16)]),
     )
+    this.game.state.avatars = Object.fromEntries(players.map((p) => [p.id, toAvatarId(p.avatar)]))
   }
 
   private startCountdown(startsInMs: number): void {

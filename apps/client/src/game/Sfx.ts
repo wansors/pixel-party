@@ -87,6 +87,22 @@ export class Sfx {
     this.tone(400, 180, { slideTo: 50, gain: 0.35 })
   }
 
+  // Elimination sting (a player is out): a harsh zap, then a sad three-note fall — loud enough to
+  // read as the round's big dramatic beat, short enough to repeat when several drop at once.
+  eliminated(): void {
+    this.tone(1400, 120, { type: 'sawtooth', slideTo: 180, gain: 0.22 })
+    const fall = [392.0, 349.23, 293.66] // G4 F4 D4
+    fall.forEach((f, i) =>
+      this.tone(f, i === fall.length - 1 ? 320 : 110, { type: 'triangle', delayMs: 140 + i * 120 }),
+    )
+  }
+
+  // Distant thunder for a lightning flash: a low, rumbling downward sweep.
+  thunder(): void {
+    this.tone(140, 520, { type: 'sawtooth', slideTo: 38, gain: 0.16 })
+    this.tone(90, 640, { type: 'triangle', slideTo: 30, delayMs: 60, gain: 0.2 })
+  }
+
   // Simon pad tone: one distinct pitch per colour pad (played on tap and on sequence playback), for
   // the classic Simon feel. Ascending pentatonic set so any pad order still sounds musical.
   pad(index: number): void {

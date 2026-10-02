@@ -49,6 +49,8 @@ E9 Maze Sprint (`maze-sprint`), E10 Line Clear Sprint (`line-clear-sprint`), E13
 Then (2026-09-28) a new sports wave (section F): F1 100 m Dash (`dash-100m`), F2 110 m Hurdles
 (`hurdles-110m`), F3 Long Jump (`long-jump`), F4 Javelin (`javelin-throw`) and F5 Micro Race
 (`micro-race`). **40 mini-games total.**
+Then (2026-10-02) the roadmap wave (D22), one game at a time: G1 Glass Bridge (`glass-bridge`).
+**41 mini-games total.**
 
 ---
 
@@ -389,6 +391,26 @@ every runner from the snapshot's `x` + `v`, so what a player sees lines up with 
 - **Win condition / Result**: finishers by time (`1:02.3`), the rest by laps + progress (`LAP 2`).
 - **Latency**: high (continuous steering) — snapshot interpolation for every car.
 
+## G. Elimination rounds — Squid Game-style (2026-10-02)
+
+Short, tense FFA rounds where watching friends get zapped is the show. Ranked by elimination order
+(survivors share 1st); eliminated players stay on screen, dimmed, and keep a way to take part; each
+exit is a big moment (`fx.eliminate`: ELIMINATED! stamp, pixel burst, sting). Players are drawn as their
+lobby avatar. Original names and art. See `implementation-decisions.md` D22.
+
+### G1. ✅ Glass Bridge — implemented (`glass-bridge`)
+- **Concept**: a bridge of rows over an abyss, each with a LEFT and a RIGHT glass panel — one tempered,
+  one that shatters. Players cross **one at a time in a seeded vest order** (#1 first); everyone behind
+  learns from every fall.
+- **Type**: FFA · **Input**: LEFT / RIGHT (← → / A D, the two big buttons, or a tap on the panel) ·
+  **Duration**: ~30–60 s (75 s cap) · **Banter**: 💥💥💥 · **Mobile-friendly**: yes
+- **Rules**: rows = players + 2 (4–12). Already-solved rows are auto-walked; each unknown row is a 4 s
+  jump timer (hesitate and you're pushed onto a seeded side). A lightning flash every 3–5.6 s shows a
+  tiny glint on the tempered panel of the row being decided (easy to miss). Everyone not jumping —
+  queued, fallen or safe — can point LEFT/RIGHT at that row: colored **heckle arrows**, honest or not.
+- **Win condition / Result**: rows reached (`4/10`); everyone who crosses shares 1st.
+- **Latency**: low (turn-based taps; the glint is held ≥ 2 snapshots). · **Complexity**: medium.
+
 ---
 
 ## Variety coverage
@@ -396,14 +418,14 @@ every runner from the snapshot's `x` + `v`, so what a player sees lines up with 
 | Axis | Covered by |
 |------|------------|
 | Reflexes / reaction | A1, A6, B1, E7, F5 |
-| Attention / focus (inhibition) | E1, E3, E4 |
+| Attention / focus (inhibition) | E1, E3, E4, G1 |
 | Speed / endurance | A2, A9, C1, F1, F2 |
 | Knowledge | A3 |
 | Mental math | E2 |
 | Memory | A4, A11, E8 |
 | Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4 |
 | Survival / dodging | A7, A8, B3 |
-| Nerve / chance | D1, D3, E5 |
+| Nerve / chance | D1, D3, E5, G1 |
 | Teamwork | C1, C2, C3 |
 | Head-to-head rivalry | B1, B2, B3, E7 |
 
@@ -411,7 +433,7 @@ every runner from the snapshot's `x` + `v`, so what a player sees lines up with 
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7 |
 | Team | C1, C2, C3 |
 

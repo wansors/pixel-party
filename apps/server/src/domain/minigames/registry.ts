@@ -9,6 +9,7 @@ import { ColorTrap } from './colorTrap'
 import { JavelinThrow, LongJump } from './fieldEvent'
 import { FleetBattle } from './fleetBattle'
 import { FruitCatch } from './fruitCatch'
+import { GlassBridge } from './glassBridge'
 import { HigherLower } from './higherLower'
 import { LineClearSprint } from './lineClearSprint'
 import { MatchPairs } from './matchPairs'
@@ -82,6 +83,7 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'hurdles-110m': () => new Hurdles110m() as unknown as MiniGame<unknown, unknown>,
   'long-jump': () => new LongJump() as unknown as MiniGame<unknown, unknown>,
   'javelin-throw': () => new JavelinThrow() as unknown as MiniGame<unknown, unknown>,
+  'glass-bridge': () => new GlassBridge() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

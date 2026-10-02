@@ -415,11 +415,12 @@ cluster below. Catalog section F.
           time.
         - Input is hold-state (`walk | run | stop`), so it works with keys or two big touch buttons →
           **mobile-friendly**. Axes: reflexes + nerve.
-  - [ ] **Glass Bridge** (`glass-bridge`) — a bridge of N rows, each with a left and a right glass
-        panel; one panel per row is tempered, the other shatters.
+  - [x] **Glass Bridge** (`glass-bridge`) — *Shipped 2026-10-02 (catalog G1, D22).* A bridge of N
+        rows, each with a left and a right glass panel; one panel per row is tempered, the other
+        shatters.
         - **Order (the first one starts):** players line up on the start platform in a seeded order
-          (vest numbers), and #1 steps out first. Everyone behind follows on the bridge. When the
-          leader falls, the next player picks up from the frontier.
+          (vest numbers), and #1 steps out first while the rest wait on the platform. When the runner
+          falls, the next vest auto-walks to the frontier and picks up from there.
         - **Known rows auto-walk:** nobody re-jumps a row already solved, so the round never drags.
         - **Jump timer:** ~4 s per unknown row; hesitating too long forces a random jump. An overall
           bridge clock ends the round: anyone still on the bridge or in the queue falls.
@@ -432,7 +433,7 @@ cluster below. Catalog section F.
         - **Tuning math:** every unknown row costs one fall half the time, so expected falls ≈ rows ÷ 2.
           With rows ≈ players + 2, about 30–40 % survive (8 players → 10 rows → ~3 survive, ~15 jumps,
           ~35 s).
-        - **Result:** rows reached; survivors share 1st (tie-break: earlier crossing).
+        - **Result:** rows reached; survivors share 1st.
         - **Possible variant:** the current leader goes first, as comic catch-up. Not the default,
           because the mini-game init ctx has no standings today, so this needs a contract change.
         - Turn-based taps → **mobile-friendly** and latency-tolerant. Axes: nerve + focus.

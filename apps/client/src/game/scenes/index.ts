@@ -8,6 +8,7 @@ import { ColorTrapScene } from './ColorTrapScene'
 import { Dash100mScene } from './Dash100mScene'
 import { FleetBattleScene } from './FleetBattleScene'
 import { FruitCatchScene } from './FruitCatchScene'
+import { GlassBridgeScene } from './GlassBridgeScene'
 import { HigherLowerScene } from './HigherLowerScene'
 import { Hurdles110mScene } from './Hurdles110mScene'
 import { JavelinThrowScene } from './JavelinThrowScene'
@@ -82,6 +83,7 @@ export const SCENES: Readonly<Record<string, SceneCtor>> = {
   'long-jump': LongJumpScene,
   'javelin-throw': JavelinThrowScene,
   'micro-race': MicroRaceScene,
+  'glass-bridge': GlassBridgeScene,
   'tug-of-war': TugOfWarScene,
   'bomb-relay': BombRelayScene,
   'fleet-battle': FleetBattleScene,

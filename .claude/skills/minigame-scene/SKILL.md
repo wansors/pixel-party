@@ -53,6 +53,12 @@ Shared kit — reuse before writing a private helper (duplicates were hoisted ou
   buttons, tiles, cards), `ensureCardTexture` (+ `CARD_FACE`/`CARD_INK`), `fitText(text, maxW, maxSize)`
   / `fitFontSize(str, maxW, maxSize)` (crisp pixel-font sizes), `teamColor(team)` (0xRRGGBB), `shade`,
   `hexToCss`, `headlineStyle` (Press Start 2P) / `bodyStyle` (monospace).
+- `game/avatars.ts`: `ensureAvatarTexture(scene, this.state.avatarOf(id), this.state.colorOf(id))` —
+  draw players as the avatar they picked in the lobby (8×8 grid, tinted in their color) instead of a
+  per-scene figure.
+- Elimination rounds: `fx.eliminate(scene, x, y, color, this.t('game.common.eliminated'))` (burst + ring
+  + stamp + shake; play `this.sfx.eliminated()` once per batch), `this.hud?.setCenter(this.t(
+  'game.common.left', { n, total }))` for the survivors chip, `game.common.spectating` for the out state.
 - `game/playerStrip.ts`: `PlayerStrip` — wrapping row of "■ NAME stat" chips in identity colors (how
   everyone else is doing).
 - `netcode/SnapshotInterpolator` for real-time motion (see `FruitCatchScene`).

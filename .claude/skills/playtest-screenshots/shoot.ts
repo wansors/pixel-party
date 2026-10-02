@@ -4,11 +4,14 @@
 // $PP_SHOTS_DIR/<tag>/ (default ./shots/<tag>/).
 //
 // Usage: bun shoot.ts <tag> <width>x<height> <game-id>[,<game-id>...] [--join] [--lobby] [--me-host]
-//        [--lang=es]
+//        [--lang=es] [--keys=ArrowRight,Space*800] [--more=3]
+// --keys: what the browser player presses after the play1 shot (default: four canvas clicks + Space).
+//         `Key` taps it, `Key*ms` holds it for ms. Key names are puppeteer's (ArrowLeft, KeyA, Space…).
+// --more: extra in-play shots (play3, play4…), one every 3 s, repeating the --keys sequence before each.
 // Env:   PP_CLIENT (http://localhost:4200)  PP_SERVER (http://localhost:3000)
 //        CHROME (auto-detected)  PP_SHOTS_DIR (./shots)
 import { existsSync } from 'node:fs'
-import puppeteer from 'puppeteer-core'
+import puppeteer, { type KeyInput } from 'puppeteer-core'
 
 const [tag = 'run', size = '1280x800', idsArg = 'button-masher', ...flags] = process.argv.slice(2)
 const [w, h] = size.split('x').map(Number) as [number, number]
@@ -65,6 +68,8 @@ const page = await browser.newPage()
 await page.setViewport({ width: w, height: h, deviceScaleFactor: 1 })
 // --lang=es: preselect the UI language (LanguageService reads localStorage `pp_lang`).
 const lang = flags.find((f) => f.startsWith('--lang='))?.slice('--lang='.length)
+const keysArg = flags.find((f) => f.startsWith('--keys='))?.slice('--keys='.length)
+const moreShots = Number(flags.find((f) => f.startsWith('--more='))?.slice('--more='.length) ?? 0)
 if (lang) {
   await page.evaluateOnNewDocument((l) => localStorage.setItem('pp_lang', l), lang)
 }
@@ -145,14 +150,36 @@ const done = new Promise<void>((resolve) => {
       setTimeout(async () => {
         if (round !== r) return
         await shot(`${g}-play1`)
-        // A few taps around the middle of the canvas + Space, then a second look.
-        for (let i = 0; i < 4; i++) {
-          await page.mouse.click(w * (0.3 + Math.random() * 0.4), h * (0.35 + Math.random() * 0.4))
-          await Bun.sleep(120)
+        // Interact (the --keys sequence, or a few taps around the middle of the canvas + Space), then
+        // another look — `--more` times over.
+        const interact = async (): Promise<void> => {
+          if (!keysArg) {
+            for (let i = 0; i < 4; i++) {
+              await page.mouse.click(
+                w * (0.3 + Math.random() * 0.4),
+                h * (0.35 + Math.random() * 0.4),
+              )
+              await Bun.sleep(120)
+            }
+            await page.keyboard.press('Space')
+            return
+          }
+          for (const step of keysArg.split(',')) {
+            const [key, holdMs] = step.split('*') as [KeyInput, string | undefined]
+            if (holdMs) {
+              await page.keyboard.down(key)
+              await Bun.sleep(Number(holdMs))
+              await page.keyboard.up(key)
+            } else await page.keyboard.press(key)
+            await Bun.sleep(150)
+          }
         }
-        await page.keyboard.press('Space')
-        await Bun.sleep(2500)
-        if (round === r && playing) await shot(`${g}-play2`)
+        for (let n = 2; n <= 2 + moreShots; n++) {
+          await interact()
+          await Bun.sleep(n === 2 ? 2500 : 3000)
+          if (round !== r || !playing) break
+          await shot(`${g}-play${n}`)
+        }
       }, 1500)
     } else if (m.type === 'ROUND_STATE' && m.final) {
       // The round's frozen last frame (FINISH stamp), shown for the server's grace period.

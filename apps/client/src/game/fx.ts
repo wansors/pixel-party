@@ -148,6 +148,40 @@ export function punch(
   })
 }
 
+// The elimination moment (Squid-style rounds): a burst in the player's color, a red ring, a slammed
+// rotated stamp ("ELIMINATED!") over the spot and a small shake — being out is part of the show. The
+// sound sting is the scene's call (`sfx.eliminated()`), so several simultaneous outs play it once.
+export function eliminate(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  color: number,
+  text: string,
+  size = 16,
+): void {
+  burst(scene, x, y, color, 24, 280)
+  ring(scene, x, y, PALETTE.red, 56)
+  shake(scene, 0.006, 160)
+  const stamp = scene.add
+    .text(x, y, text, headlineStyle(size, PALETTE.red, { stroke: '#10121c', strokeThickness: 6 }))
+    .setOrigin(0.5)
+    .setDepth(905)
+    .setAngle(-8)
+    .setScale(2.2)
+    .setAlpha(0)
+  // Keep the stamp fully on screen next to the edges.
+  const half = stamp.width / 2 + 4
+  stamp.setX(Phaser.Math.Clamp(x, half, Math.max(half, scene.scale.width - half)))
+  scene.tweens.chain({
+    targets: stamp,
+    tweens: [
+      { scale: 1, alpha: 1, duration: 160, ease: 'Back.easeOut' },
+      { alpha: 0, y: y - size, delay: 900, duration: 300, ease: 'Quad.easeIn' },
+    ],
+    onComplete: () => stamp.destroy(),
+  })
+}
+
 // Big centered banner ("YOU WIN!", "OUT!", "LOCKED IN") that slams in and stays until replaced or
 // hidden (32 px, 24 px on phones; showBanner shrinks it further to fit). Returns the text so the scene
 // can update/hide it; call once per scene and reuse.

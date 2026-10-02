@@ -4,7 +4,7 @@ import type { Sfx } from './Sfx'
 import { headlineStyle, hexToCss } from './pixelStyle'
 
 // Standard in-canvas HUD strip shared by every mini-game scene (art-direction §4): a score chip on the
-// left, the seconds left on the right and a segmented, draining pixel time bar underneath. The bar
+// left, an optional status chip in the middle (e.g. the survivors counter), the seconds left on the right and a segmented, draining pixel time bar underneath. The bar
 // changes color as time runs out (lime → amber → red) and the last seconds tick + pulse, so every game
 // builds the same end-of-round tension without each scene re-implementing its own timer text.
 //
@@ -18,6 +18,7 @@ export class Hud {
   readonly bottom: number
   private readonly score: Phaser.GameObjects.Text
   private readonly clock: Phaser.GameObjects.Text
+  private readonly center: Phaser.GameObjects.Text
   private readonly bar: Phaser.GameObjects.Graphics
   private readonly barX: number
   private readonly barY: number
@@ -41,6 +42,10 @@ export class Hud {
     this.score = scene.add
       .text(pad, rowY, '', headlineStyle(font, PALETTE.amber))
       .setOrigin(0, 0.5)
+      .setDepth(800)
+    this.center = scene.add
+      .text(width / 2, rowY, '', headlineStyle(compact ? 8 : 12, PALETTE.text))
+      .setOrigin(0.5)
       .setDepth(800)
     this.clock = scene.add
       .text(width - pad, rowY, '', headlineStyle(font + 2, PALETTE.lime))
@@ -108,6 +113,7 @@ export class Hud {
   showFinish(text: string): void {
     const { width } = this.scene.scale
     this.clock.setText('')
+    this.center.setVisible(false)
     this.bar.clear()
     this.bar.fillStyle(PALETTE.amber, 1)
     this.bar.fillRect(this.barX, this.barY, this.barW, this.barH)
@@ -141,5 +147,11 @@ export class Hud {
   // Left-hand chip: the player's own score / progress ("12 PTS", "LEVEL 4"). Empty string hides it.
   setScore(text: string): void {
     if (this.score.text !== text) this.score.setText(text)
+  }
+
+  // Middle chip: a short shared status ("7/10 LEFT" survivors counter). Empty string hides it.
+  setCenter(text: string, color: number = PALETTE.text): void {
+    if (this.center.text !== text) this.center.setText(text)
+    this.center.setColor(hexToCss(color))
   }
 }

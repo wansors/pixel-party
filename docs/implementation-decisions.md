@@ -392,3 +392,27 @@ misses — each would be speculative or gated, and the project rule is "nothing 
 - **Not done (KISS)**: no device detection or automatic filtering — the host knows who's on a phone.
   Revisit if hosts keep picking PC-only games for phone players: the client could report a coarse
   "touch device" hint on JOIN and the lobby could warn.
+
+### D22 — Catalog growth: roadmap game wave (elimination rounds, arcade classics, racers) — IN PROGRESS
+
+- **Date**: 2026-10-02. **Context**: the 2026-09-28/29 backlog ideas (`backlog.md` → *New mini-game
+  ideas* and the *Squid Game-style elimination cluster*) are implemented **one game at a time**, each
+  fully verified (domain tests, the whole gate, desktop + phone playtest shots) before the next starts.
+- **Shared groundwork** (built once, before the first game):
+  - **In-scene avatars** — the 8×8 "monigote" grids moved from `PixelAvatarComponent` to
+    `game/avatars.ts` (single source for the Angular chrome and Phaser); `ensureAvatarTexture(scene,
+    avatar, color)` tints one per player, and `RoundState.avatars`/`avatarOf(id)` mirrors the roster's
+    picks. New games draw players as their lobby avatar (the *Visual consistency audit* still covers
+    migrating the older scenes).
+  - **Elimination kit** — `fx.eliminate()` (burst in the player's color, red ring, slammed rotated
+    "ELIMINATED!" stamp, small shake), `Sfx.eliminated()` (zap + falling sting) and the HUD's middle
+    chip `hud.setCenter()` for the "7/10 LEFT" survivors counter (hidden by the FINISH stamp). Plus
+    `Sfx.thunder()` for lightning.
+  - `playtest-screenshots` gained `--keys` (tap/hold real controls) and `--more` (extra in-play shots).
+- **G1 Glass Bridge** (`glass-bridge`, mobile-friendly): seeded vest order, rows = players + 2 (4–12),
+  4 s jump timer with a seeded forced jump, known rows auto-walked (160 ms/row), lightning glint (the
+  tempered side of the row being decided, sent only while the 320 ms flash is lit — so it spans ≥ 2
+  snapshots at the default 150 ms cadence), heckle arrows from everyone not jumping (fallen and crossed
+  players included, which keeps the eliminated busy). Ranked by rows reached; everyone who crosses
+  shares 1st. **Not done**: standings-based order (the leader going first) — the mini-game init ctx has
+  no standings, so it would need a contract change; seeded order is fair on average.
