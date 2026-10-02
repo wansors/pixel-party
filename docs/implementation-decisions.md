@@ -434,3 +434,9 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   next music (they stay, dimmed, in the player strip). `playtest-screenshots` gained per-game **bot
   strategies** (`bots/<game-id>.ts`) — with junk inputs nobody ever entered a room; a door-seeking bot
   played full sessions (locks, final two, a winner) in the browser.
+- **I1 Sumo ICE** (`sumo-ice`, PC-first like `sumo-push` — the backlog guessed mobile-friendly, but it
+  is the same continuous steering D21 tagged PC-only): the floe's whole melt schedule is computed at init
+  (crack/melt time per tile; the core never melts), so the snapshot's tile string is a pure function of
+  time. Added a **lifebuoy** (2 lives, a 1.2 s collision-free ghost after the respawn on the core) after
+  the first playtest: aggressive bots shoved a player into the water 1.5 s into a 45 s round — same
+  "nobody is out in the first seconds" rule as the elimination cluster.

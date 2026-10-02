@@ -311,6 +311,10 @@
       "room-rush": {
         "name": "Carrera de Salas",
         "blurb": "Se canta un número: llena una sala con exactamente esa gente. ¡Empuja, acelera y cierra la puerta!"
+      },
+      "sumo-ice": {
+        "name": "Sumo en Hielo",
+        "blurb": "Sumo sobre un témpano que se derrite: resbala, empuja y no te caigas. ¡Gana el último que quede seco!"
       }
     }
   },
@@ -666,6 +670,10 @@
       "lockedHint": "¡A SALVO! La puerta está cerrada",
       "safe": "¡A SALVO!",
       "survived": "¡SUPERVIVIENTE!"
+    },
+    "sumoIce": {
+      "splash": "¡CHOF!",
+      "lifebuoy": "¡FLOTADOR!"
     }
   }
 }

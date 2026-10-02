@@ -483,6 +483,16 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     blurb: 'A number is called: pack a room with exactly that many. Shove, dash, slam the door!',
     axes: ['speed', 'nerve'],
   },
+  {
+    id: 'sumo-ice',
+    name: 'Sumo ICE',
+    format: 'ffa',
+    realtime: true,
+    mobileFriendly: false,
+    durationSec: 45,
+    blurb: 'Sumo on a melting ice floe: slide, shove and stay on the ice. Last one dry wins!',
+    axes: ['reflexes', 'precision'],
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

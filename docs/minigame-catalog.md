@@ -50,7 +50,8 @@ Then (2026-09-28) a new sports wave (section F): F1 100 m Dash (`dash-100m`), F2
 (`hurdles-110m`), F3 Long Jump (`long-jump`), F4 Javelin (`javelin-throw`) and F5 Micro Race
 (`micro-race`). **40 mini-games total.**
 Then (2026-10-02) the roadmap wave (D22), one game at a time: G1 Glass Bridge (`glass-bridge`), G2
-Freeze Doll (`freeze-doll`), G3 Room Rush (`room-rush`). **43 mini-games total.**
+Freeze Doll (`freeze-doll`), G3 Room Rush (`room-rush`), I1 Sumo ICE (`sumo-ice`). **44 mini-games
+total.**
 
 ---
 
@@ -444,6 +445,24 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
   call's victims tie). Stat: seconds survived. The round ends when one player is left.
 - **Latency**: high (continuous steering + shoving) — snapshot interpolation for every body.
 
+## I. Arcade classics, party-sized (2026-10-02)
+
+Real-time FFA reworks of arcade classics, keyboard-first (PC). Players are drawn as their lobby
+avatar. See `implementation-decisions.md` D22.
+
+### I1. ✅ Sumo ICE — implemented (`sumo-ice`)
+- **Concept**: Sumo Push on an ice floe that melts — a battle royale where the ring shrinks under you.
+- **Type**: FFA · **Input**: arrows / WASD or hold the pointer where you want to go · **Duration**:
+  ~20–45 s (45 s cap) · **Banter**: 💥💥💥 · **Mobile-friendly**: no (continuous steering, like B3)
+- **Rules**: a 13×13 floe of ice tiles inside a circle. Nothing melts for 6 s; then a seeded order eats
+  it edge-first but irregularly (a jitter of ~28 % of the radius punches holes), each tile cracking for
+  1.5 s before it sinks; only a 3×3 core is left for the last 8 s. Ice physics: weak grip (accel 1.1),
+  little friction (0.55/s, vs 2.0 on the dohyo) and bouncier shoves. A body over open water falls in —
+  the first time a **lifebuoy** fishes it back onto the core (1.2 s as a ghost, no collisions), the
+  second time it's out.
+- **Win condition / Result**: last one standing; the rest by survival time (`21s`).
+- **Latency**: high (continuous steering) — snapshot interpolation for every body.
+
 ---
 
 ## Variety coverage
@@ -457,7 +476,7 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
 | Mental math | E2 |
 | Memory | A4, A11, E8 |
 | Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4 |
-| Survival / dodging | A7, A8, B3 |
+| Survival / dodging | A7, A8, B3, I1 |
 | Nerve / chance | D1, D3, E5, G1, G2, G3 |
 | Teamwork | C1, C2, C3 |
 | Head-to-head rivalry | B1, B2, B3, E7 |
@@ -466,7 +485,7 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1–G3 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1–G3, I1 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7 |
 | Team | C1, C2, C3 |
 

@@ -311,6 +311,10 @@
       "room-rush": {
         "name": "Room Rush",
         "blurb": "A number is called: pack a room with exactly that many. Shove, dash, slam the door!"
+      },
+      "sumo-ice": {
+        "name": "Sumo ICE",
+        "blurb": "Sumo on a melting ice floe: slide, shove and stay on the ice. Last one dry wins!"
       }
     }
   },
@@ -666,6 +670,10 @@
       "lockedHint": "SAFE! The door is locked",
       "safe": "SAFE!",
       "survived": "SURVIVOR!"
+    },
+    "sumoIce": {
+      "splash": "SPLASH!",
+      "lifebuoy": "LIFEBUOY!"
     }
   }
 }

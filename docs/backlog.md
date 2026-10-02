@@ -376,7 +376,8 @@ cluster below. Catalog section F.
   - [ ] **Brawl** (Streets of Rage-style competitive beat 'em up) — everyone in one side-view street,
         punch/kick/grab combos, weapons and items that drop and can be picked up (pipes, bottles,
         food to heal). Last one standing, then most KOs.
-  - [ ] **Sumo ICE battle royale** (`sumo-ice`) — Sumo Push on an ice floe that melts and shrinks over
+  - [x] **Sumo ICE battle royale** (`sumo-ice`) — *Shipped 2026-10-02 (catalog I1, D22; PC-first + a
+        lifebuoy second life).* Sumo Push on an ice floe that melts and shrinks over
         time (low-friction, slippery physics; cracking edge tiles). Last one standing. Can reuse the
         `sumo` physics with lower friction + a shrinking, seeded melt pattern. Likely mobile-friendly.
 - [ ] **Squid Game-style elimination cluster (requested 2026-09-29, designs refined 2026-10-02)** —
