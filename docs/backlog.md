@@ -7,20 +7,22 @@ Phased product backlog. The philosophy is **start with a minimal MVP and grow in
 the smallest thing that is fun end-to-end, then add features (more mini-games, handicap, post-match
 analysis…) phase by phase. Nothing is built "just in case".
 
-## Current status (2026-08-22)
+## Current status (2026-09-28)
 
 **Phases 0–5 are complete, and that's the whole roadmap.** The game is playable end-to-end (`bun run dev`
-→ server :3000 + client :4200, LAN-accessible; see [`../README.md`](../README.md)) with **35
-mini-games** — the full `minigame-ideas.md` backlog is now built. The deployment target is a **local LAN
+→ server :3000 + client :4200, LAN-accessible; see [`../README.md`](../README.md)) with **40
+mini-games** — the full `minigame-ideas.md` backlog is built, plus a sports wave (track & field +
+Micro Race, 2026-09-28, D20). The deployment target is a **local LAN
 party with friends** — one process, on one local network, no accounts — which is why the project is
 permanently **stateless, anonymous, and single-instance by design**: no database (D15), no further
 social/polish phase (D16), no multi-instance scaling (D17). What remains open-ended is growing the
 mini-game catalog with brand-new ideas. Design decisions from the clear-out pass are logged in
-[`implementation-decisions.md`](implementation-decisions.md) (D1–D18).
+[`implementation-decisions.md`](implementation-decisions.md) (D1–D21). The game is **PC-first**; 31
+of the 40 games are tagged `mobileFriendly` (lobby badge + filter, D21).
 
 ### Foundation & platform
 - Bun workspaces monorepo, hexagonal server, `@pp/shared` wire contracts, Biome + TS strict +
-  determinism gate + **GitHub Actions CI**. Test suite: **218 server/shared + 7 client (Karma)**, green.
+  determinism gate + **GitHub Actions CI**. Test suite: **277 server/shared + 7 client (Karma)**, green.
 - Server-authoritative, deterministic core (seeded `Random` + `Clock` ports; the domain never touches
   `Math.random`/`Date.now`). Bun-native WS with a hand-written shape validator (no Zod).
 - Angular 20 shell + Phaser 3 (decoupled); **i18n EN/ES** (Transloco) across the UI + every scene;
@@ -35,12 +37,13 @@ mini-game catalog with brand-new ideas. Design decisions from the clear-out pass
 - Scoring: position→points table with tie-averaging; **final-ranking tiebreakers** (most 1st places →
   best average position, `domain/services/finalRanking`).
 
-### Mini-games — 35 (pluggable domain module + Phaser scene each)
-- **29 FFA**: `reaction-duel`, `button-masher`, `color-trap`, `trivia`, `balloon-chicken`,
+### Mini-games — 40 (pluggable domain module + Phaser scene each)
+- **34 FFA**: `reaction-duel`, `button-masher`, `color-trap`, `trivia`, `balloon-chicken`,
   `number-rush`, `quick-math`, `odd-one-out`, `higher-lower`, `bug-smash`, `stop-clock`, `memory-flash`,
   `simon`, `pixel-hoops`, `pixel-weight`, `pixel-split`, `fruit-catch`, `pixel-rain`, `pixel-dash`,
   `snake-arena`, `sumo-push`, `match-pairs`, `pixel-roulette`, `sudoku-race`, `pixel-beat`,
-  `maze-sprint`, `line-clear-sprint`, `quick-tetris`, `bubble-pop`.
+  `maze-sprint`, `line-clear-sprint`, `quick-tetris`, `bubble-pop`, `dash-100m`, `hurdles-110m`,
+  `long-jump`, `javelin-throw`, `micro-race`.
 - **3 team**: `tug-of-war`, `bomb-relay`, `fleet-battle`. **3 duel**: `sink-the-fleet`, `pixel-pong`,
   `quick-draw`.
 
@@ -310,6 +313,11 @@ follows the priority tiers there:
 > P0 group is 5 games ranked; the MVP ships the top 3 (A1, A2, E1) with D1/A3 as fast-follows. See
 > `minigame-ideas.md` for the full ranked table and rationale.
 
+**Sports wave (2026-09-28, D20)** — brand-new ideas beyond the ranked list: the Konami-style track &
+field events 100 m Dash (`dash-100m`), 110 m Hurdles (`hurdles-110m`), Long Jump (`long-jump`) and
+Javelin (`javelin-throw`) on one shared sprint engine, plus Micro Race (`micro-race`) from the racing
+cluster below. Catalog section F.
+
 ---
 
 ## Icebox / ideas (unscheduled)
@@ -336,9 +344,10 @@ follows the priority tiers there:
 - [ ] **Racing cluster** (top-down pixel racers; real-time, high latency sensitivity → ride the Phase 5
       action wave once netcode interpolation/prediction is proven). All seeded so every player gets the
       same track/AI; server-authoritative positions.
-  - [ ] **Micro Race** (`micro-race`, Micro Machines style) — chaotic top-down sprint on a tabletop-scale
+  - [x] **Micro Race** (`micro-race`, Micro Machines style) — chaotic top-down sprint on a tabletop-scale
         track; laps around a short circuit, bumping/hazards, first across the line wins (placements →
-        position points). FFA, short.
+        position points). FFA, short. *Shipped 2026-09-28 (catalog F5, D20): 3 seeded tabletop circuits,
+        3 laps, arcade drift/bump physics, anti-shortcut rescue.*
   - [ ] **Rally Stage** (`rally-stage`) — point-to-point time-trial against the clock on a twisty stage
         (no direct contact); rank by finish time. Handles/grip + checkpoints; FFA scored by time.
   - [ ] **Speed Circuit** (`speed-circuit`) — multi-lap wheel-to-wheel race on a proper circuit; racing
@@ -350,6 +359,116 @@ follows the priority tiers there:
 - [x] **Simon per-pad tones** — *Done 2026-07-23: each Simon (`simon`) pad now plays a distinct pitch
       on tap and during sequence playback, via a new `Sfx.pad()` on the existing WebAudio 8-bit synth
       (no assets, respects the SFX volume). See `implementation-decisions.md` D2.*
+- [ ] **New mini-game ideas (requested 2026-09-28)** — arcade classics reworked as FFA party rounds; all
+      real-time and keyboard-first (PC) unless noted. Each needs a catalog card + the usual module/scene.
+  - [ ] **Bomber Express** (`bomber-express`, Bomberman style) — grid arena with destructible crates;
+        everyone starts fully powered up (**fire range 5+, 5 bombs, speed boost by default**) so it's
+        chaos from second one, with extra power-ups dropping from crates. Last one standing, then most
+        knock-outs. Seeded crate layout; server owns the grid, bombs and chain reactions.
+  - [ ] **Vertical shooter** (bullet-hell shmup) — a vertically scrolling ship: dodge bullet patterns and
+        destroy targets. Same seeded waves for everyone (own lane/viewport each, so it's a fair race);
+        ranked by score, hits taken cost points/lives.
+  - [ ] **Pang** (Buster Bros style) — fire a harpoon straight up to split bouncing balloons into
+        smaller ones until they vanish; touching a balloon costs a life. Seeded balloon sets; ranked
+        by balloons popped (shared arena variant: steal each other's pops).
+  - [ ] **Competitive Asteroids** — shared wrap-around arena: rotate, thrust and shoot; points for
+        asteroids and more for shooting rivals, short respawn after a hit. Ranked by score.
+  - [ ] **Brawl** (Streets of Rage-style competitive beat 'em up) — everyone in one side-view street,
+        punch/kick/grab combos, weapons and items that drop and can be picked up (pipes, bottles,
+        food to heal). Last one standing, then most KOs.
+  - [ ] **Sumo ICE battle royale** (`sumo-ice`) — Sumo Push on an ice floe that melts and shrinks over
+        time (low-friction, slippery physics; cracking edge tiles). Last one standing. Can reuse the
+        `sumo` physics with lower friction + a shrinking, seeded melt pattern. Likely mobile-friendly.
+- [ ] **Squid Game-style elimination cluster (requested 2026-09-29, designs refined 2026-10-02)** —
+      short, tense, laugh-out-loud FFA rounds where the fun is watching friends get zapped. Shared
+      design rules:
+      - Ranked by elimination order (survivors share 1st); 30–45 s rounds that end early when only
+        one player is left.
+      - **Nobody is out in the first seconds**: each game delays or softens the first elimination (a
+        heart, a warm-up phase), so being out early never means 40 s of boredom.
+      - Eliminated players stay on screen, dimmed, as spectators. Their exit is a big dramatic
+        moment: an ELIMINATED stamp, a pixel-burst and a sound sting, so being out is part of the joke.
+      - One shared **elimination kit**, built once and reused by all three games: the stamp/burst/sting
+        in `fx`, a "7/10 LEFT" survivors counter in the `hud`, and spectator dimming.
+      - Server-authoritative with a seeded setup. Original names and art (no show branding).
+      - **Players look like their lobby avatar:** each player is drawn with their chosen avatar and
+        identity color, using the shared character spec/sprite set from the *Visual consistency audit*
+        below, not a per-scene figure. If the audit hasn't landed yet, build these games on the lobby
+        avatar sprites directly, so they never need migrating.
+  - [ ] **Freeze Doll** (`freeze-doll`, "Red Light, Green Light" — the laser one) — race down your own
+        lane toward a giant pixel doll. One lane per player (up to 10), so there are no collisions and
+        it stays readable on the big screen.
+        - **Movement with momentum (the core skill):** hold WALK to move. Releasing does not stop you
+          dead: you glide for ~150 ms. An optional **RUN** key (Shift, or a second touch button) is
+          ~1.6× faster but slides for ~400 ms. RUN is the risk/reward call: gain ground, but stop late.
+        - **Doll cycle:** while she faces away (GREEN), a chant plays at a seeded, varying tempo; she
+          turns when it ends. Tells: the last note plus a head twitch. Seeded fake-outs (a half-turn
+          that snaps back) punish players who stop too nervously by costing them time.
+        - **The laser:** on RED, her eyes **sweep a laser beam across the lanes** (~0.5 s, direction
+          seeded and alternating each turn for fairness). Each lane is judged at the instant the beam
+          crosses it: still moving (server-side speed > 0) = hit. The sweep *is* the latency grace
+          window (≥150 ms before the first lane is judged), and you can see it coming.
+        - **Two hearts:** the first hit stuns you for 1 s, knocks you back ~15 % of the field and
+          cracks a heart. The second hit gets you lasered: ELIMINATED.
+        - **Escalation:** GREEN phases get shorter and fake-outs more frequent as the clock runs down.
+        - **Result:** finish order first, then distance covered when the clock ends, then elimination
+          time.
+        - Input is hold-state (`walk | run | stop`), so it works with keys or two big touch buttons →
+          **mobile-friendly**. Axes: reflexes + nerve.
+  - [ ] **Glass Bridge** (`glass-bridge`) — a bridge of N rows, each with a left and a right glass
+        panel; one panel per row is tempered, the other shatters.
+        - **Order (the first one starts):** players line up on the start platform in a seeded order
+          (vest numbers), and #1 steps out first. Everyone behind follows on the bridge. When the
+          leader falls, the next player picks up from the frontier.
+        - **Known rows auto-walk:** nobody re-jumps a row already solved, so the round never drags.
+        - **Jump timer:** ~4 s per unknown row; hesitating too long forces a random jump. An overall
+          bridge clock ends the round: anyone still on the bridge or in the queue falls.
+        - **Glint (skill in a luck game):** a seeded lightning flash lights the bridge for ~150 ms every
+          few seconds, and the tempered panel reflects slightly differently. Sharp-eyed players can
+          read it (the subtlety is a tuning knob).
+        - **Heckle arrows (social twist):** waiting players can point LEFT/RIGHT at the jumper's next
+          row. The arrows show in their colors, and the jumper decides whether to trust friends who
+          gain from their fall.
+        - **Tuning math:** every unknown row costs one fall half the time, so expected falls ≈ rows ÷ 2.
+          With rows ≈ players + 2, about 30–40 % survive (8 players → 10 rows → ~3 survive, ~15 jumps,
+          ~35 s).
+        - **Result:** rows reached; survivors share 1st (tie-break: earlier crossing).
+        - **Possible variant:** the current leader goes first, as comic catch-up. Not the default,
+          because the mini-game init ctx has no standings today, so this needs a contract change.
+        - Turn-based taps → **mobile-friendly** and latency-tolerant. Axes: nerve + focus.
+  - [ ] **Room Rush** (`room-rush`, "Mingle" — the rooms one) — a top-down arena: a slowly rotating
+        round carousel in the middle (riders drift with it) and small rooms with doors around the
+        edge. Each round has 3–4 calls, and each call runs in two phases:
+        - **MUSIC** (~5 s): everyone rides the carousel and the doors stay shut.
+        - **CALL:** a giant number ("3!") appears and the doors open for ~6 s. Each room shows a live
+          counter ("2/3"). A room **locks** once it has held exactly N players for ~0.5 s: the door
+          slams, the counter turns green and those inside are safe. That half-second is the sabotage
+          window to barge in and spoil it.
+        - **Elimination:** at the buzzer, a room still open with the wrong count eliminates everyone
+          inside, and anyone left outside is out too.
+        - **Number math:** N is seeded in 1–4 (and N ≤ survivors − 1); rooms = ⌊(survivors − 1) ÷ N⌋,
+          so total capacity is always below the survivor count and at least one player goes out per
+          call.
+        - **Final two:** N = 1 with a single room, a pure race-and-shove duel.
+        - **Shoving:** reuse the `sumo` body physics (bouncy collisions) plus a short **dash** (Space,
+          ~1 s cooldown) to bump someone out of a doorway. This is what makes it a party game.
+        - Real-time movement → **PC-first** (WASD/arrows + Space). Touch gets drag-to-move + a dash
+          button (playable, not promised). Axes: speed + nerve.
+  - [ ] *Suggested extras in the same spirit (not requested — keep or drop)*: **Honeycomb Cut**
+        (carve a shape out of a candy by tracing its outline; press too hard or leave the line and it
+        cracks → mouse/touch precision), **Jump Rope** (a giant rope swings faster and faster; tap to
+        jump in rhythm or get swept off), **Marbles Duel** (1v1 guess odd/even of the marbles your
+        rival hides — quick bluffing duel).
+- [ ] **Visual consistency audit across all mini-games** — review every scene side by side and make
+      them read as one game. Today each scene draws its own player figure (Pixel Dash's capped runner,
+      Sumo's top-down rikishi, the track & field rig athlete, Micro Race's cars…) with different sizes,
+      proportions, outlines and palettes, and none of them resembles the lobby's pixel avatar
+      ("monigote"). Deliverables: (1) an inventory of every character/player sprite and how each game
+      shows identity (color, avatar, name); (2) a shared character spec in `art-direction.md` (grid
+      size, outline, shading, how the identity color and the chosen avatar show up in-game); (3) ideally
+      a designer-made avatar set (front/side/top-down variants + a few poses) that every scene reuses,
+      so a player looks like "their" avatar in every game; (4) migrate the scenes to it (one shared
+      sprite module instead of per-scene ASCII grids). *Requested 2026-09-28; needs design input.*
 - [ ] Manual mini-game selection/editor by the host.
 - [ ] Spectator mode.
 - [ ] Custom trivia packs.
