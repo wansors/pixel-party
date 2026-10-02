@@ -8,6 +8,7 @@ import { ButtonMasher } from './buttonMasher'
 import { ColorTrap } from './colorTrap'
 import { JavelinThrow, LongJump } from './fieldEvent'
 import { FleetBattle } from './fleetBattle'
+import { FreezeDoll } from './freezeDoll'
 import { FruitCatch } from './fruitCatch'
 import { GlassBridge } from './glassBridge'
 import { HigherLower } from './higherLower'
@@ -84,6 +85,7 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'long-jump': () => new LongJump() as unknown as MiniGame<unknown, unknown>,
   'javelin-throw': () => new JavelinThrow() as unknown as MiniGame<unknown, unknown>,
   'glass-bridge': () => new GlassBridge() as unknown as MiniGame<unknown, unknown>,
+  'freeze-doll': () => new FreezeDoll() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

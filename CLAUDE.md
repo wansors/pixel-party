@@ -17,14 +17,14 @@ D15–D17). Don't propose features that assume an internet-facing, multi-tenant,
 scaffolded and the game is playable end-to-end. Run it with `bun run dev` (see `README.md`). Live now:
 rooms + lobby (ready/host), host game selector + round count, server-authoritative session engine (intro
 countdown → play → per-round result → cumulative scoreboard → final), scoring/scoreboard/final ranking,
-**Phases 0–5 complete** (2026-08-21). **41 mini-games** — 35 FFA
+**Phases 0–5 complete** (2026-08-21). **42 mini-games** — 36 FFA
 (`button-masher`, `reaction-duel`, `color-trap`, `trivia`, `balloon-chicken`, `number-rush`,
 `quick-math`, `odd-one-out`, `higher-lower`, `bug-smash`, `stop-clock`, `memory-flash`, `simon`,
 `pixel-hoops`, `pixel-weight`, `pixel-split`, `fruit-catch`, `pixel-rain`, `pixel-dash`, `snake-arena`,
 `sumo-push`, `match-pairs`, `pixel-roulette`, `sudoku-race`, `pixel-beat`, `maze-sprint`,
 `line-clear-sprint`, `quick-tetris`, `bubble-pop`, and the 2026-09-28 sports wave `dash-100m`,
 `hurdles-110m`, `long-jump`, `javelin-throw`, `micro-race` — D20, and the 2026-10-02 roadmap wave
-`glass-bridge` — D22) + 3 team (`tug-of-war`,
+`glass-bridge`, `freeze-doll` — D22) + 3 team (`tug-of-war`,
 `bomb-relay`, `fleet-battle`) + 3 duel (`sink-the-fleet`, `pixel-pong`, `quick-draw`) — with **no-repeat
 seeded line-ups** (also avoids repeating a game's primary skill axis back-to-back when possible),
 **mid-session reconnect/rejoin** + **host transfer (auto-on-disconnect + manual) /
@@ -66,7 +66,7 @@ Documentation lives in `docs/`:
 ## Code layout (implemented)
 
 - `apps/server` — hexagonal: `domain/` (entities `Room`/`Player`, `minigames/` pluggable contract +
-  `buttonMasher`/`reactionDuel`/`colorTrap`/`trivia`/`balloonChicken`/`numberRush`/`quickMath`/`oddOneOut`/`higherLower`/`bugSmash`/`stopClock`/`memoryFlash`/`simon`/`pixelHoops`/`pixelWeight`/`pixelSplit`/`tugOfWar`/`sinkTheFleet`/`bombRelay`/`fruitCatch`/`pixelRain`/`pixelDash`/`snakeArena`/`pong`/`sumo`/`matchPairs`/`quickDraw`/`roulette`/`sudokuRace`/`pixelBeat`/`fleetBattle`/`mazeSprint`/`lineClearSprint`/`quickTetris`/`bubblePop`/`trackRace`/`fieldEvent`/`microRace`/`glassBridge`
+  `buttonMasher`/`reactionDuel`/`colorTrap`/`trivia`/`balloonChicken`/`numberRush`/`quickMath`/`oddOneOut`/`higherLower`/`bugSmash`/`stopClock`/`memoryFlash`/`simon`/`pixelHoops`/`pixelWeight`/`pixelSplit`/`tugOfWar`/`sinkTheFleet`/`bombRelay`/`fruitCatch`/`pixelRain`/`pixelDash`/`snakeArena`/`pong`/`sumo`/`matchPairs`/`quickDraw`/`roulette`/`sudokuRace`/`pixelBeat`/`fleetBattle`/`mazeSprint`/`lineClearSprint`/`quickTetris`/`bubblePop`/`trackRace`/`fieldEvent`/`microRace`/`glassBridge`/`freezeDoll`
   (`tetrisCore` holds the shared engine behind `lineClearSprint`/`quickTetris`; `athleticsCore` the
   sprint model behind `trackRace` (`Dash100m`, `Hurdles110m`) and `fieldEvent` (`LongJump`,
   `JavelinThrow`))
@@ -88,7 +88,7 @@ Documentation lives in `docs/`:
   `pixelStyle` (pixel-art textures/text), `avatars` (the lobby "monigote" grids + per-player textures),
   `scenes/MiniGameScene` (common base: own-snapshot guard, HUD, crash guard, relayout),
   `scenes/index` (`SCENES` id → scene map),
-  `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,BalloonChickenScene,NumberRushScene,QuickMathScene,OddOneOutScene,HigherLowerScene,BugSmashScene,StopClockScene,MemoryFlashScene,SimonScene,PixelHoopsScene,PixelWeightScene,PixelSplitScene,TugOfWarScene,SinkTheFleetScene,BombRelayScene,FruitCatchScene,PixelRainScene,PixelDashScene,SnakeArenaScene,PongScene,SumoScene,MatchPairsScene,QuickDrawScene,RouletteScene,SudokuRaceScene,PixelBeatScene,FleetBattleScene,MazeSprintScene,LineClearSprintScene,QuickTetrisScene,BubblePopScene,Dash100mScene,Hurdles110mScene,LongJumpScene,JavelinThrowScene,MicroRaceScene,GlassBridgeScene}`
+  `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,BalloonChickenScene,NumberRushScene,QuickMathScene,OddOneOutScene,HigherLowerScene,BugSmashScene,StopClockScene,MemoryFlashScene,SimonScene,PixelHoopsScene,PixelWeightScene,PixelSplitScene,TugOfWarScene,SinkTheFleetScene,BombRelayScene,FruitCatchScene,PixelRainScene,PixelDashScene,SnakeArenaScene,PongScene,SumoScene,MatchPairsScene,QuickDrawScene,RouletteScene,SudokuRaceScene,PixelBeatScene,FleetBattleScene,MazeSprintScene,LineClearSprintScene,QuickTetrisScene,BubblePopScene,Dash100mScene,Hurdles110mScene,LongJumpScene,JavelinThrowScene,MicroRaceScene,GlassBridgeScene,FreezeDollScene}`
   (`TetrisSprintSceneBase` is the shared base behind the two Tetris-style scenes; `TrackRaceSceneBase`
   / `FieldEventSceneBase` + `athleticsKit` behind the athletics scenes; `microRaceArt` paints the
   racer's tracks and cars)

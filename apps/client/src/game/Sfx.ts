@@ -103,6 +103,23 @@ export class Sfx {
     this.tone(90, 640, { type: 'triangle', slideTo: 30, delayMs: 60, gain: 0.2 })
   }
 
+  // Freeze Doll: one note of the doll's chant (a nursery-rhyme phrase; its spacing is the tempo tell),
+  // the whirr of her head turning, and the laser's sweep.
+  chant(step: number): void {
+    const freq = Sfx.CHANT[step % Sfx.CHANT.length] ?? 392
+    this.tone(freq, 140, { type: 'triangle', gain: 0.3 })
+  }
+
+  turn(): void {
+    this.tone(260, 160, { slideTo: 820, gain: 0.18 })
+  }
+
+  laser(): void {
+    this.tone(1600, 380, { type: 'sawtooth', slideTo: 700, gain: 0.12 })
+  }
+
+  private static readonly CHANT = [392.0, 329.63, 392.0, 329.63, 440.0, 392.0, 329.63, 261.63] // G E G E A G E C
+
   // Simon pad tone: one distinct pitch per colour pad (played on tap and on sequence playback), for
   // the classic Simon feel. Ascending pentatonic set so any pad order still sounds musical.
   pad(index: number): void {

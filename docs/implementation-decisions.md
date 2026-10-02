@@ -416,3 +416,12 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   players included, which keeps the eliminated busy). Ranked by rows reached; everyone who crosses
   shares 1st. **Not done**: standings-based order (the leader going first) — the mini-game init ctx has
   no standings, so it would need a contract change; seeded order is fair on average.
+- **G2 Freeze Doll** (`freeze-doll`, mobile-friendly): the doll is a seeded **timeline of segments**
+  (READY → GREEN chant → TURN → RED …) built at init, so the light at any instant is a pure function of
+  time; tick only integrates movement and judges hits. A TURN freezes the chant clock and a fake-out
+  resumes it, so the bar never tells a fake from a real spin. The laser sweep constants live in
+  `@pp/shared` (`FREEZE_DOLL_SWEEP`) so the client draws the beam exactly where the server judges.
+  Tuned with a strategy simulation (12–20 seeds, 400 ms reaction lag): reacting walkers never get hit
+  and finish in ~36–44 s, "run early, walk near the chant's end" finishes in ~30 s, running until the
+  twitch gets hit ~1.25×/round, always-running is always eliminated. **Not done**: a chant melody per
+  tempo or real singing — the 8-note phrase is spaced over the chant, which is the tell.

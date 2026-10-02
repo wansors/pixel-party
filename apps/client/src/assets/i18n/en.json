@@ -303,6 +303,10 @@
       "glass-bridge": {
         "name": "Glass Bridge",
         "blurb": "Cross one by one: LEFT or RIGHT panel? One holds, one shatters. Watch for the glint."
+      },
+      "freeze-doll": {
+        "name": "Freeze Doll",
+        "blurb": "Hold to walk while she sings, freeze before she turns. Her laser spots any twitch!"
       }
     }
   },
@@ -633,6 +637,20 @@
       "safe": "SAFE!",
       "start": "START",
       "goal": "GOAL",
+      "timeUp": "TIME UP!"
+    },
+    "freezeDoll": {
+      "walk": "WALK",
+      "run": "RUN",
+      "green": "GREEN LIGHT",
+      "red": "RED LIGHT",
+      "ready": "READY…",
+      "readyHint": "Hold WALK (↑) or RUN (SHIFT) when she sings",
+      "goHint": "MOVE! Freeze before she turns",
+      "freeze": "FREEZE!",
+      "hit": "HIT! One heart left",
+      "safe": "SAFE!",
+      "safeHint": "You made it! Watch the others…",
       "timeUp": "TIME UP!"
     }
   }

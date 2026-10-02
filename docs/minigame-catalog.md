@@ -49,8 +49,8 @@ E9 Maze Sprint (`maze-sprint`), E10 Line Clear Sprint (`line-clear-sprint`), E13
 Then (2026-09-28) a new sports wave (section F): F1 100 m Dash (`dash-100m`), F2 110 m Hurdles
 (`hurdles-110m`), F3 Long Jump (`long-jump`), F4 Javelin (`javelin-throw`) and F5 Micro Race
 (`micro-race`). **40 mini-games total.**
-Then (2026-10-02) the roadmap wave (D22), one game at a time: G1 Glass Bridge (`glass-bridge`).
-**41 mini-games total.**
+Then (2026-10-02) the roadmap wave (D22), one game at a time: G1 Glass Bridge (`glass-bridge`), G2
+Freeze Doll (`freeze-doll`). **42 mini-games total.**
 
 ---
 
@@ -411,13 +411,31 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
 - **Win condition / Result**: rows reached (`4/10`); everyone who crosses shares 1st.
 - **Latency**: low (turn-based taps; the glint is held ≥ 2 snapshots). · **Complexity**: medium.
 
+### G2. ✅ Freeze Doll ("Red Light, Green Light") — implemented (`freeze-doll`)
+- **Concept**: race down your own lane toward a giant pixel doll. Move while she sings with her back
+  turned; freeze before she faces the field — her laser catches anything that moves.
+- **Type**: FFA · **Input**: hold WALK (↑ / W / SPACE) or RUN (SHIFT), or the two big hold buttons ·
+  **Duration**: ~25–45 s (50 s cap) · **Banter**: 💥💥💥 · **Mobile-friendly**: yes
+- **Rules**: the doll's whole timeline is seeded. Each GREEN is a chant of 8 notes whose tempo varies
+  (shorter as the round goes on; the first one is long and calm) — she turns when it ends, after a
+  500 ms head twitch. Some twitches are fake-outs (she looks away again and the chant resumes); from
+  the third cycle a sudden spin can cut the chant short. On RED her laser sweeps across the lanes (from
+  100 ms to 500 ms after she faces the field, direction alternating each turn) and every lane it has
+  reached is watched until she looks away. Momentum: releasing WALK slides ~150 ms, RUN (1.6× faster)
+  ~400 ms — running pays only if you stop early. Two hearts: the first hit stuns for 1 s and knocks you
+  back 15 % of the field (one hit per RED at most), the second eliminates you.
+- **Win condition / Result**: finishers by time (`31.2s`), then distance (`64%`), then the eliminated
+  (last out first). The round ends once at most one runner is still in the race.
+- **Latency**: medium — the 500 ms twitch plus the sweep delay is the reaction window (a balance
+  simulation: walkers who react to the twitch are never hit; running until the twitch gets you hit).
+
 ---
 
 ## Variety coverage
 
 | Axis | Covered by |
 |------|------------|
-| Reflexes / reaction | A1, A6, B1, E7, F5 |
+| Reflexes / reaction | A1, A6, B1, E7, F5, G2 |
 | Attention / focus (inhibition) | E1, E3, E4, G1 |
 | Speed / endurance | A2, A9, C1, F1, F2 |
 | Knowledge | A3 |
@@ -425,7 +443,7 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
 | Memory | A4, A11, E8 |
 | Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4 |
 | Survival / dodging | A7, A8, B3 |
-| Nerve / chance | D1, D3, E5, G1 |
+| Nerve / chance | D1, D3, E5, G1, G2 |
 | Teamwork | C1, C2, C3 |
 | Head-to-head rivalry | B1, B2, B3, E7 |
 
@@ -433,7 +451,7 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1–G2 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7 |
 | Team | C1, C2, C3 |
 

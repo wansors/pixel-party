@@ -303,6 +303,10 @@
       "glass-bridge": {
         "name": "Puente de Cristal",
         "blurb": "Cruzad de uno en uno: ¿cristal IZQUIERDO o DERECHO? Uno aguanta, el otro se rompe. Atento al destello."
+      },
+      "freeze-doll": {
+        "name": "Muñeca Congelada",
+        "blurb": "Mantén para andar mientras canta y quédate quieto antes de que se gire. ¡Su láser detecta cualquier movimiento!"
       }
     }
   },
@@ -633,6 +637,20 @@
       "safe": "¡A SALVO!",
       "start": "SALIDA",
       "goal": "META",
+      "timeUp": "¡TIEMPO!"
+    },
+    "freezeDoll": {
+      "walk": "ANDAR",
+      "run": "CORRER",
+      "green": "LUZ VERDE",
+      "red": "LUZ ROJA",
+      "ready": "PREPARADOS…",
+      "readyHint": "Mantén ANDAR (↑) o CORRER (SHIFT) cuando cante",
+      "goHint": "¡MUÉVETE! Para antes de que se gire",
+      "freeze": "¡QUIETO!",
+      "hit": "¡TOCADO! Te queda un corazón",
+      "safe": "¡A SALVO!",
+      "safeHint": "¡Lo lograste! Mira a los demás…",
       "timeUp": "¡TIEMPO!"
     }
   }

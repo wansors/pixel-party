@@ -395,8 +395,8 @@ cluster below. Catalog section F.
         identity color, using the shared character spec/sprite set from the *Visual consistency audit*
         below, not a per-scene figure. If the audit hasn't landed yet, build these games on the lobby
         avatar sprites directly, so they never need migrating.
-  - [ ] **Freeze Doll** (`freeze-doll`, "Red Light, Green Light" — the laser one) — race down your own
-        lane toward a giant pixel doll. One lane per player (up to 10), so there are no collisions and
+  - [x] **Freeze Doll** (`freeze-doll`, "Red Light, Green Light" — the laser one) — *Shipped
+        2026-10-02 (catalog G2, D22).* Race down your own lane toward a giant pixel doll. One lane per player (up to 10), so there are no collisions and
         it stays readable on the big screen.
         - **Movement with momentum (the core skill):** hold WALK to move. Releasing does not stop you
           dead: you glide for ~150 ms. An optional **RUN** key (Shift, or a second touch button) is

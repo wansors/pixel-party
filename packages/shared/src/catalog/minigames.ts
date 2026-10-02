@@ -463,6 +463,16 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     blurb: 'Cross one by one: LEFT or RIGHT panel? One holds, one shatters. Watch for the glint.',
     axes: ['nerve', 'focus'],
   },
+  {
+    id: 'freeze-doll',
+    name: 'Freeze Doll',
+    format: 'ffa',
+    realtime: true,
+    mobileFriendly: true,
+    durationSec: 50,
+    blurb: 'Hold to walk while she sings, freeze before she turns. Her laser spots any twitch!',
+    axes: ['reflexes', 'nerve'],
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(
