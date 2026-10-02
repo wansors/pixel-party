@@ -325,6 +325,8 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     this.laneW = Math.min(maxLane, Math.floor((width - 24) / Math.max(1, lanes)))
     this.lanesX0 = width / 2 - (this.laneW * lanes) / 2
     this.avatarSize = Math.max(22, Math.min(this.compact ? 32 : 40, this.laneW - 8))
+    // Finishers stand on the rope, fully inside the field (clear of the chant bar above).
+    this.finishY = this.fieldTop + Math.round(this.avatarSize * 0.95) + 4
     const g = this.field as Phaser.GameObjects.Graphics
     const x0 = this.lanesX0
     const w = this.laneW * lanes
@@ -633,7 +635,7 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
           ? this.t('game.freezeDoll.safe')
           : me?.status === 'out'
             ? this.t('game.common.out')
-            : this.t('game.freezeDoll.timeUp')
+            : this.t('game.freezeDoll.tooSlow')
       showBanner(this, this.banner, text, me?.status === 'finished' ? PALETTE.lime : PALETTE.red)
     }
   }

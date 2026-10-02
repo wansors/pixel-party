@@ -20,7 +20,7 @@ The client dev server live-reloads, so edit → re-shoot without restarting.
 ## 2. One-time driver setup (outside the repo — puppeteer is NOT a project dependency)
 ```bash
 WORK="${TMPDIR:-/tmp}/pp-playtest"; mkdir -p "$WORK"
-cp .claude/skills/playtest-screenshots/shoot.ts "$WORK/"
+cp -r .claude/skills/playtest-screenshots/{shoot.ts,bots} "$WORK/"
 cd "$WORK" && [ -d node_modules/puppeteer-core ] || { echo '{"private":true}' > package.json; bun add puppeteer-core@23; }
 ```
 (Re-copy `shoot.ts` if the skill's copy changed.) Uses the system Chrome/Chromium (`CHROME=` to
@@ -45,6 +45,9 @@ cd "$WORK" && timeout 180 bun shoot.ts <tag>-phone 390x844 fruit-catch
   scene threw inside its frame hook; `Missing translation` means an i18n gap.
 - Use unique tags when several agents shoot in parallel, and keep runs targeted (each costs a Chrome
   plus a full round's duration).
+- **Smart bots**: if `bots/<game-id>.ts` exists, all three bots play that game for real — its default
+  export `(snapshot, myPlayerId) => input | input[] | null` runs every 150 ms per bot. Add one when a
+  game's key moments (a room locking, a lap, a knockout) never happen with junk inputs.
 - Team games get real teams (the lobby assigns them when the line-up has a team game). Bots never
   play properly, so opponents look idle and turn-based games mostly show waiting states.
 

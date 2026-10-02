@@ -425,3 +425,12 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   and finish in ~36–44 s, "run early, walk near the chant's end" finishes in ~30 s, running until the
   twitch gets hit ~1.25×/round, always-running is always eliminated. **Not done**: a chant melody per
   tempo or real singing — the 8-note phrase is spaced over the chant, which is the tell.
+- **G3 Room Rush** (`room-rush`, PC-first): real geometry — every room is five wall segments plus a
+  door segment (present when shut), with circle-vs-segment collision in 4 substeps per tick so a dash
+  never tunnels; the carousel rotates its riders rigidly and fences everyone in during the music. The
+  calls are drawn from a mulberry32 stream seeded once from the round's Random (the number of calls
+  isn't known up front). Lock = exactly N held for 500 ms; the buzzer also spares a room that holds
+  exactly N but hadn't locked yet. Eliminated bodies leave the physics and fade from the floor at the
+  next music (they stay, dimmed, in the player strip). `playtest-screenshots` gained per-game **bot
+  strategies** (`bots/<game-id>.ts`) — with junk inputs nobody ever entered a room; a door-seeking bot
+  played full sessions (locks, final two, a winner) in the browser.

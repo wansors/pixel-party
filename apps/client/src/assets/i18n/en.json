@@ -307,6 +307,10 @@
       "freeze-doll": {
         "name": "Freeze Doll",
         "blurb": "Hold to walk while she sings, freeze before she turns. Her laser spots any twitch!"
+      },
+      "room-rush": {
+        "name": "Room Rush",
+        "blurb": "A number is called: pack a room with exactly that many. Shove, dash, slam the door!"
       }
     }
   },
@@ -651,7 +655,17 @@
       "hit": "HIT! One heart left",
       "safe": "SAFE!",
       "safeHint": "You made it! Watch the others…",
-      "timeUp": "TIME UP!"
+      "tooSlow": "TOO SLOW!"
+    },
+    "roomRush": {
+      "dash": "DASH",
+      "number": "ROOMS OF {{n}}!",
+      "call": "CALL {{n}}",
+      "musicHint": "Ride the carousel… wait for the number",
+      "callHint": "Get in a room with exactly {{n}}!",
+      "lockedHint": "SAFE! The door is locked",
+      "safe": "SAFE!",
+      "survived": "SURVIVOR!"
     }
   }
 }

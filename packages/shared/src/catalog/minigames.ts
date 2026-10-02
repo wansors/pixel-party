@@ -473,6 +473,16 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     blurb: 'Hold to walk while she sings, freeze before she turns. Her laser spots any twitch!',
     axes: ['reflexes', 'nerve'],
   },
+  {
+    id: 'room-rush',
+    name: 'Room Rush',
+    format: 'ffa',
+    realtime: true,
+    mobileFriendly: false,
+    durationSec: 75,
+    blurb: 'A number is called: pack a room with exactly that many. Shove, dash, slam the door!',
+    axes: ['speed', 'nerve'],
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

@@ -50,7 +50,7 @@ Then (2026-09-28) a new sports wave (section F): F1 100 m Dash (`dash-100m`), F2
 (`hurdles-110m`), F3 Long Jump (`long-jump`), F4 Javelin (`javelin-throw`) and F5 Micro Race
 (`micro-race`). **40 mini-games total.**
 Then (2026-10-02) the roadmap wave (D22), one game at a time: G1 Glass Bridge (`glass-bridge`), G2
-Freeze Doll (`freeze-doll`). **42 mini-games total.**
+Freeze Doll (`freeze-doll`), G3 Room Rush (`room-rush`). **43 mini-games total.**
 
 ---
 
@@ -429,6 +429,21 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
 - **Latency**: medium — the 500 ms twitch plus the sweep delay is the reaction window (a balance
   simulation: walkers who react to the twitch are never hit; running until the twitch gets you hit).
 
+### G3. ✅ Room Rush ("Mingle") — implemented (`room-rush`)
+- **Concept**: a top-down arena — a spinning carousel in the middle and ten little rooms around the
+  edge, each with a door facing the centre. A number is called; get into a room with exactly that many.
+- **Type**: FFA · **Input**: arrows / WASD or hold the pointer where you want to go; SPACE / DASH to
+  shove · **Duration**: 3–6 calls, ~30–70 s (75 s cap) · **Banter**: 💥💥💥 · **Mobile-friendly**: no
+- **Rules**: each call: MUSIC (4–5.6 s, everyone held on the turning carousel, doors shut) → CALL
+  (6.5 s, a number N in 1–4, N ≤ survivors − 1, and ⌊(survivors − 1) ÷ N⌋ rooms open — capacity always
+  below the survivors) → buzzer. A room that holds exactly N for 0.5 s locks: the door slams and those
+  inside are safe (that half second is the window to barge in and spoil it); at the buzzer anyone not
+  in a locked room — or one holding exactly N — is ELIMINATED. The final two get one room for one.
+  Sumo-style bouncy bodies, real walls (the door is the only way in), a dash (0.85 burst, 1 s cooldown).
+- **Win condition / Result**: survivors share 1st; then by the call each player fell in (the same
+  call's victims tie). Stat: seconds survived. The round ends when one player is left.
+- **Latency**: high (continuous steering + shoving) — snapshot interpolation for every body.
+
 ---
 
 ## Variety coverage
@@ -437,13 +452,13 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
 |------|------------|
 | Reflexes / reaction | A1, A6, B1, E7, F5, G2 |
 | Attention / focus (inhibition) | E1, E3, E4, G1 |
-| Speed / endurance | A2, A9, C1, F1, F2 |
+| Speed / endurance | A2, A9, C1, F1, F2, G3 |
 | Knowledge | A3 |
 | Mental math | E2 |
 | Memory | A4, A11, E8 |
 | Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4 |
 | Survival / dodging | A7, A8, B3 |
-| Nerve / chance | D1, D3, E5, G1, G2 |
+| Nerve / chance | D1, D3, E5, G1, G2, G3 |
 | Teamwork | C1, C2, C3 |
 | Head-to-head rivalry | B1, B2, B3, E7 |
 
@@ -451,7 +466,7 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1–G2 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1–G3 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7 |
 | Team | C1, C2, C3 |
 

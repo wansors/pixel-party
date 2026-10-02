@@ -33,6 +33,7 @@ import { QuickDrawScene } from './QuickDrawScene'
 import { QuickMathScene } from './QuickMathScene'
 import { QuickTetrisScene } from './QuickTetrisScene'
 import { ReactionScene } from './ReactionScene'
+import { RoomRushScene } from './RoomRushScene'
 import { RouletteScene } from './RouletteScene'
 import { SimonScene } from './SimonScene'
 import { SinkTheFleetScene } from './SinkTheFleetScene'
@@ -86,6 +87,7 @@ export const SCENES: Readonly<Record<string, SceneCtor>> = {
   'micro-race': MicroRaceScene,
   'glass-bridge': GlassBridgeScene,
   'freeze-doll': FreezeDollScene,
+  'room-rush': RoomRushScene,
   'tug-of-war': TugOfWarScene,
   'bomb-relay': BombRelayScene,
   'fleet-battle': FleetBattleScene,

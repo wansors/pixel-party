@@ -5,6 +5,9 @@
 //
 // Usage: bun shoot.ts <tag> <width>x<height> <game-id>[,<game-id>...] [--join] [--lobby] [--me-host]
 //        [--lang=es] [--keys=ArrowRight,Space*800] [--more=3]
+// Bots: a game with a strategy module in ./bots/<game-id>.ts is played for real by all three bots
+// (default export `(snapshot, myPlayerId) => input | input[] | null`, called every 150 ms); other games
+// get generic junk inputs.
 // --keys: what the browser player presses after the play1 shot (default: four canvas clicks + Space).
 //         `Key` taps it, `Key*ms` holds it for ms. Key names are puppeteer's (ArrowLeft, KeyA, Space…).
 // --more: extra in-play shots (play3, play4…), one every 3 s, repeating the --keys sequence before each.
@@ -37,8 +40,19 @@ const { code } = (await (await fetch(`${SERVER}/api/rooms`, { method: 'POST' }))
 console.log('room', code)
 
 type Msg = { type: string; [k: string]: unknown }
+type Strategy = (snapshot: unknown, me: string) => unknown
 const bots: WebSocket[] = []
+const botIds = new Map<WebSocket, string>()
+const botSnaps = new Map<WebSocket, unknown>()
 const listeners: ((m: Msg) => void)[] = []
+const strategies = new Map<string, Strategy | null>()
+async function strategyFor(game: string): Promise<Strategy | null> {
+  if (!strategies.has(game)) {
+    const file = `${import.meta.dir}/bots/${game}.ts`
+    strategies.set(game, existsSync(file) ? ((await import(file)).default as Strategy) : null)
+  }
+  return strategies.get(game) ?? null
+}
 function bot(name: string, color: string, avatar: string, onMsg?: (m: Msg) => void): WebSocket {
   // Bun's WebSocket accepts headers; the server's origin allowlist admits the dev client origin.
   // @ts-expect-error Bun-specific constructor options
@@ -46,7 +60,12 @@ function bot(name: string, color: string, avatar: string, onMsg?: (m: Msg) => vo
     headers: { Origin: CLIENT },
   })
   ws.onopen = () => ws.send(JSON.stringify({ type: 'JOIN', name, color, avatar }))
-  ws.onmessage = (e) => onMsg?.(JSON.parse(String(e.data)) as Msg)
+  ws.onmessage = (e) => {
+    const m = JSON.parse(String(e.data)) as Msg
+    if (m.type === 'WELCOME') botIds.set(ws, m.playerId as string)
+    if (m.type === 'ROUND_STATE') botSnaps.set(ws, m.state)
+    onMsg?.(m)
+  }
   bots.push(ws)
   return ws
 }
@@ -118,8 +137,21 @@ if (flags.includes('--lobby')) await shot('lobby')
 // Generic junk inputs from the guest bots so rounds have some opponent activity (each game ignores
 // input kinds it doesn't understand).
 let playing = false
-const chatter = setInterval(() => {
+const chatter = setInterval(async () => {
   if (!playing) return
+  const play = await strategyFor(current)
+  if (play) {
+    for (const b of bots) {
+      const snap = botSnaps.get(b)
+      const id = botIds.get(b)
+      if (!snap || !id) continue
+      const out = play(snap, id)
+      for (const input of Array.isArray(out) ? out : out ? [out] : []) {
+        b.send(JSON.stringify({ type: 'MINIGAME_INPUT', input }))
+      }
+    }
+    return
+  }
   for (const b of bots.slice(1)) {
     const r = Math.random()
     const input =
@@ -132,7 +164,7 @@ const chatter = setInterval(() => {
             : { kind: 'dir', dir: ['up', 'down', 'left', 'right'][Math.floor(Math.random() * 4)] }
     b.send(JSON.stringify({ type: 'MINIGAME_INPUT', input }))
   }
-}, 250)
+}, 150)
 
 let current = ''
 let round = 0

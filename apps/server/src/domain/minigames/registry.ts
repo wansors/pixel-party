@@ -30,6 +30,7 @@ import { QuickDraw } from './quickDraw'
 import { QuickMath } from './quickMath'
 import { QuickTetris } from './quickTetris'
 import { ReactionDuel } from './reactionDuel'
+import { RoomRush } from './roomRush'
 import { Roulette } from './roulette'
 import { Simon } from './simon'
 import { SinkTheFleet } from './sinkTheFleet'
@@ -86,6 +87,7 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'javelin-throw': () => new JavelinThrow() as unknown as MiniGame<unknown, unknown>,
   'glass-bridge': () => new GlassBridge() as unknown as MiniGame<unknown, unknown>,
   'freeze-doll': () => new FreezeDoll() as unknown as MiniGame<unknown, unknown>,
+  'room-rush': () => new RoomRush() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

@@ -307,6 +307,10 @@
       "freeze-doll": {
         "name": "Muñeca Congelada",
         "blurb": "Mantén para andar mientras canta y quédate quieto antes de que se gire. ¡Su láser detecta cualquier movimiento!"
+      },
+      "room-rush": {
+        "name": "Carrera de Salas",
+        "blurb": "Se canta un número: llena una sala con exactamente esa gente. ¡Empuja, acelera y cierra la puerta!"
       }
     }
   },
@@ -624,7 +628,7 @@
     },
     "glassBridge": {
       "vest": "DORSAL #{{n}}",
-      "yourJump": "¡SALTAS TÚ! ¿IZQ. O DCHA.?",
+      "yourJump": "¡TE TOCA! ¿IZQUIERDA O DERECHA?",
       "walking": "Cruzando el cristal seguro…",
       "waitTurn": "Tienes {{n}} delante · ¡señala (o miente)!",
       "nextUp": "Vas después · ¡estudia el puente!",
@@ -646,12 +650,22 @@
       "red": "LUZ ROJA",
       "ready": "PREPARADOS…",
       "readyHint": "Mantén ANDAR (↑) o CORRER (SHIFT) cuando cante",
-      "goHint": "¡MUÉVETE! Para antes de que se gire",
+      "goHint": "¡Muévete! Para antes de que se gire",
       "freeze": "¡QUIETO!",
       "hit": "¡TOCADO! Te queda un corazón",
       "safe": "¡A SALVO!",
       "safeHint": "¡Lo lograste! Mira a los demás…",
-      "timeUp": "¡TIEMPO!"
+      "tooSlow": "¡DEMASIADO LENTO!"
+    },
+    "roomRush": {
+      "dash": "¡EMPUJA!",
+      "number": "¡SALAS DE {{n}}!",
+      "call": "RONDA {{n}}",
+      "musicHint": "Súbete al carrusel… espera al número",
+      "callHint": "¡Entra en una sala de exactamente {{n}}!",
+      "lockedHint": "¡A SALVO! La puerta está cerrada",
+      "safe": "¡A SALVO!",
+      "survived": "¡SUPERVIVIENTE!"
     }
   }
 }

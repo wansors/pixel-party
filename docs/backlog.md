@@ -437,7 +437,8 @@ cluster below. Catalog section F.
         - **Possible variant:** the current leader goes first, as comic catch-up. Not the default,
           because the mini-game init ctx has no standings today, so this needs a contract change.
         - Turn-based taps → **mobile-friendly** and latency-tolerant. Axes: nerve + focus.
-  - [ ] **Room Rush** (`room-rush`, "Mingle" — the rooms one) — a top-down arena: a slowly rotating
+  - [x] **Room Rush** (`room-rush`, "Mingle" — the rooms one) — *Shipped 2026-10-02 (catalog G3,
+        D22).* A top-down arena: a slowly rotating
         round carousel in the middle (riders drift with it) and small rooms with doors around the
         edge. Each round has 3–4 calls, and each call runs in two phases:
         - **MUSIC** (~5 s): everyone rides the carousel and the doors stay shut.
