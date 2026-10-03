@@ -54,7 +54,7 @@ Freeze Doll (`freeze-doll`), G3 Room Rush (`room-rush`), I1 Sumo ICE (`sumo-ice`
 I3 Star Blaster (`star-blaster`), I4 Asteroids Arena (`asteroids`), I5 Bomber Express
 (`bomber-express`), I6 Street Brawl (`brawl`), and the racing cluster's F6 Rally Stage (`rally-stage`)
 and F7 Speed Circuit (`speed-circuit`); then the cluster's suggested extras, G4 Honeycomb Cut
-(`honeycomb-cut`). **52 mini-games total.**
+(`honeycomb-cut`) and G5 Jump Rope (`jump-rope`). **53 mini-games total.**
 
 ---
 
@@ -486,6 +486,19 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
 - **Latency**: low — the server judges needle samples (sent every 30 ms); the client draws your trail
   at once and a pressure gauge from the same speed rule.
 
+### G5. ✅ Jump Rope — implemented (`jump-rope`)
+- **Concept**: everyone in a row while two turners swing a giant rope, faster and faster.
+- **Type**: FFA · **Input**: SPACE / ↑ / a tap anywhere (or the JUMP button) · **Duration**: 50 s cap ·
+  **Banter**: 💥💥💥 · **Mobile-friendly**: yes
+- **Rules**: the rope's whole schedule is fixed at the start: the first pass 2.2 s in, then turns of
+  1.5 s, each 3.5 % shorter, down to 0.62 s. A jump lasts 480 ms and clears the rope between 30 and
+  450 ms after take-off; no jumping again mid-air. Missing a pass trips you (one of 2 hearts); the
+  second miss sweeps you off — ELIMINATED.
+- **Win condition / Result**: last one standing (survivors at the bell share 1st); the rest by passes
+  cleared (`23`).
+- **Latency**: low/medium — passes are judged at their scheduled instant against the server's jump
+  time; your own jump animates the moment you press.
+
 ## I. Arcade classics, party-sized (2026-10-02)
 
 Real-time FFA reworks of arcade classics, keyboard-first (PC). Players are drawn as their lobby
@@ -581,7 +594,7 @@ avatar. See `implementation-decisions.md` D22.
 
 | Axis | Covered by |
 |------|------------|
-| Reflexes / reaction | A1, A6, B1, E7, F5, F7, G2, I3 |
+| Reflexes / reaction | A1, A6, B1, E7, F5, F7, G2, G5, I3 |
 | Attention / focus (inhibition) | E1, E3, E4, G1 |
 | Speed / endurance | A2, A9, C1, F1, F2, G3 |
 | Knowledge | A3 |
@@ -597,7 +610,7 @@ avatar. See `implementation-decisions.md` D22.
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G4, I1–I6 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7 |
 | Team | C1, C2, C3 |
 

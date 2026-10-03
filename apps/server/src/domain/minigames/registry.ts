@@ -17,6 +17,7 @@ import { FruitCatch } from './fruitCatch'
 import { GlassBridge } from './glassBridge'
 import { HigherLower } from './higherLower'
 import { HoneycombCut } from './honeycombCut'
+import { JumpRope } from './jumpRope'
 import { LineClearSprint } from './lineClearSprint'
 import { MatchPairs } from './matchPairs'
 import { MazeSprint } from './mazeSprint'
@@ -105,6 +106,7 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'rally-stage': () => new RallyStage() as unknown as MiniGame<unknown, unknown>,
   'speed-circuit': () => new SpeedCircuit() as unknown as MiniGame<unknown, unknown>,
   'honeycomb-cut': () => new HoneycombCut() as unknown as MiniGame<unknown, unknown>,
+  'jump-rope': () => new JumpRope() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

@@ -17,6 +17,7 @@ import { HigherLowerScene } from './HigherLowerScene'
 import { HoneycombCutScene } from './HoneycombCutScene'
 import { Hurdles110mScene } from './Hurdles110mScene'
 import { JavelinThrowScene } from './JavelinThrowScene'
+import { JumpRopeScene } from './JumpRopeScene'
 import { LineClearSprintScene } from './LineClearSprintScene'
 import { LongJumpScene } from './LongJumpScene'
 import { MatchPairsScene } from './MatchPairsScene'
@@ -106,6 +107,7 @@ export const SCENES: Readonly<Record<string, SceneCtor>> = {
   'rally-stage': RallyStageScene,
   'speed-circuit': SpeedCircuitScene,
   'honeycomb-cut': HoneycombCutScene,
+  'jump-rope': JumpRopeScene,
   'tug-of-war': TugOfWarScene,
   'bomb-relay': BombRelayScene,
   'fleet-battle': FleetBattleScene,

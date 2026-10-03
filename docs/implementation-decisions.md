@@ -491,3 +491,7 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   the server marks cut segments from needle samples (continuity window of 12 segments) and owns cracks
   (off-line distance and a speed-stress rule). The speed limit was tightened to 0.5 candy-widths/s after
   the first tests: at 0.9 the whole outline could be raced in under 2 s.
+- **G5 Jump Rope** (`jump-rope`, mobile-friendly; a suggested extra): a deterministic tempo (no
+  seeded jitter — reading the rhythm is the skill), judged per scheduled pass; two hearts so an early
+  slip isn't instant elimination. The rope is drawn as a flattened arc whose middle swings from well over
+  the heads to under the feet, behind the jumpers on the way up and in front on the way down.

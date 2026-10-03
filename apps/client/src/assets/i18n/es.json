@@ -347,6 +347,10 @@
       "honeycomb-cut": {
         "name": "Galleta de Miel",
         "blurb": "Recorta la forma de la galleta con la aguja. ¡Si te sales de la línea o vas con prisa, se agrieta!"
+      },
+      "jump-rope": {
+        "name": "Comba Gigante",
+        "blurb": "Una comba gigante gira cada vez más rápido: toca para saltar cuando pase bajo tus pies. ¡Dos fallos y estás fuera!"
       }
     }
   },
@@ -762,6 +766,12 @@
       "done": "¡RECORTADA EN {{s}}s!",
       "slow": "¡DEMASIADO DEPRISA! FRENA",
       "hint": "Mantén pulsado y repasa la línea con la aguja"
+    },
+    "jumpRope": {
+      "jump": "¡SALTA!",
+      "jumps": "SALTOS {{n}}",
+      "trip": "¡TROPIEZO!",
+      "survived": "¡SIGUES SALTANDO!"
     }
   }
 }

@@ -580,6 +580,17 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
       'Trace the shape in the candy with your needle. Stray off the line or rush and it cracks!',
     axes: ['precision', 'nerve'],
   },
+  {
+    id: 'jump-rope',
+    name: 'Jump Rope',
+    format: 'ffa',
+    realtime: true,
+    mobileFriendly: true,
+    durationSec: 50,
+    blurb:
+      'A giant rope swings faster and faster: tap to jump as it sweeps under you. Two misses and you are out!',
+    axes: ['reflexes', 'focus'],
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

@@ -347,6 +347,10 @@
       "honeycomb-cut": {
         "name": "Honeycomb Cut",
         "blurb": "Trace the shape in the candy with your needle. Stray off the line or rush and it cracks!"
+      },
+      "jump-rope": {
+        "name": "Jump Rope",
+        "blurb": "A giant rope swings faster and faster: tap to jump as it sweeps under you. Two misses and you are out!"
       }
     }
   },
@@ -762,6 +766,12 @@
       "done": "CUT OUT IN {{s}}s!",
       "slow": "TOO FAST! EASE OFF",
       "hint": "Hold and trace the line with the needle"
+    },
+    "jumpRope": {
+      "jump": "JUMP!",
+      "jumps": "JUMPS {{n}}",
+      "trip": "TRIP!",
+      "survived": "STILL JUMPING!"
     }
   }
 }

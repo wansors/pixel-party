@@ -469,7 +469,7 @@ cluster below. Catalog section F.
   - [ ] *Suggested extras in the same spirit (not requested — kept, built one by one)*: **Honeycomb Cut**
         (*shipped 2026-10-03, catalog G4*)
         (carve a shape out of a candy by tracing its outline; press too hard or leave the line and it
-        cracks → mouse/touch precision), **Jump Rope** (a giant rope swings faster and faster; tap to
+        cracks → mouse/touch precision), **Jump Rope** (*shipped 2026-10-03, catalog G5*; a giant rope swings faster and faster; tap to
         jump in rhythm or get swept off), **Marbles Duel** (1v1 guess odd/even of the marbles your
         rival hides — quick bluffing duel).
 - [ ] **Visual consistency audit across all mini-games** — review every scene side by side and make
