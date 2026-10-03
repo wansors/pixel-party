@@ -23,7 +23,7 @@ of the 55 games are tagged `mobileFriendly` (lobby badge + filter, D21).
 
 ### Foundation & platform
 - Bun workspaces monorepo, hexagonal server, `@pp/shared` wire contracts, Biome + TS strict +
-  determinism gate + **GitHub Actions CI**. Test suite: **377 server/shared + 18 client (Karma)**, green.
+  determinism gate + **GitHub Actions CI**. Test suite: **377 server/shared + 21 client (Karma)**, green.
 - Server-authoritative, deterministic core (seeded `Random` + `Clock` ports; the domain never touches
   `Math.random`/`Date.now`). Bun-native WS with a hand-written shape validator (no Zod).
 - Angular 20 shell + Phaser 3 (decoupled); **i18n EN/ES** (Transloco) across the UI + every scene;
@@ -506,7 +506,12 @@ cluster below. Catalog section F.
         - Mobile-friendly (four big answer buttons). Axes: knowledge + reflexes.
 - [ ] **Lightning Quiz in Spanish** — its 12-question bank (`trivia.ts`) is still English-only, even
       with the UI in Spanish. Move it to Weird Trivia's bilingual server-side format (D24) and grow it.
-- [ ] **Dark / acid humor pass** — review the games and give some of them a touch of black, acid humor:
+- [x] **Dark / acid humor pass** — *Done 2026-10-03 (D25):* bigger and sharper round-result callouts
+      (the same line on every screen), a wooden spoon for last place on the final ranking, an
+      elimination-stamp pool, spectator jabs, talking NPCs (the doll gloats, the bridge queue and the
+      rope turners heckle, Quick Draw's undertaker, Balloon Chicken's verdict on your greed) and 22
+      round-intro taglines — all written separately in EN and ES; no host toggle.
+      *Original request:* review the games and give some of them a touch of black, acid humor:
       elimination stamps, round-result taglines, game-over and waiting quips, NPC reactions (the Freeze
       Doll, the Glass Bridge crowd, the rope turners, the Quick Draw undertaker…), loading/intro blurbs.
       *Requested 2026-10-03.*

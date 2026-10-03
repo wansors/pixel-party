@@ -47,6 +47,46 @@ export function floatText(
   })
 }
 
+// A comic speech bubble for NPC banter (the doll, the rope turners, the crowd): pops up with its tail
+// on (x, y), holds, then fades. The body stays on screen; the tail keeps pointing at the speaker.
+export function speechBubble(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  text: string,
+  size = 12,
+  holdMs = 1400,
+): void {
+  const pad = Math.round(size * 0.6)
+  const tail = Math.max(6, Math.round(size * 0.6))
+  const label = scene.add
+    .text(0, 0, text, headlineStyle(size, PALETTE.bg, { align: 'center' }))
+    .setOrigin(0.5, 1)
+  const w = Math.ceil(label.width) + pad * 2
+  const h = Math.ceil(label.height) + pad * 2
+  const width = scene.scale.width
+  const cx = Phaser.Math.Clamp(x, w / 2 + 6, Math.max(w / 2 + 6, width - w / 2 - 6))
+  const cy = Math.max(y, tail + h + 6)
+  const tx = Phaser.Math.Clamp(x - cx, -w / 2 + tail, w / 2 - tail)
+  const g = scene.add.graphics()
+  g.fillStyle(PALETTE.bg, 1)
+  g.fillRect(-w / 2 - 2, -tail - h - 2, w + 4, h + 4)
+  g.fillStyle(PALETTE.text, 1)
+  g.fillRect(-w / 2, -tail - h, w, h)
+  // A stepped tail pointing down at the speaker.
+  for (let r = 0; r < tail; r += 2) g.fillRect(tx - (tail - r) / 2, -tail + r, tail - r, 2)
+  label.setPosition(0, -tail - pad)
+  const bubble = scene.add.container(cx, cy, [g, label]).setDepth(910).setScale(0.4)
+  scene.tweens.chain({
+    targets: bubble,
+    tweens: [
+      { scale: 1, duration: 140, ease: 'Back.easeOut' },
+      { alpha: 0, delay: holdMs, duration: 260, ease: 'Quad.easeIn' },
+    ],
+    onComplete: () => bubble.destroy(),
+  })
+}
+
 // Exploding shower of square pixels (hits, pops, catches, confetti). `count` pixels fly out radially
 // with a little gravity, in `color` plus a lighter highlight tint.
 export function burst(

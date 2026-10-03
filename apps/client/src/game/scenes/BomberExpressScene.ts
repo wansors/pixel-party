@@ -504,7 +504,7 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
       at.x,
       at.y,
       this.state.colorOf(p.id),
-      this.t('game.common.eliminated'),
+      this.quip('game.common.stamps', p.id),
       this.compact ? 12 : 16,
     )
     this.sfx.eliminated()

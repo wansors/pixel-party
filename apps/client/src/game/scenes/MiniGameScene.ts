@@ -5,6 +5,7 @@ import type { Sfx } from '../Sfx'
 import { Hud } from '../hud'
 import type { Translate } from '../i18n'
 import { addArcadeBackdrop } from '../pixelStyle'
+import { linesOf, pickLine } from '../quips'
 
 // Everything a scene needs from the outside world, in the order GameClient hands it over.
 export type SceneDeps = readonly [
@@ -103,6 +104,12 @@ export abstract class MiniGameScene<S> extends Phaser.Scene {
   // Display label for a player: "YOU" for this client, else their roster name.
   protected label(id: string): string {
     return id === this.selfId ? this.t('game.common.you') : this.state.nameOf(id)
+  }
+
+  // A flavor line from an i18n pool (game/quips): the same on every client for the same seed — pass
+  // the player id or the moment it reacts to — and stable from frame to frame.
+  protected quip(key: string, seed: string): string {
+    return pickLine(linesOf(this.t(key)), `${this.gameId}:${seed}`)
   }
 
   // Keyboard binding that ignores the OS key auto-repeat by default: a held key would otherwise fire

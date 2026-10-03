@@ -364,7 +364,14 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
     if (mine.lives < prev.lives) {
       const s = this.toScreen(mine.x, mine.y)
       if (mine.out) {
-        eliminate(this, s.x, s.y, this.state.colorOf(mine.id), this.t('game.common.out'), size)
+        eliminate(
+          this,
+          s.x,
+          s.y,
+          this.state.colorOf(mine.id),
+          this.quip('game.common.stamps', mine.id),
+          size,
+        )
         this.sfx.eliminated()
       } else {
         floatText(this, s.x, s.y - 20, `-${STAR.hitPenalty}`, PALETTE.red, size)

@@ -185,6 +185,24 @@ h3 {
   font-size: var(--fs-sm);
 }
 
+// Last place's consolation prize.
+.spoon {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  text-align: center;
+  .tag {
+    color: var(--c-red);
+    font-size: var(--fs-xs);
+  }
+  .quip {
+    color: var(--c-dim);
+    font-family: monospace;
+    font-size: 0.85rem;
+    font-style: italic;
+  }
+}
+
 // ── Profile + summary ───────────────────────────────────────────────────────
 .profile {
   display: grid;

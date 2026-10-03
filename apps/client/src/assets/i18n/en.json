@@ -77,10 +77,45 @@
       "teamWinner": "WINNING TEAM",
       "catchup": "+{{n}} catch-up",
       "callout": {
-        "streak": ["MONSTER KILL!!!", "UNSTOPPABLE!", "ON FIRE!", "RAMPAGE!"],
-        "winner": ["You're the best!", "Champion!", "Nailed it!", "Top of the podium!"],
-        "loser": ["Loser!!", "Better luck next time.", "Ouch.", "Last place gang."],
-        "other": ["Solid effort.", "Middle of the pack.", "Keep grinding.", "Not bad!"]
+        "streak": [
+          "MONSTER KILL!!!",
+          "UNSTOPPABLE!",
+          "ON FIRE!",
+          "RAMPAGE!",
+          "Somebody stop them.",
+          "Is this even legal?",
+          "Leave some for the rest!"
+        ],
+        "winner": [
+          "You're the best!",
+          "Champion!",
+          "Nailed it!",
+          "Top of the podium!",
+          "Enjoy it. It won't last.",
+          "Insufferable from now on.",
+          "Pure talent. Or luck.",
+          "Humble? Never heard of it."
+        ],
+        "loser": [
+          "Loser!!",
+          "Better luck next time.",
+          "Ouch.",
+          "Last place gang.",
+          "Your ancestors are watching.",
+          "Participation trophy!",
+          "At least you showed up.",
+          "Have you tried winning?",
+          "Thoughts and prayers."
+        ],
+        "other": [
+          "Solid effort.",
+          "Middle of the pack.",
+          "Keep grinding.",
+          "Not bad!",
+          "Gloriously average.",
+          "Nobody will remember this.",
+          "Mediocrity achieved."
+        ]
       },
       "thisRound": "This round"
     },
@@ -94,7 +129,15 @@
       "first": "1ST",
       "newHighScore": "NEW HIGH SCORE",
       "playAgain": "Play again",
-      "waitingHost": "Waiting for the host to start a new game…"
+      "waitingHost": "Waiting for the host to start a new game…",
+      "spoon": "WOODEN SPOON: {{name}}",
+      "spoonLines": [
+        "Better luck in your next life.",
+        "Someone had to lose. Thank you.",
+        "There's always next time. Probably.",
+        "Statistically impressive.",
+        "The floor called. It misses you."
+      ]
     },
     "summary": {
       "profileTitle": "Your skill profile",
@@ -143,7 +186,8 @@
     "minigame": {
       "reaction-duel": {
         "name": "Reaction Duel",
-        "blurb": "Tap the instant the light turns green. Too early and you are out."
+        "blurb": "Tap the instant the light turns green. Too early and you are out.",
+        "tagline": "Patience is a virtue. Jumping the gun is a loss."
       },
       "button-masher": {
         "name": "Button Masher",
@@ -159,7 +203,8 @@
       },
       "balloon-chicken": {
         "name": "Balloon Chicken",
-        "blurb": "Pump for points, but cash out before it bursts — or lose it all."
+        "blurb": "Pump for points, but cash out before it bursts — or lose it all.",
+        "tagline": "Greed is good. Until it goes pop."
       },
       "number-rush": {
         "name": "Number Rush",
@@ -207,15 +252,18 @@
       },
       "tug-of-war": {
         "name": "Tug of War",
-        "blurb": "Two teams, one rope. Mash together to pull the marker to your side."
+        "blurb": "Two teams, one rope. Mash together to pull the marker to your side.",
+        "tagline": "Teamwork: always someone else to blame."
       },
       "sink-the-fleet": {
         "name": "Sink the Fleet",
-        "blurb": "Head-to-head Battleship. Take turns firing to sink your rival before they sink you."
+        "blurb": "Head-to-head Battleship. Take turns firing to sink your rival before they sink you.",
+        "tagline": "Somewhere out there, a tiny admiral is crying."
       },
       "bomb-relay": {
         "name": "Bomb Relay",
-        "blurb": "Pass the bomb down your team — mash your leg and hand it off before the fuse blows."
+        "blurb": "Pass the bomb down your team — mash your leg and hand it off before the fuse blows.",
+        "tagline": "Hot potato, short fuse, shorter friendships."
       },
       "pixel-beat": {
         "name": "Pixel Beat",
@@ -247,7 +295,8 @@
       },
       "pixel-rain": {
         "name": "Pixel Rain",
-        "blurb": "Dodge the falling blocks. Last one standing wins."
+        "blurb": "Dodge the falling blocks. Last one standing wins.",
+        "tagline": "It's raining blocks. Nobody brought an umbrella."
       },
       "pixel-dash": {
         "name": "Pixel Dash",
@@ -255,11 +304,13 @@
       },
       "snake-arena": {
         "name": "Snake Arena",
-        "blurb": "Eat, grow, and do not crash. The longest snake wins."
+        "blurb": "Eat, grow, and do not crash. The longest snake wins.",
+        "tagline": "Eat, grow, crash into a friend."
       },
       "pixel-pong": {
         "name": "Pixel Pong",
-        "blurb": "Head-to-head pong. First to five points takes the duel."
+        "blurb": "Head-to-head pong. First to five points takes the duel.",
+        "tagline": "Two paddles, one ball, zero mercy."
       },
       "sumo-push": {
         "name": "Sumo Push",
@@ -271,7 +322,8 @@
       },
       "quick-draw": {
         "name": "Quick Draw",
-        "blurb": "Wait for FIRE, then draw first. Flinch early and you lose."
+        "blurb": "Wait for FIRE, then draw first. Flinch early and you lose.",
+        "tagline": "The undertaker is already taking measurements."
       },
       "pixel-roulette": {
         "name": "Pixel Roulette",
@@ -303,39 +355,48 @@
       },
       "glass-bridge": {
         "name": "Glass Bridge",
-        "blurb": "Cross one by one: LEFT or RIGHT panel? One holds, one shatters. Watch for the glint."
+        "blurb": "Cross one by one: LEFT or RIGHT panel? One holds, one shatters. Watch for the glint.",
+        "tagline": "Half the panels are tempered glass. The other half are a funeral."
       },
       "freeze-doll": {
         "name": "Freeze Doll",
-        "blurb": "Hold to walk while she sings, freeze before she turns. Her laser spots any twitch!"
+        "blurb": "Hold to walk while she sings, freeze before she turns. Her laser spots any twitch!",
+        "tagline": "She sings, you walk. She turns, you'd better be furniture."
       },
       "room-rush": {
         "name": "Room Rush",
-        "blurb": "A number is called: pack a room with exactly that many. Shove, dash, slam the door!"
+        "blurb": "A number is called: pack a room with exactly that many. Shove, dash, slam the door!",
+        "tagline": "Musical chairs, except losing is permanent."
       },
       "sumo-ice": {
         "name": "Sumo ICE",
-        "blurb": "Sumo on a melting ice floe: slide, shove and stay on the ice. Last one dry wins!"
+        "blurb": "Sumo on a melting ice floe: slide, shove and stay on the ice. Last one dry wins!",
+        "tagline": "The ice is thin. So is your dignity."
       },
       "pang": {
         "name": "Pang",
-        "blurb": "Harpoon the bouncing balloons: each hit splits them smaller. Most pops wins, dodge them all!"
+        "blurb": "Harpoon the bouncing balloons: each hit splits them smaller. Most pops wins, dodge them all!",
+        "tagline": "Pop the balloons before they pop you."
       },
       "star-blaster": {
         "name": "Star Blaster",
-        "blurb": "Same waves for everyone: weave through the bullet storm, your ship fires itself. Top score wins."
+        "blurb": "Same waves for everyone: weave through the bullet storm, your ship fires itself. Top score wins.",
+        "tagline": "Shoot everything. Ask questions never."
       },
       "asteroids": {
         "name": "Asteroids Arena",
-        "blurb": "One shared wrap-around sky: rotate, thrust, shoot. Rocks pay, rival ships pay more!"
+        "blurb": "One shared wrap-around sky: rotate, thrust, shoot. Rocks pay, rival ships pay more!",
+        "tagline": "In space, no one can hear you blame the lag."
       },
       "bomber-express": {
         "name": "Bomber Express",
-        "blurb": "Everyone starts maxed out: huge blasts, five bombs, fast boots. Last one standing wins!"
+        "blurb": "Everyone starts maxed out: huge blasts, five bombs, fast boots. Last one standing wins!",
+        "tagline": "Leave your friends a present. It ticks."
       },
       "brawl": {
         "name": "Street Brawl",
-        "blurb": "One street, everybody fighting: punch combos, kicks, throws, pipes and chicken. Last one up wins!"
+        "blurb": "One street, everybody fighting: punch combos, kicks, throws, pipes and chicken. Last one up wins!",
+        "tagline": "Friendship ends where the bottle begins."
       },
       "rally-stage": {
         "name": "Rally Stage",
@@ -347,19 +408,23 @@
       },
       "honeycomb-cut": {
         "name": "Honeycomb Cut",
-        "blurb": "Trace the shape in the candy with your needle. Stray off the line or rush and it cracks!"
+        "blurb": "Trace the shape in the candy with your needle. Stray off the line or rush and it cracks!",
+        "tagline": "Steady hands. Crack the candy and the candy cracks you."
       },
       "jump-rope": {
         "name": "Jump Rope",
-        "blurb": "A giant rope swings faster and faster: tap to jump as it sweeps under you. Two misses and you are out!"
+        "blurb": "A giant rope swings faster and faster: tap to jump as it sweeps under you. Two misses and you are out!",
+        "tagline": "Skip or trip. The rope doesn't care."
       },
       "marbles-duel": {
         "name": "Marbles Duel",
-        "blurb": "Odd or even? Hide marbles in your fist, bet on your rival’s. Win them all to win the duel."
+        "blurb": "Odd or even? Hide marbles in your fist, bet on your rival’s. Win them all to win the duel.",
+        "tagline": "Take their marbles. Then take their dignity."
       },
       "weird-trivia": {
         "name": "Weird Trivia",
-        "blurb": "Strange but true: pick the real answer among the absurd ones. Fast answers score more."
+        "blurb": "Strange but true: pick the real answer among the absurd ones. Fast answers score more.",
+        "tagline": "Everything here is true. Sadly."
       }
     }
   },
@@ -384,9 +449,25 @@
       "waiting": "Waiting for the others…",
       "finished": "FINISHED!",
       "finish": "FINISH!",
-      "eliminated": "ELIMINATED!",
       "left": "{{n}}/{{total}} LEFT",
-      "spectating": "You are out — enjoy the show"
+      "spectating": [
+        "You are out — enjoy the show",
+        "Out. Your ghost may heckle freely.",
+        "Eliminated. Have you tried being better?",
+        "You're out. Take notes, rookie.",
+        "Out. Your funeral is next round.",
+        "Spectator mode: a fancy word for lost."
+      ],
+      "stamps": [
+        "ELIMINATED!",
+        "R.I.P.",
+        "GAME OVER",
+        "DELETED",
+        "BYE BYE!",
+        "TOAST!",
+        "SEE YA!",
+        "FLATLINED"
+      ]
     },
     "reaction": {
       "wait": "WAIT…",
@@ -425,7 +506,18 @@
       "cashOut": "CASH OUT",
       "pop": "POP!",
       "cashed": "CASHED",
-      "bust": "BUST"
+      "bust": "BUST",
+      "bustLines": [
+        "Greed is good. Until it pops.",
+        "You had one job: stop.",
+        "RIP balloon. RIP points.",
+        "Bold. Wrong, but bold."
+      ],
+      "cashLines": [
+        "Chicken! But a rich chicken.",
+        "Coward's money spends the same.",
+        "Safe. And a little boring."
+      ]
     },
     "numberRush": {
       "done": "DONE!",
@@ -608,7 +700,13 @@
       "tooEarly": "Too early — you jumped the gun!",
       "slower": "{{name}} drew first ({{ms}} ms)",
       "noDraw": "Nobody drew in time",
-      "bye": "No opponent this round — free win!"
+      "bye": "No opponent this round — free win!",
+      "undertaker": [
+        "The undertaker is measuring you.",
+        "Pine box, size medium.",
+        "Your horse gets your boots.",
+        "Here lies you. Briefly missed."
+      ]
     },
     "matchPairs": {
       "prompt": "Find the pairs!",
@@ -690,7 +788,15 @@
       "safe": "SAFE!",
       "start": "START",
       "goal": "GOAL",
-      "timeUp": "TIME UP!"
+      "timeUp": "TIME UP!",
+      "crowd": [
+        "GRAVITY 1 · YOU 0",
+        "WRONG GLASS.",
+        "MIND THE GAP!",
+        "OOOOOH!",
+        "WHO'S NEXT?",
+        "THAT'S GOTTA HURT."
+      ]
     },
     "freezeDoll": {
       "walk": "WALK",
@@ -704,7 +810,15 @@
       "hit": "HIT! One heart left",
       "safe": "SAFE!",
       "safeHint": "You made it! Watch the others…",
-      "tooSlow": "TOO SLOW!"
+      "tooSlow": "TOO SLOW!",
+      "doll": [
+        "I SAW THAT.",
+        "GOTCHA.",
+        "NOT SO FAST.",
+        "MOVE AGAIN. I DARE YOU.",
+        "NEXT?",
+        "TOO EASY."
+      ]
     },
     "roomRush": {
       "dash": "DASH",
@@ -780,7 +894,14 @@
       "jump": "JUMP!",
       "jumps": "JUMPS {{n}}",
       "trip": "TRIP!",
-      "survived": "STILL JUMPING!"
+      "survived": "STILL JUMPING!",
+      "turners": [
+        "NEXT!",
+        "CLUMSY.",
+        "GRACEFUL. NOT.",
+        "IT'S A ROPE, NOT A HUG.",
+        "ANOTHER ONE BITES THE DUST."
+      ]
     },
     "marbles": {
       "hide": "HIDE",

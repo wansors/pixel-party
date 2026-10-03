@@ -16,7 +16,9 @@ shared visual language so all screens and mini-games read as one coherent system
 - **Snappy, not smooth**: stepped/instant transitions, hard cuts, small screen-shake and flashes —
   arcade responsiveness over easing curves.
 - **Loud and playful**: bold, celebratory, meant to make the group laugh (aligned with the game's
-  competitive-banter tone).
+  competitive-banter tone). The copy has a dark, acid streak — callouts, stamps, heckling NPCs — aimed
+  at the situation and the loser's pride, never at real people or groups (`implementation-decisions.md`
+  D25).
 - **Coherent across mini-games**: even though mini-games vary, they share palette, font, framing and SFX.
 
 ## 2. Color palette

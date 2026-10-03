@@ -1,7 +1,16 @@
 import { JUMP_ROPE, type JumpRopePlayer, type JumpRopeSnapshot, PALETTE } from '@pp/shared'
 import type Phaser from 'phaser'
 import { AvatarSprite } from '../avatars'
-import { addBanner, burst, eliminate, flash, floatText, shake, showBanner } from '../fx'
+import {
+  addBanner,
+  burst,
+  eliminate,
+  flash,
+  floatText,
+  shake,
+  showBanner,
+  speechBubble,
+} from '../fx'
 import { ensureBevelPanel, ensurePixelGrid, fitFontSize, headlineStyle, shade } from '../pixelStyle'
 import { YouMarker, addShadow } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
@@ -26,6 +35,9 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
   private compact = false
   private groundY = 0
   private hands = { lx: 0, rx: 0, y: 0 }
+  // Where the turners' heads are (they heckle), and when they last did.
+  private turners = { lx: 0, rx: 0, y: 0 }
+  private heckleUntil = 0
   // The rope's middle swings between ropeTop (well over the heads) and just under the feet.
   private ropeTop = 0
   private avatarPx = 0
@@ -129,6 +141,8 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
       .setDepth(50)
       .setFlipX(true)
     this.hands = { lx: margin + 10, rx: width - margin - 10, y: this.groundY - turnerH * 0.55 }
+    this.turners = { lx: margin, rx: width - margin, y: this.groundY - turnerH - 4 }
+    this.heckleUntil = 0
     this.avatarPx = this.compact ? 32 : 48
     this.ropeTop = this.groundY - this.avatarPx * 2.6
     this.ropeBack = this.add.graphics().setDepth(40)
@@ -287,6 +301,20 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
     }
   }
 
+  // The nearer turner's one-liner for whoever got swept off (one bubble at a time).
+  private heckle(x: number, seed: string): void {
+    if (this.time.now < this.heckleUntil) return
+    this.heckleUntil = this.time.now + 2000
+    const left = x < this.scale.width / 2
+    speechBubble(
+      this,
+      left ? this.turners.lx : this.turners.rx,
+      this.turners.y,
+      this.quip('game.jumpRope.turners', seed),
+      this.compact ? 12 : 16,
+    )
+  }
+
   private trip(p: JumpRopePlayer, x: number, was: JumpRopePlayer): void {
     const view = this.views.get(p.id)
     const self = p.id === this.selfId
@@ -297,10 +325,11 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
         x,
         this.groundY - this.avatarPx,
         this.state.colorOf(p.id),
-        this.t('game.common.eliminated'),
+        this.quip('game.common.stamps', p.id),
         this.compact ? 12 : 16,
       )
       this.sfx.eliminated()
+      this.heckle(x, p.id)
       if (view) {
         view.out = true
         view.avatar.setExpression('ko')

@@ -47,6 +47,15 @@
         </p>
       }
 
+      @if (spoon(); as s) {
+        <p class="spoon">
+          <span class="tag">
+            {{ 'room.final.spoon' | transloco: { name: store.playerName(s.playerId) } }}
+          </span>
+          <span class="quip">{{ spoonLine(s.playerId) }}</span>
+        </p>
+      }
+
       @if (store.final().length > 3) {
         <ol class="hs" start="4">
           @for (s of store.final().slice(3); track s.playerId) {

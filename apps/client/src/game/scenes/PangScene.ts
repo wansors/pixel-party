@@ -316,7 +316,9 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
       this.hud?.setScore(this.t('game.pang.pops', { n: mine.pops }))
       this.hud?.setCenter(this.t('game.pang.wave', { n: mine.wave + 1 }))
       if (prev && !this.firstSnapshot) this.react(prev, mine)
-      const prompt = mine.out ? this.t('game.common.spectating') : this.t('game.pang.hint')
+      const prompt = mine.out
+        ? this.quip('game.common.spectating', this.selfId)
+        : this.t('game.pang.hint')
       if (this.prompt && this.prompt.text !== prompt) {
         this.prompt.setText(prompt)
         this.prompt.setFontSize(fitFontSize(prompt, this.scale.width - 24, this.compact ? 12 : 16))
@@ -359,7 +361,14 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
     if (mine.lives < prev.lives) {
       const p = this.toScreen(mine.x, PANG.h - PANG.playerH)
       if (mine.out) {
-        eliminate(this, p.x, p.y, this.state.colorOf(mine.id), this.t('game.common.out'), size)
+        eliminate(
+          this,
+          p.x,
+          p.y,
+          this.state.colorOf(mine.id),
+          this.quip('game.common.stamps', mine.id),
+          size,
+        )
         this.sfx.eliminated()
       } else {
         floatText(this, p.x, p.y - 10, '-♥', PALETTE.red, size)

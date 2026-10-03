@@ -312,7 +312,7 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
       p.x,
       p.y - this.avatarPx,
       this.state.colorOf(b.id),
-      this.t('game.common.eliminated'),
+      this.quip('game.common.stamps', b.id),
       this.compact ? 12 : 16,
     )
     this.sfx.eliminated()

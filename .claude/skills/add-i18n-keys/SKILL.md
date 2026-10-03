@@ -29,7 +29,9 @@ python3 .claude/skills/add-i18n-keys/i18n-add.py '{
 - Interpolation is `{{name}}` (Transloco); scenes call `this.t('game.x.key', { name })`.
 - Spanish: natural, fully accented (á é í ó ú ñ ¡ ¿), same tone/length budget as the English (pixel
   font is wide — keep HUD/banners short).
-- Arrays are allowed for random flavor lines (see `room.result.callout.*`).
+- Arrays are flavor-line pools (`room.result.callout.*`, `game.common.stamps`, NPC heckles), read
+  with `quip()` / `pickLine()` from `game/quips.ts` (a seeded pick, the same line on every client). The
+  two languages' pools don't need to match line for line — each gets its own jokes.
 
 ## Check for gaps
 ```bash

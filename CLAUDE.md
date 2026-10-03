@@ -88,7 +88,8 @@ Documentation lives in `docs/`:
   ServerMsg handling, intents, Phaser bridge) + `RoomComponent` shell + one view component per phase
   (`lobby/`, `intro/`, `result/`, `final/`, `live-board/`); `core/net/game-socket.service`; `game/`
   (Phaser, framework-agnostic): `GameClient`, `serverMsgRouter`, `RoundState` (snapshot + roster
-  names/colors/avatars), `hud` (standard HUD strip), `fx` (juice kit, incl. the `eliminate` moment),
+  names/colors/avatars), `hud` (standard HUD strip), `fx` (juice kit, incl. the `eliminate` moment and NPC
+  `speechBubble`s), `quips` (seeded banter-line pools, the same jab on every screen — D25),
   `pixelStyle` (pixel-art textures/text), `avatarSprites` (the Phaser-free 16×16 avatar set: front/side/
   back views, expressions, stride frames) + `avatars` (`ensureAvatarTexture`, `AvatarSprite`,
   `avatarPx`) + `playerMarks` (YOU marker, name tags, shadows) — every scene draws players as their

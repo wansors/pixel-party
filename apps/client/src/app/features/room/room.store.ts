@@ -20,6 +20,7 @@ import {
 } from '@pp/shared'
 import { GameClient } from '../../../game/GameClient'
 import { toAvatarId } from '../../../game/avatarSprites'
+import { linesOf, pickLine } from '../../../game/quips'
 import { AudioService } from '../../core/audio/audio.service'
 import { CatalogI18nService } from '../../core/i18n/catalog-i18n.service'
 import { GameSocketService } from '../../core/net/game-socket.service'
@@ -49,7 +50,6 @@ export interface LiveRow {
   roundLeader: boolean
 }
 
-const pick = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)] as T
 const NEUTRAL = '#7b88a8'
 
 // Best-effort read of "how each player is doing so far this round" out of a mini-game's snapshot.
@@ -274,7 +274,7 @@ export class RoomStore {
       case 'ROUND_RESULT':
         this.roundResult.set({ round: msg.round, result: msg.result })
         this.radars.set(msg.result.radars ?? [])
-        this.roundCallouts.set(this.buildCallouts(msg.result))
+        this.roundCallouts.set(this.buildCallouts(msg.result, msg.round))
         this.view.set('round-result')
         if (this.isRoundWinner(msg.result)) this.audio.sfx.win()
         else this.audio.sfx.coin()
@@ -556,8 +556,9 @@ export class RoomStore {
 
   // Cosmetic flavor text for the just-finished round, purely for laughs — never affects scoring. Tiers:
   // a multi-round winning streak beats a plain win, the round's last place gets razzed, everyone else
-  // gets a neutral line. One random pick per player per round (memoized in `roundCallouts`).
-  private buildCallouts(result: RoundResultDto): Record<string, string> {
+  // gets a neutral line. One pick per player per round (memoized in `roundCallouts`), seeded by the
+  // round and the player, so every screen in the room razzes the loser with the same line.
+  private buildCallouts(result: RoundResultDto, round: number): Record<string, string> {
     const winnerId = result.placements[0] ?? null
     for (const id of this.players().map((p) => p.id)) {
       const streak = id === winnerId ? (this.winStreak.get(id) ?? 0) + 1 : 0
@@ -574,8 +575,8 @@ export class RoomStore {
             : s.rank === lastRank && result.scores.length > 1
               ? 'loser'
               : 'other'
-      const options = this.transloco.translate<string[]>(`room.result.callout.${tier}`)
-      callouts[s.playerId] = pick(options)
+      const options = linesOf(this.transloco.translate<unknown>(`room.result.callout.${tier}`))
+      callouts[s.playerId] = pickLine(options, `${round}:${result.minigameId}:${s.playerId}`)
     }
     return callouts
   }

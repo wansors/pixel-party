@@ -375,7 +375,9 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
       draw: this.t('game.quickDraw.noDraw'),
       bye: this.t('game.quickDraw.bye'),
     }
-    this.status?.setText(line[outcome])
+    // The loser also hears from the undertaker.
+    const epitaph = lose ? `\n${this.quip('game.quickDraw.undertaker', this.selfId)}` : ''
+    this.status?.setText(`${line[outcome]}${epitaph}`)
 
     if (outcome === 'fastest' && this.me) this.shoot(this.me, this.opp, fx)
     if (outcome === 'slower' && this.opp) this.shoot(this.opp, this.me, fx)

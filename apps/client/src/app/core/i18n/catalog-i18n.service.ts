@@ -25,6 +25,13 @@ export class CatalogI18nService {
     )
   }
 
+  // Optional one-line joke for the round intro (only some games have one; '' otherwise). Read through
+  // the game's catalog object so a game without a tagline never logs a missing translation.
+  minigameTagline(id: MiniGameId): string {
+    const entry = this.transloco.translateObject<{ tagline?: unknown }>(`catalog.minigame.${id}`)
+    return typeof entry?.tagline === 'string' ? entry.tagline : ''
+  }
+
   // Skill-axis display label for the Phase 4 radar; English fallback is the capitalized axis id.
   axisLabel(axis: SkillAxis): string {
     const fallback = axis.charAt(0).toUpperCase() + axis.slice(1)

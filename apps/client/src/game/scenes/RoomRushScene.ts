@@ -332,7 +332,7 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
       const p = snap.players.find((q) => q.id === id)
       if (!p) continue
       const s = this.toScreen(p.x, p.y)
-      eliminate(this, s.x, s.y, this.state.colorOf(id), this.t('game.common.eliminated'), size)
+      eliminate(this, s.x, s.y, this.state.colorOf(id), this.quip('game.common.stamps', id), size)
     }
     if (me && snap.outThisCall.includes(me.id)) flash(this, PALETTE.red, 220, 0.3)
     else if (me?.alive) {
@@ -537,7 +537,8 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
     me: RoomRushPlayer | undefined,
   ): { text: string; color: number } {
     if (!me || this.state.final) return { text: '', color: PALETTE.amber }
-    if (!me.alive) return { text: this.t('game.common.spectating'), color: PALETTE.dim }
+    if (!me.alive)
+      return { text: this.quip('game.common.spectating', this.selfId), color: PALETTE.dim }
     if (snap.phase === 'music')
       return { text: this.t('game.roomRush.musicHint'), color: PALETTE.cyan }
     if (snap.phase === 'reveal') return { text: this.t('game.roomRush.safe'), color: PALETTE.lime }

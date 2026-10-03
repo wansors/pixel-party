@@ -252,7 +252,7 @@ export class HoneycombCutScene extends MiniGameScene<HoneycombSnapshot> {
           at.x,
           at.y,
           this.state.colorOf(me.id),
-          this.t('game.common.eliminated'),
+          this.quip('game.common.stamps', me.id),
           this.compact ? 12 : 16,
         )
         this.sfx.eliminated()
@@ -359,7 +359,7 @@ export class HoneycombCutScene extends MiniGameScene<HoneycombSnapshot> {
     const text = !me
       ? ''
       : me.broken
-        ? this.t('game.common.spectating')
+        ? this.quip('game.common.spectating', this.selfId)
         : me.doneMs !== null
           ? this.t('game.common.waiting')
           : this.speed > HONEYCOMB.maxSpeed && this.down

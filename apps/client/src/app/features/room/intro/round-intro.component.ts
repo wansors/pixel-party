@@ -6,7 +6,7 @@ import { PixelAvatarComponent } from '../../../shared/pixel-avatar.component'
 import { RoomStore } from '../room.store'
 
 // Round intro card shown during the pre-round countdown: which game is next, how it's played (the
-// catalog blurb), its format, skill axes and whether it plays well on a phone, and — for team rounds —
+// catalog blurb) with a one-line joke when the game has one, its format, skill axes and whether it plays well on a phone, and — for team rounds —
 // who's on which side. The countdown number is re-created on every tick so its pop animation replays.
 @Component({
   selector: 'app-round-intro',
@@ -20,6 +20,9 @@ import { RoomStore } from '../room.store'
         </div>
         <div class="pad">
           <h2 class="game">{{ catalog.minigameName(intro.game) }}</h2>
+          @if (catalog.minigameTagline(intro.game); as tagline) {
+            <p class="tagline">{{ tagline }}</p>
+          }
           <div class="badges">
             <span class="badge format">{{ 'room.format.' + intro.format | transloco }}</span>
             @for (a of axes(); track a) {

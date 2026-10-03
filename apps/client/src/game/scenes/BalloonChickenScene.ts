@@ -1,4 +1,9 @@
-import { type BalloonChickenSnapshot, type BalloonPlayer, PALETTE } from '@pp/shared'
+import {
+  type BalloonChickenSnapshot,
+  type BalloonPlayer,
+  type BalloonStatus,
+  PALETTE,
+} from '@pp/shared'
 import type Phaser from 'phaser'
 import { AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, flash, floatText, punch, shake, showBanner } from '../fx'
@@ -346,7 +351,13 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
       .tick(time)
     for (const b of [this.pump, this.cash]) b?.img.setAlpha(alive ? 1 : 0.3)
     if (alive) this.wobble(self.pumps, time)
-    else this.status?.setText(this.t('game.common.waiting'))
+    else this.status?.setText(this.doneLine(self.status))
+  }
+
+  // Burst or cashed out: a jab at the choice, then the wait.
+  private doneLine(status: BalloonStatus): string {
+    const key = status === 'burst' ? 'game.balloon.bustLines' : 'game.balloon.cashLines'
+    return `${this.quip(key, this.selfId)}\n${this.t('game.common.waiting')}`
   }
 
   // Wobble grows with the pump count (never with the hidden threshold): a lazy sway at first, a
@@ -411,7 +422,7 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
     this.value?.setVisible(false)
     this.scrap?.setVisible(true)
     if (this.banner) showBanner(this, this.banner, this.t('game.balloon.pop'), PALETTE.red)
-    this.status?.setText(this.t('game.common.waiting'))
+    this.status?.setText(this.doneLine('burst'))
   }
 
   // `quiet`: restoring the end state after a relayout restart — the balloon is long gone, just the

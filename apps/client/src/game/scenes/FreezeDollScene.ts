@@ -8,7 +8,17 @@ import {
 } from '@pp/shared'
 import Phaser from 'phaser'
 import { type AvatarExpression, AvatarSprite, avatarPx } from '../avatars'
-import { addBanner, burst, eliminate, flash, floatText, punch, shake, showBanner } from '../fx'
+import {
+  addBanner,
+  burst,
+  eliminate,
+  flash,
+  floatText,
+  punch,
+  shake,
+  showBanner,
+  speechBubble,
+} from '../fx'
 import {
   ensureBevelPanel,
   ensurePixelGrid,
@@ -144,6 +154,8 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
   private lastElapsed = 0
   private laserPlayed = false
   private bannerShown = false
+  // The doll's last gloat (one speech bubble at a time).
+  private gloatUntil = 0
 
   constructor(...deps: SceneDeps) {
     super('freeze-doll', ...deps)
@@ -165,6 +177,7 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     this.lastElapsed = 0
     this.laserPlayed = false
     this.bannerShown = false
+    this.gloatUntil = 0
     this.lanes = 0
     this.promptText = ''
 
@@ -564,13 +577,14 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     const y = this.yAt(view.x) - this.avatarSize / 2
     if (r.hearts < view.hearts0) {
       this.zap(x, y)
+      this.gloat(`${r.id}:${r.hearts}`)
       if (r.status === 'out') {
         eliminate(
           this,
           x,
           y,
           this.state.colorOf(r.id),
-          this.t('game.common.eliminated'),
+          this.quip('game.common.stamps', r.id),
           this.compact ? 12 : 16,
         )
         this.sfx.eliminated()
@@ -599,6 +613,20 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     }
     view.status = r.status
     view.hearts0 = r.hearts
+  }
+
+  // The doll's one-liner when her laser catches someone (the same line on every screen).
+  private gloat(seed: string): void {
+    const doll = this.doll
+    if (!doll || this.time.now < this.gloatUntil) return
+    this.gloatUntil = this.time.now + 2000
+    speechBubble(
+      this,
+      doll.x + doll.displayWidth * 0.3,
+      doll.y + this.dollPx * 3,
+      this.quip('game.freezeDoll.doll', seed),
+      this.compact ? 12 : 16,
+    )
   }
 
   private zap(x: number, y: number): void {
@@ -666,7 +694,8 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     if (!me || this.state.final) return { text: '', color: PALETTE.amber }
     if (me.status === 'finished')
       return { text: this.t('game.freezeDoll.safeHint'), color: PALETTE.lime }
-    if (me.status === 'out') return { text: this.t('game.common.spectating'), color: PALETTE.dim }
+    if (me.status === 'out')
+      return { text: this.quip('game.common.spectating', this.selfId), color: PALETTE.dim }
     if (me.status === 'stunned') return { text: this.t('game.freezeDoll.hit'), color: PALETTE.red }
     if (snap.light === 'ready')
       return { text: this.t('game.freezeDoll.readyHint'), color: PALETTE.amber }

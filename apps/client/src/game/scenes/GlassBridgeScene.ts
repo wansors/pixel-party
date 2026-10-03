@@ -6,7 +6,17 @@ import {
 } from '@pp/shared'
 import Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
-import { addBanner, burst, eliminate, flash, floatText, punch, ring, showBanner } from '../fx'
+import {
+  addBanner,
+  burst,
+  eliminate,
+  flash,
+  floatText,
+  punch,
+  ring,
+  showBanner,
+  speechBubble,
+} from '../fx'
 import {
   bodyStyle,
   ensureBevelPanel,
@@ -536,11 +546,21 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
       x,
       y - this.panelH,
       this.state.colorOf(p.id),
-      this.t('game.common.eliminated'),
+      this.quip('game.common.stamps', p.id),
       this.compact ? 12 : 16,
     )
     this.sfx.pop()
     this.sfx.eliminated()
+    // The crowd still waiting on the start platform has an opinion.
+    this.time.delayedCall(650, () =>
+      speechBubble(
+        this,
+        this.cx,
+        this.slotY(0) - this.avatarSize * 0.6,
+        this.quip('game.glassBridge.crowd', p.id),
+        this.compact ? 12 : 16,
+      ),
+    )
     if (r) {
       this.hiddenFor.add(p.id)
       r.vest.setVisible(false)

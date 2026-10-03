@@ -64,9 +64,15 @@ Shared kit — reuse before writing a private helper (duplicates were hoisted ou
   - `avatarPx()` keeps sizes on crisp 16-px steps.
 - `game/playerMarks.ts`: `YouMarker` (the one "this is you" ▼; `.place(x, topOfSprite, time)`),
   `nameTagStyle(size, color)`, `addShadow(scene, size, depth)`.
-- Elimination rounds: `fx.eliminate(scene, x, y, color, this.t('game.common.eliminated'))` (burst + ring
-  + stamp + shake; play `this.sfx.eliminated()` once per batch), `this.hud?.setCenter(this.t(
-  'game.common.left', { n, total }))` for the survivors chip, `game.common.spectating` for the out state.
+- Elimination rounds: `fx.eliminate(scene, x, y, color, this.quip('game.common.stamps', id))` (burst +
+  ring + stamp + shake; play `this.sfx.eliminated()` once per batch), `this.hud?.setCenter(this.t(
+  'game.common.left', { n, total }))` for the survivors chip, `this.quip('game.common.spectating',
+  this.selfId)` for the out state.
+- Banter (`docs/implementation-decisions.md` D25): `this.quip(poolKey, seed)` picks a line from an i18n
+  array, the same on every client for the same seed (a player id, a moment) and stable across frames —
+  never `Math.random` for text. NPCs talk with `fx.speechBubble(scene, x, y, text, size)` (tail on the
+  speaker). Dark, acid humor is welcome when it targets the situation or the loser's pride, never real
+  people or groups; write each language's lines natively (EN and ES get their own jokes).
 - `game/playerStrip.ts`: `PlayerStrip` — wrapping row of chips in identity colors (how everyone else is
   doing). Pass `avatar: this.state.avatarOf(id)` so each chip leads with the player's avatar (KO face
   when `dim`).

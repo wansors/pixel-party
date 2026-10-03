@@ -559,3 +559,40 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   one font size (the largest at which the longest one fits) instead of shrinking one by one.
 - **Not done**: Lightning Quiz's own bank is still English-only. Moving it to the same bilingual
   format is a follow-up.
+
+### D25 — Dark / acid humor pass: seeded banter pools, NPC heckles, no spicy toggle — DONE
+
+- **Date**: 2026-10-03. **Context**: a user request (backlog Icebox): give some games a touch of black,
+  acid humor.
+- **Inventory (before)**: the only flavor text was the round-result callouts (4 lines per tier, picked
+  with `Math.random`, so every screen showed a different one) and a few fixed stamps and prompts:
+  "ELIMINATED!" and "OUT!" stamps, "You are out — enjoy the show", "POP!", "TOO SLOW!", "YOU LOSE".
+  The NPCs (the doll, the rope turners, the bridge crowd) never said a word, and the round intro had
+  only the how-to-play blurb.
+- **What changed** (every line written separately in EN and ES — each language gets its own jokes,
+  e.g. "Farolillo rojo", "Hay más días que longanizas", "La avaricia rompe el saco. Y el globo."):
+  - **Round results**: the four callout tiers grew to 7–9 lines each, with a sharper edge ("Your
+    ancestors are watching.", "Insufferable from now on.").
+  - **Final ranking**: last place gets the *wooden spoon* (*farolillo rojo*) and a jab, from 3 players.
+  - **Elimination stamps**: one shared pool ("R.I.P.", "TOAST!", "FLATLINED" / "D.E.P.", "¡FIAMBRE!",
+    "¡A LA CAJA!") in the nine elimination scenes; Brawl keeps its "K.O.!".
+  - **Spectating**: the out-of-the-round prompt is a pool ("Out. Your ghost may heckle freely.").
+  - **NPCs talk** through a new speech bubble (`fx.speechBubble`): the Freeze Doll gloats when her laser
+    catches someone, the Glass Bridge queue heckles every fall, the Jump Rope turners mock whoever gets
+    swept off. Quick Draw's loser hears from the undertaker; Balloon Chicken jabs at a burst ("You had
+    one job: stop.") or a cash-out ("Chicken! But a rich chicken.").
+  - **Round intro taglines**: 22 games got a one-line joke under the title ("In space, no one can hear
+    you blame the lag."). Optional per game (`catalog.minigame.<id>.tagline`).
+  - Weird Trivia (D24) brings its own crowd quips ("NOBODY KNEW!").
+- **Seeded, not random.** `game/quips.ts` picks a pool line with a hash of a seed (round + game +
+  player, or the moment an NPC reacts to). Every screen in the room shows the same jab, so the room
+  laughs at the same line, and a line never flickers between frames. Scenes call `this.quip(key,
+  seed)`.
+- **Where the line is drawn**: jokes aim at the situation and at the loser's pride — death, failure,
+  greed, vanity — never at real people or groups, and nothing sexual. That keeps every line
+  friendly-banter level for a LAN party of friends.
+- **No "spicy lines" host toggle** (the backlog's open question). Because the lines stay within that
+  limit, a toggle would add lobby UI and a second set of strings for little gain. Revertable: the
+  pools are plain arrays, so a toggle could later pick from a milder pool.
+- **Not done**: voiced NPCs, an undertaker sprite in Quick Draw (it is a line, not a character),
+  taglines for the remaining 33 games.
