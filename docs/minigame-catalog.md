@@ -56,6 +56,8 @@ I3 Star Blaster (`star-blaster`), I4 Asteroids Arena (`asteroids`), I5 Bomber Ex
 and F7 Speed Circuit (`speed-circuit`); then the cluster's suggested extras, G4 Honeycomb Cut
 (`honeycomb-cut`), G5 Jump Rope (`jump-rope`) and G6 Marbles Duel (`marbles-duel`). **54 mini-games
 total — every game idea on the roadmap is built.**
+Then (2026-10-03) J1 Weird Trivia (`weird-trivia`), the first brand-new idea after the roadmap.
+**55 mini-games total.**
 
 ---
 
@@ -603,6 +605,29 @@ avatar. See `implementation-decisions.md` D22.
 
 ---
 
+## J. Party trivia (2026-10-03)
+
+### J1. ✅ Weird Trivia — implemented (`weird-trivia`)
+- **Concept**: a fast quiz of strange-but-true facts instead of general knowledge (wombats poop cubes,
+  the chainsaw was invented for childbirth, the Pringles inventor was buried in a can). The laugh is
+  the "no way that's true!" moment at the reveal.
+- **Type**: FFA · **Input**: tap one of four answers (keys 1–4) · **Duration**: 50 s (5 questions) ·
+  **Banter**: 💥💥💥 · **Mobile-friendly**: yes
+- **Rules**: the Lightning Quiz scoring (a right answer = 1000 + a speed bonus of up to 1000; wrong or
+  no answer = 0). Each question has a 6 s answer window, which closes early once everybody has locked
+  in. Then a 4 s reveal: the right tile lights up, every player's avatar pops onto the tile they picked
+  (grinning or wincing), the board shows a one-line fun fact and the room gets a quip ("NOBODY KNEW!",
+  "3 FELL FOR IT!"). Points are banked at the reveal, so locking in gives nothing away.
+- **The bank**: 63 facts, server-side (`weirdTriviaBank.ts`), each written natively in EN and ES (own
+  phrasing and jokes; a wordplay question may ask a different thing per language). Every right answer
+  is real and verifiable; the decoys are absurd-but-plausible. A question ships its text in both
+  languages and the client shows the player's; the right slot and the fact stay off the wire until the
+  reveal. Tests enforce the budgets (a choice ≤ 24 chars, a fact ≤ 120).
+- **Win condition / Result**: most points (`3/5 · 4210 pts`).
+- **Latency**: low. · **Complexity**: low (the Lightning Quiz board, `QuizSceneBase`, is shared).
+
+---
+
 ## Variety coverage
 
 | Axis | Covered by |
@@ -610,7 +635,7 @@ avatar. See `implementation-decisions.md` D22.
 | Reflexes / reaction | A1, A6, B1, E7, F5, F7, G2, G5, I3 |
 | Attention / focus (inhibition) | E1, E3, E4, G1 |
 | Speed / endurance | A2, A9, C1, F1, F2, G3 |
-| Knowledge | A3 |
+| Knowledge | A3, J1 |
 | Mental math | E2 |
 | Memory | A4, A11, E8 |
 | Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4, F6, G4, I2 |
@@ -623,7 +648,7 @@ avatar. See `implementation-decisions.md` D22.
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6, J1 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7, G6 |
 | Team | C1, C2, C3 |
 

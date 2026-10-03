@@ -532,3 +532,30 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   - a hat or costume layer (e.g. a cowboy hat for Quick Draw), because ears differ too much per
     species to fit one overlay
   - avatars on the Sink the Fleet / Fleet Battle boards, which have no figure to draw
+
+### D24 — Weird Trivia: a bilingual, server-side bank of strange-but-true facts — DONE
+
+- **Date**: 2026-10-03. **Context**: a user request (backlog Icebox): a fast trivia round with very
+  strange facts instead of general knowledge. Catalog J1, `weird-trivia`.
+- **The bank lives on the server, in both languages.** `weirdTriviaBank.ts` holds 63 facts, each
+  written natively in EN and ES (own phrasing, own jokes; the wordplay question even asks a different
+  thing per language). A question ships its text in both languages and the client shows the player's
+  (`lang.code` in each translation bundle tells a scene which one it is). The alternative, putting the
+  bank in the Transloco files, would have put every right answer and fun fact in the client bundle and
+  forced the answer slot onto the wire. This way the right slot and the fact stay on the server until
+  the reveal, like Sink the Fleet's fleets and Marbles Duel's fist.
+- **Facts must be real.** Every right answer is verifiable; the decoys are absurd and false. Where a
+  popular "fact" is disputed (sloths out-breathing dolphins, the orange-carrot-for-William-of-Orange
+  story) it was left out. Tests check the bank's shape: unique ids, both languages, four distinct
+  choices, and the screen budgets (a choice ≤ 24 chars, a question ≤ 90, a fact ≤ 120).
+- **A reveal phase, unlike Lightning Quiz.** Lightning Quiz only tells you whether *your* pick was
+  right (from your score moving). Weird Trivia's payoff is the shared "no way!", so each question gets
+  a 4 s reveal for everybody: the right tile, every avatar on the tile it picked, the fact and a crowd
+  quip. Points are banked at the reveal, so a lock-in never leaks the verdict through the scoreboard.
+  The 6 s answer window closes early once everybody has locked in, which keeps it fast.
+- **Shared, not forked.** The two quizzes share `quizCore` (seeded shuffle, the right-answer score,
+  points ranking) on the server and `QuizSceneBase` (board, tiles, keys, contestant lights) on the
+  client. Lightning Quiz behaves as before, with one visible change: the four answer labels now share
+  one font size (the largest at which the longest one fits) instead of shrinking one by one.
+- **Not done**: Lightning Quiz's own bank is still English-only. Moving it to the same bilingual
+  format is a follow-up.

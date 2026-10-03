@@ -5,7 +5,8 @@
   },
   "lang": {
     "en": "EN",
-    "es": "ES"
+    "es": "ES",
+    "code": "en"
   },
   "audio": {
     "snd": "SND",
@@ -355,6 +356,10 @@
       "marbles-duel": {
         "name": "Marbles Duel",
         "blurb": "Odd or even? Hide marbles in your fist, bet on your rival’s. Win them all to win the duel."
+      },
+      "weird-trivia": {
+        "name": "Weird Trivia",
+        "blurb": "Strange but true: pick the real answer among the absurd ones. Fast answers score more."
       }
     }
   },
@@ -791,6 +796,13 @@
       "youTake": "You take {{n}}!",
       "theyTake": "They take {{n}}",
       "bye": "No opponent this round — free win!"
+    },
+    "weirdTrivia": {
+      "hint": "Strange but true — tap the real one",
+      "trueStory": "★ TRUE STORY ★",
+      "nobody": "NOBODY KNEW!",
+      "everybody": "TOO EASY!",
+      "fooled": "{{n}} FELL FOR IT!"
     }
   }
 }

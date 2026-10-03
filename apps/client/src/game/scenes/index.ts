@@ -54,6 +54,7 @@ import { SumoIceScene } from './SumoIceScene'
 import { SumoScene } from './SumoScene'
 import { TriviaScene } from './TriviaScene'
 import { TugOfWarScene } from './TugOfWarScene'
+import { WeirdTriviaScene } from './WeirdTriviaScene'
 
 export type SceneCtor = new (...deps: SceneDeps) => Phaser.Scene
 
@@ -64,6 +65,7 @@ export const SCENES: Readonly<Record<string, SceneCtor>> = {
   'button-masher': ButtonMasherScene,
   'color-trap': ColorTrapScene,
   trivia: TriviaScene,
+  'weird-trivia': WeirdTriviaScene,
   'balloon-chicken': BalloonChickenScene,
   'number-rush': NumberRushScene,
   'quick-math': QuickMathScene,

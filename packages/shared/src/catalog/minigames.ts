@@ -93,6 +93,16 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     axes: ['knowledge'],
   },
   {
+    id: 'weird-trivia',
+    name: 'Weird Trivia',
+    format: 'ffa',
+    realtime: true,
+    mobileFriendly: true,
+    durationSec: 50,
+    blurb: 'Strange but true: pick the real answer among the absurd ones. Fast answers score more.',
+    axes: ['knowledge', 'reflexes'],
+  },
+  {
     id: 'balloon-chicken',
     name: 'Balloon Chicken',
     format: 'ffa',

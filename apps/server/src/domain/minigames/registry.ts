@@ -51,6 +51,7 @@ import { SumoIce } from './sumoIce'
 import { Dash100m, Hurdles110m } from './trackRace'
 import { Trivia } from './trivia'
 import { TugOfWar } from './tugOfWar'
+import { WeirdTrivia } from './weirdTrivia'
 
 // Mini-game registry: id -> factory. The session engine is agnostic — it looks up a factory by id and
 // runs the round. Adding a game = one domain module + one entry here (+ its client scene + catalog meta).
@@ -59,6 +60,7 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'reaction-duel': () => new ReactionDuel() as unknown as MiniGame<unknown, unknown>,
   'color-trap': () => new ColorTrap() as unknown as MiniGame<unknown, unknown>,
   trivia: () => new Trivia() as unknown as MiniGame<unknown, unknown>,
+  'weird-trivia': () => new WeirdTrivia() as unknown as MiniGame<unknown, unknown>,
   'balloon-chicken': () => new BalloonChicken() as unknown as MiniGame<unknown, unknown>,
   'fruit-catch': () => new FruitCatch() as unknown as MiniGame<unknown, unknown>,
   'pixel-rain': () => new PixelRain() as unknown as MiniGame<unknown, unknown>,

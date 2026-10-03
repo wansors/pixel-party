@@ -93,6 +93,7 @@ The inventory was taken from all 54 scenes:
 | Bug Smash, Stop Clock, Pixel Beat | text chips | avatar + text chips |
 | Pixel Hoops, Pixel Weight, Pixel Split, Memory Flash | no identity at all | standard strip under the HUD (avatar + name + score); in Hoops your avatar shoots (happy on a basket, hurt on a miss) |
 | Trivia, Number Rush, Quick Math, Odd One Out, Higher/Lower, Match Pairs, Sudoku Race, Honeycomb Cut | "■ name" strip | avatar strip (shared `PlayerStrip`) |
+| Weird Trivia (added after the audit, D24) | — | avatar strip; at each reveal every avatar pops onto the tile it picked, grinning if right and wincing if wrong |
 
 ## 4. Left as is (by design)
 

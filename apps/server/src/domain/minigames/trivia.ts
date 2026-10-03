@@ -1,13 +1,11 @@
 import type { TriviaInput, TriviaSnapshot } from '@pp/shared'
-import type { Random } from '../ports/Random'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
+import { rankByPoints, rightAnswerPoints, shuffle } from './quizCore'
 
 // 4 x 7.5s = 30s total, matching the catalog's 30s cap (SessionEngine only ever forwards `durationMs`,
 // never `questions`/`questionMs`, so these defaults are trivia's real round length in production).
 const DEFAULT_QUESTIONS = 4
 const DEFAULT_QUESTION_MS = 7500
-const BASE_POINTS = 1000
-const SPEED_BONUS = 1000
 
 interface Question {
   q: string
@@ -47,16 +45,6 @@ const QUESTION_BANK: readonly Question[] = [
   { q: 'How many minutes in an hour?', choices: ['30', '60', '90', '100'], answer: 1 },
   { q: 'Which is not a mammal?', choices: ['Whale', 'Bat', 'Shark', 'Dog'], answer: 2 },
 ]
-
-// Fisher–Yates using the seeded Random port so the order is reproducible per round.
-function shuffle<T>(items: readonly T[], random: Random): T[] {
-  const out = [...items]
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(random.next() * (i + 1))
-    ;[out[i], out[j]] = [out[j], out[i]]
-  }
-  return out
-}
 
 export interface TriviaState {
   players: PlayerId[]
@@ -108,9 +96,8 @@ export class Trivia implements MiniGame<TriviaState, TriviaInput> {
     answered.add(idx)
     if (input.choice === state.questions[idx].answer) {
       const questionStart = state.startedAt + idx * state.questionMs
-      const remaining = Math.max(0, questionStart + state.questionMs - now)
-      const bonus = Math.round((remaining / state.questionMs) * SPEED_BONUS)
-      state.points.set(playerId, (state.points.get(playerId) ?? 0) + BASE_POINTS + bonus)
+      const earned = rightAnswerPoints(questionStart + state.questionMs - now, state.questionMs)
+      state.points.set(playerId, (state.points.get(playerId) ?? 0) + earned)
     }
     return state
   }
@@ -124,21 +111,7 @@ export class Trivia implements MiniGame<TriviaState, TriviaInput> {
   }
 
   getResult(state: TriviaState): NormalizedResult {
-    const sorted = [...state.players].sort(
-      (a, b) => (state.points.get(b) ?? 0) - (state.points.get(a) ?? 0),
-    )
-    const ranks: Record<PlayerId, number> = {}
-    let rank = 0
-    let prev: number | undefined
-    sorted.forEach((id, idx) => {
-      const p = state.points.get(id) ?? 0
-      if (idx > 0 && p !== prev) rank = idx
-      ranks[id] = rank
-      prev = p
-    })
-    const stats: Record<PlayerId, string> = {}
-    for (const id of state.players) stats[id] = `${state.points.get(id) ?? 0} pts`
-    return { placements: sorted, ranks, stats }
+    return rankByPoints(state.players, state.points, (id) => `${state.points.get(id) ?? 0} pts`)
   }
 
   snapshot(state: TriviaState, now: number): TriviaSnapshot {

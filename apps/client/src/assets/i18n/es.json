@@ -5,7 +5,8 @@
   },
   "lang": {
     "en": "EN",
-    "es": "ES"
+    "es": "ES",
+    "code": "es"
   },
   "audio": {
     "snd": "SON",
@@ -355,6 +356,10 @@
       "marbles-duel": {
         "name": "Duelo de Canicas",
         "blurb": "¿Par o impar? Esconde canicas en el puño y apuesta por las de tu rival. Gánalas todas para ganar el duelo."
+      },
+      "weird-trivia": {
+        "name": "Trivial Rarito",
+        "blurb": "Raro pero cierto: elige la respuesta real entre las absurdas. Cuanto antes, más puntos."
       }
     }
   },
@@ -791,6 +796,13 @@
       "youTake": "¡Te llevas {{n}}!",
       "theyTake": "Se lleva {{n}}",
       "bye": "Sin rival esta ronda: ¡victoria gratis!"
+    },
+    "weirdTrivia": {
+      "hint": "Raro pero cierto: toca la de verdad",
+      "trueStory": "★ VERÍDICO ★",
+      "nobody": "¡NI DIOS LO SABÍA!",
+      "everybody": "¡DEMASIADO FÁCIL!",
+      "fooled": "¡{{n}} PICARON!"
     }
   }
 }
