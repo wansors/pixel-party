@@ -364,7 +364,7 @@ export class SudokuRaceScene extends MiniGameScene<SudokuSnapshot> {
       .map(([id, b]) => {
         const name = this.label(id).slice(0, 10).toUpperCase()
         const text = `${name} ${b.correctCount}/${blanks}${b.done ? ' ✓' : ''}`
-        return { text, color: this.state.colorOf(id) }
+        return { text, avatar: this.state.avatarOf(id), color: this.state.colorOf(id) }
       })
     this.strip?.set(chips)
     if (!board) return

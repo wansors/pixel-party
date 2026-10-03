@@ -361,6 +361,7 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
         .sort((a, b) => b.score - a.score)
         .map((s) => ({
           text: `${this.label(s.id)} ${s.score}`,
+          avatar: this.state.avatarOf(s.id),
           color: this.state.colorOf(s.id),
           dim: !s.alive,
         })),

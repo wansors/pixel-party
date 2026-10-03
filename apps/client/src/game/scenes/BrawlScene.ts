@@ -378,6 +378,7 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
     this.strip?.set(
       snap.fighters.map((f) => ({
         text: `${this.label(f.id)} ${f.action === 'ko' ? '✗' : `${f.hp}`}`,
+        avatar: this.state.avatarOf(f.id),
         color: this.state.colorOf(f.id),
         dim: f.action === 'ko',
       })),

@@ -686,6 +686,7 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     this.strip?.set(
       snap.players.map((p) => ({
         text: `#${p.vest} ${this.label(p.id)}${p.status === 'crossed' ? ' ✓' : p.status === 'fallen' ? ' ✗' : p.status === 'active' ? ' ▶' : ''}`,
+        avatar: this.state.avatarOf(p.id),
         color: this.state.colorOf(p.id),
         dim: p.status === 'fallen',
       })),

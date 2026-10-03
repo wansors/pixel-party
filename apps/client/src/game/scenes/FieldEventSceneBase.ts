@@ -639,6 +639,7 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
         const best = this.bestOf(a)
         return {
           text: `${this.label(a.id)} ${best === null ? '—' : best.toFixed(2)}`,
+          avatar: this.state.avatarOf(a.id),
           color: this.state.colorOf(a.id, PALETTE.cyan),
           dim: a.phase === 'done',
         }

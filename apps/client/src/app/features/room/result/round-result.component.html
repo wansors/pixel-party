@@ -20,7 +20,8 @@
                 <app-pixel-avatar
                   [avatar]="store.playerAvatar(id)"
                   [color]="store.playerColor(id)"
-                  [size]="28"
+                  [size]="32"
+                  expression="happy"
                 />
               }
             </span>
@@ -33,7 +34,8 @@
               class="bounce"
               [avatar]="store.playerAvatar(wid)"
               [color]="store.playerColor(wid)"
-              [size]="56"
+              [size]="64"
+              expression="happy"
             />
             <span class="wname">{{ store.playerName(wid) }}</span>
             @if (store.roundStat(wid); as stat) {
@@ -50,7 +52,7 @@
               <app-pixel-avatar
                 [avatar]="store.playerAvatar(s.playerId)"
                 [color]="store.playerColor(s.playerId)"
-                [size]="22"
+                [size]="24"
               />
               <span class="who">
                 <span class="name" [style.color]="store.playerColor(s.playerId)">
@@ -81,7 +83,7 @@
               <app-pixel-avatar
                 [avatar]="store.playerAvatar(s.playerId)"
                 [color]="store.playerColor(s.playerId)"
-                [size]="22"
+                [size]="24"
               />
               <span class="who">
                 <span class="name" [style.color]="store.playerColor(s.playerId)">

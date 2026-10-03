@@ -35,7 +35,7 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
         <div class="arcade-titlebar">{{ 'join.title' | transloco }}</div>
         <div class="body">
           <div class="me">
-            <app-pixel-avatar [avatar]="avatar()" [color]="color()" [size]="72" />
+            <app-pixel-avatar [avatar]="avatar()" [color]="color()" [size]="64" />
           </div>
 
           <input
@@ -56,7 +56,7 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
                   [class.sel]="a === avatar()"
                   (click)="avatar.set(a)"
                 >
-                  <app-pixel-avatar [avatar]="a" [color]="color()" [size]="28" />
+                  <app-pixel-avatar [avatar]="a" [color]="color()" [size]="32" />
                 </button>
               }
             </div>
@@ -105,7 +105,7 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
     .logo span { display: inline-block; animation: hop 2.4s steps(2, end) infinite; }
     @keyframes hop { 0%, 90%, 100% { transform: none; } 95% { transform: translateY(-6px); } }
     .tagline { margin: 0 0 0.5rem; text-align: center; color: var(--c-dim); font-size: var(--fs-xs);
-      letter-spacing: 0.08em; text-transform: uppercase; }
+      letter-spacing: 0.08em; line-height: 1.6; text-transform: uppercase; text-wrap: balance; }
     .or { text-align: center; color: var(--c-dim); font-size: var(--fs-xs); text-transform: uppercase; }
     @media (prefers-reduced-motion: reduce) { .logo span { animation: none; } }
     @media (max-width: 420px) { .logo { font-size: var(--fs-lg); } }

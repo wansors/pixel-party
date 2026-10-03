@@ -278,7 +278,12 @@ export class TriviaScene extends MiniGameScene<TriviaSnapshot> {
     const chips = players.slice(0, MAX_CHIPS).map((id) => {
       const done = snap.answeredCurrent.includes(id)
       const name = this.label(id).slice(0, 10).toUpperCase()
-      return { text: done ? `${name} ✓` : name, color: this.state.colorOf(id), dim: !done }
+      return {
+        text: done ? `${name} ✓` : name,
+        avatar: this.state.avatarOf(id),
+        color: this.state.colorOf(id),
+        dim: !done,
+      }
     })
     this.strip?.set(snap.question === null ? [] : chips)
 

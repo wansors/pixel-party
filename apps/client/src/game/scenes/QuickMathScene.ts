@@ -207,6 +207,7 @@ export class QuickMathScene extends MiniGameScene<QuickMathSnapshot> {
       .slice(0, MAX_CHIPS)
       .map(([id, n]) => ({
         text: `${this.label(id).slice(0, 10).toUpperCase()} ${n}`,
+        avatar: this.state.avatarOf(id),
         color: this.state.colorOf(id),
       }))
     this.strip?.set(chips)

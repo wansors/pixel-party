@@ -381,6 +381,7 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
     this.strip?.set(
       snap.cars.map((c) => ({
         text: `${c.pos}. ${this.label(c.id)}${c.finishMs !== null ? ' ✓' : ''}`,
+        avatar: this.state.avatarOf(c.id),
         color: this.state.colorOf(c.id),
         dim: false,
       })),

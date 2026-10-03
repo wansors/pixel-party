@@ -615,6 +615,7 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     this.strip?.set(
       snap.runners.map((r) => ({
         text: `${this.label(r.id)} ${r.status === 'finished' ? '✓' : r.status === 'out' ? '✗' : '♥'.repeat(r.hearts)}`,
+        avatar: this.state.avatarOf(r.id),
         color: this.state.colorOf(r.id),
         dim: r.status === 'out',
       })),

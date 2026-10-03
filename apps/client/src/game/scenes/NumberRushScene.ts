@@ -195,6 +195,7 @@ export class NumberRushScene extends MiniGameScene<NumberRushSnapshot> {
         const n = Math.min(total, p - 1)
         return {
           text: `${name} ${n}/${total}${p > total ? ' ✓' : ''}`,
+          avatar: this.state.avatarOf(id),
           color: this.state.colorOf(id),
         }
       })

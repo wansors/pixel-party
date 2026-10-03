@@ -22,7 +22,7 @@
       <ul class="players">
         @for (p of store.players(); track p.id) {
           <li [class.off]="!p.connected" [class.me]="p.id === store.selfId()" [class.ready]="p.ready">
-            <app-pixel-avatar [avatar]="$any(p.avatar)" [color]="p.color" [size]="28" />
+            <app-pixel-avatar [avatar]="$any(p.avatar)" [color]="p.color" [size]="32" />
             <span class="who">
               <span class="pname" [style.color]="p.color">{{ p.name }}</span>
               <span class="tags">

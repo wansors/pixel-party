@@ -44,7 +44,7 @@ import { RoomStore } from '../room.store'
                   <span class="tname" [style.color]="t.color">{{ store.teamName(t.id) }}</span>
                   <span class="members">
                     @for (p of t.members; track p.id) {
-                      <app-pixel-avatar [avatar]="$any(p.avatar)" [color]="p.color" [size]="22" />
+                      <app-pixel-avatar [avatar]="$any(p.avatar)" [color]="p.color" [size]="24" />
                     }
                   </span>
                 </div>

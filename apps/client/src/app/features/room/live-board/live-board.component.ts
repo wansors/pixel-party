@@ -28,7 +28,7 @@ import { RoomStore } from '../room.store'
             <app-pixel-avatar
               [avatar]="store.playerAvatar(r.playerId)"
               [color]="store.playerColor(r.playerId)"
-              [size]="18"
+              [size]="16"
             />
             <span class="name" [style.color]="store.playerColor(r.playerId)">
               {{ store.playerName(r.playerId) }}

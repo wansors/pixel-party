@@ -462,6 +462,7 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
     this.strip?.set(
       snap.players.map((p) => ({
         text: `${this.label(p.id)} ${this.t('game.bomber.kos', { n: p.kos })}${p.alive ? '' : ' ✗'}`,
+        avatar: this.state.avatarOf(p.id),
         color: this.state.colorOf(p.id),
         dim: !p.alive,
       })),

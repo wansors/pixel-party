@@ -318,6 +318,7 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
     this.strip?.set(
       snap.arenas.map((a) => ({
         text: `${this.label(a.id)} ${a.pops} ${a.out ? '✗' : '♥'.repeat(a.lives)}`,
+        avatar: this.state.avatarOf(a.id),
         color: this.state.colorOf(a.id),
         dim: a.out,
       })),

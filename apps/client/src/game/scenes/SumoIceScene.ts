@@ -258,6 +258,7 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
     this.strip?.set(
       snap.bodies.map((b) => ({
         text: `${this.label(b.id)} ${b.alive ? '♥'.repeat(b.lives) : '✗'}`,
+        avatar: this.state.avatarOf(b.id),
         color: this.state.colorOf(b.id),
         dim: !b.alive,
       })),

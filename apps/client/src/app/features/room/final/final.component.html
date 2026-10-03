@@ -26,7 +26,8 @@
                 [class.bounce]="place(s) === 1"
                 [avatar]="store.playerAvatar(s.playerId)"
                 [color]="store.playerColor(s.playerId)"
-                [size]="place(s) === 1 ? 56 : 40"
+                [size]="place(s) === 1 ? 64 : 48"
+                [expression]="place(s) === 1 ? 'happy' : 'idle'"
               />
               <span class="pname" [style.color]="store.playerColor(s.playerId)">
                 {{ store.playerName(s.playerId) }}
@@ -54,7 +55,7 @@
               <app-pixel-avatar
                 [avatar]="store.playerAvatar(s.playerId)"
                 [color]="store.playerColor(s.playerId)"
-                [size]="22"
+                [size]="24"
               />
               <span class="who">
                 <span class="name" [style.color]="store.playerColor(s.playerId)">

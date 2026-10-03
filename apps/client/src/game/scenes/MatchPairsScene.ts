@@ -256,6 +256,7 @@ export class MatchPairsScene extends MiniGameScene<MatchSnapshot> {
       .slice(0, MAX_CHIPS)
       .map(({ id, pairs, done }) => ({
         text: `${this.label(id).slice(0, 10).toUpperCase()} ${pairs}/${total}${done ? ' ✓' : ''}`,
+        avatar: this.state.avatarOf(id),
         color: this.state.colorOf(id),
       }))
     this.strip?.set(chips)

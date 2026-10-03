@@ -174,6 +174,7 @@ export class OddOneOutScene extends MiniGameScene<OddOneOutSnapshot> {
       .slice(0, MAX_CHIPS)
       .map(([id, n]) => ({
         text: `${this.label(id).slice(0, 10).toUpperCase()} ${n + 1}`,
+        avatar: this.state.avatarOf(id),
         color: this.state.colorOf(id),
       }))
     this.strip?.set(chips)

@@ -299,6 +299,7 @@ export class HigherLowerScene extends MiniGameScene<HigherLowerSnapshot> {
         const name = this.label(id).slice(0, 10).toUpperCase()
         return {
           text: alive ? `${name} ${n}` : `${name} ${n} ✕`,
+          avatar: this.state.avatarOf(id),
           color: this.state.colorOf(id),
           dim: !alive,
         }

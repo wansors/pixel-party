@@ -303,6 +303,7 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
     this.strip?.set(
       snap.arenas.map((a) => ({
         text: `${this.label(a.id)} ${a.score} ${a.out ? '✗' : '♥'.repeat(a.lives)}`,
+        avatar: this.state.avatarOf(a.id),
         color: this.state.colorOf(a.id),
         dim: a.out,
       })),

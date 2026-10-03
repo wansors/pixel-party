@@ -487,6 +487,7 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
     this.strip?.set(
       snap.players.map((p) => ({
         text: `${this.label(p.id)}${p.alive ? (p.safe ? ' ✓' : '') : ' ✗'}`,
+        avatar: this.state.avatarOf(p.id),
         color: this.state.colorOf(p.id),
         dim: !p.alive,
       })),

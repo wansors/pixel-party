@@ -351,6 +351,7 @@ export class HoneycombCutScene extends MiniGameScene<HoneycombSnapshot> {
     this.strip?.set(
       snap.players.map((p) => ({
         text: `${this.label(p.id)} ${p.doneMs !== null ? '✓' : p.broken ? '✗' : `${Math.floor(p.progress * 100)}%`}`,
+        avatar: this.state.avatarOf(p.id),
         color: this.state.colorOf(p.id),
         dim: p.broken,
       })),

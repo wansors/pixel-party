@@ -1,18 +1,32 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core'
 import type { AvatarId } from '@pp/shared'
-import { AVATAR_SPRITES } from '../../game/avatarSprites'
+import {
+  AVATAR_SIZE,
+  type AvatarExpression,
+  type AvatarPose,
+  avatarPalette,
+  avatarPixels,
+} from '../../game/avatarSprites'
 
-// Preset 8x8 "monigote" sprite (grids in game/avatarSprites.ts, shared with the Phaser scenes), rendered as
-// crisp SVG rects (self-hosted, CSP-safe) so every player reads as color + avatar + name, never color
-// alone (art-direction §6).
+// Preset 16x16 "monigote" sprite (grids in game/avatarSprites.ts, shared with the Phaser scenes), rendered
+// as crisp SVG rects (self-hosted, CSP-safe) so every player reads as color + avatar + name, never color
+// alone (art-direction §6). Same pixels, outline and shading as in every mini-game.
 
 interface Cell {
   x: number
   y: number
+  w: number
   fill: string
 }
 
-const DARK = '#141126'
+function parseColor(value: string): number {
+  const hex = /^#?([0-9a-f]{6})$/i.exec(value.trim())?.[1]
+  return hex ? Number.parseInt(hex, 16) : 0xff3e7f
+}
+
+function toCss(color: number): string {
+  return `#${color.toString(16).padStart(6, '0')}`
+}
 
 // <app-pixel-avatar [avatar]="'cat'" [color]="'#ff3e7f'" [size]="32" />
 @Component({
@@ -22,14 +36,14 @@ const DARK = '#141126'
     <svg
       [attr.width]="size()"
       [attr.height]="size()"
-      viewBox="0 0 8 8"
+      [attr.viewBox]="viewBox"
       shape-rendering="crispEdges"
       class="pixel-avatar"
       role="img"
       [attr.aria-label]="avatar()"
     >
       @for (c of cells(); track $index) {
-        <rect [attr.x]="c.x" [attr.y]="c.y" width="1" height="1" [attr.fill]="c.fill" />
+        <rect [attr.x]="c.x" [attr.y]="c.y" [attr.width]="c.w" height="1" [attr.fill]="c.fill" />
       }
     </svg>
   `,
@@ -44,16 +58,23 @@ export class PixelAvatarComponent {
   readonly avatar = input<AvatarId>('cat')
   readonly color = input<string>('#ff3e7f')
   readonly size = input<number>(32)
+  readonly pose = input<AvatarPose>('front')
+  readonly expression = input<AvatarExpression>('idle')
 
+  protected readonly viewBox = `0 0 ${AVATAR_SIZE} ${AVATAR_SIZE}`
+
+  // One rect per horizontal run of same-colored pixels (≈3× fewer DOM nodes than one per pixel).
   readonly cells = computed<Cell[]>(() => {
-    const grid = AVATAR_SPRITES[this.avatar()] ?? AVATAR_SPRITES.cat
-    const body = this.color()
+    const palette = avatarPalette(parseColor(this.color()))
     const out: Cell[] = []
-    grid.forEach((row, y) => {
-      for (let x = 0; x < row.length; x++) {
-        const ch = row[x]
-        if (ch === 'B') out.push({ x, y, fill: body })
-        else if (ch === 'D') out.push({ x, y, fill: DARK })
+    avatarPixels(this.avatar(), this.pose(), this.expression()).forEach((row, y) => {
+      let x = 0
+      while (x < row.length) {
+        const role = row[x]
+        let end = x + 1
+        while (end < row.length && row[end] === role) end++
+        if (role) out.push({ x, y, w: end - x, fill: toCss(palette[role]) })
+        x = end
       }
     })
     return out
