@@ -373,7 +373,8 @@ cluster below. Catalog section F.
         player, same seeded waves).* Fire a harpoon straight up to split bouncing balloons into
         smaller ones until they vanish; touching a balloon costs a life. Seeded balloon sets; ranked
         by balloons popped (shared arena variant: steal each other's pops).
-  - [ ] **Competitive Asteroids** — shared wrap-around arena: rotate, thrust and shoot; points for
+  - [x] **Competitive Asteroids** (`asteroids`) — *Shipped 2026-10-03 as Asteroids Arena (catalog I4,
+        D22).* Shared wrap-around arena: rotate, thrust and shoot; points for
         asteroids and more for shooting rivals, short respawn after a hit. Ranked by score.
   - [ ] **Brawl** (Streets of Rage-style competitive beat 'em up) — everyone in one side-view street,
         punch/kick/grab combos, weapons and items that drop and can be picked up (pipes, bottles,

@@ -515,6 +515,16 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
       'Same waves for everyone: weave through the bullet storm, your ship fires itself. Top score wins.',
     axes: ['reflexes', 'focus'],
   },
+  {
+    id: 'asteroids',
+    name: 'Asteroids Arena',
+    format: 'ffa',
+    realtime: true,
+    mobileFriendly: false,
+    durationSec: 60,
+    blurb: 'One shared wrap-around sky: rotate, thrust, shoot. Rocks pay, rival ships pay more!',
+    axes: ['precision', 'reflexes'],
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

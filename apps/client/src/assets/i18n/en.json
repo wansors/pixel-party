@@ -323,6 +323,10 @@
       "star-blaster": {
         "name": "Star Blaster",
         "blurb": "Same waves for everyone: weave through the bullet storm, your ship fires itself. Top score wins."
+      },
+      "asteroids": {
+        "name": "Asteroids Arena",
+        "blurb": "One shared wrap-around sky: rotate, thrust, shoot. Rocks pay, rival ships pay more!"
       }
     }
   },
@@ -695,6 +699,13 @@
       "score": "{{n}} PTS",
       "warning": "WARNING! BOSS",
       "final": "{{n}} POINTS"
+    },
+    "asteroids": {
+      "thrust": "THRUST",
+      "fire": "FIRE",
+      "score": "{{n}} PTS",
+      "final": "{{n}} POINTS",
+      "boom": "BOOM!"
     }
   }
 }

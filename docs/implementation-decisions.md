@@ -454,3 +454,9 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   client (the server resolves hits). Tuned with simulated pilots: drones were first ramming players at
   the bottom, so they now veer off before the ship's zone; ring 8 / fan 5 / boss spiral 4, bullet speeds
   0.3–0.4, a small hitbox and a 2 s shield.
+- **I4 Asteroids Arena** (`asteroids`, PC-first; the backlog's "Competitive Asteroids"): one shared
+  arena, so the snapshot carries every ship/rock/bullet with velocities and the scene extrapolates
+  (wrapping) between updates. Bullets sweep their whole step (segment-vs-circle, wrap-aware) so a fast
+  shot can't skip a small rock. No lives: dying costs 2 s and the chance to score (the score is the
+  ranking). **Not done**: wrap "ghost" copies at the edges — objects are clipped to the arena and
+  reappear on the other side.

@@ -323,6 +323,10 @@
       "star-blaster": {
         "name": "Star Blaster",
         "blurb": "Las mismas oleadas para todos: esquiva la lluvia de balas, tu nave dispara sola. Gana la mejor puntuación."
+      },
+      "asteroids": {
+        "name": "Arena de Asteroides",
+        "blurb": "Un cielo compartido que da la vuelta: gira, acelera y dispara. Las rocas puntúan, ¡las naves rivales mucho más!"
       }
     }
   },
@@ -695,6 +699,13 @@
       "score": "{{n}} PTS",
       "warning": "¡CUIDADO! JEFE",
       "final": "{{n}} PUNTOS"
+    },
+    "asteroids": {
+      "thrust": "MOTOR",
+      "fire": "FUEGO",
+      "score": "{{n}} PTS",
+      "final": "{{n}} PUNTOS",
+      "boom": "¡BUM!"
     }
   }
 }

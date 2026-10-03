@@ -1,3 +1,4 @@
+export * from './asteroids'
 export * from './athletics'
 export * from './balloonChicken'
 export * from './bombRelay'

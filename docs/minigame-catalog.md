@@ -51,7 +51,7 @@ Then (2026-09-28) a new sports wave (section F): F1 100 m Dash (`dash-100m`), F2
 (`micro-race`). **40 mini-games total.**
 Then (2026-10-02) the roadmap wave (D22), one game at a time: G1 Glass Bridge (`glass-bridge`), G2
 Freeze Doll (`freeze-doll`), G3 Room Rush (`room-rush`), I1 Sumo ICE (`sumo-ice`), I2 Pang (`pang`),
-I3 Star Blaster (`star-blaster`). **46 mini-games total.**
+I3 Star Blaster (`star-blaster`), I4 Asteroids Arena (`asteroids`). **47 mini-games total.**
 
 ---
 
@@ -492,6 +492,19 @@ avatar. See `implementation-decisions.md` D22.
   both sides; tuned with simulated pilots (an idle ship loses ~1 life per round, a dodging one ~0.1 and
   scores ~2.3× more).
 
+### I4. ✅ Asteroids Arena (competitive Asteroids) — implemented (`asteroids`)
+- **Concept**: classic *Asteroids*, but everyone shares one wrapping sky — rocks to break and rivals
+  to shoot.
+- **Type**: FFA · **Input**: ← → / A D turn, ↑ / W thrust, SPACE fire, or ◀ ▶ THRUST FIRE hold buttons
+  · **Duration**: 60 s · **Banter**: 💥💥💥 · **Mobile-friendly**: no
+- **Rules**: inertia ships (thrust 0.95, light drag, 0.75 top speed), a gun with a 220 ms cadence and
+  4 bullets in flight. Rocks split big → medium → small → gone and pay 20 / 50 / 100; a rival ship pays
+  250. A rock or a rival's bullet blows you up — back in 2 s at the safest of a few seeded spots, with
+  2 s of shield. The field is topped up with big rocks (away from ships) whenever it thins out.
+- **Win condition / Result**: highest score (`1830`), then kills.
+- **Latency**: high — ships, rocks and bullets are extrapolated from the snapshot's velocities; your own
+  heading is predicted from your held keys. Ships are their pilot's lobby avatar, turned to the heading.
+
 ---
 
 ## Variety coverage
@@ -508,13 +521,13 @@ avatar. See `implementation-decisions.md` D22.
 | Survival / dodging | A7, A8, B3, I1, I3 |
 | Nerve / chance | D1, D3, E5, G1, G2, G3 |
 | Teamwork | C1, C2, C3 |
-| Head-to-head rivalry | B1, B2, B3, E7 |
+| Head-to-head rivalry | B1, B2, B3, E7, I4 |
 
 ## Format mix
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1–G3, I1–I3 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1–G3, I1–I4 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7 |
 | Team | C1, C2, C3 |
 
