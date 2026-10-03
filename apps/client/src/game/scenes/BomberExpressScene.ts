@@ -1,6 +1,6 @@
 import { BOMBER, type BomberDir, type BomberPlayer, type BomberSnapshot, PALETTE } from '@pp/shared'
 import Phaser from 'phaser'
-import { ensureAvatarTexture } from '../avatars'
+import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, eliminate, flash, floatText, shake, showBanner } from '../fx'
 import {
   ensureBevelPanel,
@@ -9,6 +9,7 @@ import {
   fitFontSize,
   headlineStyle,
 } from '../pixelStyle'
+import { YouMarker, addShadow } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -63,8 +64,12 @@ const ICONS: Record<'r' | 'b' | 's', { rows: string[]; legend: Record<string, nu
 }
 
 interface View {
-  avatar: Phaser.GameObjects.Image
+  avatar: AvatarSprite
+  shadow: Phaser.GameObjects.Ellipse
   alive: boolean
+  // Celebrating a knock-out until then (scene time).
+  cheerUntil: number
+  kos: number
 }
 
 export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
@@ -89,7 +94,7 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
   private views = new Map<string, View>()
   private strip?: PlayerStrip
   private banner?: Phaser.GameObjects.Text
-  private marker?: Phaser.GameObjects.Text
+  private marker?: YouMarker
   private held: BomberDir[] = []
   private padHeld = new Map<number, BomberDir>()
   private sentDir: BomberDir | null | '' = ''
@@ -249,11 +254,7 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
       )
     }
     this.flames = this.add.graphics().setDepth(35)
-    this.marker = this.add
-      .text(0, 0, '▼', headlineStyle(this.compact ? 8 : 12, PALETTE.amber))
-      .setOrigin(0.5, 1)
-      .setDepth(75)
-      .setVisible(false)
+    this.marker = new YouMarker(this, this.compact ? 12 : 16, 75)
     this.banner = addBanner(this)
   }
 
@@ -375,20 +376,26 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
     for (const p of snap.players) {
       let view = this.views.get(p.id)
       if (!view) {
-        const key = ensureAvatarTexture(
+        const size = avatarPx(cell)
+        const avatar = new AvatarSprite(
           this,
           this.state.avatarOf(p.id),
           this.state.colorOf(p.id),
-          4,
+          size,
         )
-        const avatar = this.add
-          .image(0, 0, key)
-          .setDisplaySize(cell * 0.86, cell * 0.86)
-          .setDepth(50)
-        view = { avatar, alive: p.alive }
+        avatar.image.setOrigin(0.5, 0.6).setDepth(50)
+        const shadow = addShadow(this, size, 49)
+        view = { avatar, shadow, alive: p.alive, cheerUntil: 0, kos: p.kos }
         this.views.set(p.id, view)
-        if (!p.alive) avatar.setAlpha(0.25).setAngle(90)
+        if (!p.alive) {
+          avatar.setExpression('ko')
+          avatar.image.setAlpha(0.25).setAngle(90)
+          shadow.setVisible(false)
+        }
       }
+      // A knock-out you scored: a short happy face.
+      if (p.kos > view.kos) view.cheerUntil = time + 900
+      view.kos = p.kos
       const moving = p.tx !== p.x || p.ty !== p.y
       const step = moving ? Math.min(1, p.step + since / Math.max(1, p.stepMs)) : 0
       const a = this.cellCenter(p.x, p.y)
@@ -397,9 +404,16 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
       const y =
         Phaser.Math.Linear(a.y, b.y, step) -
         (moving && p.alive ? Math.abs(Math.sin(step * Math.PI)) * 3 : 0)
-      view.avatar.setPosition(Math.round(x), Math.round(y))
-      if (p.id === this.selfId)
-        this.marker?.setPosition(Math.round(x), Math.round(y - cell * 0.45)).setVisible(p.alive)
+      // Faces the way it walks (top-down: back going up, front going down, side going across).
+      if (moving && p.alive) view.avatar.faceMotion(b.x - a.x, b.y - a.y)
+      if (p.alive) view.avatar.setExpression(time < view.cheerUntil ? 'happy' : 'idle')
+      view.avatar.tick(time)
+      view.avatar.image.setPosition(Math.round(x), Math.round(y))
+      view.shadow.setPosition(Math.round(x), Math.round(y + cell * 0.3)).setVisible(p.alive)
+      if (p.id === this.selfId) {
+        if (p.alive) this.marker?.place(x, y - cell * 0.5, time)
+        else this.marker?.hide()
+      }
     }
   }
 
@@ -449,7 +463,8 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
       const view = this.views.get(p.id)
       if (view && !p.alive && view.alive) {
         view.alive = false
-        this.tweens.add({ targets: view.avatar, angle: 90, alpha: 0.25, duration: 300 })
+        view.avatar.setExpression('ko')
+        this.tweens.add({ targets: view.avatar.image, angle: 90, alpha: 0.25, duration: 300 })
       }
     }
     const me = snap.players.find((p) => p.id === this.selfId)
@@ -495,7 +510,7 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
     this.sfx.eliminated()
     if (p.id === this.selfId) {
       flash(this, PALETTE.red, 220, 0.3)
-      this.marker?.setVisible(false)
+      this.marker?.hide()
     }
   }
 }

@@ -206,8 +206,8 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
     // 16 × 10 sprite cells → about 2.6 × 1.6 car radii long/wide in world units.
     const body = this.add.image(c.x, c.y, key).setDisplaySize(34, 22)
     const pilot = this.add
-      .image(c.x, c.y, ensureAvatarTexture(this, this.state.avatarOf(c.id), shade(color, 0.3), 1))
-      .setDisplaySize(10, 10)
+      .image(c.x, c.y, ensureAvatarTexture(this, this.state.avatarOf(c.id), color, 2))
+      .setDisplaySize(12, 12)
     this.world?.add([body, pilot])
     // Your car draws over the ghosts / the pack.
     if (c.id === this.selfId) this.world?.bringToTop(body).bringToTop(pilot)

@@ -1,6 +1,6 @@
 import { MARBLES, type MarblesPlayerView, type MarblesSnapshot, PALETTE } from '@pp/shared'
 import type Phaser from 'phaser'
-import { ensureAvatarTexture } from '../avatars'
+import { type AvatarExpression, AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, floatText, punch, showBanner } from '../fx'
 import {
   bodyStyle,
@@ -42,6 +42,8 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
   private banner?: Phaser.GameObjects.Text
   private layoutKey = ''
   private lastView?: MarblesPlayerView
+  private myAvatar?: AvatarSprite
+  private rivalAvatar?: AvatarSprite
   private rows = { theirs: 0, mine: 0, centre: 0, controls: 0 }
   private revealShown = 0
 
@@ -61,6 +63,8 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
     this.ui = []
     this.layoutKey = ''
     this.lastView = undefined
+    this.myAvatar = undefined
+    this.rivalAvatar = undefined
     this.revealShown = 0
     const top = this.top + 10
     const bottom = height - 12
@@ -202,7 +206,7 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
     }
   }
 
-  protected frame(snap: MarblesSnapshot | null): void {
+  protected frame(snap: MarblesSnapshot | null, time: number): void {
     const v = snap?.players[this.selfId]
     if (!snap || !v) return
     const key = `${v.turn}:${v.phase}:${v.role}:${v.youChose}`
@@ -212,8 +216,35 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
       this.onChange(v)
     }
     this.paintPouches(v)
+    this.paintAvatars(v, time)
     this.paintTimer(v)
     this.lastView = v
+  }
+
+  // The two players at the ends of the table, reacting to every reveal and to the result.
+  private paintAvatars(v: MarblesPlayerView, time: number): void {
+    const px = avatarPx(this.compact ? 32 : 48)
+    const make = (id: string, y: number): AvatarSprite => {
+      const a = new AvatarSprite(this, this.state.avatarOf(id), this.state.colorOf(id), px)
+      a.image.setPosition(28 + px / 2, y).setDepth(10)
+      return a
+    }
+    if (!this.myAvatar) this.myAvatar = make(this.selfId, this.rows.mine + 10)
+    if (!this.rivalAvatar && v.opponentId)
+      this.rivalAvatar = make(v.opponentId, this.rows.theirs + 10)
+    let mine: AvatarExpression = 'idle'
+    let theirs: AvatarExpression = 'idle'
+    if (v.won !== null && v.phase === 'done') {
+      mine = v.won ? 'happy' : 'ko'
+      theirs = v.won ? 'ko' : 'happy'
+    } else if (v.phase === 'reveal' && v.last) {
+      const iGuessed = v.last.guesserId === this.selfId
+      const iWon = iGuessed === v.last.correct
+      mine = iWon ? 'happy' : 'hurt'
+      theirs = iWon ? 'hurt' : 'happy'
+    }
+    this.myAvatar.setExpression(mine).tick(time)
+    this.rivalAvatar?.setExpression(theirs).tick(time)
   }
 
   // Your pouch and theirs: a row of marbles (capped) with the count.
@@ -237,40 +268,10 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
       v.opponentId ? this.t('game.marbles.theirs', { name: oppName, n: v.theirs }) : '',
     )
     this.mineText?.setText(this.t('game.marbles.mine', { n: v.mine }))
+    this.mineText?.setColor(hexToCss(this.state.colorOf(this.selfId, PALETTE.amber)))
+    if (v.opponentId) this.theirsText?.setColor(hexToCss(this.state.colorOf(v.opponentId)))
     row(v.theirs, this.rows.theirs + (this.compact ? 22 : 28))
     row(v.mine, this.rows.mine)
-    // The avatars at the ends of the table.
-    if (!this.lastView) {
-      const px = this.compact ? 28 : 40
-      if (v.opponentId) {
-        this.add
-          .image(
-            28 + px / 2,
-            this.rows.theirs + 10,
-            ensureAvatarTexture(
-              this,
-              this.state.avatarOf(v.opponentId),
-              this.state.colorOf(v.opponentId),
-              4,
-            ),
-          )
-          .setDisplaySize(px, px)
-          .setDepth(10)
-      }
-      this.add
-        .image(
-          28 + px / 2,
-          this.rows.mine + 10,
-          ensureAvatarTexture(
-            this,
-            this.state.avatarOf(this.selfId),
-            this.state.colorOf(this.selfId),
-            4,
-          ),
-        )
-        .setDisplaySize(px, px)
-        .setDepth(10)
-    }
   }
 
   private paintTimer(v: MarblesPlayerView): void {

@@ -1,6 +1,6 @@
 import { PALETTE, PANG, type PangArena, type PangSnapshot } from '@pp/shared'
 import type Phaser from 'phaser'
-import { ensureAvatarTexture } from '../avatars'
+import { AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, eliminate, flash, floatText, shake, showBanner } from '../fx'
 import {
   bodyStyle,
@@ -8,6 +8,7 @@ import {
   ensurePixelOrb,
   fitFontSize,
   headlineStyle,
+  hexToCss,
   shade,
 } from '../pixelStyle'
 import { PlayerStrip } from '../playerStrip'
@@ -62,9 +63,12 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
   private minis?: Phaser.GameObjects.Graphics
   private miniBoxes: { x: number; y: number; w: number; h: number }[] = []
   private miniLabels: Phaser.GameObjects.Text[] = []
+  private miniAvatars: Phaser.GameObjects.Image[] = []
   private balloonImgs: Phaser.GameObjects.Image[] = []
   private balloonKeys: string[] = []
-  private avatar?: Phaser.GameObjects.Image
+  private avatar?: AvatarSprite
+  // Smiling after a pop until then (scene time).
+  private cheerUntil = 0
   private strip?: PlayerStrip
   private banner?: Phaser.GameObjects.Text
   private bannerUntil = 0
@@ -97,6 +101,9 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
     this.balloonKeys = []
     this.miniBoxes = []
     this.miniLabels = []
+    this.miniAvatars = []
+    this.avatar = undefined
+    this.cheerUntil = 0
     this.buttons = []
     this.sims = new Map()
     this.lastTick = -1
@@ -347,6 +354,7 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
       burst(this, tip.x, tip.y, PALETTE.red, 14, 220)
       floatText(this, tip.x, tip.y, `+${mine.pops - prev.pops}`, PALETTE.amber, size)
       this.sfx.pop()
+      this.cheerUntil = this.time.now + 600
     }
     if (mine.lives < prev.lives) {
       const p = this.toScreen(mine.x, PANG.h - PANG.playerH)
@@ -399,23 +407,30 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
           Math.min(PANG.w - PANG.playerHalfW, mine.x + this.sentDir * PANG.walk * since),
         )
     const floor = this.toScreen(x, PANG.h)
-    const avatarPx = Math.max(20, Math.round(PANG.playerH * this.arena.scale * 1.15))
     if (!this.avatar) {
-      const key = ensureAvatarTexture(
+      const size = avatarPx(Math.max(24, Math.round(PANG.playerH * this.arena.scale * 1.25)))
+      this.avatar = new AvatarSprite(
         this,
         this.state.avatarOf(mine.id),
         this.state.colorOf(mine.id),
-        4,
+        size,
       )
-      this.avatar = this.add
-        .image(0, 0, key)
-        .setOrigin(0.5, 1)
-        .setDisplaySize(avatarPx, avatarPx)
-        .setDepth(50)
+      this.avatar.image.setOrigin(0.5, 1).setDepth(50)
     }
-    this.avatar.setPosition(Math.round(floor.x), Math.round(floor.y))
-    this.avatar.setAlpha(mine.out ? 0.3 : mine.shielded ? (Math.floor(time / 90) % 2 ? 0.3 : 1) : 1)
-    this.avatar.setAngle(mine.out ? 90 : 0)
+    // Side view while walking (facing the way you go), front view standing to shoot.
+    const walking = !mine.out && this.sentDir !== 0
+    this.avatar
+      .setPose(walking ? 'side' : 'front')
+      .face(walking ? this.sentDir : 1)
+      .setExpression(
+        mine.out ? 'ko' : mine.shielded ? 'hurt' : time < this.cheerUntil ? 'happy' : 'idle',
+      )
+      .tick(time)
+    if (!walking) this.avatar.image.setFlipX(false)
+    this.avatar.image
+      .setPosition(Math.round(floor.x), Math.round(floor.y))
+      .setAlpha(mine.out ? 0.3 : mine.shielded ? (Math.floor(time / 90) % 2 ? 0.3 : 1) : 1)
+      .setAngle(mine.out ? 90 : 0)
     // The harpoon: a zigzag wire from the floor up to the arrowhead.
     const g = this.harpoonG as Phaser.GameObjects.Graphics
     g.clear()
@@ -459,9 +474,20 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
         h: boxH,
       }))
       for (const l of this.miniLabels) l.destroy()
+      for (const a of this.miniAvatars) a.destroy()
       this.miniLabels = this.miniBoxes.map((b) =>
         this.add
           .text(b.x, b.y + b.h + 2, '', bodyStyle(11, PALETTE.text, { fontStyle: 'bold' }))
+          .setDepth(6),
+      )
+      this.miniAvatars = others.map((a) =>
+        this.add
+          .image(
+            0,
+            0,
+            ensureAvatarTexture(this, this.state.avatarOf(a.id), this.state.colorOf(a.id), 1),
+          )
+          .setOrigin(0.5, 1)
           .setDepth(6),
       )
     }
@@ -482,8 +508,18 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
           Math.max(1.5, (PANG.radius[b.size] ?? 0.03) * s),
         )
       }
-      g.fillStyle(this.state.colorOf(a.id), 1)
-      g.fillRect(box.x + a.x * s - 3, box.y + box.h - 7, 6, 7)
+      // Each rival is their avatar (KO face once out) walking the thumbnail's floor.
+      const mini = this.miniAvatars[i]
+      const miniKey = ensureAvatarTexture(
+        this,
+        this.state.avatarOf(a.id),
+        this.state.colorOf(a.id),
+        1,
+        'front',
+        a.out ? 'ko' : 'idle',
+      )
+      if (mini && mini.texture.key !== miniKey) mini.setTexture(miniKey)
+      mini?.setPosition(Math.round(box.x + a.x * s), box.y + box.h - 1).setAlpha(a.out ? 0.5 : 1)
       if (a.harpoon !== null && a.harpoonX !== null) {
         g.lineStyle(1, 0xd8dce8, 1)
         g.lineBetween(
@@ -495,7 +531,12 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
       }
       const label = this.miniLabels[i]
       const text = `${this.label(a.id)} · ${a.pops} ${a.out ? '✗' : '♥'.repeat(a.lives)}`
-      if (label && label.text !== text) label.setText(text).setColor(a.out ? '#7b88a8' : '#eef1f7')
+      if (label && label.text !== text) {
+        label
+          .setText(text)
+          .setColor(hexToCss(this.state.colorOf(a.id)))
+          .setAlpha(a.out ? 0.45 : 1)
+      }
     })
   }
 }

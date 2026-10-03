@@ -11,9 +11,9 @@ import {
   starEnemyAt,
 } from '@pp/shared'
 import type Phaser from 'phaser'
-import { ensureAvatarTexture } from '../avatars'
+import { AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, eliminate, flash, floatText, shake, showBanner } from '../fx'
-import { bodyStyle, ensurePixelGrid, ensurePixelOrb, shade } from '../pixelStyle'
+import { bodyStyle, ensurePixelGrid, ensurePixelOrb, hexToCss, shade } from '../pixelStyle'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -74,6 +74,7 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
   private minis?: Phaser.GameObjects.Graphics
   private miniBoxes: { x: number; y: number; w: number; h: number }[] = []
   private miniLabels: Phaser.GameObjects.Text[] = []
+  private miniAvatars: Phaser.GameObjects.Image[] = []
   private enemyImgs = new Map<number, Phaser.GameObjects.Image>()
   // Clips everything inside the viewport (enemies veering off the side, bullets near the edges).
   private clip?: Phaser.Display.Masks.GeometryMask
@@ -81,7 +82,7 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
   private bulletImgs: Phaser.GameObjects.Image[] = []
   private bulletKey = ''
   private ship?: Phaser.GameObjects.Image
-  private pilot?: Phaser.GameObjects.Image
+  private pilot?: AvatarSprite
   private canopy?: Phaser.GameObjects.Ellipse
   private strip?: PlayerStrip
   private banner?: Phaser.GameObjects.Text
@@ -116,6 +117,7 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
     this.bulletImgs = []
     this.miniBoxes = []
     this.miniLabels = []
+    this.miniAvatars = []
     this.ship = undefined
     this.pilot = undefined
     this.canopy = undefined
@@ -407,19 +409,21 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
         .setDisplaySize(shipPx, shipPx * (SHIP_ROWS.length / 12))
         .setDepth(50)
       // A dark canopy so the pilot (your lobby avatar, in your color) stands out from the hull.
-      this.canopy = this.add.ellipse(0, 0, shipPx * 0.5, shipPx * 0.46, 0x10121c, 0.9).setDepth(51)
-      const pilot = ensureAvatarTexture(this, this.state.avatarOf(mine.id), shade(color, 0.25), 2)
-      this.pilot = this.add
-        .image(0, 0, pilot)
-        .setDisplaySize(shipPx * 0.4, shipPx * 0.4)
-        .setDepth(52)
-      if (this.clip) for (const o of [this.ship, this.canopy, this.pilot]) o.setMask(this.clip)
+      const pilotPx = avatarPx(Math.max(16, shipPx * 0.5))
+      this.canopy = this.add
+        .ellipse(0, 0, pilotPx * 1.15, pilotPx * 1.05, 0x10121c, 0.9)
+        .setDepth(51)
+      this.pilot = new AvatarSprite(this, this.state.avatarOf(mine.id), color, pilotPx)
+      this.pilot.image.setDepth(52)
+      if (this.clip)
+        for (const o of [this.ship, this.canopy, this.pilot.image]) o.setMask(this.clip)
     }
     const alpha = mine.out ? 0.25 : mine.shielded ? (Math.floor(time / 90) % 2 ? 0.3 : 1) : 1
     this.ship.setPosition(Math.round(s.x), Math.round(s.y)).setAlpha(alpha)
     // The pilot (your lobby avatar) sits in the middle of the hull.
     this.canopy?.setPosition(Math.round(s.x), Math.round(s.y + shipPx * 0.04)).setAlpha(alpha)
-    this.pilot?.setPosition(Math.round(s.x), Math.round(s.y + shipPx * 0.04)).setAlpha(alpha)
+    this.pilot?.setExpression(mine.out ? 'ko' : mine.shielded ? 'hurt' : 'idle').tick(time)
+    this.pilot?.image.setPosition(Math.round(s.x), Math.round(s.y + shipPx * 0.04)).setAlpha(alpha)
     // Engine flame.
     const g = this.fx as Phaser.GameObjects.Graphics
     if (!mine.out) {
@@ -565,9 +569,19 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
         h: boxH,
       }))
       for (const l of this.miniLabels) l.destroy()
+      for (const m of this.miniAvatars) m.destroy()
       this.miniLabels = this.miniBoxes.map((b) =>
         this.add
           .text(b.x, b.y + b.h + 2, '', bodyStyle(11, PALETTE.text, { fontStyle: 'bold' }))
+          .setDepth(6),
+      )
+      this.miniAvatars = others.map((a) =>
+        this.add
+          .image(
+            0,
+            0,
+            ensureAvatarTexture(this, this.state.avatarOf(a.id), this.state.colorOf(a.id), 1),
+          )
           .setDepth(6),
       )
     }
@@ -596,15 +610,18 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
         if (b.x < 0 || b.x > STAR.w || b.y < 0 || b.y > STAR.h) continue
         g.fillRect(Math.round(box.x + b.x * s), Math.round(box.y + b.y * s), 2, 2)
       }
-      if (!a.out) {
-        g.fillStyle(this.state.colorOf(a.id), 1)
-        const sx = box.x + a.x * s
-        const sy = box.y + a.y * s
-        g.fillTriangle(sx, sy - 5, sx - 4, sy + 4, sx + 4, sy + 4)
-      }
+      // Each rival flies as their pilot avatar.
+      this.miniAvatars[i]
+        ?.setPosition(Math.round(box.x + a.x * s), Math.round(box.y + a.y * s))
+        .setVisible(!a.out)
       const label = this.miniLabels[i]
       const text = `${this.label(a.id).slice(0, 8)} · ${a.score} ${a.out ? '✗' : '♥'.repeat(a.lives)}`
-      if (label && label.text !== text) label.setText(text).setColor(a.out ? '#7b88a8' : '#eef1f7')
+      if (label && label.text !== text) {
+        label
+          .setText(text)
+          .setColor(hexToCss(this.state.colorOf(a.id)))
+          .setAlpha(a.out ? 0.45 : 1)
+      }
     })
   }
 }

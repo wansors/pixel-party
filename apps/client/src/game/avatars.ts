@@ -39,12 +39,13 @@ export function ensureAvatarTexture(
 }
 
 // Display sizes that keep a 16×16 avatar crisp: every sprite pixel covers the same number of screen
-// pixels (24 is the one half-step, for small UI). Pick the nearest one to the size a layout wants.
+// pixels (24 is the one half-step, for small UI). avatarPx gives the largest one that fits the room a
+// layout has (never below 16).
 const AVATAR_STEPS = [16, 24, 32, 48, 64, 80, 96, 112, 128] as const
 
-export function avatarPx(px: number): number {
+export function avatarPx(maxPx: number): number {
   let best: number = AVATAR_STEPS[0]
-  for (const step of AVATAR_STEPS) if (Math.abs(step - px) < Math.abs(best - px)) best = step
+  for (const step of AVATAR_STEPS) if (step <= maxPx) best = step
   return best
 }
 
@@ -70,7 +71,7 @@ export class AvatarSprite {
   ) {
     this.pose = pose
     this.blinkOffset = (color % 997) * 37
-    this.image = scene.add.image(0, 0, this.textureFor('idle')).setDisplaySize(size, size)
+    this.image = scene.add.image(0, 0, this.textureFor(pose, 'idle')).setDisplaySize(size, size)
   }
 
   setPose(pose: AvatarPose): this {
@@ -84,15 +85,33 @@ export class AvatarSprite {
     return this
   }
 
+  // Top-down facing from a motion vector (screen axes): back when moving up, front when moving down,
+  // side (flipped as needed) when moving sideways. Small or diagonal-ish moves keep the current facing,
+  // so the sprite doesn't flicker between views.
+  faceMotion(dx: number, dy: number, still = 0.25): this {
+    const ax = Math.abs(dx)
+    const ay = Math.abs(dy)
+    if (Math.max(ax, ay) < still) return this
+    if (ax > ay * 1.3) return this.setPose('side').face(dx)
+    if (ay > ax * 1.3) {
+      this.image.setFlipX(false)
+      return this.setPose(dy < 0 ? 'back' : 'front')
+    }
+    return this
+  }
+
   setExpression(expression: AvatarExpression): this {
     this.expression = expression
     return this
   }
 
+  // Applies the pose, the expression and the idle blink (call once per frame). A face that has to read
+  // (happy, hurt, KO) turns a back view around to the front.
   tick(time: number): void {
     const blink =
       this.expression === 'idle' && (time + this.blinkOffset) % BLINK_EVERY_MS < BLINK_MS
-    const key = this.textureFor(blink ? 'blink' : this.expression)
+    const pose = this.pose === 'back' && this.expression !== 'idle' ? 'front' : this.pose
+    const key = this.textureFor(pose, blink ? 'blink' : this.expression)
     if (this.image.texture.key !== key) this.image.setTexture(key)
   }
 
@@ -100,7 +119,7 @@ export class AvatarSprite {
     this.image.destroy()
   }
 
-  private textureFor(expression: AvatarExpression): string {
-    return ensureAvatarTexture(this.scene, this.avatar, this.color, 4, this.pose, expression)
+  private textureFor(pose: AvatarPose, expression: AvatarExpression): string {
+    return ensureAvatarTexture(this.scene, this.avatar, this.color, 4, pose, expression)
   }
 }

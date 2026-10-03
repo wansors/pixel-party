@@ -1,9 +1,10 @@
 import { PALETTE, SUMO_ICE, type SumoIceBody, type SumoIceSnapshot } from '@pp/shared'
 import type Phaser from 'phaser'
-import { ensureAvatarTexture } from '../avatars'
+import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, eliminate, flash, floatText, ring, shake, showBanner } from '../fx'
 import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
 import { ensurePixelGrid, headlineStyle, shade } from '../pixelStyle'
+import { YouMarker } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -41,9 +42,11 @@ const CRACK_ROWS = [
 ]
 
 interface View {
-  avatar: Phaser.GameObjects.Image
+  avatar: AvatarSprite
   shadow: Phaser.GameObjects.Ellipse
   out: boolean
+  x: number
+  y: number
 }
 
 export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
@@ -58,7 +61,7 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
   private avatarPx = 0
   private strip?: PlayerStrip
   private banner?: Phaser.GameObjects.Text
-  private marker?: Phaser.GameObjects.Text
+  private marker?: YouMarker
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
   private wasd?: Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>
   private aim?: { x: number; y: number }
@@ -99,7 +102,7 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
     const areaBottom = height - (this.compact ? 16 : 20)
     const size = Math.floor(Math.min(width - 16, areaBottom - areaTop))
     this.arena = { cx: width / 2, cy: areaTop + (areaBottom - areaTop) / 2, size }
-    this.avatarPx = Math.max(18, Math.round(SUMO_ICE.playerR * 2 * size * 1.1))
+    this.avatarPx = avatarPx(Math.round(SUMO_ICE.playerR * 2 * size * 1.25))
 
     this.water = this.add.graphics().setDepth(1)
     const px = Math.max(1, Math.floor(size / N / 8))
@@ -124,11 +127,7 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
           .setVisible(false),
       )
     }
-    this.marker = this.add
-      .text(0, 0, '▼', headlineStyle(this.compact ? 8 : 12, PALETTE.amber))
-      .setOrigin(0.5, 1)
-      .setDepth(75)
-      .setVisible(false)
+    this.marker = new YouMarker(this, this.compact ? 8 : 12, 75)
     this.banner = addBanner(this)
 
     this.cursors = this.input.keyboard?.createCursorKeys()
@@ -230,7 +229,7 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
     const ky = (keys?.down.isDown || w?.S.isDown ? 1 : 0) - (keys?.up.isDown || w?.W.isDown ? 1 : 0)
     let dir = { dx: kx, dy: ky }
     if (kx === 0 && ky === 0 && this.aim) {
-      const me = this.views.get(this.selfId)?.avatar
+      const me = this.views.get(this.selfId)?.avatar.image
       const dx = this.aim.x - (me?.x ?? this.arena.cx)
       const dy = this.aim.y - (me?.y ?? this.arena.cy)
       dir = Math.hypot(dx, dy) < this.avatarPx * 0.4 ? { dx: 0, dy: 0 } : { dx, dy }
@@ -319,7 +318,7 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
     this.sfx.eliminated()
     if (b.id === this.selfId) {
       flash(this, 0x29a8f2, 220, 0.3)
-      this.marker?.setVisible(false)
+      this.marker?.hide()
       this.ended = true
       // A short SPLASH! — then the banner clears so you can watch the rest of the fight.
       const banner = this.banner as Phaser.GameObjects.Text
@@ -355,9 +354,10 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
   private sink(view: View): void {
     view.out = true
     view.shadow.setVisible(false)
+    view.avatar.setExpression('ko').tick(0)
     this.tweens.add({
-      targets: view.avatar,
-      scale: view.avatar.scale * 0.3,
+      targets: view.avatar.image,
+      scale: view.avatar.image.scale * 0.3,
       angle: 180,
       alpha: 0,
       duration: 700,
@@ -371,24 +371,21 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
     for (const b of sample.to.bodies) {
       let view = this.views.get(b.id)
       if (!view) {
-        const key = ensureAvatarTexture(
-          this,
-          this.state.avatarOf(b.id),
-          this.state.colorOf(b.id),
-          4,
-        )
         const shadow = this.add
           .ellipse(0, 0, this.avatarPx * 0.9, this.avatarPx * 0.35, shade(0x0d2a4a, -0.3), 0.55)
           .setDepth(50)
-        const avatar = this.add
-          .image(0, 0, key)
-          .setDisplaySize(this.avatarPx, this.avatarPx)
-          .setDepth(60)
-        view = { avatar, shadow, out: false }
+        const avatar = new AvatarSprite(
+          this,
+          this.state.avatarOf(b.id),
+          this.state.colorOf(b.id),
+          this.avatarPx,
+        )
+        avatar.image.setDepth(60)
+        view = { avatar, shadow, out: false, x: Number.NaN, y: 0 }
         this.views.set(b.id, view)
         if (!b.alive) {
           view.out = true
-          avatar.setVisible(false)
+          avatar.image.setVisible(false)
           shadow.setVisible(false)
         }
       }
@@ -399,13 +396,18 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
       const s = jump
         ? this.toScreen(b.x, b.y)
         : this.toScreen(lerp(from.x, b.x, sample.t), lerp(from.y, b.y, sample.t))
-      view.avatar.setPosition(Math.round(s.x), Math.round(s.y - this.avatarPx * 0.15))
-      view.avatar.setAlpha(b.ghost ? (Math.floor(time / 90) % 2 ? 0.35 : 0.9) : 1)
+      // Faces where it slides; dazed (hurt) while it blinks back in after a lifebuoy.
+      if (!Number.isNaN(view.x) && !jump) view.avatar.faceMotion(s.x - view.x, s.y - view.y)
+      view.x = s.x
+      view.y = s.y
+      view.avatar.setExpression(b.ghost ? 'hurt' : 'idle').tick(time)
+      view.avatar.image
+        .setPosition(Math.round(s.x), Math.round(s.y - this.avatarPx * 0.15))
+        .setAlpha(b.ghost ? (Math.floor(time / 90) % 2 ? 0.35 : 0.9) : 1)
       view.shadow.setPosition(Math.round(s.x), Math.round(s.y + this.avatarPx * 0.32))
       if (b.id === this.selfId) {
-        this.marker
-          ?.setPosition(Math.round(s.x), Math.round(s.y - this.avatarPx * 0.7))
-          .setVisible(b.alive)
+        if (b.alive) this.marker?.place(s.x, s.y - this.avatarPx * 0.62, time)
+        else this.marker?.hide()
       }
     }
   }

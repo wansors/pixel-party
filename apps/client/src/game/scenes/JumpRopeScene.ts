@@ -1,8 +1,9 @@
 import { JUMP_ROPE, type JumpRopePlayer, type JumpRopeSnapshot, PALETTE } from '@pp/shared'
 import type Phaser from 'phaser'
-import { ensureAvatarTexture } from '../avatars'
+import { AvatarSprite } from '../avatars'
 import { addBanner, burst, eliminate, flash, floatText, shake, showBanner } from '../fx'
 import { ensureBevelPanel, ensurePixelGrid, fitFontSize, headlineStyle, shade } from '../pixelStyle'
+import { YouMarker, addShadow } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -14,8 +15,11 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 const TURNER_ROWS = ['__HH__', '__HH__', '_TTTT_', 'TTTTTT', '_TTTT_', '__LL__', '_L__L_', 'L____L']
 
 interface View {
-  avatar: Phaser.GameObjects.Image
+  avatar: AvatarSprite
+  shadow: Phaser.GameObjects.Ellipse
   out: boolean
+  // Wincing after a trip until then (scene time).
+  hurtUntil: number
 }
 
 export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
@@ -29,7 +33,7 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
   private ropeBack?: Phaser.GameObjects.Graphics
   private ropeFront?: Phaser.GameObjects.Graphics
   private views = new Map<string, View>()
-  private marker?: Phaser.GameObjects.Text
+  private marker?: YouMarker
   private strip?: PlayerStrip
   private banner?: Phaser.GameObjects.Text
   private jumpBtn?: Phaser.GameObjects.Image
@@ -129,11 +133,7 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
     this.ropeTop = this.groundY - this.avatarPx * 2.6
     this.ropeBack = this.add.graphics().setDepth(40)
     this.ropeFront = this.add.graphics().setDepth(60)
-    this.marker = this.add
-      .text(0, 0, '▼', headlineStyle(this.compact ? 8 : 12, PALETTE.amber))
-      .setOrigin(0.5, 1)
-      .setDepth(70)
-      .setVisible(false)
+    this.marker = new YouMarker(this, this.compact ? 8 : 12, 70)
     this.banner = addBanner(this)
   }
 
@@ -202,20 +202,21 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
     snap.players.forEach((p, i) => {
       let view = this.views.get(p.id)
       if (!view) {
-        const key = ensureAvatarTexture(
+        const avatar = new AvatarSprite(
           this,
           this.state.avatarOf(p.id),
           this.state.colorOf(p.id),
-          4,
+          this.avatarPx,
         )
-        const avatar = this.add
-          .image(0, 0, key)
-          .setOrigin(0.5, 1)
-          .setDisplaySize(this.avatarPx, this.avatarPx)
-          .setDepth(50)
-        view = { avatar, out: !p.alive }
+        avatar.image.setOrigin(0.5, 1).setDepth(50)
+        const shadow = addShadow(this, this.avatarPx, 49)
+        view = { avatar, shadow, out: !p.alive, hurtUntil: 0 }
         this.views.set(p.id, view)
-        if (!p.alive) avatar.setAngle(90).setAlpha(0.35)
+        if (!p.alive) {
+          avatar.setExpression('ko')
+          avatar.image.setAngle(90).setAlpha(0.35)
+          shadow.setVisible(false)
+        }
       }
       const x = this.slots[i] ?? 0
       let jumpMs = p.jumpMs === null ? -1 : p.jumpMs + since
@@ -224,11 +225,19 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
         jumpMs = Math.max(jumpMs, this.time.now - this.localJumpAt)
       const airborne = jumpMs >= 0 && jumpMs < JUMP_ROPE.jumpMs && p.alive
       const h = airborne ? Math.sin((Math.PI * jumpMs) / JUMP_ROPE.jumpMs) * this.avatarPx * 0.9 : 0
-      if (!view.out) view.avatar.setPosition(Math.round(x), Math.round(this.groundY - h))
-      if (p.id === this.selfId)
-        this.marker
-          ?.setPosition(Math.round(x), Math.round(this.groundY - h - this.avatarPx - 2))
-          .setVisible(p.alive)
+      const now = this.time.now
+      if (!view.out) {
+        view.avatar.setExpression(now < view.hurtUntil ? 'hurt' : airborne ? 'happy' : 'idle')
+        view.avatar.image.setPosition(Math.round(x), Math.round(this.groundY - h))
+        // The shadow stays on the ground and shrinks while you're up in the air.
+        const lift = 1 - h / (this.avatarPx * 1.8)
+        view.shadow.setPosition(Math.round(x), Math.round(this.groundY - 1)).setScale(lift, 1)
+      }
+      view.avatar.tick(now)
+      if (p.id === this.selfId) {
+        if (p.alive) this.marker?.place(x, this.groundY - h - this.avatarPx, now)
+        else this.marker?.hide()
+      }
     })
   }
 
@@ -294,8 +303,10 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
       this.sfx.eliminated()
       if (view) {
         view.out = true
-        view.avatar.setPosition(x, this.groundY)
-        this.tweens.add({ targets: view.avatar, angle: 90, alpha: 0.35, duration: 300 })
+        view.avatar.setExpression('ko')
+        view.avatar.image.setPosition(x, this.groundY)
+        view.shadow.setVisible(false)
+        this.tweens.add({ targets: view.avatar.image, angle: 90, alpha: 0.35, duration: 300 })
       }
       if (self) flash(this, PALETTE.red, 200, 0.3)
       return
@@ -312,12 +323,14 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
       this.sfx.wrong()
       shake(this, 0.008, 160)
     }
-    if (view)
+    if (view) {
+      view.hurtUntil = this.time.now + 700
       this.tweens.add({
-        targets: view.avatar,
+        targets: view.avatar.image,
         angle: { from: -18, to: 0 },
         duration: 300,
         ease: 'Bounce.easeOut',
       })
+    }
   }
 }

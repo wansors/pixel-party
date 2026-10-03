@@ -1,13 +1,15 @@
 import { ASTEROIDS, type AsteroidsShip, type AsteroidsSnapshot, PALETTE } from '@pp/shared'
 import Phaser from 'phaser'
-import { ensureAvatarTexture } from '../avatars'
+import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, flash, floatText, ring, shake, showBanner } from '../fx'
 import { ensureBevelPanel, ensurePixelGrid, fitFontSize, headlineStyle, shade } from '../pixelStyle'
+import { YouMarker } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
-// Asteroids Arena: one shared, wrapping starfield. Every ship is its pilot's lobby avatar, turned to
-// face where it flies (a nose chevron in front, a flame when thrusting, a ring while shielded). Rocks
+// Asteroids Arena: one shared, wrapping starfield. Every ship is a bubble pod with its pilot's lobby
+// avatar riding upright inside (a nose chevron on the rim shows the heading, a flame when thrusting, a
+// ring while shielded). Rocks
 // are lumpy pixel boulders in three sizes; bullets take their shooter's color. Everything is
 // extrapolated from the snapshot's velocities between updates; your own heading is predicted from
 // your held keys. ←/→ (A/D) turn, ↑/W thrust, SPACE fires — or the four hold buttons.
@@ -45,8 +47,11 @@ function rockRows(cells: number, size: number): string[] {
 }
 
 interface ShipView {
-  avatar: Phaser.GameObjects.Image
+  avatar: AvatarSprite
   alive: boolean
+  kills: number
+  // Smiling after a kill until then (scene time).
+  cheerUntil: number
 }
 
 export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
@@ -59,6 +64,7 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
   private rockImgs = new Map<number, Phaser.GameObjects.Image>()
   private ships = new Map<string, ShipView>()
   private shipPx = 0
+  private marker?: YouMarker
   private strip?: PlayerStrip
   private banner?: Phaser.GameObjects.Text
   private buttons: {
@@ -179,7 +185,8 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
     this.sky = this.add.graphics().setDepth(1)
     this.paintSky()
     this.g = this.add.graphics().setDepth(40).setMask(this.clip)
-    this.shipPx = Math.max(22, Math.round(ASTEROIDS.shipR * 2 * scale * 1.6))
+    this.shipPx = avatarPx(Math.max(24, Math.round(ASTEROIDS.shipR * 2 * scale * 1.6)))
+    this.marker = new YouMarker(this, this.compact ? 8 : 12, 60)
     for (let size = 1; size <= 3; size++) {
       const cells = Math.max(6, Math.round(((ASTEROIDS.rockR[size] ?? 0.03) * 2 * scale) / 3))
       this.rockKeys[size] = ensurePixelGrid(this, {
@@ -291,34 +298,46 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
     for (const s of snap.ships) {
       let view = this.ships.get(s.id)
       if (!view) {
-        const key = ensureAvatarTexture(
+        const avatar = new AvatarSprite(
           this,
           this.state.avatarOf(s.id),
           this.state.colorOf(s.id),
-          4,
+          this.shipPx,
         )
-        const avatar = this.add
-          .image(0, 0, key)
-          .setDisplaySize(this.shipPx, this.shipPx)
-          .setDepth(50)
-        if (this.clip) avatar.setMask(this.clip)
-        view = { avatar, alive: s.alive }
+        avatar.image.setDepth(50)
+        if (this.clip) avatar.image.setMask(this.clip)
+        view = { avatar, alive: s.alive, kills: s.kills, cheerUntil: 0 }
         this.ships.set(s.id, view)
       }
-      view.avatar.setVisible(s.alive)
-      if (!s.alive) continue
+      if (s.kills > view.kills) view.cheerUntil = time + 900
+      view.kills = s.kills
+      view.avatar.image.setVisible(s.alive)
+      if (!s.alive) {
+        if (s.id === this.selfId) this.marker?.hide()
+        continue
+      }
       const rot = s.id === this.selfId ? myRot : s.rot
       const a = s.a + rot * ASTEROIDS.turn * since
       const p = this.toScreen(wrap(s.x + s.vx * since, W), wrap(s.y + s.vy * since, H))
-      // The avatar's "up" faces the heading.
-      view.avatar.setPosition(Math.round(p.x), Math.round(p.y)).setRotation(a + Math.PI / 2)
-      view.avatar.setAlpha(s.shield ? (Math.floor(time / 100) % 2 ? 0.5 : 1) : 1)
+      // The pilot rides upright in a bubble pod (leaning into turns); the nose chevron on the pod's
+      // rim shows the heading.
+      view.avatar.setExpression(time < view.cheerUntil ? 'happy' : 'idle').tick(time)
+      view.avatar.image
+        .setPosition(Math.round(p.x), Math.round(p.y))
+        .setAngle(rot * 10)
+        .setAlpha(s.shield ? (Math.floor(time / 100) % 2 ? 0.5 : 1) : 1)
       const color = this.state.colorOf(s.id)
       const r = this.shipPx * 0.62
       const cos = Math.cos(a)
       const sin = Math.sin(a)
+      g.fillStyle(0x0b0f1f, 0.6)
+      g.fillCircle(p.x, p.y, r)
+      g.lineStyle(2, color, 0.9)
+      g.strokeCircle(p.x, p.y, r)
+      g.fillStyle(0xffffff, 0.35)
+      g.fillCircle(p.x - r * 0.45, p.y - r * 0.45, Math.max(2, r * 0.14))
       // Nose chevron.
-      g.fillStyle(PALETTE.text, 1)
+      g.fillStyle(color, 1)
       g.fillTriangle(
         p.x + cos * (r + 7),
         p.y + sin * (r + 7),
@@ -343,10 +362,7 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
         g.lineStyle(2, color, 0.7)
         g.strokeCircle(p.x, p.y, r + 4)
       }
-      if (s.id === this.selfId) {
-        g.lineStyle(1, PALETTE.amber, 0.8)
-        g.strokeCircle(p.x, p.y, r + 9)
-      }
+      if (s.id === this.selfId) this.marker?.place(p.x, p.y - r - 4, time)
     }
   }
 

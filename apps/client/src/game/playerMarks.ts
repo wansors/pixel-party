@@ -34,3 +34,13 @@ export class YouMarker {
     this.text.setVisible(false)
   }
 }
+
+// Soft ground shadow under a standing character, sized from its display size.
+export function addShadow(
+  scene: Phaser.Scene,
+  size: number,
+  depth: number,
+): Phaser.GameObjects.Ellipse {
+  const h = Math.max(4, Math.round(size * 0.2))
+  return scene.add.ellipse(0, 0, Math.round(size * 0.75), h, 0x000000, 0.35).setDepth(depth)
+}

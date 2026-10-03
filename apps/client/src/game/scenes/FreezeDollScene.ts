@@ -3,10 +3,11 @@ import {
   type FreezeDollMode,
   type FreezeDollRunner,
   type FreezeDollSnapshot,
+  type FreezeDollStatus,
   PALETTE,
 } from '@pp/shared'
 import Phaser from 'phaser'
-import { ensureAvatarTexture } from '../avatars'
+import { type AvatarExpression, AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, eliminate, flash, floatText, punch, shake, showBanner } from '../fx'
 import {
   ensureBevelPanel,
@@ -16,6 +17,7 @@ import {
   hexToCss,
   shade,
 } from '../pixelStyle'
+import { YouMarker, addShadow } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -82,8 +84,16 @@ const DOLL_LEGEND = (eyes: number): Record<string, number> => ({
   K: 0x2a2234,
 })
 
+// The face a runner turns to the camera in each state (none = back view, walking to the doll).
+const FACES: Partial<Record<FreezeDollStatus, AvatarExpression>> = {
+  stunned: 'hurt',
+  out: 'ko',
+  finished: 'happy',
+}
+
 interface RunnerView {
-  avatar: Phaser.GameObjects.Image
+  avatar: AvatarSprite
+  shadow: Phaser.GameObjects.Ellipse
   hearts: Phaser.GameObjects.Image[]
   x: number
   status: FreezeDollRunner['status']
@@ -114,7 +124,7 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
   private promptText = ''
   private strip?: PlayerStrip
   private banner?: Phaser.GameObjects.Text
-  private youMarker?: Phaser.GameObjects.Text
+  private youMarker?: YouMarker
   private views = new Map<string, RunnerView>()
   private buttons: {
     mode: 'walk' | 'run'
@@ -290,11 +300,7 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     this.field = this.add.graphics().setDepth(5)
     this.watch = this.add.graphics().setDepth(6)
     this.laser = this.add.graphics().setDepth(80)
-    this.youMarker = this.add
-      .text(0, 0, '▼', headlineStyle(this.compact ? 12 : 16, PALETTE.amber))
-      .setOrigin(0.5, 1)
-      .setDepth(75)
-      .setVisible(false)
+    this.youMarker = new YouMarker(this, this.compact ? 12 : 16, 75)
     this.banner = addBanner(this)
   }
 
@@ -324,7 +330,7 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     const maxLane = this.compact ? 64 : 96
     this.laneW = Math.min(maxLane, Math.floor((width - 24) / Math.max(1, lanes)))
     this.lanesX0 = width / 2 - (this.laneW * lanes) / 2
-    this.avatarSize = Math.max(22, Math.min(this.compact ? 32 : 40, this.laneW - 8))
+    this.avatarSize = avatarPx(Math.min(this.compact ? 32 : 48, this.laneW - 6))
     // Finishers stand on the rope, fully inside the field (clear of the chant bar above).
     this.finishY = this.fieldTop + Math.round(this.avatarSize * 0.95) + 4
     const g = this.field as Phaser.GameObjects.Graphics
@@ -491,19 +497,26 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     for (const r of snap.runners) {
       let view = this.views.get(r.id)
       if (!view) {
-        const key = ensureAvatarTexture(
+        // Everyone walks away from the camera toward the doll (back view).
+        const avatar = new AvatarSprite(
           this,
           this.state.avatarOf(r.id),
           this.state.colorOf(r.id),
-          4,
+          this.avatarSize,
+          'back',
         )
-        const avatar = this.add
-          .image(this.laneX(r.lane), this.yAt(r.x), key)
-          .setOrigin(0.5, 0.9)
-          .setDisplaySize(this.avatarSize, this.avatarSize)
-          .setDepth(60)
+        avatar.image.setOrigin(0.5, 0.9).setDepth(60)
+        const shadow = addShadow(this, this.avatarSize, 59)
         const hearts = [0, 1].map(() => this.add.image(0, 0, heartKey).setDepth(61))
-        view = { avatar, hearts, x: r.x, status: r.status, hearts0: r.hearts, fallen: false }
+        view = {
+          avatar,
+          shadow,
+          hearts,
+          x: r.x,
+          status: r.status,
+          hearts0: r.hearts,
+          fallen: false,
+        }
         this.views.set(r.id, view)
         if (r.status === 'out') this.layDown(view, false)
       }
@@ -516,20 +529,25 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
       const y = this.yAt(view.x)
       const moving = r.v > 0.001 && r.status === 'racing'
       const bob = moving ? Math.abs(Math.sin(time / 90)) * -3 : 0
+      // Back to the camera while racing; turned around (face visible) when lasered, out or safe.
+      const face = FACES[r.status]
+      view.avatar.setPose(face ? 'front' : 'back').setExpression(face ?? 'idle')
+      view.avatar.tick(time)
+      const img = view.avatar.image
       if (!view.fallen) {
-        view.avatar.setPosition(Math.round(x), Math.round(y + bob))
-        view.avatar.setAngle(moving ? Math.sin(time / 90) * 6 : 0)
-        view.avatar.setAlpha(r.status === 'stunned' ? (Math.floor(time / 90) % 2 ? 0.35 : 1) : 1)
-      } else view.avatar.setPosition(Math.round(x), Math.round(y))
+        img.setPosition(Math.round(x), Math.round(y + bob))
+        img.setAngle(moving ? Math.sin(time / 90) * 6 : 0)
+        img.setAlpha(r.status === 'stunned' ? (Math.floor(time / 90) % 2 ? 0.35 : 1) : 1)
+      } else img.setPosition(Math.round(x), Math.round(y))
+      view.shadow.setPosition(Math.round(x), Math.round(y + 1)).setVisible(!view.fallen)
       const hw = (h0: Phaser.GameObjects.Image): number => h0.width + 2
       view.hearts.forEach((h, i) => {
         h.setVisible(!view.fallen && r.status !== 'finished' && i < r.hearts)
         h.setPosition(Math.round(x + (i - 0.5) * hw(h)), Math.round(y + 8))
       })
       if (r.id === this.selfId) {
-        this.youMarker
-          ?.setPosition(Math.round(x), Math.round(y - this.avatarSize * 0.9 - 4 + bob))
-          .setVisible(!view.fallen)
+        if (view.fallen) this.youMarker?.hide()
+        else this.youMarker?.place(x, y - this.avatarSize * 0.9 + bob, time)
       }
     }
   }
@@ -599,8 +617,8 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     view.fallen = true
     const to = { angle: 90, alpha: 0.4 }
     if (animate)
-      this.tweens.add({ targets: view.avatar, ...to, duration: 380, ease: 'Bounce.easeOut' })
-    else view.avatar.setAngle(to.angle).setAlpha(to.alpha)
+      this.tweens.add({ targets: view.avatar.image, ...to, duration: 380, ease: 'Bounce.easeOut' })
+    else view.avatar.image.setAngle(to.angle).setAlpha(to.alpha)
     for (const h of view.hearts) h.setVisible(false)
   }
 

@@ -98,6 +98,59 @@ Players are **anonymous** — no accounts, no persistence. Each player in a room
 
 This trio (color + avatar + name) is what shows up everywhere a player is referenced.
 
+### 6.1 Character spec — one cast for every screen and mini-game
+
+A player looks like **their** avatar everywhere: the join picker, the lobby, the results, the podium
+and inside every mini-game that draws a figure for them. There is one sprite source,
+`apps/client/src/game/avatarSprites.ts` (pure data, no Phaser), rendered by `PixelAvatarComponent`
+(SVG) in the Angular shell and by `game/avatars.ts` (`ensureAvatarTexture`, `AvatarSprite`) in the
+scenes. Scenes never draw their own player figure. The per-game audit and migration log is in
+[`visual-audit.md`](visual-audit.md).
+
+- **The cast**: six chibi animals, all built the same way: cat, dog, fox, owl, frog and bear. They are
+  big-headed and small-bodied, with 3×3 eyes and a smile.
+- **Grid**: **16×16** per view, drawn as ASCII silhouettes plus feature letters. Every grid keeps a
+  1-cell empty margin for the outline. Feet sit on row 14, so all six share one ground line.
+- **Computed style** (identical for the whole cast, never hand-painted per sprite):
+  - **Outline**: a 1-px outline in a dark tone of the identity color (`shade −0.7`), so dark colors still
+    separate from dark backgrounds.
+  - **Body shading** in 3 tones, lit from the top-left: highlight (`+0.32`) on the top/left edges,
+    shade (`−0.28`) on the bottom/right edges. Markings (dog ears, owl wings, tails) use `−0.42`.
+  - **Light parts**: muzzle and belly are the identity color mixed 72 % with warm white, shaded along
+    their lower edge.
+  - **Fixed accents**: pink (ears, cheeks, nose), ink, white and amber (beak, feet).
+- **Identity color**: the avatar *is* the identity color. Never re-tint, lighten or swap it in a scene,
+  including for pilots, ghosts or teams. Show a team with a frame or the side of the screen, not by
+  recoloring the player.
+- **Views**:
+  - **front**: the default. Lobby, results, and also **top-down arenas**. Like classic Bomberman or
+    Zelda, top-down games show the character from the front instead of a literal overhead view.
+  - **side**: faces right; flip it to face left. Use it for side-scrollers, platformers and lane races.
+  - **back**: no face, shows the tail and markings. Use it when a character walks away from the camera.
+- **Expressions** (the eyes): `idle` (with an automatic blink every ~3.4 s, offset per player),
+  `happy` (won, safe, scored), `hurt` (a hit, stun or trip; brief), `ko` (eliminated; stays), and `blink`.
+- **Size**: display at whole steps of the 16-px grid (16 / 32 / 48 / 64…; 24 is the one half-step for
+  small UI). Use `avatarPx()`. Never stretch to an arbitrary size: uneven pixels look broken.
+- **Motion**: no walk-cycle frames. Characters move with juice instead: a bob, a ±6° waddle, a hop
+  arc, a squash on landing, a recoil on hits. All of it is tweened on the same sprite.
+- **Grounding**: a standing character gets a soft dark ellipse shadow (~0.8× its width, alpha ~0.35).
+- **Who is who on the canvas**:
+  - **You**: an amber ▼ with a dark outline, bobbing above your own character (`YouMarker`). It is
+    the same in every game.
+  - **Others**: a name tag in their identity color with a dark outline (`nameTagStyle`), where space
+    allows.
+  - **Standings**: the `PlayerStrip` chips lead with each player's avatar, showing the KO face when
+    that player is out.
+- **Out / eliminated**: switch to the KO face and play the shared `eliminate()` effect. Then, if the
+  figure stays on the field, lie it down (±90°) at ~0.4 alpha. If the rules take it away (fell, sank),
+  play the fall instead.
+- **Vehicles and props**: when a player drives or flies something (a car, a ship), their avatar rides
+  it as the **pilot**, so the vehicle never replaces the player.
+- **No figure at all** (quiz, puzzle and board games): identity shows through the `PlayerStrip`
+  (avatar + name + stat) or that game's rival board, always with the avatar, never a plain color.
+- **Non-player characters** (the doll, rope turners, referees) are drawn separately, in neutral
+  colors, so they never read as a player.
+
 ## 7. Scoreboards & results (the retro payoff)
 
 - Render the cumulative scoreboard and the **final ranking as a classic arcade high-score table**:

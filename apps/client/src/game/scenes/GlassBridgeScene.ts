@@ -5,7 +5,7 @@ import {
   PALETTE,
 } from '@pp/shared'
 import Phaser from 'phaser'
-import { ensureAvatarTexture } from '../avatars'
+import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, eliminate, flash, floatText, punch, ring, showBanner } from '../fx'
 import {
   bodyStyle,
@@ -15,6 +15,7 @@ import {
   hexToCss,
   shade,
 } from '../pixelStyle'
+import { YouMarker } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -35,7 +36,7 @@ interface Spot {
 }
 
 interface Runner {
-  avatar: Phaser.GameObjects.Image
+  avatar: AvatarSprite
   vest: Phaser.GameObjects.Text
   x: number
   y: number
@@ -100,7 +101,9 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
   private timerBar?: Phaser.GameObjects.Graphics
   private arrows?: Phaser.GameObjects.Graphics
   private arrowKey = ''
-  private marker?: Phaser.GameObjects.Text
+  private marker?: YouMarker
+  // A pulsing ring in the active runner's color under their feet (the ▼ is only ever "you").
+  private spotlight?: Phaser.GameObjects.Graphics
   private nameTag?: Phaser.GameObjects.Text
   private runners = new Map<string, Runner>()
   private buttons: {
@@ -200,7 +203,7 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     this.slotH = Math.min(this.compact ? 60 : 64, Math.floor(areaH / (rows + 2)))
     this.panelH = Math.max(18, Math.round(this.slotH * 0.78))
     this.panelW = Math.min(Math.round(this.panelH * 1.5), Math.floor((width - 40) / 2) - 12)
-    this.avatarSize = Math.max(20, Math.min(40, Math.round(this.slotH * 0.82)))
+    this.avatarSize = avatarPx(Math.max(24, Math.min(48, Math.round(this.slotH * 0.85))))
     this.railW = Math.max(4, Math.round(this.panelW * 0.12))
     this.cx = width / 2
     // Center the whole stack vertically in the area when there is slack.
@@ -273,11 +276,8 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     this.targetBox = this.add.graphics().setDepth(35)
     this.arrows = this.add.graphics().setDepth(36)
     this.timerBar = this.add.graphics().setDepth(36)
-    this.marker = this.add
-      .text(0, 0, '▼', headlineStyle(this.compact ? 12 : 16, PALETTE.amber))
-      .setOrigin(0.5, 1)
-      .setDepth(62)
-      .setVisible(false)
+    this.marker = new YouMarker(this, this.compact ? 12 : 16, 62)
+    this.spotlight = this.add.graphics().setDepth(59)
     this.nameTag = this.add
       .text(0, 0, '', bodyStyle(this.compact ? 11 : 13, PALETTE.text, { fontStyle: 'bold' }))
       .setOrigin(0, 0.5)
@@ -544,16 +544,18 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     if (r) {
       this.hiddenFor.add(p.id)
       r.vest.setVisible(false)
+      r.avatar.setExpression('ko').tick(0)
+      const img = r.avatar.image
       this.tweens.add({
-        targets: r.avatar,
+        targets: img,
         x,
         y: y + this.slotH * 2.2,
         angle: 300,
-        scale: r.avatar.scale * 0.25,
+        scale: img.scale * 0.25,
         alpha: 0,
         duration: FALL_ANIM_MS,
         ease: 'Quad.easeIn',
-        onComplete: () => r.avatar.setVisible(false),
+        onComplete: () => img.setVisible(false),
       })
     }
     // Leave the faller's name at the hole they made.
@@ -595,18 +597,14 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
       let r = this.runners.get(p.id)
       const spot = this.spotOf(p, snap)
       if (!r) {
-        const key = ensureAvatarTexture(
+        const start = spot ?? { x: this.cx, y: this.slotY(0) }
+        const avatar = new AvatarSprite(
           this,
           this.state.avatarOf(p.id),
           this.state.colorOf(p.id),
-          4,
+          this.avatarSize,
         )
-        const start = spot ?? { x: this.cx, y: this.slotY(0) }
-        const avatar = this.add
-          .image(start.x, start.y, key)
-          .setOrigin(0.5, 0.85)
-          .setDisplaySize(this.avatarSize, this.avatarSize)
-          .setDepth(60)
+        avatar.image.setOrigin(0.5, 0.85).setPosition(start.x, start.y).setDepth(60)
         const vest = this.add
           .text(
             start.x,
@@ -619,11 +617,18 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
         r = { avatar, vest, x: start.x, y: start.y }
         this.runners.set(p.id, r)
         if (p.status === 'fallen') {
-          avatar.setVisible(false)
+          avatar.image.setVisible(false)
           vest.setVisible(false)
         }
       }
       if (this.hiddenFor.has(p.id) || !spot) continue
+      // Waiting on the platform facing the crowd; back to the camera while out on the glass; a happy
+      // face once across.
+      r.avatar
+        .setPose(p.status === 'active' ? 'back' : 'front')
+        .setExpression(p.status === 'crossed' ? 'happy' : 'idle')
+        .tick(time)
+      const img = r.avatar.image
       const anim = this.jumpAnim
       if (anim && anim.id === p.id && time - anim.at < JUMP_ANIM_MS) {
         const f = (time - anim.at) / JUMP_ANIM_MS
@@ -631,29 +636,41 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
         r.y =
           Phaser.Math.Linear(anim.from.y, anim.to.y, f) - Math.sin(f * Math.PI) * this.slotH * 0.6
         const s = 1 + Math.sin(f * Math.PI) * 0.35
-        r.avatar.setDisplaySize(this.avatarSize * s, this.avatarSize * s)
+        img.setDisplaySize(this.avatarSize * s, this.avatarSize * s)
       } else if (anim && anim.id === p.id && snap.phase === 'jump') {
         // Landed, waiting for the server's verdict on that panel.
         r.x = anim.to.x
         r.y = anim.to.y
-        r.avatar.setDisplaySize(this.avatarSize, this.avatarSize)
+        img.setDisplaySize(this.avatarSize, this.avatarSize)
       } else {
         r.x += (spot.x - r.x) * k
         r.y += (spot.y - r.y) * k
-        r.avatar.setDisplaySize(this.avatarSize, this.avatarSize)
+        img.setDisplaySize(this.avatarSize, this.avatarSize)
       }
-      r.avatar.setPosition(Math.round(r.x), Math.round(r.y))
+      img.setPosition(Math.round(r.x), Math.round(r.y))
       r.vest.setPosition(Math.round(r.x), Math.round(r.y - this.avatarSize * 0.85 - 2))
-      r.avatar.setAlpha(p.status === 'queue' ? 0.85 : 1)
+      img.setAlpha(p.status === 'queue' ? 0.85 : 1)
     }
-    // The active runner's marker, plus their name beside the bridge while they are on the glass.
+    // You: the standard ▼ over your own avatar (above your vest number).
+    const mine = this.runners.get(this.selfId)
+    if (mine && snap.phase !== 'done' && !this.hiddenFor.has(this.selfId))
+      this.marker?.place(mine.x, mine.y - this.avatarSize * 0.85 - 12, time)
+    else this.marker?.hide()
+    // The active runner's spotlight, plus their name beside the bridge while they are on the glass.
     const activeId = snap.active ?? ''
     const active = this.runners.get(activeId)
     const tag = this.nameTag
     if (active && snap.phase !== 'done' && !this.hiddenFor.has(activeId)) {
-      const bob = Math.sin(time / 160) * 3
-      const top = active.y - this.avatarSize * 0.85 - 14
-      this.marker?.setPosition(active.x, top + bob).setVisible(true)
+      const pulse = 0.55 + 0.45 * Math.sin(time / 140)
+      this.spotlight
+        ?.clear()
+        .lineStyle(2, this.state.colorOf(activeId), pulse)
+        .strokeEllipse(
+          Math.round(active.x),
+          Math.round(active.y + this.avatarSize * 0.1),
+          this.avatarSize * 0.95,
+          this.avatarSize * 0.34,
+        )
       const onGlass = active.y < this.slotY(0) - this.slotH / 2
       if (tag && onGlass) {
         const label = this.label(activeId)
@@ -670,7 +687,7 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
           .setVisible(true)
       } else tag?.setVisible(false)
     } else {
-      this.marker?.setVisible(false)
+      this.spotlight?.clear()
       tag?.setVisible(false)
     }
   }

@@ -6,10 +6,11 @@ import {
   roomRushSlotAngle,
 } from '@pp/shared'
 import type Phaser from 'phaser'
-import { ensureAvatarTexture } from '../avatars'
+import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, eliminate, flash, floatText, ring, shake, showBanner } from '../fx'
 import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
 import { ensureBevelPanel, fitFontSize, headlineStyle, hexToCss, shade } from '../pixelStyle'
+import { YouMarker, addShadow } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -24,8 +25,11 @@ const WEDGES = 8
 const WEDGE_COLORS = [PALETTE.magenta, PALETTE.amber, PALETTE.cyan, PALETTE.lime]
 
 interface View {
-  avatar: Phaser.GameObjects.Image
+  avatar: AvatarSprite
+  shadow: Phaser.GameObjects.Ellipse
   gone: boolean
+  x: number
+  y: number
 }
 
 export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
@@ -42,7 +46,7 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
   private promptText = ''
   private strip?: PlayerStrip
   private banner?: Phaser.GameObjects.Text
-  private marker?: Phaser.GameObjects.Text
+  private marker?: YouMarker
   private dashBtn?: Phaser.GameObjects.Image
   private dashText?: Phaser.GameObjects.Text
   private dashKeys = { up: '', down: '' }
@@ -130,7 +134,7 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
     const areaBottom = btnY - btnH / 2 - 10
     const size = Math.floor(Math.min(width - 16, areaBottom - areaTop))
     this.arena = { cx: width / 2, cy: areaTop + (areaBottom - areaTop) / 2, size }
-    this.avatarPx = Math.max(18, Math.round(ROOM_RUSH.playerR * 2 * size * 1.15))
+    this.avatarPx = avatarPx(Math.round(ROOM_RUSH.playerR * 2 * size * 1.25))
     this.floor = this.add.graphics().setDepth(1)
     this.carousel = this.add.graphics().setDepth(2)
     this.rooms = this.add.graphics().setDepth(3)
@@ -154,11 +158,7 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
           .setDepth(70),
       )
     }
-    this.marker = this.add
-      .text(0, 0, '▼', headlineStyle(this.compact ? 8 : 12, PALETTE.amber))
-      .setOrigin(0.5, 1)
-      .setDepth(75)
-      .setVisible(false)
+    this.marker = new YouMarker(this, this.compact ? 8 : 12, 75)
     this.banner = addBanner(this)
 
     // Controls: arrows / WASD, or hold the pointer where you want to go; SPACE dashes.
@@ -265,9 +265,9 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
     const ky = (keys?.down.isDown || w?.S.isDown ? 1 : 0) - (keys?.up.isDown || w?.W.isDown ? 1 : 0)
     if (kx !== 0 || ky !== 0) this.dir = { dx: kx, dy: ky }
     else if (this.aim) {
-      const me = this.views.get(this.selfId)?.avatar
-      const ox = me?.x ?? this.arena.cx
-      const oy = me?.y ?? this.arena.cy
+      const me = this.views.get(this.selfId)
+      const ox = me && !Number.isNaN(me.x) ? me.x : this.arena.cx
+      const oy = me && !Number.isNaN(me.x) ? me.y : this.arena.cy
       const dx = this.aim.x - ox
       const dy = this.aim.y - oy
       // A dead zone around your own avatar, so holding still on yourself really stops.
@@ -347,9 +347,12 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
     const v = this.views.get(id)
     if (!v || v.gone) return
     v.gone = true
-    if (!animate) v.avatar.setVisible(false)
+    v.avatar.setExpression('ko')
+    v.shadow.setVisible(false)
+    const img = v.avatar.image
+    if (!animate) img.setVisible(false)
     else
-      this.tweens.add({ targets: v.avatar, alpha: 0, scale: v.avatar.scale * 0.5, duration: 500 })
+      this.tweens.add({ targets: img, alpha: 0, scale: img.scale * 0.5, delay: 350, duration: 500 })
   }
 
   private paintCarousel(snap: RoomRushSnapshot, since: number): void {
@@ -445,17 +448,15 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
     for (const p of sample.to.players) {
       let view = this.views.get(p.id)
       if (!view) {
-        const key = ensureAvatarTexture(
+        const avatar = new AvatarSprite(
           this,
           this.state.avatarOf(p.id),
           this.state.colorOf(p.id),
-          4,
+          this.avatarPx,
         )
-        const avatar = this.add
-          .image(0, 0, key)
-          .setDisplaySize(this.avatarPx, this.avatarPx)
-          .setDepth(60)
-        view = { avatar, gone: false }
+        avatar.image.setDepth(60)
+        const shadow = addShadow(this, this.avatarPx, 59)
+        view = { avatar, shadow, gone: false, x: Number.NaN, y: 0 }
         this.views.set(p.id, view)
         if (!p.alive) this.fadeOut(p.id, false)
       }
@@ -465,14 +466,18 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
       const x = jump ? p.x : lerp(from.x, p.x, sample.t)
       const y = jump ? p.y : lerp(from.y, p.y, sample.t)
       const s = this.toScreen(x, y)
-      view.avatar.setPosition(Math.round(s.x), Math.round(s.y))
+      // Faces where it walks (top-down: back going up, front going down, side going across).
+      if (!Number.isNaN(view.x) && !jump) view.avatar.faceMotion(s.x - view.x, s.y - view.y)
+      view.x = s.x
+      view.y = s.y
+      if (!view.gone) view.avatar.setExpression(p.safe ? 'happy' : 'idle')
+      view.avatar.tick(time)
+      view.avatar.image.setPosition(Math.round(s.x), Math.round(s.y))
+      view.shadow.setPosition(Math.round(s.x), Math.round(s.y + this.avatarPx * 0.42))
       if (p.id === this.selfId) {
-        this.marker
-          ?.setPosition(Math.round(s.x), Math.round(s.y - this.avatarPx * 0.55))
-          .setVisible(!view.gone)
+        if (view.gone) this.marker?.hide()
+        else this.marker?.place(s.x, s.y - this.avatarPx * 0.45, time)
       }
-      if (!view.gone && p.alive)
-        view.avatar.setAlpha(p.safe ? 0.85 + 0.15 * Math.sin(time / 150) : 1)
     }
   }
 

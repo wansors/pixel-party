@@ -1,8 +1,9 @@
-import { BRAWL, type BrawlFighter, type BrawlSnapshot, PALETTE } from '@pp/shared'
+import { BRAWL, type BrawlAction, type BrawlFighter, type BrawlSnapshot, PALETTE } from '@pp/shared'
 import Phaser from 'phaser'
-import { ensureAvatarTexture } from '../avatars'
+import { type AvatarExpression, AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, eliminate, flash, floatText, shake, showBanner } from '../fx'
 import { ensureBevelPanel, ensurePixelGrid, fitFontSize, headlineStyle, shade } from '../pixelStyle'
+import { YouMarker } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -27,8 +28,15 @@ const ITEM_ROWS: Record<string, { rows: string[]; legend: Record<string, number>
   },
 }
 
+// The fighter's face per action (the rest keep the idle face, blinking).
+const FACES: Partial<Record<BrawlAction, AvatarExpression>> = {
+  hurt: 'hurt',
+  down: 'hurt',
+  ko: 'ko',
+}
+
 interface View {
-  avatar: Phaser.GameObjects.Image
+  avatar: AvatarSprite
   shadow: Phaser.GameObjects.Ellipse
   hp: Phaser.GameObjects.Graphics
   x: number
@@ -45,7 +53,7 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
   private itemKeys: Record<string, string> = {}
   private strip?: PlayerStrip
   private banner?: Phaser.GameObjects.Text
-  private marker?: Phaser.GameObjects.Text
+  private marker?: YouMarker
   private keysHeld = { up: false, down: false, left: false, right: false }
   private pad = new Map<number, [number, number]>()
   private sent = ''
@@ -152,9 +160,8 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
 
     // The street: shop fronts, then the fighting band (pavement edge → road).
     const areaBottom = padY - b * 1.5 - 12
-    this.fighterPx = Math.max(
-      26,
-      Math.min(this.compact ? 34 : 56, Math.round(((width - 24) / BRAWL.w) * 0.11)),
+    this.fighterPx = avatarPx(
+      Math.max(32, Math.min(this.compact ? 32 : 64, Math.round(((width - 24) / BRAWL.w) * 0.12))),
     )
     // Fighters at either end of the street stay fully on screen.
     const sx = (width - 24 - this.fighterPx) / BRAWL.w
@@ -173,11 +180,7 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
         pixelSize: this.compact ? 2 : 3,
       })
     }
-    this.marker = this.add
-      .text(0, 0, '▼', headlineStyle(this.compact ? 8 : 12, PALETTE.amber))
-      .setOrigin(0.5, 1)
-      .setDepth(450)
-      .setVisible(false)
+    this.marker = new YouMarker(this, this.compact ? 8 : 12, 450)
     this.banner = addBanner(this)
   }
 
@@ -275,13 +278,15 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
     for (const f of snap.fighters) {
       let view = this.views.get(f.id)
       if (!view) {
-        const key = ensureAvatarTexture(
+        // Side view: a street brawler faces left or right.
+        const avatar = new AvatarSprite(
           this,
           this.state.avatarOf(f.id),
           this.state.colorOf(f.id),
-          4,
+          px,
+          'side',
         )
-        const avatar = this.add.image(0, 0, key).setOrigin(0.5, 1).setDisplaySize(px, px)
+        avatar.image.setOrigin(0.5, 1)
         const shadow = this.add.ellipse(0, 0, px * 0.9, px * 0.25, 0x000000, 0.35)
         const hp = this.add.graphics()
         view = { avatar, shadow, hp, x: f.x, y: f.y }
@@ -300,17 +305,20 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
       const lying = f.action === 'down' || f.action === 'ko'
       view.shadow.setPosition(p.x, p.y).setDepth(depth - 1)
       view.avatar
+        .face(f.face)
+        .setExpression(FACES[f.action] ?? 'idle')
+        .tick(time)
+      view.avatar.image
         .setPosition(
           Math.round(p.x - (f.action === 'hurt' ? f.face * 4 : 0)),
           Math.round(p.y + bob + (lying ? -px * 0.1 : 0)),
         )
         .setDepth(depth)
-        .setFlipX(f.face === -1)
         .setAngle(lying ? f.face * -90 : f.action === 'hurt' ? f.face * -8 : 0)
         .setAlpha(f.action === 'ko' ? 0.35 : f.guard ? (Math.floor(time / 90) % 2 ? 0.45 : 1) : 1)
       // A white flash on the frame a hit lands.
-      if (f.action === 'hurt' && ms < 120) view.avatar.setTintFill(0xffffff)
-      else view.avatar.clearTint()
+      if (f.action === 'hurt' && ms < 120) view.avatar.image.setTintFill(0xffffff)
+      else view.avatar.image.clearTint()
       // Limbs and weapons, in the fighter's color.
       const color = this.state.colorOf(f.id)
       const hand = { x: p.x + f.face * px * 0.35, y: p.y - px * 0.45 }
@@ -357,10 +365,10 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
           .fillStyle(f.hp > 50 ? PALETTE.lime : f.hp > 25 ? PALETTE.amber : PALETTE.red, 1)
           .fillRect(bx, by, (bw * f.hp) / BRAWL.hp, 4)
       }
-      if (f.id === this.selfId)
-        this.marker
-          ?.setPosition(Math.round(p.x), Math.round(p.y - px - 14))
-          .setVisible(f.action !== 'ko')
+      if (f.id === this.selfId) {
+        if (f.action === 'ko') this.marker?.hide()
+        else this.marker?.place(p.x, p.y - px - 12 + bob, time)
+      }
     }
   }
 
