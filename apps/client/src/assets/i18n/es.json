@@ -327,6 +327,10 @@
       "asteroids": {
         "name": "Arena de Asteroides",
         "blurb": "Un cielo compartido que da la vuelta: gira, acelera y dispara. Las rocas puntúan, ¡las naves rivales mucho más!"
+      },
+      "bomber-express": {
+        "name": "Bomber Express",
+        "blurb": "Todos empiezan al máximo: explosiones enormes, cinco bombas y botas rápidas. ¡Gana el último en pie!"
       }
     }
   },
@@ -706,6 +710,14 @@
       "score": "{{n}} PTS",
       "final": "{{n}} PUNTOS",
       "boom": "¡BUM!"
+    },
+    "bomber": {
+      "bomb": "BOMBA",
+      "kos": "{{n}} KO",
+      "survived": "¡SIGUES VIVO!",
+      "pickRange": "+FUEGO",
+      "pickBomb": "+BOMBA",
+      "pickSpeed": "+VELOCIDAD"
     }
   }
 }

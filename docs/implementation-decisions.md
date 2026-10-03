@@ -460,3 +460,10 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   shot can't skip a small rock. No lives: dying costs 2 s and the chance to score (the score is the
   ranking). **Not done**: wrap "ghost" copies at the edges — objects are clipped to the arena and
   reappear on the other side.
+- **I5 Bomber Express** (`bomber-express`, PC-first): tile-to-tile movement on the server (a held
+  direction chains steps from the exact arrival time, so the stride doesn't stutter on the 50 ms tick);
+  a player "stands" on the tile they're leaving until halfway through a step (that's where a bomb
+  drops and where flames catch them). Explosions run through a queue in one tick so chains resolve
+  together. Ranking follows the backlog: last standing first, then knock-outs, then survival time.
+  **Not done**: sudden-death closing walls (the full power-up start ends most rounds early anyway)
+  and bomb kicking.

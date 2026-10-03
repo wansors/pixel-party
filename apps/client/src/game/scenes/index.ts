@@ -2,6 +2,7 @@ import type Phaser from 'phaser'
 import { AsteroidsScene } from './AsteroidsScene'
 import { BalloonChickenScene } from './BalloonChickenScene'
 import { BombRelayScene } from './BombRelayScene'
+import { BomberExpressScene } from './BomberExpressScene'
 import { BubblePopScene } from './BubblePopScene'
 import { BugSmashScene } from './BugSmashScene'
 import { ButtonMasherScene } from './ButtonMasherScene'
@@ -96,6 +97,7 @@ export const SCENES: Readonly<Record<string, SceneCtor>> = {
   pang: PangScene,
   'star-blaster': StarBlasterScene,
   asteroids: AsteroidsScene,
+  'bomber-express': BomberExpressScene,
   'tug-of-war': TugOfWarScene,
   'bomb-relay': BombRelayScene,
   'fleet-battle': FleetBattleScene,

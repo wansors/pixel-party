@@ -120,6 +120,12 @@ export class Sfx {
 
   private static readonly CHANT = [392.0, 329.63, 392.0, 329.63, 440.0, 392.0, 329.63, 261.63] // G E G E A G E C
 
+  // A bomb going off: a low, crunchy downward rumble.
+  boom(): void {
+    this.tone(160, 320, { type: 'sawtooth', slideTo: 35, gain: 0.3 })
+    this.tone(90, 420, { type: 'square', slideTo: 30, delayMs: 30, gain: 0.18 })
+  }
+
   // Simon pad tone: one distinct pitch per colour pad (played on tap and on sequence playback), for
   // the classic Simon feel. Ascending pentatonic set so any pad order still sounds musical.
   pad(index: number): void {

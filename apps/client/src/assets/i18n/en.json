@@ -327,6 +327,10 @@
       "asteroids": {
         "name": "Asteroids Arena",
         "blurb": "One shared wrap-around sky: rotate, thrust, shoot. Rocks pay, rival ships pay more!"
+      },
+      "bomber-express": {
+        "name": "Bomber Express",
+        "blurb": "Everyone starts maxed out: huge blasts, five bombs, fast boots. Last one standing wins!"
       }
     }
   },
@@ -706,6 +710,14 @@
       "score": "{{n}} PTS",
       "final": "{{n}} POINTS",
       "boom": "BOOM!"
+    },
+    "bomber": {
+      "bomb": "BOMB",
+      "kos": "{{n}} KO",
+      "survived": "SURVIVED!",
+      "pickRange": "+FIRE",
+      "pickBomb": "+BOMB",
+      "pickSpeed": "+SPEED"
     }
   }
 }

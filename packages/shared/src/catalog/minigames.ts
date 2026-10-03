@@ -525,6 +525,17 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     blurb: 'One shared wrap-around sky: rotate, thrust, shoot. Rocks pay, rival ships pay more!',
     axes: ['precision', 'reflexes'],
   },
+  {
+    id: 'bomber-express',
+    name: 'Bomber Express',
+    format: 'ffa',
+    realtime: true,
+    mobileFriendly: false,
+    durationSec: 60,
+    blurb:
+      'Everyone starts maxed out: huge blasts, five bombs, fast boots. Last one standing wins!',
+    axes: ['reflexes', 'nerve'],
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

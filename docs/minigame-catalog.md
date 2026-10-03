@@ -51,7 +51,8 @@ Then (2026-09-28) a new sports wave (section F): F1 100 m Dash (`dash-100m`), F2
 (`micro-race`). **40 mini-games total.**
 Then (2026-10-02) the roadmap wave (D22), one game at a time: G1 Glass Bridge (`glass-bridge`), G2
 Freeze Doll (`freeze-doll`), G3 Room Rush (`room-rush`), I1 Sumo ICE (`sumo-ice`), I2 Pang (`pang`),
-I3 Star Blaster (`star-blaster`), I4 Asteroids Arena (`asteroids`). **47 mini-games total.**
+I3 Star Blaster (`star-blaster`), I4 Asteroids Arena (`asteroids`), I5 Bomber Express
+(`bomber-express`). **48 mini-games total.**
 
 ---
 
@@ -505,6 +506,20 @@ avatar. See `implementation-decisions.md` D22.
 - **Latency**: high — ships, rocks and bullets are extrapolated from the snapshot's velocities; your own
   heading is predicted from your held keys. Ships are their pilot's lobby avatar, turned to the heading.
 
+### I5. ✅ Bomber Express (Bomberman) — implemented (`bomber-express`)
+- **Concept**: classic *Bomberman*, but everyone starts **fully powered** — fire range 5, five bombs,
+  fast boots — so it's chaos from the first second.
+- **Type**: FFA · **Input**: arrows / WASD (or the d-pad) to walk, SPACE / BOMB to drop one ·
+  **Duration**: ~15–60 s (60 s cap) · **Banter**: 💥💥💥 · **Mobile-friendly**: no
+- **Rules**: a 17×13 grid — border walls, a pillar on every even/even cell, a seeded 60 % scatter of
+  crates (each spawn cell and its neighbours kept clear; up to 10 spawns). Tile-to-tile movement
+  (150 ms per tile at the start). Bombs blow after 2.2 s in a cross that stops at walls and at the first
+  crate (which it breaks), setting off any bomb in its path (chain reactions); flames burn 0.55 s. A
+  third of the crates hide a power-up: +fire (to 9), +bomb (to 8), faster boots. Bombs block the way.
+- **Win condition / Result**: last one standing; then knock-outs scored (a self-KO scores nothing),
+  then who lasted longer (`2 KO`).
+- **Latency**: medium — steps are interpolated client-side from the snapshot's step progress.
+
 ---
 
 ## Variety coverage
@@ -518,7 +533,7 @@ avatar. See `implementation-decisions.md` D22.
 | Mental math | E2 |
 | Memory | A4, A11, E8 |
 | Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4, I2 |
-| Survival / dodging | A7, A8, B3, I1, I3 |
+| Survival / dodging | A7, A8, B3, I1, I3, I5 |
 | Nerve / chance | D1, D3, E5, G1, G2, G3 |
 | Teamwork | C1, C2, C3 |
 | Head-to-head rivalry | B1, B2, B3, E7, I4 |
@@ -527,7 +542,7 @@ avatar. See `implementation-decisions.md` D22.
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1–G3, I1–I4 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1–G3, I1–I5 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7 |
 | Team | C1, C2, C3 |
 

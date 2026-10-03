@@ -361,7 +361,8 @@ cluster below. Catalog section F.
       (no assets, respects the SFX volume). See `implementation-decisions.md` D2.*
 - [ ] **New mini-game ideas (requested 2026-09-28)** — arcade classics reworked as FFA party rounds; all
       real-time and keyboard-first (PC) unless noted. Each needs a catalog card + the usual module/scene.
-  - [ ] **Bomber Express** (`bomber-express`, Bomberman style) — grid arena with destructible crates;
+  - [x] **Bomber Express** (`bomber-express`, Bomberman style) — *Shipped 2026-10-03 (catalog I5,
+        D22).* Grid arena with destructible crates;
         everyone starts fully powered up (**fire range 5+, 5 bombs, speed boost by default**) so it's
         chaos from second one, with extra power-ups dropping from crates. Last one standing, then most
         knock-outs. Seeded crate layout; server owns the grid, bombs and chain reactions.

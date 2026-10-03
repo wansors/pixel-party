@@ -3,6 +3,7 @@ import type { MiniGame } from './MiniGame'
 import { Asteroids } from './asteroids'
 import { BalloonChicken } from './balloonChicken'
 import { BombRelay } from './bombRelay'
+import { BomberExpress } from './bomberExpress'
 import { BubblePop } from './bubblePop'
 import { BugSmash } from './bugSmash'
 import { ButtonMasher } from './buttonMasher'
@@ -96,6 +97,7 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   pang: () => new Pang() as unknown as MiniGame<unknown, unknown>,
   'star-blaster': () => new StarBlaster() as unknown as MiniGame<unknown, unknown>,
   asteroids: () => new Asteroids() as unknown as MiniGame<unknown, unknown>,
+  'bomber-express': () => new BomberExpress() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)
