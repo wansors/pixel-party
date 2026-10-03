@@ -341,16 +341,18 @@ cluster below. Catalog section F.
       validates each shot. Ranked by bubbles cleared (finishers by fastest board-clear). *P3 — latency-
       tolerant (self-paced, common seed) but high build effort (aim physics + hex-grid snap + cluster
       flood-fill); rides the puzzle/action wave.*
-- [ ] **Racing cluster** (top-down pixel racers; real-time, high latency sensitivity → ride the Phase 5
+- [x] **Racing cluster** (top-down pixel racers; real-time, high latency sensitivity → ride the Phase 5
       action wave once netcode interpolation/prediction is proven). All seeded so every player gets the
       same track/AI; server-authoritative positions.
   - [x] **Micro Race** (`micro-race`, Micro Machines style) — chaotic top-down sprint on a tabletop-scale
         track; laps around a short circuit, bumping/hazards, first across the line wins (placements →
         position points). FFA, short. *Shipped 2026-09-28 (catalog F5, D20): 3 seeded tabletop circuits,
         3 laps, arcade drift/bump physics, anti-shortcut rescue.*
-  - [ ] **Rally Stage** (`rally-stage`) — point-to-point time-trial against the clock on a twisty stage
+  - [x] **Rally Stage** (`rally-stage`) — *Shipped 2026-10-03 (catalog F6, D22).* Point-to-point
+        time-trial against the clock on a twisty stage
         (no direct contact); rank by finish time. Handles/grip + checkpoints; FFA scored by time.
-  - [ ] **Speed Circuit** (`speed-circuit`) — multi-lap wheel-to-wheel race on a proper circuit; racing
+  - [x] **Speed Circuit** (`speed-circuit`) — *Shipped 2026-10-03 (catalog F7, D22).* Multi-lap
+        wheel-to-wheel race on a proper circuit; racing
         line + slipstream/boost pickups; final lap order → placements. FFA (duel/team variants later).
 - [x] **Pixel Split — reset the cut to the far left each object** — *Done 2026-07-23: the `pixel-split`
       cut selector now initialises at the leftmost boundary on every object (was centred), so symmetric
@@ -359,7 +361,7 @@ cluster below. Catalog section F.
 - [x] **Simon per-pad tones** — *Done 2026-07-23: each Simon (`simon`) pad now plays a distinct pitch
       on tap and during sequence playback, via a new `Sfx.pad()` on the existing WebAudio 8-bit synth
       (no assets, respects the SFX volume). See `implementation-decisions.md` D2.*
-- [ ] **New mini-game ideas (requested 2026-09-28)** — arcade classics reworked as FFA party rounds; all
+- [x] **New mini-game ideas (requested 2026-09-28)** — arcade classics reworked as FFA party rounds; all
       real-time and keyboard-first (PC) unless noted. Each needs a catalog card + the usual module/scene.
   - [x] **Bomber Express** (`bomber-express`, Bomberman style) — *Shipped 2026-10-03 (catalog I5,
         D22).* Grid arena with destructible crates;
@@ -385,7 +387,7 @@ cluster below. Catalog section F.
         lifebuoy second life).* Sumo Push on an ice floe that melts and shrinks over
         time (low-friction, slippery physics; cracking edge tiles). Last one standing. Can reuse the
         `sumo` physics with lower friction + a shrinking, seeded melt pattern. Likely mobile-friendly.
-- [ ] **Squid Game-style elimination cluster (requested 2026-09-29, designs refined 2026-10-02)** —
+- [x] **Squid Game-style elimination cluster (requested 2026-09-29, designs refined 2026-10-02)** —
       short, tense, laugh-out-loud FFA rounds where the fun is watching friends get zapped. Shared
       design rules:
       - Ranked by elimination order (survivors share 1st); 30–45 s rounds that end early when only

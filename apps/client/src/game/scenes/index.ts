@@ -36,12 +36,14 @@ import { PongScene } from './PongScene'
 import { QuickDrawScene } from './QuickDrawScene'
 import { QuickMathScene } from './QuickMathScene'
 import { QuickTetrisScene } from './QuickTetrisScene'
+import { RallyStageScene } from './RallyStageScene'
 import { ReactionScene } from './ReactionScene'
 import { RoomRushScene } from './RoomRushScene'
 import { RouletteScene } from './RouletteScene'
 import { SimonScene } from './SimonScene'
 import { SinkTheFleetScene } from './SinkTheFleetScene'
 import { SnakeArenaScene } from './SnakeArenaScene'
+import { SpeedCircuitScene } from './SpeedCircuitScene'
 import { StarBlasterScene } from './StarBlasterScene'
 import { StopClockScene } from './StopClockScene'
 import { SudokuRaceScene } from './SudokuRaceScene'
@@ -100,6 +102,8 @@ export const SCENES: Readonly<Record<string, SceneCtor>> = {
   asteroids: AsteroidsScene,
   'bomber-express': BomberExpressScene,
   brawl: BrawlScene,
+  'rally-stage': RallyStageScene,
+  'speed-circuit': SpeedCircuitScene,
   'tug-of-war': TugOfWarScene,
   'bomb-relay': BombRelayScene,
   'fleet-battle': FleetBattleScene,

@@ -92,15 +92,30 @@ export interface MicroRacePoint {
 // Uniform closed Catmull-Rom through the control points, resampled every `spacing` world units by arc
 // length. Pure and deterministic — the server and the client derive the exact same polyline from a def.
 export function sampleMicroRaceTrack(def: MicroRaceTrackDef, spacing = 8): MicroRacePoint[] {
-  const pts = def.points
+  return sampleSpline(def.points, spacing, true)
+}
+
+// Catmull-Rom through `pts` (closed loop, or an open road whose ends are held), resampled every
+// `spacing` world units by arc length. Shared by every top-down racer's course.
+export function sampleSpline(
+  pts: readonly (readonly [number, number])[],
+  spacing: number,
+  closed: boolean,
+): MicroRacePoint[] {
   const n = pts.length
+  const at = (i: number): readonly [number, number] =>
+    (closed ? pts[((i % n) + n) % n] : pts[Math.max(0, Math.min(n - 1, i))]) as readonly [
+      number,
+      number,
+    ]
   const dense: MicroRacePoint[] = []
   const STEPS = 48
-  for (let i = 0; i < n; i++) {
-    const p0 = pts[(i - 1 + n) % n] as readonly [number, number]
-    const p1 = pts[i] as readonly [number, number]
-    const p2 = pts[(i + 1) % n] as readonly [number, number]
-    const p3 = pts[(i + 2) % n] as readonly [number, number]
+  const segments = closed ? n : n - 1
+  for (let i = 0; i < segments; i++) {
+    const p0 = at(i - 1)
+    const p1 = at(i)
+    const p2 = at(i + 1)
+    const p3 = at(i + 2)
     for (let s = 0; s < STEPS; s++) {
       const t = s / STEPS
       const t2 = t * t
@@ -111,10 +126,15 @@ export function sampleMicroRaceTrack(def: MicroRaceTrackDef, spacing = 8): Micro
       dense.push({ x: f(p0[0], p1[0], p2[0], p3[0]), y: f(p0[1], p1[1], p2[1], p3[1]) })
     }
   }
-  // Arc-length resample (the loop closes back onto dense[0]).
+  if (!closed) {
+    const last = pts[n - 1] as readonly [number, number]
+    dense.push({ x: last[0], y: last[1] })
+  }
+  // Arc-length resample (a closed loop runs back onto dense[0]).
   const out: MicroRacePoint[] = [{ ...(dense[0] as MicroRacePoint) }]
   let carry = 0
-  for (let i = 0; i < dense.length; i++) {
+  const spans = closed ? dense.length : dense.length - 1
+  for (let i = 0; i < spans; i++) {
     const a = dense[i] as MicroRacePoint
     const b = dense[(i + 1) % dense.length] as MicroRacePoint
     const len = Math.hypot(b.x - a.x, b.y - a.y)
@@ -126,10 +146,12 @@ export function sampleMicroRaceTrack(def: MicroRaceTrackDef, spacing = 8): Micro
     }
     carry = len - (d - spacing)
   }
-  // Drop a tail sample that would sit (almost) on top of the start sample.
-  const first = out[0] as MicroRacePoint
-  const last = out[out.length - 1] as MicroRacePoint
-  if (Math.hypot(last.x - first.x, last.y - first.y) < spacing * 0.5) out.pop()
+  if (closed) {
+    // Drop a tail sample that would sit (almost) on top of the start sample.
+    const first = out[0] as MicroRacePoint
+    const last = out[out.length - 1] as MicroRacePoint
+    if (Math.hypot(last.x - first.x, last.y - first.y) < spacing * 0.5) out.pop()
+  }
   return out
 }
 

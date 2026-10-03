@@ -9,6 +9,7 @@ import { BubblePop } from './bubblePop'
 import { BugSmash } from './bugSmash'
 import { ButtonMasher } from './buttonMasher'
 import { ColorTrap } from './colorTrap'
+import { RallyStage, SpeedCircuit } from './courseRace'
 import { JavelinThrow, LongJump } from './fieldEvent'
 import { FleetBattle } from './fleetBattle'
 import { FreezeDoll } from './freezeDoll'
@@ -100,6 +101,8 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   asteroids: () => new Asteroids() as unknown as MiniGame<unknown, unknown>,
   'bomber-express': () => new BomberExpress() as unknown as MiniGame<unknown, unknown>,
   brawl: () => new Brawl() as unknown as MiniGame<unknown, unknown>,
+  'rally-stage': () => new RallyStage() as unknown as MiniGame<unknown, unknown>,
+  'speed-circuit': () => new SpeedCircuit() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

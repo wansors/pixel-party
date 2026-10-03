@@ -47,7 +47,9 @@ cd "$WORK" && timeout 180 bun shoot.ts <tag>-phone 390x844 fruit-catch
   plus a full round's duration).
 - **Smart bots**: if `bots/<game-id>.ts` exists, all three bots play that game for real — its default
   export `(snapshot, myPlayerId) => input | input[] | null` runs every 150 ms per bot. Add one when a
-  game's key moments (a room locking, a lap, a knockout) never happen with junk inputs.
+  game's key moments (a room locking, a lap, a knockout) never happen with junk inputs. Strategies
+  that need shared game data (the racers' course geometry) import it from `$PP_REPO` — run
+  `PP_REPO=<repo root> bun shoot.ts …` for those.
 - Team games get real teams (the lobby assigns them when the line-up has a team game). Bots never
   play properly, so opponents look idle and turn-based games mostly show waiting states.
 

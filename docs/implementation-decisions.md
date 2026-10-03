@@ -472,3 +472,17 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   hits everyone in front on the lane (crowd fights are the fun). Fighters are the lobby avatars, flipped
   to face their way, with limbs/weapons drawn in their color. The depth band is a pseudo-3D strip whose
   height isn't tied to the street's scale, so it stays playable on a portrait screen.
+- **F6 Rally Stage + F7 Speed Circuit** (`rally-stage`, `speed-circuit`, PC-first): Micro Race's car
+  engine was extracted to `raceCore` (physics with per-step tuning for surfaces/draft/boost, bumps,
+  world walls, the windowed road follower with the stray-car rescue, `formatRaceTime`) and Micro Race now
+  runs on it (its 14 tests unchanged). The shared spline sampler handles open roads (`sampleSpline`),
+  and the client's road distance field is shared too (`courseArt.roadDistanceField`). Both racers are
+  configurations of one `CourseRace` module: stage = open road, ghosts, 3 checkpoints, gravel grip;
+  circuit = closed loop, contact, 2 laps, slipstream and boost pads. Layouts are checked by tests
+  (stay on the map, ≥ 2·halfWidth + 40 between non-adjacent stretches); circuit corners were rounded
+  to radii ≥ ~64 after a measurement pass. The scene base moves one world container as a chase camera,
+  so the HUD, lights, minimap and strip stay fixed without a second camera.
+- **Lazy room route** (perf): the growing catalog pushed the initial bundle over its 2 MB budget. The
+  room is now `loadComponent`-lazy and the avatar grids moved to a Phaser-free `avatarSprites.ts`
+  (the join screen's picker had started importing Phaser through `pixelStyle`): initial bundle 2.09 MB
+  → 387 kB, the room chunk (Phaser + all scenes) loads on entering a room.

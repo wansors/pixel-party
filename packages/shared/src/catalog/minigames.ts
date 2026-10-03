@@ -547,6 +547,28 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
       'One street, everybody fighting: punch combos, kicks, throws, pipes and chicken. Last one up wins!',
     axes: ['reflexes', 'speed'],
   },
+  {
+    id: 'rally-stage',
+    name: 'Rally Stage',
+    format: 'ffa',
+    realtime: true,
+    mobileFriendly: false,
+    durationSec: 70,
+    blurb:
+      'Point-to-point against the clock: gravel slides, tarmac grips, split times. Fastest stage wins.',
+    axes: ['precision', 'speed'],
+  },
+  {
+    id: 'speed-circuit',
+    name: 'Speed Circuit',
+    format: 'ffa',
+    realtime: true,
+    mobileFriendly: false,
+    durationSec: 100,
+    blurb:
+      'Two laps wheel-to-wheel: tuck into the slipstream, hit the boost pads, take the flag first.',
+    axes: ['precision', 'reflexes'],
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

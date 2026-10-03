@@ -335,6 +335,14 @@
       "brawl": {
         "name": "Pelea Callejera",
         "blurb": "Una calle y todos a golpes: combos de puñetazos, patadas, lanzamientos, tuberías y pollo. ¡Gana el último en pie!"
+      },
+      "rally-stage": {
+        "name": "Tramo de Rally",
+        "blurb": "De punta a punta contra el reloj: la grava derrapa, el asfalto agarra y hay tiempos parciales. Gana el tramo más rápido."
+      },
+      "speed-circuit": {
+        "name": "Circuito de Velocidad",
+        "blurb": "Dos vueltas rueda con rueda: métete en el rebufo, pisa los turbos y llega primero a la bandera."
       }
     }
   },
@@ -732,6 +740,16 @@
       "wham": "¡ZAS!",
       "ko": "¡K.O.!",
       "standing": "SIGUES EN PIE"
+    },
+    "courseRace": {
+      "go": "¡YA!",
+      "rescued": "DE VUELTA A LA PISTA",
+      "finished": "¡META! P{{pos}}",
+      "hurry": "¡CORRE!",
+      "stageStatus": "PARCIAL {{cp}}/{{cps}} · {{pct}}%",
+      "split": "PARCIAL {{time}}",
+      "circuitStatus": "VUELTA {{lap}}/{{laps}} · P{{pos}}",
+      "lap": "¡VUELTA {{lap}}!"
     }
   }
 }

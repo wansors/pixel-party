@@ -52,7 +52,8 @@ Then (2026-09-28) a new sports wave (section F): F1 100 m Dash (`dash-100m`), F2
 Then (2026-10-02) the roadmap wave (D22), one game at a time: G1 Glass Bridge (`glass-bridge`), G2
 Freeze Doll (`freeze-doll`), G3 Room Rush (`room-rush`), I1 Sumo ICE (`sumo-ice`), I2 Pang (`pang`),
 I3 Star Blaster (`star-blaster`), I4 Asteroids Arena (`asteroids`), I5 Bomber Express
-(`bomber-express`), I6 Street Brawl (`brawl`). **49 mini-games total.**
+(`bomber-express`), I6 Street Brawl (`brawl`), and the racing cluster's F6 Rally Stage (`rally-stage`)
+and F7 Speed Circuit (`speed-circuit`). **51 mini-games total.**
 
 ---
 
@@ -393,6 +394,29 @@ every runner from the snapshot's `x` + `v`, so what a player sees lines up with 
 - **Win condition / Result**: finishers by time (`1:02.3`), the rest by laps + progress (`LAP 2`).
 - **Latency**: high (continuous steering) — snapshot interpolation for every car.
 
+F6 and F7 run on the same car engine as F5 (`raceCore`: arcade physics, bumps, the windowed road
+follower and the stray-car rescue), on courses bigger than a screen — the scene follows your car (a
+chase camera) with a minimap of the whole course. Cars carry their driver's lobby avatar.
+
+### F6. ✅ Rally Stage — implemented (`rally-stage`)
+- **Concept**: a point-to-point time trial on a twisty stage — two seeded layouts (forest, desert) of
+  gravel (loose: grip 4.2, 93 % top speed) and tarmac stretches.
+- **Type**: FFA, everyone at once as **ghosts** (no contact) · **Input**: as F5 · **Duration**: ~25–45 s
+  (70 s cap; 15 s finish window after the first car) · **Banter**: 💥💥 · **Mobile-friendly**: no
+- **Rules**: start lights, then race to the stage end; three checkpoints pop split times. Off the road
+  the car slows hard; straying from your stretch for 1.5 s puts you back on the road.
+- **Win condition / Result**: finish time (`0:26.8`), unfinished by distance (`64%`).
+
+### F7. ✅ Speed Circuit — implemented (`speed-circuit`)
+- **Concept**: two laps wheel-to-wheel on a proper circuit (grand-prix and night layouts, wide track,
+  kerbs and gravel run-off), faster than F5.
+- **Type**: FFA · **Input**: as F5 · **Duration**: ~50–65 s (100 s cap; 12 s finish window) ·
+  **Banter**: 💥💥💥 · **Mobile-friendly**: no
+- **Rules**: staggered grid. **Slipstream**: tucked in behind a car (≤ 140 units, in its wake, same
+  heading) gives +10 % top speed / +15 % acceleration (wind lines). **Boost pads** on two straights:
+  +25 % top speed and +60 % acceleration for 1.2 s (a flame). Contact is on.
+- **Win condition / Result**: finishing order (`0:53.3`), the rest by laps + distance (`LAP 2`).
+
 ## G. Elimination rounds — Squid Game-style (2026-10-02)
 
 Short, tense FFA rounds where watching friends get zapped is the show. Ranked by elimination order
@@ -541,13 +565,13 @@ avatar. See `implementation-decisions.md` D22.
 
 | Axis | Covered by |
 |------|------------|
-| Reflexes / reaction | A1, A6, B1, E7, F5, G2, I3 |
+| Reflexes / reaction | A1, A6, B1, E7, F5, F7, G2, I3 |
 | Attention / focus (inhibition) | E1, E3, E4, G1 |
 | Speed / endurance | A2, A9, C1, F1, F2, G3 |
 | Knowledge | A3 |
 | Mental math | E2 |
 | Memory | A4, A11, E8 |
-| Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4, I2 |
+| Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4, F6, I2 |
 | Survival / dodging | A7, A8, B3, I1, I3, I5 |
 | Nerve / chance | D1, D3, E5, G1, G2, G3 |
 | Teamwork | C1, C2, C3 |
@@ -557,7 +581,7 @@ avatar. See `implementation-decisions.md` D22.
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1–G3, I1–I6 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G3, I1–I6 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7 |
 | Team | C1, C2, C3 |
 

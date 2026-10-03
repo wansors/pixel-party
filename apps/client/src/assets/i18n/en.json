@@ -335,6 +335,14 @@
       "brawl": {
         "name": "Street Brawl",
         "blurb": "One street, everybody fighting: punch combos, kicks, throws, pipes and chicken. Last one up wins!"
+      },
+      "rally-stage": {
+        "name": "Rally Stage",
+        "blurb": "Point-to-point against the clock: gravel slides, tarmac grips, split times. Fastest stage wins."
+      },
+      "speed-circuit": {
+        "name": "Speed Circuit",
+        "blurb": "Two laps wheel-to-wheel: tuck into the slipstream, hit the boost pads, take the flag first."
       }
     }
   },
@@ -732,6 +740,16 @@
       "wham": "WHAM!",
       "ko": "K.O.!",
       "standing": "STILL STANDING"
+    },
+    "courseRace": {
+      "go": "GO!",
+      "rescued": "BACK ON THE ROAD",
+      "finished": "FINISHED P{{pos}}!",
+      "hurry": "HURRY UP!",
+      "stageStatus": "SPLIT {{cp}}/{{cps}} · {{pct}}%",
+      "split": "SPLIT {{time}}",
+      "circuitStatus": "LAP {{lap}}/{{laps}} · P{{pos}}",
+      "lap": "LAP {{lap}}!"
     }
   }
 }

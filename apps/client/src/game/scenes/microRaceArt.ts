@@ -5,6 +5,7 @@ import {
   type MicroRaceTheme,
   sampleMicroRaceTrack,
 } from '@pp/shared'
+import { roadDistanceField } from './courseArt'
 
 // Pixel-art painter for the Micro Race tabletops. Pure (no Phaser): paints one track into an RGBA
 // buffer at TEXEL world units per pixel — the tabletop surface for its theme, a few props lying on the
@@ -187,49 +188,20 @@ function cerealColor(wx: number, wy: number): Rgb | null {
 
 // --- Road -----------------------------------------------------------------------------------------
 
-// Per-texel distance to the centreline + nearest segment index, by stamping a box around every
-// centreline segment (true point-to-segment distance, so the road edges come out straight).
-function distanceField(
-  samples: MicroRacePoint[],
-  reach: number,
-): {
-  dist: Float32Array
-  idx: Int32Array
-} {
-  const dist = new Float32Array(TRACK_TEX_W * TRACK_TEX_H).fill(Number.POSITIVE_INFINITY)
-  const idx = new Int32Array(TRACK_TEX_W * TRACK_TEX_H).fill(-1)
-  const rt = Math.ceil(reach / TEXEL) + 4
-  samples.forEach((s, i) => {
-    const e = samples[(i + 1) % samples.length] as MicroRacePoint
-    const ex = e.x - s.x
-    const ey = e.y - s.y
-    const len2 = ex * ex + ey * ey || 1
-    const tx0 = Math.floor(s.x / TEXEL)
-    const ty0 = Math.floor(s.y / TEXEL)
-    for (let ty = Math.max(0, ty0 - rt); ty <= Math.min(TRACK_TEX_H - 1, ty0 + rt); ty++) {
-      for (let tx = Math.max(0, tx0 - rt); tx <= Math.min(TRACK_TEX_W - 1, tx0 + rt); tx++) {
-        const px = tx * TEXEL + TEXEL / 2 - s.x
-        const py = ty * TEXEL + TEXEL / 2 - s.y
-        const u = Math.max(0, Math.min(1, (px * ex + py * ey) / len2))
-        const d = Math.hypot(px - ex * u, py - ey * u)
-        const k = ty * TRACK_TEX_W + tx
-        if (d < (dist[k] as number)) {
-          dist[k] = d
-          idx[k] = i
-        }
-      }
-    }
-  })
-  return { dist, idx }
-}
-
 export function paintMicroTrack(track: number): Uint8ClampedArray {
   const def = MICRO_RACE_TRACKS[track] ?? (MICRO_RACE_TRACKS[0] as (typeof MICRO_RACE_TRACKS)[0])
   const samples = sampleMicroRaceTrack(def, SPACING)
   const hw = def.halfWidth
   const surface = SURFACES[def.theme]
   const props = PROPS[def.theme]
-  const { dist, idx } = distanceField(samples, hw + SHOULDER + 12)
+  const { dist, idx } = roadDistanceField(
+    samples,
+    TRACK_TEX_W,
+    TRACK_TEX_H,
+    TEXEL,
+    hw + SHOULDER + 12,
+    true,
+  )
   // Start line frame: sample 0 and its tangent.
   const s0 = samples[0] as MicroRacePoint
   const s1 = samples[1] as MicroRacePoint
