@@ -6,7 +6,7 @@ session-wide ranking.
 
 <p align="center">
   <a href="docs/promo/pixel-party-promo-share.mp4">
-    <img src="docs/promo/preview.gif" alt="Pixel Party — a quick look at some of the 40 mini-games" width="640">
+    <img src="docs/promo/preview.gif" alt="Pixel Party — a quick look at some of the 55 mini-games" width="640">
   </a>
   <br>
   <sub>▶ <a href="docs/promo/pixel-party-promo-share.mp4">Watch the 42-second trailer</a> (with sound) ·

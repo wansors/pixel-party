@@ -391,14 +391,14 @@
         <div id="m-phone" class="phone" style="left: 250px; top: 36px; width: 300px; height: 648px"></div>
         <div id="m-shout" class="abs shout" style="left: 0; top: 0"></div>
         <div id="m-name" class="abs gname" style="left: 0; top: 0"></div>
-        <div id="m-more" class="abs center-x h-big stroke shadow" style="top: 300px; color: var(--magenta)">+ 19 MORE GAMES</div>
+        <div id="m-more" class="abs center-x h-big stroke shadow" style="top: 300px; color: var(--magenta)">+ 39 MORE GAMES</div>
       </section>
 
       <!-- 5 · Formats -->
       <section id="s-formats">
         <div id="f-h1" class="abs center-x h-big shadow" style="top: 60px; color: var(--amber)">EVERY WAY TO PLAY</div>
         <div id="f-card0" class="card" style="left: 40px; top: 170px">
-          <div class="thumb"><img src="assets/m-masher.webp" alt="" /></div>
+          <div class="thumb"><img src="assets/f-ffa.webp" alt="" /></div>
           <div class="body"><div class="name" style="color: var(--lime)">FREE-FOR-ALL</div><div class="sub">ALL AGAINST ALL</div></div>
         </div>
         <div id="f-card1" class="card" style="left: 460px; top: 170px">
@@ -406,14 +406,14 @@
           <div class="body"><div class="name" style="color: var(--red)">TEAM BATTLES</div><div class="sub">RED VS BLUE</div></div>
         </div>
         <div id="f-card2" class="card" style="left: 880px; top: 170px">
-          <div class="thumb"><img src="assets/m-fleet.webp" alt="" /></div>
+          <div class="thumb"><img src="assets/f-duel.webp" alt="" /></div>
           <div class="body"><div class="name" style="color: var(--cyan)">1V1 DUELS</div><div class="sub">HEAD TO HEAD</div></div>
         </div>
       </section>
 
       <!-- 6 · Standings + podium -->
       <section id="s-podium">
-        <div id="p-result" class="crt" style="left: 60px; top: 150px; width: 560px; height: 364px"><img src="assets/result-team.webp" alt="" /></div>
+        <div id="p-result" class="crt" style="left: 60px; top: 150px; width: 560px; height: 364px"><img src="assets/result-round.webp" alt="" /></div>
         <div id="p-final" class="crt" style="left: 560px; top: 120px; width: 680px; height: 442px"><img src="assets/final-podium.webp" alt="" /></div>
         <div id="p-h1" class="abs h-mid stroke shadow" style="left: 60px; top: 56px; color: var(--cyan)">CLIMB THE STANDINGS</div>
         <div id="p-h2" class="abs center-x h-big stroke shadow" style="top: 596px; color: var(--amber)">CROWN THE CHAMPION</div>
@@ -428,7 +428,7 @@
       <!-- 8 · End card -->
       <section id="s-end">
         <h1 id="e-logo" class="abs center-x logo shadow" style="top: 190px"></h1>
-        <div id="e-sub" class="abs center-x label" style="top: 322px; color: var(--dim)">35 MINI-GAMES · ONE ROOM · ENDLESS BRAGGING RIGHTS</div>
+        <div id="e-sub" class="abs center-x label" style="top: 322px; color: var(--dim)">55 MINI-GAMES · ONE ROOM · ENDLESS BRAGGING RIGHTS</div>
         <div id="e-play" class="abs center-x h-big stroke shadow" style="top: 400px; color: var(--amber)">PRESS START</div>
         <div id="e-term" class="abs terminal mono" style="left: 340px; top: 520px; width: 600px; text-align: center">$ bun install &amp;&amp; bun run dev</div>
       </section>
@@ -510,21 +510,21 @@
 
       // ── Montage shots ───────────────────────────────────────────────────────────────────────────
       const SHOTS = [
-        { img: 'm-masher', shout: 'MASH!', name: 'BUTTON MASHER', color: '#ffcf4b' },
-        { img: 'm-fruit', shout: 'CATCH!', name: 'FRUIT CATCH', color: '#8be94b' },
-        { img: 'm-bomb', shout: 'BOOM!', name: 'BOMB RELAY', color: '#ff7b3d' },
+        { img: 'm-glass', shout: 'GULP!', name: 'GLASS BRIDGE', color: '#29d3f2' },
+        { img: 'm-freeze', shout: 'FREEZE!', name: 'FREEZE DOLL', color: '#ff5252' },
+        { img: 'm-bomber', shout: 'BOOM!', name: 'BOMBER EXPRESS', color: '#ff7b3d' },
         { img: 'p-quickdraw', shout: 'DRAW!', name: 'QUICK DRAW', color: '#ffcf4b', phone: true },
-        { img: 'm-tetris', shout: 'STACK!', name: 'LINE CLEAR SPRINT', color: '#29d3f2' },
-        { img: 'm-roulette', shout: 'SPIN!', name: 'PIXEL ROULETTE', color: '#ff3e7f' },
-        { img: 'p-pong', shout: 'RALLY!', name: 'PIXEL PONG', color: '#8be94b', phone: true },
-        { img: 'm-fleet', shout: 'FIRE!', name: 'SINK THE FLEET', color: '#ff5252' },
-        { img: 'm-bubble', shout: 'POP!', name: 'BUBBLE POP', color: '#29d3f2' },
-        { img: 'p-sumo', shout: 'SHOVE!', name: 'SUMO PUSH', color: '#ff7b3d', phone: true },
-        { img: 'm-trivia', shout: 'THINK FAST!', name: 'LIGHTNING QUIZ', color: '#b06bff' },
-        { img: 'm-maze', shout: 'RACE!', name: 'MAZE SPRINT', color: '#8be94b' },
+        { img: 'm-brawl', shout: 'POW!', name: 'STREET BRAWL', color: '#ff3e7f' },
+        { img: 'm-asteroids', shout: 'BLAST!', name: 'ASTEROIDS ARENA', color: '#b06bff' },
+        { img: 'p-jumprope', shout: 'SKIP!', name: 'JUMP ROPE', color: '#8be94b', phone: true },
+        { img: 'm-weird', shout: 'NO WAY!', name: 'WEIRD TRIVIA', color: '#ffcf4b' },
+        { img: 'm-starblaster', shout: 'DODGE!', name: 'STAR BLASTER', color: '#29d3f2' },
+        { img: 'p-balloon', shout: 'PUMP!', name: 'BALLOON CHICKEN', color: '#ff3e7f', phone: true },
+        { img: 'm-sumoice', shout: 'SPLASH!', name: 'SUMO ICE', color: '#29d3f2' },
+        { img: 'm-pang', shout: 'POP!', name: 'PANG', color: '#ff7b3d' },
         { img: 'p-dash', shout: 'JUMP!', name: 'PIXEL DASH', color: '#ffcf4b', phone: true },
-        { img: 'm-pairs', shout: 'MATCH!', name: 'MATCH PAIRS', color: '#ff3e7f' },
-        { img: 'm-beat', shout: 'ON BEAT!', name: 'PIXEL BEAT', color: '#29d3f2' },
+        { img: 'm-roomrush', shout: 'RUN!', name: 'ROOM RUSH', color: '#8be94b' },
+        { img: 'm-fruit', shout: 'CATCH!', name: 'FRUIT CATCH', color: '#4be3c3' },
         { img: 'm-tug', shout: 'PULL!', name: 'TUG OF WAR', color: '#5b8cff' },
       ]
       // One <img> per shot, already in its frame: a cut only toggles visibility, so no rendered frame
@@ -641,7 +641,7 @@
           if (span.textContent !== ' ') li++
         }
         // Tagline types on (one character per 32nd note, done within the bar), subline pops on bar 3.
-        const text = '35 MINI-GAMES · ONE ROOM · ENDLESS BRAGGING RIGHTS'
+        const text = '55 MINI-GAMES · ONE ROOM · ENDLESS BRAGGING RIGHTS'
         const n = Math.floor(clamp((t - bar(2)) / (B / 8), 0, text.length))
         $('tagline').textContent = text.slice(0, n)
         pop($('subline'), t, bar(3), { dy: 20 })
@@ -665,10 +665,10 @@
         const lp = prog(t, bar(6), bar(6) + 0.5)
         css($('l-laptop'), { x: -900 * (1 - outCubic(lp)), s: lerp(0.9, 1, outCubic(lp)) })
         slam($('l-h1'), t, beat(25), { from: 1.6 })
-        const count = Math.round(35 * outCubic(prog(t, beat(26), bar(7) + 2 * B)))
+        const count = Math.round(55 * outCubic(prog(t, beat(26), bar(7) + 2 * B)))
         const cnt = $('l-count')
         cnt.textContent = String(count)
-        css(cnt, { o: t < beat(26) ? 0 : 1, s: count === 35 ? 1 + 0.25 * kick(t) : 1 })
+        css(cnt, { o: t < beat(26) ? 0 : 1, s: count === 55 ? 1 + 0.25 * kick(t) : 1 })
         pop($('l-count-label'), t, beat(26), { dy: 10 })
         for (let i = 0; i < 3; i++) pop($(`l-tag${i}`), t, beat(29 + i), { dy: 30 })
       }

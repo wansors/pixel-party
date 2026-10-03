@@ -9,7 +9,7 @@ lands on the beat grid).
 | `promo.html` | The video. Every frame is a pure function of the timeline position (`window.__seek(t)`), so it plays live in a browser and renders deterministically. |
 | `assets/*.webp` | Real in-game screenshots (desktop 1280x800, phone 390x844) captured with the `playtest-screenshots` skill. |
 | `render.ts` | Headless-Chrome → ffmpeg renderer (MP4 with the soundtrack, or single stills). |
-| `pixel-party-promo.mp4` | Rendered master: 1920x1080, 30 fps, h264 CRF 18 + AAC, 41.8 s (~24 MB). |
+| `pixel-party-promo.mp4` | Rendered master: 1920x1080, 30 fps, h264 CRF 18 + AAC, 41.8 s (~24 MB). Last render: 2026-10-03 (55 games, avatar cast). |
 | `pixel-party-promo-share.mp4` | Lighter copy for chats/social (CRF 24, ~12 MB). |
 | `poster.png` | 1080p thumbnail (logo + tagline frame). |
 | `preview.gif` | ~7 s looping montage (640x360, 10 fps) used as the hero image of the repo README. |
@@ -27,8 +27,8 @@ ffmpeg -y -ss 14.07 -t 6.86 -i pixel-party-promo.mp4 -vf "fps=10,scale=640:-1:fl
 | 0–1 | CRT power-on, INSERT COIN, the logo drops in letter by letter |
 | 2–3 | Tagline types on, pixel confetti |
 | 4–5 | "Grab your phone. Join with a code." — phone mockup, room code typing |
-| 6–7 | "The host picks the line-up" — laptop mockup of the lobby, 35 counter |
-| 8–15 | Montage: 16 games, one cut every 2 beats, each with a slammed shout word; "+19 more games" |
+| 6–7 | "The host picks the line-up" — laptop mockup of the lobby, 55 counter |
+| 8–15 | Montage: 16 games, one cut every 2 beats, each with a slammed shout word; "+39 more games" |
 | 16–17 | Every way to play: free-for-all / team battles / 1v1 duels |
 | 18–19 | Climb the standings → crown the champion (results + podium) |
 | 20–21 | Built for LAN parties: 8 feature chips popping on the beat |
@@ -62,4 +62,12 @@ Shoot fresh screenshots with the `playtest-screenshots` skill (desktop `1280x800
 convert the ones you want to WebP into `assets/` (the montage expects the names listed in `SHOTS` in
 `promo.html`; phone shots are the `p-*` files and render inside the phone mockup), then re-render.
 To add or reorder montage shots, edit `SHOTS` — each one lasts 2 beats, so keep the list at 16 or
-change the montage's bar range together with the scenes after it.
+change the montage's bar range together with the scenes after it. The counts (tagline, lobby counter,
+"+N more games", end card) are hard-coded — update them when the catalog grows.
+
+Current montage (2026-10-03): Glass Bridge, Freeze Doll, Bomber Express, Quick Draw (phone), Street
+Brawl, Asteroids Arena, Jump Rope (phone), Weird Trivia, Star Blaster, Balloon Chicken (phone), Sumo
+ICE, Pang, Pixel Dash (phone), Room Rush, Fruit Catch, Tug of War. The format cards use `f-ffa`
+(Bomber Express), `m-tug` and `f-duel` (Quick Draw); the podium scene uses `result-round` and
+`final-podium`. Pick frames where a cut's white flash won't hide the action (the flash covers the first
+~0.13 s of each shot).
