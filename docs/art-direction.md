@@ -130,9 +130,12 @@ scenes. Scenes never draw their own player figure. The per-game audit and migrat
 - **Expressions** (the eyes): `idle` (with an automatic blink every ~3.4 s, offset per player),
   `happy` (won, safe, scored), `hurt` (a hit, stun or trip; brief), `ko` (eliminated; stays), and `blink`.
 - **Size**: display at whole steps of the 16-px grid (16 / 32 / 48 / 64…; 24 is the one half-step for
-  small UI). Use `avatarPx()`. Never stretch to an arbitrary size: uneven pixels look broken.
-- **Motion**: no walk-cycle frames. Characters move with juice instead: a bob, a ±6° waddle, a hop
-  arc, a squash on landing, a recoil on hits. All of it is tweened on the same sprite.
+  small UI). Use `avatarPx(maxPx)`, which gives the largest step that fits. Never stretch to an
+  arbitrary size: uneven pixels look broken. The one exception is a size that is a gameplay contract
+  (Pixel Rain's hit zone).
+- **Motion**: two stride frames (`AvatarSprite.walk()`): on the side view the feet pass under the body;
+  on the front and back views one foot lifts, then the other. On top of that, juice tweened on the same
+  sprite: a bob, a lean, a ±6° waddle, a hop arc, a squash on landing, a recoil on hits.
 - **Grounding**: a standing character gets a soft dark ellipse shadow (~0.8× its width, alpha ~0.35).
 - **Who is who on the canvas**:
   - **You**: an amber ▼ with a dark outline, bobbing above your own character (`YouMarker`). It is

@@ -1,7 +1,9 @@
 import { PALETTE, type PixelHoopsSnapshot, toleranceForShot } from '@pp/shared'
 import Phaser from 'phaser'
+import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, floatText, punch, ring, shake, showBanner } from '../fx'
 import { bodyStyle, ensurePixelGrid, headlineStyle, hexToCss, shade } from '../pixelStyle'
+import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 const CHARGE_MS = 1200
@@ -111,6 +113,8 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
   private hint?: Phaser.GameObjects.Text
   private waitText?: Phaser.GameObjects.Text
   private banner?: Phaser.GameObjects.Text
+  // Everyone's score at a glance (avatar + name + points) under the HUD.
+  private strip?: PlayerStrip
   private ballKey = ''
   private fireKey = ''
   private cell = 4
@@ -119,6 +123,10 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
   private hoopLo = 0
   private floorY = 0
   private restX = 0
+  // You: your avatar beside the ball, facing the hoop (happy on a basket, hurt on a miss).
+  private shooter?: AvatarSprite
+  private faceUntil = 0
+  private face: 'happy' | 'hurt' = 'happy'
   private restY = 0
   private ballSize = 0
   private meterX = 0
@@ -154,7 +162,17 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
 
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
-    const top = this.top
+    const stripSize = compact ? 11 : 13
+    const stripH = PlayerStrip.rowH(stripSize)
+    this.strip = new PlayerStrip(
+      this,
+      width / 2,
+      this.top + 2 + stripH / 2,
+      width - 24,
+      stripSize,
+      1,
+    )
+    const top = this.top + stripH + 2
     this.cell = compact ? 3 : height > 640 ? 5 : 4
     const legendFire = { o: 0x7a1f10, b: PALETTE.orange, h: PALETTE.amber, s: PALETTE.red }
     this.ballKey = ensurePixelGrid(this, {
@@ -277,6 +295,22 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
       .image(this.restX, this.restY, this.ballKey)
       .setDisplaySize(this.ballSize, this.ballSize)
       .setDepth(8)
+    const shooterPx = avatarPx(this.ballSize * 1.3)
+    this.shooter = new AvatarSprite(
+      this,
+      this.state.avatarOf(this.selfId),
+      this.state.colorOf(this.selfId),
+      shooterPx,
+      'side',
+    )
+    this.shooter.image
+      .setOrigin(0.5, 1)
+      .setPosition(
+        Math.max(shooterPx / 2, this.restX - this.ballSize * 0.5 - shooterPx * 0.4),
+        this.floorY,
+      )
+      .setDepth(7)
+    this.faceUntil = 0
 
     this.comboText = this.add
       .text(16, top + (compact ? 14 : 20), '', headlineStyle(16, PALETTE.amber))
@@ -455,8 +489,16 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
     })
   }
 
-  protected frame(snap: PixelHoopsSnapshot | null): void {
+  protected frame(snap: PixelHoopsSnapshot | null, time: number): void {
+    this.shooter?.setExpression(time < this.faceUntil ? this.face : 'idle').tick(time)
     if (!snap) return
+    this.strip?.set(
+      Object.keys(snap.scores).map((id) => ({
+        text: `${this.label(id)} ${snap.scores[id] ?? 0}`,
+        avatar: this.state.avatarOf(id),
+        color: this.state.colorOf(id),
+      })),
+    )
     const shot = snap.shots[this.selfId] ?? null
     const myScore = snap.scores[this.selfId] ?? 0
     const combo = snap.combos[this.selfId] ?? 0
@@ -541,6 +583,8 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
     if (!outcome) return
     const rimY = this.hoopY(this.hoop.t)
     const ball = p.ball
+    this.face = outcome.made ? 'happy' : 'hurt'
+    this.faceUntil = this.time.now + 900
     if (outcome.made) {
       this.sfx.coin()
       // Drop through the net: behind the front rim + net, in front of the back rim.

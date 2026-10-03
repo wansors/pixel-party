@@ -9,6 +9,7 @@ import {
   hexToCss,
   shade,
 } from '../pixelStyle'
+import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 const CHOICES = 4
@@ -47,6 +48,8 @@ export class MemoryFlashScene extends MiniGameScene<MemoryFlashSnapshot> {
   private question?: Phaser.GameObjects.Text
   private waitText?: Phaser.GameObjects.Text
   private banner?: Phaser.GameObjects.Text
+  // Everyone's score at a glance (avatar + name + points) under the HUD.
+  private strip?: PlayerStrip
   private pixels: Phaser.GameObjects.Image[] = []
   private buttons: ChoiceBtn[] = []
   private boardCX = 0
@@ -105,8 +108,18 @@ export class MemoryFlashScene extends MiniGameScene<MemoryFlashSnapshot> {
 
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
+    const stripSize = compact ? 11 : 13
+    const stripH = PlayerStrip.rowH(stripSize)
+    this.strip = new PlayerStrip(
+      this,
+      width / 2,
+      this.top + 2 + stripH / 2,
+      width - 24,
+      stripSize,
+      1,
+    )
     const cx = width / 2
-    const top = this.top
+    const top = this.top + stripH + 2
     const promptSize = compact ? 16 : 24
     const promptY = top + (compact ? 22 : 30)
     this.prompt = this.add
@@ -333,6 +346,13 @@ export class MemoryFlashScene extends MiniGameScene<MemoryFlashSnapshot> {
 
   protected frame(snap: MemoryFlashSnapshot | null): void {
     if (!snap) return
+    this.strip?.set(
+      Object.keys(snap.scores).map((id) => ({
+        text: `${this.label(id)} ${snap.scores[id] ?? 0}`,
+        avatar: this.state.avatarOf(id),
+        color: this.state.colorOf(id),
+      })),
+    )
     const board = snap.boards[this.selfId] ?? null
     const myScore = snap.scores[this.selfId] ?? 0
     this.hud?.setScore(this.t('game.common.correct', { n: myScore }))

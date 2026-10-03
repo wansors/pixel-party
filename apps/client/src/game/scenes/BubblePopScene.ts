@@ -1,5 +1,6 @@
 import { type BubblePopBoard, type BubblePopSnapshot, PALETTE } from '@pp/shared'
 import Phaser from 'phaser'
+import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, floatText, punch, ring, shake, showBanner } from '../fx'
 import { bodyStyle, ensurePixelGrid, ensurePixelOrb, headlineStyle, shade } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
@@ -52,6 +53,8 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
   private ghost?: Phaser.GameObjects.Image
   private blocked?: Phaser.GameObjects.Text
   private cannon?: Phaser.GameObjects.Image
+  // You: your avatar manning the cannon (stands beside it, on the side with room).
+  private gunner?: AvatarSprite
   private loaded?: Phaser.GameObjects.Image
   private hint?: Phaser.GameObjects.Text
   private waitText?: Phaser.GameObjects.Text
@@ -199,12 +202,33 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
       .image(this.cellX(this.aim), this.launcherY + this.cell * 0.42, cannonKey)
       .setDisplaySize(this.cell * 1.3, this.cell * 0.65)
       .setDepth(4)
+    this.gunner = new AvatarSprite(
+      this,
+      this.state.avatarOf(this.selfId),
+      this.state.colorOf(this.selfId),
+      avatarPx(this.cell * 1.1),
+      'side',
+    )
+    this.gunner.image.setOrigin(0.5, 1).setDepth(4)
+    this.placeGunner(this.cellX(this.aim))
     this.loaded = this.add
       .image(this.cellX(this.aim), this.launcherY, bubbleKey(1))
       .setDisplaySize(this.cell - 2, this.cell - 2)
       .setDepth(5)
     this.drawLanes()
     this.built = true
+  }
+
+  // Beside the cannon, facing it: on its right, or on its left at the last column.
+  private placeGunner(x: number): void {
+    const g = this.gunner
+    if (!g) return
+    const right = this.aim < this.cols - 1
+    g.face(right ? -1 : 1)
+    g.image.setPosition(
+      Math.round(x + (right ? 1 : -1) * this.cell * 1.05),
+      Math.round(this.launcherY + this.cell * 0.78),
+    )
   }
 
   private cellX(col: number): number {
@@ -259,6 +283,7 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
     const x = this.cellX(next)
     this.cannon?.setX(x)
     this.loaded?.setX(x)
+    this.placeGunner(x)
   }
 
   private myBoard(): BubblePopBoard | null {
@@ -285,6 +310,7 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
     this.flying++
     this.loaded?.setVisible(false)
     if (this.cannon) punch(this, this.cannon, -0.12, 60)
+    if (this.gunner) punch(this, this.gunner.image, 0.1, 60)
     this.tweens.add({
       targets: shot,
       y: toY,
@@ -317,9 +343,10 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
     return 0
   }
 
-  protected frame(snap: BubblePopSnapshot | null): void {
+  protected frame(snap: BubblePopSnapshot | null, time: number): void {
     if (!snap) return
     if (!this.built) this.build(snap)
+    this.gunner?.tick(time)
     const board = snap.boards[this.selfId]
     if (!board) return
     this.hud?.setScore(this.t('game.common.pts', { n: board.score }))
@@ -430,5 +457,6 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
     this.hint?.setVisible(false)
     this.cannon?.setVisible(false)
     this.loaded?.setVisible(false)
+    this.gunner?.setExpression('happy')
   }
 }

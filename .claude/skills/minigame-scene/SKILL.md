@@ -53,14 +53,23 @@ Shared kit — reuse before writing a private helper (duplicates were hoisted ou
   buttons, tiles, cards), `ensureCardTexture` (+ `CARD_FACE`/`CARD_INK`), `fitText(text, maxW, maxSize)`
   / `fitFontSize(str, maxW, maxSize)` (crisp pixel-font sizes), `teamColor(team)` (0xRRGGBB), `shade`,
   `hexToCss`, `headlineStyle` (Press Start 2P) / `bodyStyle` (monospace).
-- `game/avatars.ts`: `ensureAvatarTexture(scene, this.state.avatarOf(id), this.state.colorOf(id))` —
-  draw players as the avatar they picked in the lobby (8×8 grid, tinted in their color) instead of a
-  per-scene figure.
+- **Players are always their lobby avatar** (`art-direction.md` §6.1; never a per-scene figure):
+  - `game/avatars.ts`: `new AvatarSprite(scene, avatarOf(id), colorOf(id), avatarPx(maxPx), pose)`
+    gives you `.image` to position and tween. Then `.setPose('front'|'side'|'back')`, `.face(dx)`
+    (side view, flip), `.faceMotion(dx, dy)` (top-down 4-way facing), `.walk(moving, time)` (stride
+    frames), `.setExpression('idle'|'happy'|'hurt'|'ko')`, and `.tick(time)` once per frame (it also
+    blinks).
+  - `ensureAvatarTexture(scene, avatar, color, pixel, pose, expression, step)` for static icons
+    (pixel 1 = 16 px).
+  - `avatarPx()` keeps sizes on crisp 16-px steps.
+- `game/playerMarks.ts`: `YouMarker` (the one "this is you" ▼; `.place(x, topOfSprite, time)`),
+  `nameTagStyle(size, color)`, `addShadow(scene, size, depth)`.
 - Elimination rounds: `fx.eliminate(scene, x, y, color, this.t('game.common.eliminated'))` (burst + ring
   + stamp + shake; play `this.sfx.eliminated()` once per batch), `this.hud?.setCenter(this.t(
   'game.common.left', { n, total }))` for the survivors chip, `game.common.spectating` for the out state.
-- `game/playerStrip.ts`: `PlayerStrip` — wrapping row of "■ NAME stat" chips in identity colors (how
-  everyone else is doing).
+- `game/playerStrip.ts`: `PlayerStrip` — wrapping row of chips in identity colors (how everyone else is
+  doing). Pass `avatar: this.state.avatarOf(id)` so each chip leads with the player's avatar (KO face
+  when `dim`).
 - `netcode/SnapshotInterpolator` for real-time motion (see `FruitCatchScene`).
 - `setColor` on a Text is cheap to repeat (a boot-time guard skips unchanged colors), but prefer
   updating texts only when their value changes.

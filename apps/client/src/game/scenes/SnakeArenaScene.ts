@@ -1,5 +1,6 @@
 import { type Cell, PALETTE, type SnakeSnapshot, type SnakeView } from '@pp/shared'
 import type Phaser from 'phaser'
+import { ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, flash, floatText, punch, shake, showBanner } from '../fx'
 import {
   bodyStyle,
@@ -65,6 +66,8 @@ function fitGrid(n: number, w: number, h: number, labelH: number, gap: number, m
 
 interface Rival {
   id: string
+  // Their avatar before the name (KO face once out).
+  icon: Phaser.GameObjects.Image
   gfx: Phaser.GameObjects.Graphics
   out: Phaser.GameObjects.Text
   len: Phaser.GameObjects.Text
@@ -419,9 +422,12 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
       const x = x0 + col * (size + gap)
       const y = y0 + row * (size + labelH + gap) + labelH
       const color = this.state.colorOf(id)
-      const maxChars = Math.max(3, Math.floor((size * 0.7) / (font * 0.6)))
+      const maxChars = Math.max(3, Math.floor((size * 0.7 - 19) / (font * 0.6)))
+      const icon = this.add
+        .image(x, y - 2, ensureAvatarTexture(this, this.state.avatarOf(id), color, 1))
+        .setOrigin(0, 1)
       this.add
-        .text(x, y - 3, this.state.nameOf(id).slice(0, maxChars), bodyStyle(font, color))
+        .text(x + 19, y - 3, this.state.nameOf(id).slice(0, maxChars), bodyStyle(font, color))
         .setOrigin(0, 1)
       const len = this.add
         .text(x + size, y - 3, '', headlineStyle(pixelFont, PALETTE.text))
@@ -441,7 +447,7 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
         .setOrigin(0.5)
         .setDepth(5)
         .setVisible(false)
-      this.rivals.push({ id, gfx, out, len, x, y, size, dead: false })
+      this.rivals.push({ id, icon, gfx, out, len, x, y, size, dead: false })
     })
   }
 
@@ -470,6 +476,16 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
         .setColor(hexToCss(view.alive ? PALETTE.text : PALETTE.dim))
       if (!view.alive && !rival.dead) {
         rival.dead = true
+        rival.icon.setTexture(
+          ensureAvatarTexture(
+            this,
+            this.state.avatarOf(rival.id),
+            this.state.colorOf(rival.id),
+            1,
+            'front',
+            'ko',
+          ),
+        )
         rival.out.setVisible(true)
         if (!first) {
           this.sfx.pop()

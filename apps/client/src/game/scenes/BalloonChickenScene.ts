@@ -1,5 +1,6 @@
 import { type BalloonChickenSnapshot, type BalloonPlayer, PALETTE } from '@pp/shared'
 import type Phaser from 'phaser'
+import { AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, flash, floatText, punch, shake, showBanner } from '../fx'
 import {
   bodyStyle,
@@ -95,6 +96,8 @@ const pointsOf = (p: BalloonPlayer, ppp: number): number =>
 
 interface Token {
   id: string
+  // The rival's avatar beside their name (KO face once burst, happy once cashed).
+  icon: Phaser.GameObjects.Image
   balloon: Phaser.GameObjects.Image
   scrap: Phaser.GameObjects.Image
   coin: Phaser.GameObjects.Image
@@ -124,6 +127,8 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
   private banner?: Phaser.GameObjects.Text
   private status?: Phaser.GameObjects.Text
   private pump?: Button
+  // You: your avatar working the pump (sweating as it grows, KO on a burst, happy on a cash-out).
+  private pumper?: AvatarSprite
   private cash?: Button
   private tokens: Token[] = []
   private knot = { x: 0, y: 0 }
@@ -183,6 +188,18 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
       .setDisplaySize(pumpW, pumpH * 0.72)
       .setDepth(3)
     this.handleY = barrel.y - barrel.displayHeight + 4
+    const pumperPx = avatarPx(pumpH * 0.75)
+    this.pumper = new AvatarSprite(
+      this,
+      this.state.avatarOf(this.selfId),
+      this.state.colorOf(this.selfId, PALETTE.dim),
+      pumperPx,
+      'side',
+    )
+    this.pumper.image
+      .setOrigin(0.5, 1)
+      .setPosition(cx - pumpW * 0.5 - pumperPx * 0.42, pumpBottom)
+      .setDepth(4)
     this.handle = this.add
       .image(cx, this.handleY, handleKey)
       .setOrigin(0.5, 1)
@@ -316,6 +333,17 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
     this.lastPumps = self.pumps
 
     const alive = self.status === 'pumping'
+    this.pumper
+      ?.setExpression(
+        self.status === 'burst'
+          ? 'ko'
+          : self.status === 'cashed'
+            ? 'happy'
+            : self.pumps >= 10
+              ? 'hurt'
+              : 'idle',
+      )
+      .tick(time)
     for (const b of [this.pump, this.cash]) b?.img.setAlpha(alive ? 1 : 0.3)
     if (alive) this.wobble(self.pumps, time)
     else this.status?.setText(this.t('game.common.waiting'))
@@ -339,6 +367,13 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
     this.setBalloonSize(pumps, ppp)
     if (!this.balloon || pumps < this.lastPumps) return
     punch(this, this.balloon, 0.08, 80)
+    // The pumper leans into the stroke.
+    const pumper = this.pumper?.image
+    if (pumper) {
+      this.tweens.killTweensOf(pumper)
+      pumper.setAngle(12)
+      this.tweens.add({ targets: pumper, angle: 0, duration: 140, ease: 'Quad.easeOut' })
+    }
     if (this.handle) {
       this.tweens.killTweensOf(this.handle)
       this.handle.setY(this.handleY + 10)
@@ -451,18 +486,25 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
         .image(x, baseY - size * 0.35, ensurePixelOrb(this, 'pp-balloon-coin', 8, PALETTE.amber))
         .setDisplaySize(size * 0.5, size * 0.5)
         .setVisible(false)
-      this.add
+      const name = this.add
         .text(
-          x,
+          x + 9,
           baseY + 4,
           this.state.nameOf(id).slice(0, compact ? 7 : 10),
           bodyStyle(compact ? 11 : 13, color),
         )
         .setOrigin(0.5, 0)
+      const icon = this.add
+        .image(
+          Math.round(name.x - name.width / 2 - 2),
+          name.y + name.height / 2,
+          ensureAvatarTexture(this, this.state.avatarOf(id), color, 1),
+        )
+        .setOrigin(1, 0.5)
       const value = this.add
         .text(x, baseY + (compact ? 18 : 22), '', headlineStyle(compact ? 8 : 16, PALETTE.text))
         .setOrigin(0.5, 0)
-      this.tokens.push({ id, balloon, scrap, coin, value, size, key: '' })
+      this.tokens.push({ id, icon, balloon, scrap, coin, value, size, key: '' })
     })
   }
 
@@ -480,6 +522,17 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
         .setDisplaySize(tok.size * frac * (14 / 17), tok.size * frac)
       tok.scrap.setVisible(p.status === 'burst')
       tok.coin.setVisible(p.status === 'cashed')
+      const face = p.status === 'burst' ? 'ko' : p.status === 'cashed' ? 'happy' : 'idle'
+      tok.icon.setTexture(
+        ensureAvatarTexture(
+          this,
+          this.state.avatarOf(tok.id),
+          this.state.colorOf(tok.id, PALETTE.dim),
+          1,
+          'front',
+          face,
+        ),
+      )
       const v = pointsOf(p, snap.pointsPerPump)
       tok.value
         .setText(p.status === 'burst' ? this.t('game.balloon.bust') : String(v))

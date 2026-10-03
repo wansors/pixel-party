@@ -1,5 +1,6 @@
 import { type BombRelaySnapshot, type BombRelayTeamView, PALETTE, type TeamId } from '@pp/shared'
 import type Phaser from 'phaser'
+import { ensureAvatarTexture } from '../avatars'
 import { burst, flash, floatText, punch, ring, shake } from '../fx'
 import {
   bodyStyle,
@@ -67,6 +68,8 @@ interface Column {
   barY: number
   barW: number
   chain: Phaser.GameObjects.Graphics
+  // One avatar per chain member (pooled, MAX_CHAIN).
+  chainIcons: Phaser.GameObjects.Image[]
   chainY: number
   legStartedAt: number
   relays: number
@@ -215,6 +218,11 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
     const bar = this.add.graphics()
     const chain = this.add.graphics()
     const chainY = barY + (compact ? 26 : 34)
+    const chainIcons = Array.from({ length: MAX_CHAIN }, () =>
+      this.add
+        .image(cx, chainY, ensureAvatarTexture(this, 'cat', PALETTE.dim, 1))
+        .setVisible(false),
+    )
     return {
       team,
       cx,
@@ -234,6 +242,7 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
       barY,
       barW,
       chain,
+      chainIcons,
       chainY,
       legStartedAt: 0,
       relays: 0,
@@ -426,28 +435,36 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
       col.bar.strokeRect(col.barX - 3, col.barY - 3, col.barW + 6, h + 6)
     }
 
-    // Relay chain: every member in pass order; the holder's pip is big and lit, the next one outlined.
+    // Relay chain: every member's avatar in pass order; the holder is bigger, framed and scared stiff
+    // (hurt face), the next one outlined.
     const members = view.members.slice(0, MAX_CHAIN)
-    const pip = this.scale.width < 520 ? 12 : 16
-    const step = pip + 8
+    const pip = 16
+    const step = pip + 10
     const x0 = col.cx - ((members.length - 1) * step) / 2
     const holderIdx = view.members.indexOf(view.holderId)
     const nextIdx = members.length > 1 ? (holderIdx + 1) % view.members.length : -1
     col.chain.clear()
+    col.chainIcons.forEach((icon, i) => icon.setVisible(i < members.length))
     members.forEach((id, i) => {
       const x = x0 + i * step
       const c = this.state.colorOf(id, PALETTE.dim)
       const isHolder = i === holderIdx
-      const size = isHolder ? pip + 4 : pip
-      col.chain.fillStyle(shade(c, -0.6), 1)
-      col.chain.fillRect(
-        Math.round(x - size / 2),
-        Math.round(col.chainY - size / 2) + 2,
-        size,
-        size,
-      )
-      col.chain.fillStyle(c, isHolder ? 1 : 0.75)
-      col.chain.fillRect(Math.round(x - size / 2), Math.round(col.chainY - size / 2), size, size)
+      const size = isHolder ? 24 : pip
+      col.chainIcons[i]
+        ?.setTexture(
+          ensureAvatarTexture(
+            this,
+            this.state.avatarOf(id),
+            c,
+            1,
+            'front',
+            isHolder ? 'hurt' : 'idle',
+          ),
+        )
+        .setDisplaySize(size, size)
+        .setPosition(Math.round(x), Math.round(col.chainY))
+        .setAlpha(isHolder ? 1 : 0.8)
+        .setVisible(true)
       if (isHolder) {
         col.chain.lineStyle(2, PALETTE.amber, 1)
         col.chain.strokeRect(x - size / 2 - 3, col.chainY - size / 2 - 3, size + 6, size + 6)

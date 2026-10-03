@@ -60,7 +60,8 @@ Documentation lives in `docs/`:
 - `minigame-ideas.md` — ~30 mini-game ideas ranked by priority.
 - `scoring-system.md` — scoring, ranking, handicap.
 - `technical-architecture.md` — stack & architecture (mirrors `../utopia-offline`).
-- `art-direction.md` — retro classic-arcade pixel-art visual identity.
+- `art-direction.md` — retro classic-arcade pixel-art visual identity (§6.1: the player character spec).
+- `visual-audit.md` — how every mini-game draws the players (inventory + migration to the avatar set).
 - `backlog.md` — phased roadmap (MVP first, then incremental epics); tracks implementation status.
 - `implementation-decisions.md` — KISS decision log (what was built/deferred and why; revertable).
 
@@ -87,7 +88,10 @@ Documentation lives in `docs/`:
   (`lobby/`, `intro/`, `result/`, `final/`, `live-board/`); `core/net/game-socket.service`; `game/`
   (Phaser, framework-agnostic): `GameClient`, `serverMsgRouter`, `RoundState` (snapshot + roster
   names/colors/avatars), `hud` (standard HUD strip), `fx` (juice kit, incl. the `eliminate` moment),
-  `pixelStyle` (pixel-art textures/text), `avatars` (the lobby "monigote" grids + per-player textures),
+  `pixelStyle` (pixel-art textures/text), `avatarSprites` (the Phaser-free 16×16 avatar set: front/side/
+  back views, expressions, stride frames) + `avatars` (`ensureAvatarTexture`, `AvatarSprite`,
+  `avatarPx`) + `playerMarks` (YOU marker, name tags, shadows) — every scene draws players as their
+  lobby avatar (`docs/visual-audit.md`),
   `scenes/MiniGameScene` (common base: own-snapshot guard, HUD, crash guard, relayout),
   `scenes/index` (`SCENES` id → scene map),
   `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,BalloonChickenScene,NumberRushScene,QuickMathScene,OddOneOutScene,HigherLowerScene,BugSmashScene,StopClockScene,MemoryFlashScene,SimonScene,PixelHoopsScene,PixelWeightScene,PixelSplitScene,TugOfWarScene,SinkTheFleetScene,BombRelayScene,FruitCatchScene,PixelRainScene,PixelDashScene,SnakeArenaScene,PongScene,SumoScene,MatchPairsScene,QuickDrawScene,RouletteScene,SudokuRaceScene,PixelBeatScene,FleetBattleScene,MazeSprintScene,LineClearSprintScene,QuickTetrisScene,BubblePopScene,Dash100mScene,Hurdles110mScene,LongJumpScene,JavelinThrowScene,MicroRaceScene,GlassBridgeScene,FreezeDollScene,RoomRushScene,SumoIceScene,PangScene,StarBlasterScene,AsteroidsScene,BomberExpressScene,BrawlScene,RallyStageScene,SpeedCircuitScene,HoneycombCutScene,JumpRopeScene,MarblesDuelScene}`

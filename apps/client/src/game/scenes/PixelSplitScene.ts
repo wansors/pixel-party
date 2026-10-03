@@ -2,6 +2,7 @@ import { PALETTE, type PixelSplitObject, type PixelSplitSnapshot } from '@pp/sha
 import Phaser from 'phaser'
 import { addBanner, burst, floatText, punch, ring, showBanner } from '../fx'
 import { bodyStyle, ensureBevelPanel, ensurePixelBlock, headlineStyle, shade } from '../pixelStyle'
+import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // The two halves are tinted apart so the balance reads at a glance (counts are never shown until the
@@ -35,6 +36,8 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
   private submitLabel?: Phaser.GameObjects.Text
   private waitText?: Phaser.GameObjects.Text
   private banner?: Phaser.GameObjects.Text
+  // Everyone's score at a glance (avatar + name + points) under the HUD.
+  private strip?: PlayerStrip
   private leftKey = ''
   private rightKey = ''
   private boardCX = 0
@@ -72,8 +75,18 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
 
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
+    const stripSize = compact ? 11 : 13
+    const stripH = PlayerStrip.rowH(stripSize)
+    this.strip = new PlayerStrip(
+      this,
+      width / 2,
+      this.top + 2 + stripH / 2,
+      width - 24,
+      stripSize,
+      1,
+    )
     const cx = width / 2
-    const top = this.top
+    const top = this.top + stripH + 2
     this.leftKey = ensurePixelBlock(this, 'pp-split-left', 16, LEFT_COLOR, 2)
     this.rightKey = ensurePixelBlock(this, 'pp-split-right', 16, RIGHT_COLOR, 2)
 
@@ -298,6 +311,13 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
 
   protected frame(snap: PixelSplitSnapshot | null): void {
     if (!snap) return
+    this.strip?.set(
+      Object.keys(snap.scores).map((id) => ({
+        text: `${this.label(id)} ${snap.scores[id] ?? 0}`,
+        avatar: this.state.avatarOf(id),
+        color: this.state.colorOf(id),
+      })),
+    )
     const obj = snap.objects[this.selfId] ?? null
     const myScore = snap.scores[this.selfId] ?? 0
     this.hud?.setScore(this.t('game.common.pts', { n: myScore }))

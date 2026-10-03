@@ -1,5 +1,6 @@
 import { type MiniGameId, PALETTE, type TetrisBoard, type TetrisSprintSnapshot } from '@pp/shared'
 import type Phaser from 'phaser'
+import { ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, flash, floatText, shake, showBanner } from '../fx'
 import {
   bodyStyle,
@@ -74,7 +75,8 @@ interface ArcadeButton {
 }
 
 interface RivalRow {
-  pip: Phaser.GameObjects.Rectangle
+  // The rival's avatar (KO face once topped out).
+  pip: Phaser.GameObjects.Image
   name: Phaser.GameObjects.Text
   lines: Phaser.GameObjects.Text
 }
@@ -297,11 +299,11 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
       const ry = y + i * rowH + rowH / 2
       this.rivalRows.push({
         pip: this.add
-          .rectangle(x + 5, ry, 10, 10, PALETTE.dim)
-          .setStrokeStyle(2, PALETTE.bg)
+          .image(x, ry, ensureAvatarTexture(this, 'cat', PALETTE.dim, 1))
+          .setOrigin(0, 0.5)
           .setVisible(false),
         name: this.add
-          .text(x + 16, ry, '', bodyStyle(font, PALETTE.text))
+          .text(x + 21, ry, '', bodyStyle(font, PALETTE.text))
           .setOrigin(0, 0.5)
           .setVisible(false),
         lines: this.add
@@ -489,7 +491,10 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
       const board = snap.boards[id]
       const finished = (board?.doneAt ?? 0) > 0
       const alpha = board?.toppedOut ? 0.45 : 1
-      row.pip.setFillStyle(color).setAlpha(alpha)
+      const face = board?.toppedOut ? 'ko' : finished ? 'happy' : 'idle'
+      row.pip
+        .setTexture(ensureAvatarTexture(this, this.state.avatarOf(id), color, 1, 'front', face))
+        .setAlpha(alpha)
       row.name
         .setText(`${finished ? '★' : ''}${this.state.nameOf(id).slice(0, maxChars)}`)
         .setColor(hexToCss(color))

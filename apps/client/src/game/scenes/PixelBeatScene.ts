@@ -1,5 +1,6 @@
 import { MINIGAMES_BY_ID, PALETTE, type PixelBeatSnapshot } from '@pp/shared'
 import type Phaser from 'phaser'
+import { ensureAvatarTexture } from '../avatars'
 import { burst, floatText, punch, ring, shake } from '../fx'
 import {
   bodyStyle,
@@ -47,6 +48,8 @@ function hash01(a: number, b: number): number {
 interface Chip {
   id: string
   text: Phaser.GameObjects.Text
+  // The player's avatar, just left of the text.
+  icon: Phaser.GameObjects.Image
   key: string
 }
 
@@ -380,11 +383,13 @@ export class PixelBeatScene extends MiniGameScene<PixelBeatSnapshot> {
       const inRow = Math.min(perRow, ids.length - row * perRow)
       const x = width / 2 - (inRow * chipW) / 2 + (i % perRow) * chipW + chipW / 2
       const y = this.top + row * rowH + rowH / 2
-      const text = this.add
-        .text(x, y, '', bodyStyle(compact ? 12 : 15, this.state.colorOf(id, PALETTE.dim)))
-        .setOrigin(0.5)
+      const color = this.state.colorOf(id, PALETTE.dim)
+      const text = this.add.text(x + 9, y, '', bodyStyle(compact ? 12 : 15, color)).setOrigin(0.5)
       if (id === this.selfId) text.setBackgroundColor(hexToCss(PALETTE.panelAlt))
-      this.chips.push({ id, text, key: '' })
+      const icon = this.add
+        .image(x, y, ensureAvatarTexture(this, this.state.avatarOf(id), color, 1))
+        .setOrigin(1, 0.5)
+      this.chips.push({ id, text, icon, key: '' })
     })
   }
 
@@ -399,6 +404,7 @@ export class PixelBeatScene extends MiniGameScene<PixelBeatSnapshot> {
       chip.key = key
       const name = this.label(chip.id).slice(0, compact ? 6 : 10)
       chip.text.setText(` ${name} ${score}${streak > 1 ? ` x${streak}` : ''} `)
+      chip.icon.setX(Math.round(chip.text.x - chip.text.width / 2 - 2))
     }
   }
 }

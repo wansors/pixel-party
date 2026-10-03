@@ -1,5 +1,6 @@
 import { PALETTE, type SimonPlayerView, type SimonSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
+import { ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, flash, floatText, punch, ring, shake, showBanner } from '../fx'
 import { bodyStyle, headlineStyle, hexToCss, shade } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
@@ -55,6 +56,8 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
   private halos: Phaser.GameObjects.Image[] = []
   private pips?: Phaser.GameObjects.Graphics
   private rivals: Phaser.GameObjects.Text[] = []
+  // Each rival's avatar, just left of their text (KO face once out).
+  private rivalIcons: Phaser.GameObjects.Image[] = []
   private waitText?: Phaser.GameObjects.Text
   private banner?: Phaser.GameObjects.Text
   private cellPx = 4
@@ -97,6 +100,7 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
     this.pads = []
     this.halos = []
     this.rivals = []
+    this.rivalIcons = []
     this.shownLen = -1
     this.playing = false
     this.wasAlive = true
@@ -154,6 +158,12 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
         this.add
           .text(0, rivalY, '', bodyStyle(compact ? 12 : 14, PALETTE.text))
           .setOrigin(0.5)
+          .setVisible(false),
+      )
+      this.rivalIcons.push(
+        this.add
+          .image(0, rivalY, ensureAvatarTexture(this, 'cat', PALETTE.dim, 1))
+          .setOrigin(1, 0.5)
           .setVisible(false),
       )
     }
@@ -465,15 +475,31 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
     const slot = (this.scale.width - 32) / Math.max(1, others.length)
     this.rivals.forEach((text, i) => {
       const id = others[i]
+      const icon = this.rivalIcons[i]
       text.setVisible(id !== undefined)
+      icon?.setVisible(id !== undefined)
       if (id === undefined) return
       const alive = snap.players[id]?.alive ?? false
       const name = this.label(id).slice(0, 8)
+      const color = this.state.colorOf(id, PALETTE.text)
       text
         .setText(`${name} ${snap.scores[id] ?? 0}${alive ? '' : ' ✕'}`)
-        .setColor(hexToCss(this.state.colorOf(id, PALETTE.text)))
+        .setColor(hexToCss(color))
         .setAlpha(alive ? 1 : 0.5)
-        .setX(16 + slot * (i + 0.5))
+        .setX(16 + slot * (i + 0.5) + 9)
+      icon
+        ?.setTexture(
+          ensureAvatarTexture(
+            this,
+            this.state.avatarOf(id),
+            color,
+            1,
+            'front',
+            alive ? 'idle' : 'ko',
+          ),
+        )
+        .setPosition(Math.round(text.x - text.width / 2 - 2), text.y)
+        .setAlpha(alive ? 1 : 0.5)
     })
   }
 }

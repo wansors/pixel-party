@@ -1,5 +1,6 @@
 import { PALETTE, type ReactionSnapshot } from '@pp/shared'
 import type Phaser from 'phaser'
+import { avatarPx, ensureAvatarTexture } from '../avatars'
 import { burst, flash, floatText, punch, ring, shake } from '../fx'
 import {
   bodyStyle,
@@ -23,7 +24,7 @@ const RATINGS: readonly [number, string, number][] = [
 ]
 
 interface Row {
-  swatch: Phaser.GameObjects.Rectangle
+  swatch: Phaser.GameObjects.Image
   name: Phaser.GameObjects.Text
   value: Phaser.GameObjects.Text
   frame: Phaser.GameObjects.Rectangle
@@ -134,12 +135,15 @@ export class ReactionScene extends MiniGameScene<ReactionSnapshot> {
         .rectangle(cx, y, boardW, rowH - 3, PALETTE.bg, 0.72)
         .setStrokeStyle(2, PALETTE.text)
         .setDepth(5)
+      // Each row leads with the player's avatar (texture set per player in renderBoard).
+      const icon = avatarPx(rowH - 4)
       const swatch = this.add
-        .rectangle(left + 10, y, rowH * 0.45, rowH * 0.45, PALETTE.dim)
+        .image(left + 8, y, ensureAvatarTexture(this, 'cat', PALETTE.dim, 1))
         .setOrigin(0, 0.5)
+        .setDisplaySize(icon, icon)
         .setDepth(6)
       const name = this.add
-        .text(left + 18 + rowH * 0.45, y, '', bodyStyle(compact ? 13 : 16, PALETTE.text))
+        .text(left + 14 + icon, y, '', bodyStyle(compact ? 13 : 16, PALETTE.text))
         .setOrigin(0, 0.5)
         .setDepth(6)
       const value = this.add
@@ -277,7 +281,10 @@ export class ReactionScene extends MiniGameScene<ReactionSnapshot> {
       const arrived = (typeof ms === 'number' || out) && !this.shown.has(id)
       if (arrived) this.shown.add(id)
       const color = this.state.colorOf(id, PALETTE.dim)
-      row.swatch.setFillStyle(color)
+      const face = i === 0 && typeof ms === 'number' ? 'happy' : out ? 'hurt' : 'idle'
+      row.swatch.setTexture(
+        ensureAvatarTexture(this, this.state.avatarOf(id), color, 1, 'front', face),
+      )
       row.name.setText(this.label(id)).setColor(hexToCss(color))
       row.frame.setStrokeStyle(id === this.selfId ? 2 : 0, PALETTE.text)
       if (typeof ms === 'number') {

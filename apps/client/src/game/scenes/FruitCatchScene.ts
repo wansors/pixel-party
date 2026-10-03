@@ -1,5 +1,6 @@
 import { type FruitCatchSnapshot, type FruitItem, PALETTE } from '@pp/shared'
 import Phaser from 'phaser'
+import { AvatarSprite, avatarPx } from '../avatars'
 import { burst, flash, floatText, ring, shake } from '../fx'
 import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
 import { bodyStyle, ensurePixelGrid, shade } from '../pixelStyle'
@@ -84,6 +85,13 @@ interface Seen {
 // smoothed through the snapshot interpolator and the player's own basket locally (drag / ◀ ▶).
 export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
   private basket?: Phaser.GameObjects.Image
+  // You: your lobby avatar standing in the basket, peeking over the rim (facing the way you move;
+  // happy on a catch, hurt on a bomb).
+  private catcher?: AvatarSprite
+  private lastBasketX = 0.5
+  private movedAt = 0
+  private faceUntil = 0
+  private face: 'happy' | 'hurt' = 'happy'
   private readonly sprites = new Map<number, Phaser.GameObjects.Image>()
   private readonly seen = new Map<number, Seen>()
   private readonly interp = new SnapshotInterpolator<FruitCatchSnapshot>(100)
@@ -159,6 +167,15 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
       .setOrigin(0.5, 1)
       .setDisplaySize(basketW, basketH)
       .setDepth(20)
+    const catcherPx = avatarPx(basketH * 1.5)
+    this.catcher = new AvatarSprite(this, this.state.avatarOf(this.selfId), selfColor, catcherPx)
+    this.catcher.image
+      .setOrigin(0.5, 1)
+      .setPosition(width / 2, groundY - 2 - basketH * 0.5)
+      .setDepth(19)
+    this.lastBasketX = 0.5
+    this.movedAt = 0
+    this.faceUntil = 0
     this.skyTop = this.top
     this.rimY = groundY - 2 - basketH
 
@@ -210,6 +227,19 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
 
     const { width } = this.scale
     this.basket?.setX(this.basketX * width)
+    const catcher = this.catcher
+    if (catcher) {
+      const moved = this.basketX - this.lastBasketX
+      this.lastBasketX = this.basketX
+      if (Math.abs(moved) > 0.0005) {
+        catcher.setPose('side').face(moved)
+        this.movedAt = now
+      } else if (now - this.movedAt > 180) {
+        catcher.setPose('front').image.setFlipX(false)
+      }
+      catcher.setExpression(now < this.faceUntil ? this.face : 'idle').tick(now)
+      catcher.image.setX(this.basketX * width)
+    }
 
     const latest = this.interp.latest()
     if (latest) this.trackScore(latest)
@@ -281,6 +311,8 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
     const caught = Math.abs(item.x - this.basketX) <= BASKET_HALF
     if (item.kind === 'bomb') {
       if (!caught) return
+      this.face = 'hurt'
+      this.faceUntil = this.time.now + 700
       this.sfx.wrong()
       burst(this, x, this.rimY, PALETTE.orange, 26, 320)
       burst(this, x, this.rimY, PALETTE.red, 14, 200)
@@ -290,6 +322,8 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
       return
     }
     if (caught) {
+      this.face = 'happy'
+      this.faceUntil = this.time.now + 350
       const color = FRUIT_COLORS[id % FRUIT_COLORS.length] ?? PALETTE.red
       burst(this, x, this.rimY, color, 10, 160)
       ring(this, x, this.rimY, PALETTE.lime, 36)

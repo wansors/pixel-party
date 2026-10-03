@@ -472,7 +472,12 @@ cluster below. Catalog section F.
         cracks → mouse/touch precision), **Jump Rope** (*shipped 2026-10-03, catalog G5*; a giant rope swings faster and faster; tap to
         jump in rhythm or get swept off), **Marbles Duel** (*shipped 2026-10-03, catalog G6*; 1v1 guess odd/even of the marbles your
         rival hides — quick bluffing duel).
-- [ ] **Visual consistency audit across all mini-games** — review every scene side by side and make
+- [x] **Visual consistency audit across all mini-games** — *Done 2026-10-03 (D23,
+      [`visual-audit.md`](visual-audit.md)):* a new 16×16 avatar set (front/side/back, expressions,
+      stride frames, computed outline + shading) used by the lobby and by all 54 scenes; the bespoke
+      figures (runner, rikishi, pullers, gunslingers, slime, athletes) are gone; one YOU marker, name
+      tags, shadows and avatar strips everywhere; spec in `art-direction.md` §6.1.
+      *Original request:* review every scene side by side and make
       them read as one game. Today each scene draws its own player figure (Pixel Dash's capped runner,
       Sumo's top-down rikishi, the track & field rig athlete, Micro Race's cars…) with different sizes,
       proportions, outlines and palettes, and none of them resembles the lobby's pixel avatar

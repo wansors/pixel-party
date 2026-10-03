@@ -9,6 +9,7 @@ import {
   hexToCss,
   shade,
 } from '../pixelStyle'
+import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // Cosmetic colour per shared object (the server only sends a name); anything new falls back to lime.
@@ -56,6 +57,8 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
   private submitBtn?: Button
   private waitText?: Phaser.GameObjects.Text
   private banner?: Phaser.GameObjects.Text
+  // Everyone's score at a glance (avatar + name + points) under the HUD.
+  private strip?: PlayerStrip
   private controls: (Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Visible)[] = []
   private repeat?: Phaser.Time.TimerEvent
   private plateY = 0
@@ -107,8 +110,18 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
 
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
+    const stripSize = compact ? 11 : 13
+    const stripH = PlayerStrip.rowH(stripSize)
+    this.strip = new PlayerStrip(
+      this,
+      width / 2,
+      this.top + 2 + stripH / 2,
+      width - 24,
+      stripSize,
+      1,
+    )
     const cx = width / 2
-    const top = this.top
+    const top = this.top + stripH + 2
     const promptY = top + (compact ? 22 : 30)
     this.prompt = this.add
       .text(cx, promptY, '', headlineStyle(compact ? 16 : 24, PALETTE.text, { align: 'center' }))
@@ -443,6 +456,13 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
 
   protected frame(snap: PixelWeightSnapshot | null): void {
     if (!snap) return
+    this.strip?.set(
+      Object.keys(snap.scores).map((id) => ({
+        text: `${this.label(id)} ${snap.scores[id] ?? 0}`,
+        avatar: this.state.avatarOf(id),
+        color: this.state.colorOf(id),
+      })),
+    )
     const obj = snap.objects[this.selfId] ?? null
     const myScore = snap.scores[this.selfId] ?? 0
     this.hud?.setScore(this.t('game.common.pts', { n: myScore }))

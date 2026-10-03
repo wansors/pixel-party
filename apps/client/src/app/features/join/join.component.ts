@@ -35,7 +35,7 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
         <div class="arcade-titlebar">{{ 'join.title' | transloco }}</div>
         <div class="body">
           <div class="me">
-            <app-pixel-avatar [avatar]="avatar()" [color]="color()" [size]="64" />
+            <app-pixel-avatar [avatar]="avatar()" [color]="color()" [size]="64" [blinks]="true" />
           </div>
 
           <input

@@ -1,5 +1,6 @@
 import { type ButtonMasherSnapshot, PALETTE } from '@pp/shared'
 import type Phaser from 'phaser'
+import { avatarPx, ensureAvatarTexture } from '../avatars'
 import { burst, floatText, punch } from '../fx'
 import { bodyStyle, ensurePixelOrb, headlineStyle, hexToCss, shade } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
@@ -11,6 +12,8 @@ interface Lane {
   count: Phaser.GameObjects.Text
   bar: Phaser.GameObjects.Rectangle
   track: Phaser.GameObjects.Rectangle
+  // The player's avatar running at the head of their bar.
+  runner: Phaser.GameObjects.Image
 }
 
 // Button Masher canvas: a giant arcade button to hammer (tap / Space) plus a live "race" of every
@@ -86,9 +89,14 @@ export class ButtonMasherScene extends MiniGameScene<ButtonMasherSnapshot> {
         .rectangle(this.laneLeft, y, 0, laneH * 0.6, PALETTE.lime)
         .setOrigin(0, 0.5)
       const count = this.add
-        .text(this.laneLeft + this.laneWidth + 10, y, '', headlineStyle(compact ? 10 : 13))
+        .text(this.laneLeft + this.laneWidth + 18, y, '', headlineStyle(compact ? 10 : 13))
         .setOrigin(0, 0.5)
-      this.lanes.push({ name, count, bar, track })
+      const runner = this.add
+        .image(this.laneLeft, y + laneH * 0.3, ensureAvatarTexture(this, 'cat', PALETTE.dim, 1))
+        .setOrigin(0.5, 1)
+        .setDisplaySize(avatarPx(laneH), avatarPx(laneH))
+        .setDepth(2)
+      this.lanes.push({ name, count, bar, track, runner })
     }
 
     this.add
@@ -143,6 +151,7 @@ export class ButtonMasherScene extends MiniGameScene<ButtonMasherSnapshot> {
       const entry = ranked[i]
       const visible = entry !== undefined
       lane.name.setVisible(visible)
+      lane.runner.setVisible(visible)
       lane.count.setVisible(visible)
       lane.bar.setVisible(visible)
       lane.track.setVisible(visible)
@@ -151,9 +160,23 @@ export class ButtonMasherScene extends MiniGameScene<ButtonMasherSnapshot> {
       const color = this.state.colorOf(id, PALETTE.lime)
       lane.name.setText(this.label(id)).setColor(hexToCss(color))
       lane.count.setText(String(n))
-      lane.bar
-        .setFillStyle(color)
-        .setSize(Math.max(2, (n / lead) * this.laneWidth), lane.bar.height)
+      const barW = Math.max(2, (n / lead) * this.laneWidth)
+      lane.bar.setFillStyle(color).setSize(barW, lane.bar.height)
+      // Strides while mashing; the leader grins.
+      const step = n > 0 ? Math.floor(this.time.now / 110) % 2 : 0
+      lane.runner
+        .setTexture(
+          ensureAvatarTexture(
+            this,
+            this.state.avatarOf(id),
+            color,
+            1,
+            'side',
+            i === 0 && n > 0 ? 'happy' : 'idle',
+            step as 0 | 1,
+          ),
+        )
+        .setX(Math.round(this.laneLeft + barW))
       lane.track.setStrokeStyle(id === this.selfId ? 2 : 0, PALETTE.text)
     })
   }

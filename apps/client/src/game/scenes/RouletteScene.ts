@@ -1,5 +1,6 @@
 import { PALETTE, type RouletteSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
+import { ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, flash, punch, ring, showBanner } from '../fx'
 import {
   bodyStyle,
@@ -69,6 +70,8 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
   private spinText?: Phaser.GameObjects.Text
   private spunText?: Phaser.GameObjects.Text
   private rows: Phaser.GameObjects.Text[] = []
+  // Each standings row leads with the player's avatar.
+  private rowIcons: Phaser.GameObjects.Image[] = []
   private waitText?: Phaser.GameObjects.Text
   private banner?: Phaser.GameObjects.Text
   private cellPx = 4
@@ -90,6 +93,7 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
     super.create()
     this.bulbs = []
     this.rows = []
+    this.rowIcons = []
     this.phase = 'idle'
     this.rot = 0
     this.settle = undefined
@@ -165,6 +169,12 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
         this.add
           .text(colX, y + rowH * (i + 1), '', bodyStyle(compact ? 14 : 17, PALETTE.text))
           .setOrigin(0.5),
+      )
+      this.rowIcons.push(
+        this.add
+          .image(colX, y + rowH * (i + 1), ensureAvatarTexture(this, 'cat', PALETTE.dim, 1))
+          .setOrigin(1, 0.5)
+          .setVisible(false),
       )
     }
     this.waitText = this.add
@@ -415,7 +425,9 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
     const ranked = [...ids].sort((a, b) => (shown(b) ?? -1) - (shown(a) ?? -1))
     this.rows.forEach((row, i) => {
       const id = ranked[i]
+      const icon = this.rowIcons[i]
       row.setVisible(id !== undefined)
+      icon?.setVisible(id !== undefined)
       if (id === undefined) return
       const known = shown(id) !== undefined
       const v = known ? String(snap.values[id]).padStart(3, ' ') : '  ?'
@@ -423,6 +435,17 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
       row
         .setText(`${id === this.selfId ? '▶' : ' '} ${name} ${v}`)
         .setColor(hexToCss(this.state.colorOf(id, PALETTE.text)))
+        .setAlpha(known ? 1 : 0.6)
+      icon
+        ?.setTexture(
+          ensureAvatarTexture(
+            this,
+            this.state.avatarOf(id),
+            this.state.colorOf(id, PALETTE.text),
+            1,
+          ),
+        )
+        .setPosition(Math.round(row.x - row.width / 2 - 6), row.y)
         .setAlpha(known ? 1 : 0.6)
     })
   }

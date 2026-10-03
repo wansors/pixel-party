@@ -1,5 +1,6 @@
 import { type BugSmashLiveBug, type BugSmashSnapshot, PALETTE } from '@pp/shared'
 import Phaser from 'phaser'
+import { ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, flash, floatText, punch, ring, shake, showBanner } from '../fx'
 import { bodyStyle, ensurePixelGrid, hexToCss, shade } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
@@ -157,6 +158,8 @@ interface Hole {
 interface Chip {
   id: string
   text: Phaser.GameObjects.Text
+  // The player's avatar, just left of the text.
+  icon: Phaser.GameObjects.Image
   score: number
 }
 
@@ -287,11 +290,13 @@ export class BugSmashScene extends MiniGameScene<BugSmashSnapshot> {
       const inRow = Math.min(perRow, ids.length - row * perRow)
       const x = width / 2 - (inRow * chipW) / 2 + (i % perRow) * chipW + chipW / 2
       const y = this.top + row * rowH + rowH / 2
-      const text = this.add
-        .text(x, y, '', bodyStyle(compact ? 12 : 15, this.state.colorOf(id, PALETTE.dim)))
-        .setOrigin(0.5)
+      const color = this.state.colorOf(id, PALETTE.dim)
+      const text = this.add.text(x + 9, y, '', bodyStyle(compact ? 12 : 15, color)).setOrigin(0.5)
       if (id === this.selfId) text.setBackgroundColor(hexToCss(PALETTE.panelAlt))
-      this.chips.push({ id, text, score: -1 })
+      const icon = this.add
+        .image(x, y, ensureAvatarTexture(this, this.state.avatarOf(id), color, 1))
+        .setOrigin(1, 0.5)
+      this.chips.push({ id, text, icon, score: -1 })
     })
     return this.top + Math.ceil(ids.length / perRow) * rowH
   }
@@ -434,6 +439,7 @@ export class BugSmashScene extends MiniGameScene<BugSmashSnapshot> {
       const gained = chip.score >= 0 && score > chip.score
       chip.score = score
       chip.text.setText(` ${this.label(chip.id).slice(0, compact ? 6 : 10)} ${score} `)
+      chip.icon.setX(Math.round(chip.text.x - chip.text.width / 2 - 2))
       if (gained && chip.id !== this.selfId) punch(this, chip.text, 0.2, 80)
     }
   }

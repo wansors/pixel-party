@@ -1,5 +1,6 @@
 import { COLOR_TRAP_COLORS, type ColorTrapSnapshot, PALETTE } from '@pp/shared'
 import Phaser from 'phaser'
+import { ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, floatText, punch, ring, shake, showBanner } from '../fx'
 import { bodyStyle, ensureBevelPanel, fitText, headlineStyle, hexToCss, shade } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
@@ -267,18 +268,20 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
       const x = width / 2 - (inRow * chipW) / 2 + (i % perRow) * chipW + 4
       const y = this.top + 2 + row * rowH + rowH / 2
       const color = this.state.colorOf(id, PALETTE.dim)
-      // Boxed chip: identity swatch, "name score", and a lamp that lights (with the frame) once
+      // Boxed chip: the player's avatar, "name score", and a lamp that lights (with the frame) once
       // this player has locked an answer for the live prompt.
       const box = this.add
         .rectangle(x, y, chipW - 8, rowH - 4, PALETTE.panel)
         .setOrigin(0, 0.5)
         .setStrokeStyle(2, PALETTE.frame)
-      this.add.rectangle(x + 6, y, 8, 8, color).setOrigin(0, 0.5)
+      this.add
+        .image(x + 3, y, ensureAvatarTexture(this, this.state.avatarOf(id), color, 1))
+        .setOrigin(0, 0.5)
       const lamp = this.add.rectangle(x + chipW - 22, y, 8, 8, PALETTE.panelAlt).setOrigin(0, 0.5)
       const text = this.add
-        .text(x + 19, y, '', bodyStyle(compact ? 12 : 14, color))
+        .text(x + 23, y, '', bodyStyle(compact ? 12 : 14, color))
         .setOrigin(0, 0.5)
-        .setFixedSize(chipW - 46, 0)
+        .setFixedSize(chipW - 50, 0)
       this.chips.push({ id, box, text, lamp, key: '' })
     })
   }

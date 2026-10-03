@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, effect, input, signal } from '@angular/core'
 import type { AvatarId } from '@pp/shared'
 import {
   AVATAR_SIZE,
@@ -28,7 +28,10 @@ function toCss(color: number): string {
   return `#${color.toString(16).padStart(6, '0')}`
 }
 
-// <app-pixel-avatar [avatar]="'cat'" [color]="'#ff3e7f'" [size]="32" />
+const BLINK_EVERY_MS = 3400
+const BLINK_MS = 140
+
+// <app-pixel-avatar [avatar]="'cat'" [color]="'#ff3e7f'" [size]="32" [blinks]="true" />
 @Component({
   selector: 'app-pixel-avatar',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -60,14 +63,41 @@ export class PixelAvatarComponent {
   readonly size = input<number>(32)
   readonly pose = input<AvatarPose>('front')
   readonly expression = input<AvatarExpression>('idle')
+  // Idle avatars blink now and then, like in the mini-games (off by default: long lists stay still).
+  readonly blinks = input(false)
+
+  private readonly blinking = signal(false)
 
   protected readonly viewBox = `0 0 ${AVATAR_SIZE} ${AVATAR_SIZE}`
+
+  constructor() {
+    // Timers only run for avatars that blink; a random phase so a row of them doesn't blink in unison.
+    effect((onCleanup) => {
+      if (!this.blinks()) return
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const schedule = (delay: number): void => {
+        timer = setTimeout(() => {
+          this.blinking.set(true)
+          timer = setTimeout(() => {
+            this.blinking.set(false)
+            schedule(BLINK_EVERY_MS - BLINK_MS)
+          }, BLINK_MS)
+        }, delay)
+      }
+      schedule(Math.random() * BLINK_EVERY_MS)
+      onCleanup(() => {
+        clearTimeout(timer)
+        this.blinking.set(false)
+      })
+    })
+  }
 
   // One rect per horizontal run of same-colored pixels (≈3× fewer DOM nodes than one per pixel).
   readonly cells = computed<Cell[]>(() => {
     const palette = avatarPalette(parseColor(this.color()))
     const out: Cell[] = []
-    avatarPixels(this.avatar(), this.pose(), this.expression()).forEach((row, y) => {
+    const expression = this.blinking() && this.expression() === 'idle' ? 'blink' : this.expression()
+    avatarPixels(this.avatar(), this.pose(), expression).forEach((row, y) => {
       let x = 0
       while (x < row.length) {
         const role = row[x]

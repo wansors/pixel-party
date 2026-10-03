@@ -502,3 +502,33 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   rounds + 3 suggested extras, 6 arcade classics, 2 racers — each shipped with domain tests, the full
   gate (lint, determinism, typecheck, server + client tests, production build) and desktop + phone
   playtests driven by real-input bot strategies.
+
+### D23 — Visual consistency audit: one avatar cast in every scene — DONE
+
+- **Date**: 2026-10-03. **Context**: the backlog's *Visual consistency audit*. The full inventory and
+  the before/after for each game are in [`visual-audit.md`](visual-audit.md); the spec is
+  `art-direction.md` §6.1.
+- **The set is code, not imported art.** The six avatars are 16×16 ASCII silhouettes with feature
+  letters. The outline, the 3-tone shading, the light parts and the eyes are computed the same way for
+  every sprite, so the cast stays coherent and a new view or expression is a few lines.
+  - Views: front, side and back.
+  - Expressions: idle with blink, happy, hurt, KO.
+  - Stride frames: a rewrite of the feet row.
+  - The module stays Phaser-free so the join screen's avatar picker doesn't pull in the engine (lazy
+    room route, D22).
+- **Top-down games show the front view**, as classic Bomberman/Zelda do. They get 4-way facing
+  (`faceMotion`) instead of a literal overhead sprite, so one set covers every camera.
+- **No re-tinting.** The identity color *is* the avatar. Pilots and ghosts keep it, and cockpits or
+  canopies provide the contrast.
+- **The athletes lost their procedural rig** (13 poses) for the avatar. The side view with
+  distance-driven strides, leans and a gripped javelin reads as the player, which was the point. The
+  rig's leg animation was the only thing worth keeping, and the stride frames replace it.
+- **One "you" cue** (amber outlined ▼) everywhere. Glass Bridge's active runner gets a spotlight ring
+  instead, since that ▼ used to mark the runner, not you.
+- **Kept abstract** on purpose: play pieces that aren't the player's body (paddles, snake bodies,
+  cars, ships, stacks, fleets) carry only the identity color.
+- **Not done**:
+  - per-species walk cycles beyond the two stride frames
+  - a hat or costume layer (e.g. a cowboy hat for Quick Draw), because ears differ too much per
+    species to fit one overlay
+  - avatars on the Sink the Fleet / Fleet Battle boards, which have no figure to draw
