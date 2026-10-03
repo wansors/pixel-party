@@ -377,7 +377,8 @@ cluster below. Catalog section F.
   - [x] **Competitive Asteroids** (`asteroids`) — *Shipped 2026-10-03 as Asteroids Arena (catalog I4,
         D22).* Shared wrap-around arena: rotate, thrust and shoot; points for
         asteroids and more for shooting rivals, short respawn after a hit. Ranked by score.
-  - [ ] **Brawl** (Streets of Rage-style competitive beat 'em up) — everyone in one side-view street,
+  - [x] **Brawl** (`brawl`, Streets of Rage-style competitive beat 'em up) — *Shipped 2026-10-03 as
+        Street Brawl (catalog I6, D22).* Everyone in one side-view street,
         punch/kick/grab combos, weapons and items that drop and can be picked up (pipes, bottles,
         food to heal). Last one standing, then most KOs.
   - [x] **Sumo ICE battle royale** (`sumo-ice`) — *Shipped 2026-10-02 (catalog I1, D22; PC-first + a

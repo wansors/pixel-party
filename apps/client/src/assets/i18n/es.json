@@ -331,6 +331,10 @@
       "bomber-express": {
         "name": "Bomber Express",
         "blurb": "Todos empiezan al máximo: explosiones enormes, cinco bombas y botas rápidas. ¡Gana el último en pie!"
+      },
+      "brawl": {
+        "name": "Pelea Callejera",
+        "blurb": "Una calle y todos a golpes: combos de puñetazos, patadas, lanzamientos, tuberías y pollo. ¡Gana el último en pie!"
       }
     }
   },
@@ -718,6 +722,16 @@
       "pickRange": "+FUEGO",
       "pickBomb": "+BOMBA",
       "pickSpeed": "+VELOCIDAD"
+    },
+    "brawl": {
+      "punch": "PUÑO",
+      "kick": "PATADA",
+      "grab": "AGARRE",
+      "kos": "{{n}} KO",
+      "pow": "¡POW!",
+      "wham": "¡ZAS!",
+      "ko": "¡K.O.!",
+      "standing": "SIGUES EN PIE"
     }
   }
 }

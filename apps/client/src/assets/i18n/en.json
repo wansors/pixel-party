@@ -331,6 +331,10 @@
       "bomber-express": {
         "name": "Bomber Express",
         "blurb": "Everyone starts maxed out: huge blasts, five bombs, fast boots. Last one standing wins!"
+      },
+      "brawl": {
+        "name": "Street Brawl",
+        "blurb": "One street, everybody fighting: punch combos, kicks, throws, pipes and chicken. Last one up wins!"
       }
     }
   },
@@ -718,6 +722,16 @@
       "pickRange": "+FIRE",
       "pickBomb": "+BOMB",
       "pickSpeed": "+SPEED"
+    },
+    "brawl": {
+      "punch": "PUNCH",
+      "kick": "KICK",
+      "grab": "GRAB",
+      "kos": "{{n}} KO",
+      "pow": "POW!",
+      "wham": "WHAM!",
+      "ko": "K.O.!",
+      "standing": "STILL STANDING"
     }
   }
 }

@@ -3,6 +3,7 @@ import { AsteroidsScene } from './AsteroidsScene'
 import { BalloonChickenScene } from './BalloonChickenScene'
 import { BombRelayScene } from './BombRelayScene'
 import { BomberExpressScene } from './BomberExpressScene'
+import { BrawlScene } from './BrawlScene'
 import { BubblePopScene } from './BubblePopScene'
 import { BugSmashScene } from './BugSmashScene'
 import { ButtonMasherScene } from './ButtonMasherScene'
@@ -98,6 +99,7 @@ export const SCENES: Readonly<Record<string, SceneCtor>> = {
   'star-blaster': StarBlasterScene,
   asteroids: AsteroidsScene,
   'bomber-express': BomberExpressScene,
+  brawl: BrawlScene,
   'tug-of-war': TugOfWarScene,
   'bomb-relay': BombRelayScene,
   'fleet-battle': FleetBattleScene,

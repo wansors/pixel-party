@@ -467,3 +467,8 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   together. Ranking follows the backlog: last standing first, then knock-outs, then survival time.
   **Not done**: sudden-death closing walls (the full power-up start ends most rounds early anyway)
   and bomb kicking.
+- **I6 Street Brawl** (`brawl`, PC-first; the backlog's "Brawl"): attacks resolve immediately when
+  the input arrives (cooldowns and "busy" windows keep it fair), movement integrates in tick; one swing
+  hits everyone in front on the lane (crowd fights are the fun). Fighters are the lobby avatars, flipped
+  to face their way, with limbs/weapons drawn in their color. The depth band is a pseudo-3D strip whose
+  height isn't tied to the street's scale, so it stays playable on a portrait screen.

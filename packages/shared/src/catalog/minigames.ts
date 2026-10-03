@@ -536,6 +536,17 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
       'Everyone starts maxed out: huge blasts, five bombs, fast boots. Last one standing wins!',
     axes: ['reflexes', 'nerve'],
   },
+  {
+    id: 'brawl',
+    name: 'Street Brawl',
+    format: 'ffa',
+    realtime: true,
+    mobileFriendly: false,
+    durationSec: 75,
+    blurb:
+      'One street, everybody fighting: punch combos, kicks, throws, pipes and chicken. Last one up wins!',
+    axes: ['reflexes', 'speed'],
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

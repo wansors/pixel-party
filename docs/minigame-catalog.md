@@ -52,7 +52,7 @@ Then (2026-09-28) a new sports wave (section F): F1 100 m Dash (`dash-100m`), F2
 Then (2026-10-02) the roadmap wave (D22), one game at a time: G1 Glass Bridge (`glass-bridge`), G2
 Freeze Doll (`freeze-doll`), G3 Room Rush (`room-rush`), I1 Sumo ICE (`sumo-ice`), I2 Pang (`pang`),
 I3 Star Blaster (`star-blaster`), I4 Asteroids Arena (`asteroids`), I5 Bomber Express
-(`bomber-express`). **48 mini-games total.**
+(`bomber-express`), I6 Street Brawl (`brawl`). **49 mini-games total.**
 
 ---
 
@@ -520,6 +520,21 @@ avatar. See `implementation-decisions.md` D22.
   then who lasted longer (`2 KO`).
 - **Latency**: medium — steps are interpolated client-side from the snapshot's step progress.
 
+### I6. ✅ Street Brawl (Streets of Rage) — implemented (`brawl`)
+- **Concept**: a competitive side-view beat 'em up — everyone in one street, fighting everyone.
+- **Type**: FFA · **Input**: arrows / WASD to move along and across the street; SPACE / J punch, K kick,
+  L grab (or the d-pad and three buttons) · **Duration**: ~30–75 s (75 s cap) · **Banter**: 💥💥💥 ·
+  **Mobile-friendly**: no
+- **Rules**: 100 HP. Attacks land in front, on about the same lane (±0.05 of depth). Punch 8 (quick;
+  the third in a row within 0.65 s is a 14-damage knock-down), kick 12 (longer, shoves), grab: throw
+  whoever is right next to you (16, knock-down, tossed 0.25 away). Knocked down = untouchable for
+  0.9 s, then 0.6 s of guard. Items drop on a seeded schedule (max 4 on the street): a pipe (14 damage,
+  longer reach, 6 swings), a bottle (one 22-damage knock-down, then it smashes), roast chicken (+30 HP).
+  Knocked down while armed, you drop it. 0 HP = K.O. for good.
+- **Win condition / Result**: last one standing; then K.O.s dealt; then HP left / time lasted (`2 KO`).
+- **Latency**: medium — attacks resolve on the server as they arrive; walks are eased and
+  dead-reckoned on the client.
+
 ---
 
 ## Variety coverage
@@ -536,13 +551,13 @@ avatar. See `implementation-decisions.md` D22.
 | Survival / dodging | A7, A8, B3, I1, I3, I5 |
 | Nerve / chance | D1, D3, E5, G1, G2, G3 |
 | Teamwork | C1, C2, C3 |
-| Head-to-head rivalry | B1, B2, B3, E7, I4 |
+| Head-to-head rivalry | B1, B2, B3, E7, I4, I6 |
 
 ## Format mix
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1–G3, I1–I5 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1–G3, I1–I6 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7 |
 | Team | C1, C2, C3 |
 
