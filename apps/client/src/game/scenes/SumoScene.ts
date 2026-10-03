@@ -1,8 +1,10 @@
 import { PALETTE, type SumoBody, type SumoSnapshot } from '@pp/shared'
 import type Phaser from 'phaser'
+import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, flash, floatText, ring, shake, showBanner } from '../fx'
 import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
-import { bodyStyle, ensurePixelGrid, fitFontSize, headlineStyle, shade } from '../pixelStyle'
+import { bodyStyle, ensurePixelGrid, fitFontSize, headlineStyle } from '../pixelStyle'
+import { YouMarker, addShadow, nameTagStyle } from '../playerMarks'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // Mirrors the server's sumo.ts: bodies are circles of radius PLAYER_R in the normalized arena (ring
@@ -50,35 +52,17 @@ function dohyoRows(): string[] {
   return rows
 }
 
-// A top-down rikishi, 16x16, facing right: a big round body in the player's color, the head seen from
-// above (hair on the back half, face crescent in front, topknot bun sticking out behind) and both
-// hands on the front rim, ready to shove.
-function wrestlerRows(): string[] {
-  const rows: string[] = []
-  for (let y = 0; y < 16; y++) {
-    let row = ''
-    for (let x = 0; x < 16; x++) {
-      const at = (cx: number, cy: number): number => Math.hypot(x + 0.5 - cx, y + 0.5 - cy)
-      const d = at(8, 8)
-      if (at(4.9, 8) < 1.4 || at(7.6, 8) < 2.7) row += 'k'
-      else if (at(8.6, 8) < 3.6) row += at(8.6, 8) > 2.9 ? 'F' : 'f'
-      else if (at(13.5, 3.6) < 1.9 || at(13.5, 12.4) < 1.9) row += 'f'
-      else if (d < 7) row += d > 6 ? 'o' : x < 7 && y < 7 && d < 5.5 && d > 3.5 ? 'h' : 'b'
-      else row += '_'
-    }
-    rows.push(row)
-  }
-  return rows
-}
-
+// A wrestler is the player's lobby avatar on a shadow, facing where it shoves or travels.
 interface Rikishi {
-  sprite: Phaser.GameObjects.Image
+  avatar: AvatarSprite
+  shadow: Phaser.GameObjects.Ellipse
   label: Phaser.GameObjects.Text
   color: number
-  angle: number
   px: number
   py: number
   out: boolean
+  // Wincing after a clash until then (scene time).
+  hurtUntil: number
 }
 
 // Sumo Push canvas (Phase 5). Shared arena: every wrestler is rendered from the snapshot (interpolated
@@ -89,7 +73,7 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
   private dohyo?: Phaser.GameObjects.Image
   private shadow?: Phaser.GameObjects.Rectangle
   private arrow?: Phaser.GameObjects.Graphics
-  private marker?: Phaser.GameObjects.Text
+  private marker?: YouMarker
   private banner?: Phaser.GameObjects.Text
   private subline?: Phaser.GameObjects.Text
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
@@ -132,7 +116,8 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     this.won = false
     this.ringR = DEFAULT_RING
     for (const b of this.bodies.values()) {
-      b.sprite.destroy()
+      b.avatar.destroy()
+      b.shadow.destroy()
       b.label.destroy()
     }
     this.bodies.clear()
@@ -173,11 +158,7 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     this.fitDohyo()
 
     this.arrow = this.add.graphics().setDepth(25)
-    this.marker = this.add
-      .text(0, 0, '▼', headlineStyle(16, PALETTE.text, { stroke: '#10121c', strokeThickness: 3 }))
-      .setOrigin(0.5, 1)
-      .setDepth(40)
-      .setVisible(false)
+    this.marker = new YouMarker(this, 16, 40)
 
     this.add
       .text(
@@ -241,26 +222,6 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     return { dx: aim.x - ox, dy: aim.y - oy }
   }
 
-  private wrestlerKey(color: number): string {
-    let key = this.wrestlerKeys.get(color)
-    if (!key) {
-      key = ensurePixelGrid(this, {
-        key: `pp-sumo-rikishi-${color.toString(16)}`,
-        rows: wrestlerRows(),
-        legend: {
-          o: shade(color, -0.55),
-          b: color,
-          h: shade(color, 0.4),
-          f: 0xf2c29b,
-          F: 0xc98f68,
-          k: 0x1a1a24,
-        },
-      })
-      this.wrestlerKeys.set(color, key)
-    }
-    return key
-  }
-
   protected frame(snap: SumoSnapshot | null): void {
     const now = this.time.now
     if (snap && this.state.tick !== this.lastTick) {
@@ -309,7 +270,9 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
         if (b.alive) continue
         const body = this.bodyOf(b)
         body.out = true
-        body.sprite.setAlpha(0.35)
+        body.avatar.setExpression('ko').tick(0)
+        body.avatar.image.setAlpha(0.35)
+        body.shadow.setVisible(false)
         body.label.setAlpha(0.4)
       }
       if (me && !me.alive) this.becomeOut(me, false)
@@ -357,6 +320,10 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     if (d >= CONTACT || before < CONTACT) return
     if (now - (this.impactAt.get(key) ?? Number.NEGATIVE_INFINITY) < IMPACT_COOLDOWN_MS) return
     this.impactAt.set(key, now)
+    for (const id of [a.id, b.id]) {
+      const body = this.bodies.get(id)
+      if (body) body.hurtUntil = this.time.now + 350
+    }
     const p = this.toScreen((a.x + b.x) / 2, (a.y + b.y) / 2)
     burst(this, p.x, p.y, PALETTE.text, 8, 160)
     burst(this, p.x, p.y, 0xe6cf9f, 6, 120)
@@ -381,7 +348,7 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     const body = this.bodyOf(b)
     body.out = true
     this.wasAlive = false
-    this.marker?.setVisible(false)
+    this.marker?.hide()
     if (withFx) {
       const p = this.toScreen(b.x, b.y)
       this.sfx.wrong()
@@ -394,16 +361,17 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     this.subline?.setText(this.t('game.common.waiting')).setVisible(true)
   }
 
-  // Tumbling off the platform: the wrestler shrinks a little and fades.
+  // Tumbling off the platform: KO face, the wrestler shrinks a little, tips over and fades.
   private fallOff(body: Rikishi): void {
-    const sx = body.sprite.scaleX
-    const sy = body.sprite.scaleY
+    const img = body.avatar.image
+    body.avatar.setExpression('ko').tick(0)
+    body.shadow.setVisible(false)
     this.tweens.add({
-      targets: body.sprite,
-      scaleX: sx * 0.75,
-      scaleY: sy * 0.75,
+      targets: img,
+      scaleX: img.scaleX * 0.75,
+      scaleY: img.scaleY * 0.75,
       alpha: 0.35,
-      angle: body.sprite.angle + 90,
+      angle: 90,
       duration: 320,
       ease: 'Quad.easeIn',
     })
@@ -421,30 +389,30 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     let body = this.bodies.get(b.id)
     if (!body) {
       const color = this.state.colorOf(b.id, PALETTE.red)
-      const d = this.arena.size * PLAYER_R * 2 * (16 / 14)
+      const d = avatarPx(this.arena.size * PLAYER_R * 2 * 1.3)
       const mine = b.id === this.selfId
       const p = this.toScreen(b.x, b.y)
+      const avatar = new AvatarSprite(this, this.state.avatarOf(b.id), color, d)
+      avatar.image.setPosition(p.x, p.y).setDepth(mine ? 31 : 30)
       // Everyone starts facing the centre of the ring.
-      const angle = Math.round(Math.atan2(0.5 - b.y, 0.5 - b.x) / (Math.PI / 4)) * 45
+      avatar.faceMotion(0.5 - b.x, 0.5 - b.y, 0)
       body = {
-        sprite: this.add
-          .image(p.x, p.y, this.wrestlerKey(color))
-          .setDisplaySize(d, d)
-          .setAngle(angle)
-          .setDepth(mine ? 31 : 30),
+        avatar,
+        shadow: addShadow(this, d, 29),
         label: this.add
-          .text(p.x, p.y, mine ? this.t('game.common.you') : this.state.nameOf(b.id), {
-            ...bodyStyle(this.compact ? 10 : 12, color),
-            stroke: '#10121c',
-            strokeThickness: 3,
-          })
+          .text(
+            p.x,
+            p.y,
+            mine ? this.t('game.common.you') : this.state.nameOf(b.id),
+            nameTagStyle(this.compact ? 8 : 10, color),
+          )
           .setOrigin(0.5, 0)
           .setDepth(32),
         color,
-        angle,
         px: p.x,
         py: p.y,
         out: false,
+        hurtUntil: 0,
       }
       this.bodies.set(b.id, body)
     }
@@ -465,18 +433,16 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
       const body = this.bodyOf(b)
       const mine = b.id === this.selfId
       if (!body.out) {
-        // Face the push direction (own wrestler) or the direction of travel, snapped to 45°.
-        const vx = mine && this.hasDir() ? this.dir.dx : p.x - body.px
-        const vy = mine && this.hasDir() ? this.dir.dy : p.y - body.py
-        if (Math.hypot(vx, vy) > (mine && this.hasDir() ? 0 : 0.6)) {
-          body.angle = Math.round(Math.atan2(vy, vx) / (Math.PI / 4)) * 45
-          body.sprite.setAngle(body.angle)
-        }
+        // Face the push direction (own wrestler) or the direction of travel.
+        if (mine && this.hasDir()) body.avatar.faceMotion(this.dir.dx, this.dir.dy, 0)
+        else body.avatar.faceMotion(p.x - body.px, p.y - body.py, 0.6)
+        body.avatar.setExpression(now < body.hurtUntil ? 'hurt' : 'idle').tick(now)
+        body.shadow.setPosition(p.x, p.y + radius * 0.85)
       }
       body.px = p.x
       body.py = p.y
-      body.sprite.setPosition(p.x, p.y)
-      body.label.setPosition(p.x, p.y + radius + 2)
+      body.avatar.image.setPosition(p.x, p.y)
+      body.label.setPosition(p.x, p.y + radius + 4)
       if (mine && !body.out) this.drawSelfCues(p, radius, body.color, now)
     }
   }
@@ -487,9 +453,8 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
 
   // "That's you" marker bobbing overhead + an arrow showing where you are shoving.
   private drawSelfCues(p: { x: number; y: number }, radius: number, color: number, now: number) {
-    this.marker
-      ?.setPosition(p.x, p.y - radius - 4 - Math.abs(Math.sin(now / 200)) * 5)
-      .setVisible(this.wasAlive)
+    if (this.wasAlive) this.marker?.place(p.x, p.y - radius - 2, now)
+    else this.marker?.hide()
     const g = this.arrow
     if (!g || !this.hasDir()) return
     const a = Math.atan2(this.dir.dy, this.dir.dx)

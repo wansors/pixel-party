@@ -1,25 +1,44 @@
 import { type FieldAthlete, type FieldEventSnapshot, PALETTE } from '@pp/shared'
 import type Phaser from 'phaser'
-import { addBanner, burst, flash, floatText, ring, shake, showBanner } from '../fx'
+import { AvatarSprite, avatarPx } from '../avatars'
+import { addBanner, burst, flash, ring, shake, showBanner } from '../fx'
 import { bodyStyle, fitFontSize, headlineStyle, shade } from '../pixelStyle'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene } from './MiniGameScene'
 import {
   ATHLETE_H,
-  ATHLETE_W,
-  type AthletePose,
   GRASS,
+  METRES_PER_FRAME,
   RunnerTracker,
   StridePad,
   TARTAN,
-  athleteHand,
-  athleteTexture,
   ensureCrowdTile,
   ensureFlagTexture,
-  runFrame,
 } from './athleticsKit'
 
-const SPRITE_M = 2.2 // world metres the athlete sprite spans
+const SPRITE_M = 2.2 // world metres the athlete's box spans
+
+// What the athlete (your lobby avatar, side view) is doing: drives its lean, stride and face, and
+// where the javelin sits in its "hand".
+type FieldPose = 'stand' | 'run' | 'takeoff' | 'fly' | 'land' | 'fallen' | 'windup' | 'release'
+
+const LEAN: Record<FieldPose, number> = {
+  stand: 0,
+  run: 6,
+  takeoff: -10,
+  fly: -14,
+  land: 12,
+  fallen: 80,
+  windup: -14,
+  release: 16,
+}
+
+// The javelin's grip relative to the avatar's feet, in avatar sizes (x forward, y up).
+const GRIP: Partial<Record<FieldPose, { x: number; y: number }>> = {
+  windup: { x: -0.3, y: 0.44 },
+  release: { x: 0.3, y: 0.56 },
+}
+const CARRY = { x: 0.06, y: 0.34 }
 const SAND = 0xe3c98c
 const JAVELIN_M = 2.6
 const RELEASE_H_M = 1.9 // javelin release height
@@ -44,7 +63,7 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
   private readonly tracker = new RunnerTracker()
   private world?: Phaser.GameObjects.Container
   private crowd?: Phaser.GameObjects.TileSprite
-  private athlete?: Phaser.GameObjects.Image
+  private athlete?: AvatarSprite
   private javelin?: Phaser.GameObjects.Image
   private gauge?: Phaser.GameObjects.Graphics
   private gaugeText?: Phaser.GameObjects.Text
@@ -67,7 +86,6 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
   private arrivedAt = 0
   private prev?: FieldAthlete
   private prevBests = new Map<string, number | null>()
-  private pose: AthletePose | '' = ''
   private aimStart = -1
   private aimFrozen: number | null = null
   private lastFoot: 'L' | 'R' | null = null
@@ -85,7 +103,6 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
     this.lastTick = -1
     this.prev = undefined
     this.prevBests = new Map()
-    this.pose = ''
     this.aimStart = -1
     this.aimFrozen = null
     this.lastFoot = null
@@ -141,11 +158,15 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
     this.world = this.add.container(0, 0)
     this.buildGround(groundH)
 
-    this.athlete = this.add
-      .image(0, this.groundY, athleteTexture(this, 'stand', this.color))
-      .setOrigin(0.5, 1)
-      .setScale(this.spriteScale)
-    this.world.add(this.athlete)
+    this.athlete = new AvatarSprite(
+      this,
+      this.state.avatarOf(this.selfId),
+      this.color,
+      this.avatarSize(),
+      'side',
+    )
+    this.athlete.image.setOrigin(0.5, 1).setPosition(0, this.groundY)
+    this.world.add(this.athlete.image)
     if (this.look.kind === 'throw') {
       this.javelin = this.add.image(0, 0, this.javelinTexture()).setOrigin(0.5)
       this.world.add(this.javelin)
@@ -337,7 +358,7 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
     // Athlete position/pose and the camera target, by phase.
     let ax = 0
     let lift = 0
-    let pose: AthletePose = 'stand'
+    let pose: FieldPose = 'stand'
     let focus = 0
     let anchor = 0.28
     const range = (me.landX ?? me.takeoffX) - me.takeoffX
@@ -348,7 +369,7 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
         break
       case 'run':
         ax = runX
-        pose = me.v < 0.4 ? 'stand' : runFrame(runX)
+        pose = me.v < 0.4 ? 'stand' : 'run'
         break
       case 'aim':
         ax = me.takeoffX
@@ -381,11 +402,21 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
         break
     }
     if (focus === 0) focus = ax
-    if (pose !== this.pose) {
-      this.pose = pose
-      this.athlete?.setTexture(athleteTexture(this, pose, this.color, this.look.kind === 'throw'))
+    const athlete = this.athlete
+    if (athlete) {
+      // Strides follow the distance run; tucked in the air; a face for the outcome.
+      const stride = Math.floor(runX / (METRES_PER_FRAME * 2)) % 2
+      const landed = me.phase === 'mark' && me.landX !== null
+      athlete
+        .setStep(pose === 'run' ? (stride as 0 | 1) : pose === 'fly' || pose === 'takeoff' ? 1 : 0)
+        .setExpression(pose === 'fallen' ? 'hurt' : pose === 'fly' || landed ? 'happy' : 'idle')
+        .tick(now)
+      const bob =
+        pose === 'run' && stride === 1 ? -Math.max(1, Math.round(this.avatarSize() / 24)) : 0
+      athlete.image
+        .setPosition(ax * this.ppm, this.groundY - lift * this.ppm + bob)
+        .setAngle(LEAN[pose])
     }
-    this.athlete?.setPosition(ax * this.ppm, this.groundY - lift * this.ppm)
 
     // Camera: glued to the action while running/flying, a quick pan back to the runway between
     // attempts. Real elapsed time (not Phaser's smoothed delta) so a hiccup never leaves it behind.
@@ -402,6 +433,11 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
     if (me.phase === 'run') this.pad?.setSpeed(me.v)
   }
 
+  // The avatar stands in the athlete's box (SPRITE_M tall), at a crisp size.
+  private avatarSize(): number {
+    return avatarPx(this.spriteScale * ATHLETE_H * 0.8)
+  }
+
   // Drawn peak height of the launch arc (metres): the real projectile apex, squashed to fit the sky.
   private apexM(range: number, angle: number): number {
     const real = (Math.max(0, range) * Math.tan((Math.min(80, angle) * Math.PI) / 180)) / 4
@@ -412,7 +448,7 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
   private renderJavelin(
     snap: FieldEventSnapshot,
     me: FieldAthlete,
-    pose: AthletePose,
+    pose: FieldPose,
     ax: number,
     flightT: number,
     apex: number,
@@ -426,7 +462,8 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
       me.phase === 'aim' ||
       (me.phase === 'mark' && me.landX === null)
     if (inHand) {
-      const hand = athleteHand(pose, true)
+      const grip = GRIP[pose] ?? CARRY
+      const size = this.avatarSize()
       const angle =
         me.phase === 'aim'
           ? -(this.aimFrozen ?? this.aimAngle(snap, me, this.time.now))
@@ -435,10 +472,7 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
             : -60
       jav
         .setVisible(me.phase !== 'mark')
-        .setPosition(
-          ax * this.ppm + hand.x * this.spriteScale,
-          this.groundY + hand.y * this.spriteScale,
-        )
+        .setPosition(ax * this.ppm + grip.x * size, this.groundY - grip.y * size)
         .setAngle(angle)
       return
     }
@@ -474,8 +508,8 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
     if (!showing) return
     const angle = aiming ? (this.aimFrozen ?? this.aimAngle(snap, me, now)) : me.angle
     const r = this.compact ? 42 : 64
-    const cx = (ax - this.camX) * this.ppm + (ATHLETE_W / 2) * this.spriteScale * 0.6 + 8
-    const cy = this.groundY - ATHLETE_H * this.spriteScale * 0.55
+    const cx = (ax - this.camX) * this.ppm + this.avatarSize() * 0.3 + 8
+    const cy = this.groundY - this.avatarSize() * 0.55
     const rad = (d: number): number => (-d * Math.PI) / 180
     g.fillStyle(PALETTE.bg, 0.7)
     g.slice(cx, cy, r + 6, rad(0), rad(90), true)
@@ -693,7 +727,7 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
         .setVisible(false)
       this.world?.add([img, label])
       // Keep the athlete (and javelin) drawn over the flags.
-      if (this.athlete) this.world?.bringToTop(this.athlete)
+      if (this.athlete) this.world?.bringToTop(this.athlete.image)
       if (this.javelin) this.world?.bringToTop(this.javelin)
       flag = { img, label, best: -1 }
       this.flags.set(id, flag)

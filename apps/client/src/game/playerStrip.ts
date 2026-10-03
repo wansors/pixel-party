@@ -82,6 +82,14 @@ export class PlayerStrip {
     this.layout(size)
   }
 
+  // Where the i-th chip sits (its avatar, else its label), for effects anchored on a player's chip.
+  positionOf(i: number): { x: number; y: number } | null {
+    const c = this.chips[i]
+    if (!c) return null
+    if (c.icon) return { x: c.icon.x + ICON / 2, y: c.icon.y }
+    return { x: c.label.x + c.label.width / 2, y: c.label.y }
+  }
+
   // A chip's width: the icon (16 px, the avatar's own pixel grid) + a small gap + the label.
   private static width(c: ChipView): number {
     return (c.icon ? ICON + ICON_GAP : 0) + c.label.width

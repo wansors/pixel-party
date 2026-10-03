@@ -1,8 +1,10 @@
 import { PALETTE, type PixelDashSnapshot } from '@pp/shared'
 import type Phaser from 'phaser'
+import { AvatarSprite, avatarPx } from '../avatars'
 import { burst, floatText, punch, ring, shake } from '../fx'
 import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
 import { bodyStyle, ensurePixelGrid, ensurePixelOrb, headlineStyle, shade } from '../pixelStyle'
+import { addShadow } from '../playerMarks'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // Mirrors the server's pixelDash.ts: an obstacle's `t` is its time-to-arrival over LEAD_MS (1 = just
@@ -14,26 +16,6 @@ const CLEAR_WINDOW_T = 0.19
 const JUMP_UP_MS = 190
 const RUN_FRAME_MS = 90
 const STREAK_EVERY = 5
-
-// Runner, 12x14 cells, facing right: a cap in the player's color, face, shirt, then one of three leg
-// poses (two run strides + a tucked jump).
-const RUNNER_TOP = [
-  '____cccc____',
-  '___cccccccc_',
-  '___ssssks___',
-  '___sssssss__',
-  '____ssss____',
-  '___bbbbbb___',
-  '__bbbbbbbss_',
-  '_ssbbbbbb___',
-  '___bbbbbb___',
-  '___dddddd___',
-]
-const RUNNER_LEGS: Record<'run1' | 'run2' | 'jump', string[]> = {
-  run1: ['___ll__ll___', '__ll____ll__', '_ll______ll_', 'ee________ee'],
-  run2: ['____llll____', '____l_l_____', '____l_l_____', '___ee_ee____'],
-  jump: ['__llllllll__', '__l______l__', '_ee______ee_', '____________'],
-}
 
 // Three cosmetic obstacle looks (the server only sends ids): crate, traffic cone, rock.
 const OBSTACLES: { rows: string[]; legend: Record<string, number> }[] = [
@@ -89,15 +71,16 @@ const OBSTACLES: { rows: string[]; legend: Record<string, number> }[] = [
 // scrolling world, and the player's own runner locally. Tap anywhere / Space sends a JUMP and hops the
 // runner; clears and stumbles come back from the snapshot and get their own feedback.
 export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
-  private runner?: Phaser.GameObjects.Image
+  // You: your lobby avatar in side view, running right (bob + lean instead of leg frames).
+  private runner?: AvatarSprite
+  private shadow?: Phaser.GameObjects.Ellipse
+  private hurtUntil = 0
   private button?: Phaser.GameObjects.Image
   private buttonKey = ''
   private buttonDownKey = ''
   private layers: { sprite: Phaser.GameObjects.TileSprite; factor: number }[] = []
   private readonly sprites = new Map<number, Phaser.GameObjects.Image>()
   private readonly interp = new SnapshotInterpolator<PixelDashSnapshot>(100)
-  private runKeys: string[] = []
-  private jumpKey = ''
   private obstacleKeys: string[] = []
   private lastTick = -1
   private lastScore = -1
@@ -140,29 +123,6 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
 
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
-    const color = this.state.colorOf(this.selfId, PALETTE.amber)
-    const legend = {
-      c: shade(color, 0.25),
-      s: 0xf2c29b,
-      k: PALETTE.bg,
-      b: color,
-      d: shade(color, -0.45),
-      l: PALETTE.frame,
-      e: PALETTE.text,
-    }
-    const hex = color.toString(16)
-    this.runKeys = (['run1', 'run2'] as const).map((pose) =>
-      ensurePixelGrid(this, {
-        key: `pp-dash-runner-${hex}-${pose}`,
-        rows: [...RUNNER_TOP, ...RUNNER_LEGS[pose]],
-        legend,
-      }),
-    )
-    this.jumpKey = ensurePixelGrid(this, {
-      key: `pp-dash-runner-${hex}-jump`,
-      rows: [...RUNNER_TOP, ...RUNNER_LEGS.jump],
-      legend,
-    })
     this.obstacleKeys = OBSTACLES.map((o, i) =>
       ensurePixelGrid(this, { key: `pp-dash-obstacle-${i}`, rows: o.rows, legend: o.legend }),
     )
@@ -170,17 +130,22 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
     const playH = height - this.top
     this.groundY = Math.round(this.top + playH * (compact ? 0.6 : 0.64))
     this.runnerX = Math.round(width * (compact ? 0.22 : 0.18))
-    this.runnerH = Math.round(Math.max(36, Math.min(96, (this.groundY - this.top) * 0.24)))
+    this.runnerH = avatarPx(Math.max(32, Math.min(96, (this.groundY - this.top) * 0.26)))
     this.obstacleH = Math.round(this.runnerH * 0.55)
     this.speed = (width + this.obstacleH - this.runnerX) / LEAD_MS
 
     this.buildWorld(width, height)
 
-    this.runner = this.add
-      .image(this.runnerX, this.groundY, this.runKeys[0] ?? '')
-      .setOrigin(0.5, 1)
-      .setDisplaySize(this.runnerH * (12 / 14), this.runnerH)
-      .setDepth(30)
+    this.shadow = addShadow(this, this.runnerH, 29).setPosition(this.runnerX, this.groundY - 1)
+    this.runner = new AvatarSprite(
+      this,
+      this.state.avatarOf(this.selfId),
+      this.state.colorOf(this.selfId, PALETTE.amber),
+      this.runnerH,
+      'side',
+    )
+    this.runner.image.setOrigin(0.5, 1).setPosition(this.runnerX, this.groundY).setDepth(30)
+    this.hurtUntil = 0
 
     // A big arcade JUMP button in the dirt: the obvious "what do I do" (tapping anywhere works too).
     const below = height - this.groundY
@@ -331,10 +296,10 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
       punch(this, this.button, -0.08, 60)
       this.time.delayedCall(80, () => this.button?.setTexture(this.buttonKey))
     }
-    const runner = this.runner
+    const runner = this.runner?.image
     if (this.jumping || this.crashing || !runner) return
     this.jumping = true
-    runner.setTexture(this.jumpKey)
+    runner.setAngle(-8)
     this.tweens.add({
       targets: runner,
       y: this.groundY - this.runnerH * 1.3,
@@ -343,7 +308,7 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
       ease: 'Quad.easeOut',
       onComplete: () => {
         this.jumping = false
-        runner.setY(this.groundY)
+        runner.setY(this.groundY).setAngle(0)
         burst(this, runner.x, this.groundY - 2, 0x8a7a6a, 5, 70)
       },
     })
@@ -362,8 +327,18 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
         layer.sprite.tilePositionX += (this.speed * delta * layer.factor) / layer.sprite.tileScaleX
       }
     }
-    if (this.runner && !this.jumping && !this.crashing && moving) {
-      this.runner.setTexture(this.runKeys[Math.floor(now / RUN_FRAME_MS) % 2] ?? '')
+    const runner = this.runner
+    if (runner) {
+      // Running: a stride bob and a forward lean; happy in the air, wincing after a stumble.
+      runner
+        .setExpression(now < this.hurtUntil ? 'hurt' : this.jumping ? 'happy' : 'idle')
+        .tick(now)
+      if (!this.jumping && !this.crashing && moving) {
+        const stride = Math.floor(now / RUN_FRAME_MS) % 2
+        runner.image.setY(this.groundY - stride * Math.max(2, this.runnerH / 16)).setAngle(4)
+      }
+      const lift = (this.groundY - runner.image.y) / (this.runnerH * 1.6)
+      this.shadow?.setScale(Math.max(0.4, 1 - lift), 1)
     }
     this.renderObstacles(now)
   }
@@ -419,7 +394,7 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
   }
 
   private onCrash(): void {
-    const runner = this.runner
+    const runner = this.runner?.image
     this.streak = 0
     this.sfx.wrong()
     shake(this, 0.01, 220)
@@ -442,9 +417,10 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
     if (!runner || this.crashing) return
     // Stumble: the runner trips forward, blinks and gets back up.
     this.crashing = true
+    this.hurtUntil = this.time.now + 900
     this.tweens.killTweensOf(runner)
     this.jumping = false
-    runner.setY(this.groundY).setTexture(this.runKeys[1] ?? '')
+    runner.setY(this.groundY)
     this.tweens.add({
       targets: runner,
       angle: { from: 0, to: 70 },

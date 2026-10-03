@@ -1,5 +1,6 @@
 import { PALETTE, type QuickDrawPlayerView, type QuickDrawSnapshot } from '@pp/shared'
 import type Phaser from 'phaser'
+import { AvatarSprite, avatarPx } from '../avatars'
 import { burst, flash, floatText, punch, shake } from '../fx'
 import {
   bodyStyle,
@@ -19,52 +20,9 @@ const BLAZE = [0x3a1a52, 0x6e2a6e, 0xb0446a, 0xff7b3d, 0xffa24b, 0xffcf4b]
 const SAND = 0x9a6a3a
 const WOOD = 0x7a4a26
 
-// 20x20 gunslinger facing right. 'A' = holstered, 'B' = drawn (arm out, revolver levelled). Colors:
-// H hat, f skin, e eye, k bandana, b shirt (player color), w belt, g steel, p denim, B boots.
-const SLINGER_A = [
-  '______HHHHH_________',
-  '______HHHHH_________',
-  '____HHHHHHHHH_______',
-  '______fffff_________',
-  '______fffef_________',
-  '______fffff_________',
-  '_______kkk__________',
-  '_____bbbbbbb________',
-  '____bbbbbbbbb_______',
-  '____bbbbbbbbb_______',
-  '____bb_bbb_bb_______',
-  '____bb_bbb_bb_______',
-  '____ff_wwwwwff______',
-  '_______wwwwgg_______',
-  '_______ppppgg_______',
-  '_______pp_pp________',
-  '_______pp_pp________',
-  '_______pp_pp________',
-  '_______pp_pp________',
-  '______BBB_BBB_______',
-]
-const SLINGER_B = [
-  '______HHHHH_________',
-  '______HHHHH_________',
-  '____HHHHHHHHH_______',
-  '______fffff_________',
-  '______fffef_________',
-  '______fffff_________',
-  '_______kkk__________',
-  '_____bbbbbbb________',
-  '____bbbbbbbbbbbfgggg',
-  '____bbbbbbbbbbbfgg__',
-  '____bb_bbb_______g__',
-  '____bb_bbb__________',
-  '____ff_wwwww________',
-  '_______wwwww________',
-  '_______pppp_________',
-  '_______pp_pp________',
-  '_______pp_pp________',
-  '_______pp_pp________',
-  '_______pp_pp________',
-  '______BBB_BBB_______',
-]
+// Each duelist is the player's lobby avatar in side view, facing the other; drawing pulls this revolver
+// (facing right, 10x5 cells at the avatar's pixel size): g steel, d dark steel, w wooden grip.
+const REVOLVER = ['__gggggggg', '_gdddddddd', '_wwd______', '_ww_______', '_ww_______']
 const CACTUS = [
   '___gg___',
   '__gGgg__',
@@ -91,32 +49,12 @@ const TUMBLEWEED = [
 type Outcome = 'fastest' | 'oppJumped' | 'jumped' | 'slower' | 'draw' | 'bye'
 
 interface Slinger {
-  sprite: Phaser.GameObjects.Image
+  avatar: AvatarSprite
+  gun: Phaser.GameObjects.Image
   name: Phaser.GameObjects.Text
-  keyA: string
-  keyB: string
-  // Gun-tip offset from the sprite origin (feet), for the muzzle flash.
+  // Gun-tip offset from the avatar's origin (feet), for the muzzle flash.
   tipX: number
   tipY: number
-}
-
-function slingerKeys(scene: Phaser.Scene, color: number): [string, string] {
-  const legend = {
-    H: shade(color, -0.6),
-    f: 0xe8b48a,
-    e: PALETTE.bg,
-    k: shade(color, 0.45),
-    b: color,
-    w: 0x5a3a1e,
-    g: 0xaab2cc,
-    p: 0x3a3f66,
-    B: 0x3b2413,
-  }
-  const hex = color.toString(16)
-  return [
-    ensurePixelGrid(scene, { key: `pp-qd-slinger-a-${hex}`, rows: SLINGER_A, legend }),
-    ensurePixelGrid(scene, { key: `pp-qd-slinger-b-${hex}`, rows: SLINGER_B, legend }),
-  ]
 }
 
 // Generates (and caches by key) a beveled pixel tile at its real size — a stretched square block
@@ -280,17 +218,29 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
   // Both duelists, once the snapshot names the opponent (or leaves us alone on a bye).
   private buildSlingers(me: QuickDrawPlayerView): void {
     const { width, height } = this.scale
-    const size = Math.min(height * 0.26, width * 0.34)
+    const size = avatarPx(Math.min(height * 0.26, width * 0.34))
     const feetY = this.horizon + (height - this.horizon) * 0.35
+    const cell = size / 16
+    const gunKey = ensurePixelGrid(this, {
+      key: 'pp-qd-revolver',
+      rows: REVOLVER,
+      legend: { g: 0xaab2cc, d: 0x6b7390, w: 0x7a4a26 },
+      pixelSize: 1,
+    })
     const make = (id: string, x: number, flip: boolean): Slinger => {
       const color = this.state.colorOf(id, id === this.selfId ? PALETTE.cyan : PALETTE.magenta)
-      const [keyA, keyB] = slingerKeys(this, color)
-      const sprite = this.add
-        .image(x, feetY, keyA)
-        .setOrigin(0.5, 1)
-        .setDisplaySize(size, size)
+      const avatar = new AvatarSprite(this, this.state.avatarOf(id), color, size, 'side')
+      avatar.face(flip ? -1 : 1)
+      avatar.image.setOrigin(0.5, 1).setPosition(x, feetY).setDepth(5)
+      // The drawn revolver sticks out in front at belly height (hidden while holstered).
+      const dir = flip ? -1 : 1
+      const gun = this.add
+        .image(x + dir * size * 0.38, feetY - size * 0.36, gunKey)
+        .setOrigin(flip ? 1 : 0, 0.5)
+        .setScale(cell)
         .setFlipX(flip)
-        .setDepth(5)
+        .setDepth(6)
+        .setVisible(false)
       const fontSize = size > 150 ? 16 : 8
       const name = this.add
         .text(
@@ -302,9 +252,8 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
         .setOrigin(0.5, 1)
         .setDepth(6)
       fitText(name, width * 0.4, fontSize)
-      // Gun tip sits at column 20, row 8.5 of the 20x20 grid (mirrored for the opponent).
-      const tipX = (flip ? -1 : 1) * size * 0.5
-      return { sprite, name, keyA, keyB, tipX, tipY: -size * (1 - 8.5 / 20) }
+      const tipX = dir * (size * 0.38 + REVOLVER[0].length * cell)
+      return { avatar, gun, name, tipX, tipY: -size * 0.36 - cell * 2 }
     }
     const opponent = me.opponentId
     if (opponent === null) {
@@ -361,10 +310,12 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
     punch(this, this.signText, 0.2, 90)
   }
 
-  protected frame(snap: QuickDrawSnapshot | null): void {
+  protected frame(snap: QuickDrawSnapshot | null, time: number): void {
     const me = snap?.players[this.selfId]
     if (!snap || !me) return
     if (!this.me) this.buildSlingers(me)
+    this.me?.avatar.tick(time)
+    this.opp?.avatar.tick(time)
 
     // A bye is known from a round's very first snapshot, so it always gets its celebration.
     if (me.opponentId === null) {
@@ -433,7 +384,7 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
     if (!fx) return
     if (win) {
       this.sfx.correct()
-      const sprite = this.me?.sprite
+      const sprite = this.me?.avatar.image
       if (sprite) {
         burst(
           this,
@@ -454,21 +405,25 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
 
   // `shooter` draws and fires; `target` reels back and drops.
   private shoot(shooter: Slinger, target: Slinger | undefined, fx: boolean): void {
-    if (!fx) shooter.sprite.setTexture(shooter.keyB)
+    if (!fx) shooter.gun.setVisible(true)
     else if (shooter !== this.me || !this.firedLocally) this.fireGun(shooter)
+    shooter.avatar.setExpression('happy')
     if (!target) return
-    const away = target.sprite.flipX ? 1 : -1
+    target.avatar.setExpression('ko')
+    target.gun.setVisible(false)
+    const img = target.avatar.image
+    const away = img.flipX ? 1 : -1
     const fallen = {
       angle: -away * 80,
-      x: target.sprite.x - away * target.sprite.displayWidth * 0.2,
+      x: img.x - away * img.displayWidth * 0.2,
       alpha: 0.7,
     }
     if (!fx) {
-      target.sprite.setAngle(fallen.angle).setX(fallen.x).setAlpha(fallen.alpha)
+      img.setAngle(fallen.angle).setX(fallen.x).setAlpha(fallen.alpha)
       return
     }
     this.tweens.add({
-      targets: target.sprite,
+      targets: img,
       ...fallen,
       duration: 380,
       delay: 80,
@@ -477,9 +432,10 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
   }
 
   private fireGun(shooter: Slinger): void {
-    shooter.sprite.setTexture(shooter.keyB)
-    const x = shooter.sprite.x + shooter.tipX
-    const y = shooter.sprite.y + shooter.tipY
+    shooter.gun.setVisible(true)
+    punch(this, shooter.gun, 0.15, 60)
+    const x = shooter.avatar.image.x + shooter.tipX
+    const y = shooter.avatar.image.y + shooter.tipY
     burst(this, x, y, PALETTE.amber, 16, 240)
     burst(this, x, y, PALETTE.text, 6, 120)
     flash(this, PALETTE.amber, 90)
@@ -488,16 +444,19 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
 
   // Jumped the gun: the gun comes out before the signal, the duelist goes grey.
   private misfire(who: Slinger, fx: boolean): void {
-    who.sprite.setTexture(who.keyB).setTint(0x8a8a9a)
+    const img = who.avatar.image
+    who.gun.setVisible(true).setTint(0x8a8a9a)
+    who.avatar.setExpression('hurt')
+    img.setTint(0x8a8a9a)
     if (!fx) return
     floatText(
       this,
-      who.sprite.x,
-      who.sprite.y - who.sprite.displayHeight - 30,
+      img.x,
+      img.y - img.displayHeight - 30,
       this.t('game.quickDraw.early'),
       PALETTE.red,
       18,
     )
-    punch(this, who.sprite, 0.08, 90)
+    punch(this, img, 0.08, 90)
   }
 }

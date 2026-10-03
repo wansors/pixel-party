@@ -1,51 +1,21 @@
 import { PALETTE, type TeamId, type TugOfWarSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
+import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, floatText, punch, ring, showBanner } from '../fx'
 import { bodyStyle, ensurePixelGrid, headlineStyle, shade, teamColor } from '../pixelStyle'
+import { YouMarker, addShadow } from '../playerMarks'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 const ROPE = 0xc9a36b
 const ROPE_DARK = 0x8a6a3e
 const ROPE_EDGE = 0x4a3520
-const SKIN = 0xf2c79a
-const PANTS = 0x3a3f66
-const SHOES = 0x23263a
 const LEAD_DEADZONE = 0.08 // offsets this close to 0 don't count as a lead change
 const DANGER = 0.7 // knot this close to a post = "almost there"
 
-// Pullers face right (red side); blue pullers are the same sprite flipped. Brace = digging in, heave =
-// leaning further back with arms at full stretch (played on each of the team's pulls).
-const PULLER_ROWS = {
-  brace: [
-    '__oooo___',
-    '_ossseo__',
-    '_osssso__',
-    '__oooo___',
-    '__obbbo__',
-    '_obhbbbss',
-    '_obhbbo__',
-    '__obbbo__',
-    '__oddo___',
-    '_odo_do__',
-    'od____do_',
-    'kk____kk_',
-  ],
-  heave: [
-    '_oooo____',
-    'ossseo___',
-    'osssso___',
-    '_oooo____',
-    '_obbbo___',
-    'obhbbbbss',
-    'obhbbo___',
-    '_obbbo___',
-    '__oddo___',
-    '__od_do__',
-    '_od___do_',
-    '_kk____kk',
-  ],
-}
-const HAND_ROW = 5.5 // rope passes through the hands (row 5 of 12)
+// Pullers are the players' avatars in side view, facing the knot (red faces right, blue is flipped),
+// leaning back to brace and further back on each of their team's pulls. The rope runs at belly height,
+// HAND_HEIGHT of an avatar above the ground (the field is laid out in `ps`-sized rows, 12 per puller).
+const HAND_HEIGHT = 0.34
 
 // Knot pennant hanging from the middle of the rope, colored by whoever is ahead.
 const PENNANT_ROWS = [
@@ -73,9 +43,8 @@ function postRows(): string[] {
 interface Puller {
   id: string
   team: TeamId
-  sprite: Phaser.GameObjects.Image
-  brace: string
-  heave: string
+  avatar: AvatarSprite
+  shadow: Phaser.GameObjects.Ellipse
   heaveUntil: number
 }
 
@@ -91,7 +60,7 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
   private counts: Partial<Record<TeamId, Phaser.GameObjects.Text>> = {}
   private prompt?: Phaser.GameObjects.Text
   private hint?: Phaser.GameObjects.Text
-  private marker?: Phaser.GameObjects.Text
+  private marker?: YouMarker
   private banner?: Phaser.GameObjects.Text
   private pullers: Puller[] = []
   private extra: Partial<Record<TeamId, Phaser.GameObjects.Text>> = {}
@@ -100,6 +69,7 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
   private reach = 0 // px from the center line to a goal post (= offset ±1)
   private groundY = 0
   private ropeY = 0
+  private pullerPx = 0
   private ps = 4
   private spacing = 0
   private gapFromKnot = 0
@@ -145,7 +115,8 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
     this.spacing = 9 * this.ps * (compact ? 1.05 : 1.2)
     this.gapFromKnot = 9 * this.ps * 0.9
     this.groundY = Math.round(top + avail * (compact ? 0.5 : 0.56))
-    this.ropeY = this.groundY - (12 - HAND_ROW) * this.ps
+    this.pullerPx = avatarPx(12 * this.ps)
+    this.ropeY = this.groundY - Math.round(this.pullerPx * HAND_HEIGHT)
 
     this.drawPlates(compact)
     this.drawField(width, compact)
@@ -186,16 +157,7 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
         }),
       )
       .setOrigin(0.5, 1)
-    this.marker = this.add
-      .text(
-        0,
-        0,
-        '▼',
-        headlineStyle(compact ? 16 : 24, this.state.colorOf(this.selfId, PALETTE.text)),
-      )
-      .setOrigin(0.5, 1)
-      .setDepth(12)
-      .setVisible(false)
+    this.marker = new YouMarker(this, compact ? 12 : 16, 12)
     // The finish banner takes the prompt's place under the field, so the rope stays in view.
     this.banner = addBanner(this)
       .setFontSize(compact ? 24 : 40)
@@ -289,33 +251,6 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
     })
   }
 
-  private pullerKeys(color: number): { brace: string; heave: string } {
-    const legend = {
-      o: shade(color, -0.6),
-      s: SKIN,
-      e: 0x10121c,
-      b: color,
-      h: shade(color, 0.4),
-      d: PANTS,
-      k: SHOES,
-    }
-    const hex = color.toString(16)
-    return {
-      brace: ensurePixelGrid(this, {
-        key: `pp-tug-brace-${hex}`,
-        rows: PULLER_ROWS.brace,
-        legend,
-        pixelSize: 1,
-      }),
-      heave: ensurePixelGrid(this, {
-        key: `pp-tug-heave-${hex}`,
-        rows: PULLER_ROWS.heave,
-        legend,
-        pixelSize: 1,
-      }),
-    }
-  }
-
   // Team membership is fixed for the round: build each side's line of pullers from the first snapshot.
   private build(snap: TugOfWarSnapshot): void {
     this.built = true
@@ -325,15 +260,22 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
       const ids = Object.keys(snap.teams)
         .filter((id) => snap.teams[id] === team)
         .sort((a, b) => (a === this.selfId ? -1 : b === this.selfId ? 1 : a.localeCompare(b)))
+      const size = this.pullerPx
       for (const id of ids.slice(0, maxShown)) {
-        const keys = this.pullerKeys(this.state.colorOf(id, teamColor(team)))
-        const sprite = this.add
-          .image(0, this.groundY + 1, keys.brace)
+        const avatar = new AvatarSprite(
+          this,
+          this.state.avatarOf(id),
+          this.state.colorOf(id, teamColor(team)),
+          size,
+          'side',
+        )
+        avatar.face(team === 'red' ? 1 : -1)
+        avatar.image
           .setOrigin(0.5, 1)
-          .setScale(this.ps)
-          .setFlipX(team === 'blue')
+          .setPosition(0, this.groundY + 1)
           .setDepth(8)
-        this.pullers.push({ id, team, sprite, ...keys, heaveUntil: 0 })
+        const shadow = addShadow(this, size, 7).setY(this.groundY)
+        this.pullers.push({ id, team, avatar, shadow, heaveUntil: 0 })
       }
       if (ids.length > maxShown) {
         this.extra[team] = this.add
@@ -356,7 +298,7 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
     const me = this.pullers.find((p) => p.id === this.selfId)
     if (me) {
       me.heaveUntil = this.time.now + 120
-      if (++this.pulls % 3 === 0) burst(this, me.sprite.x, this.groundY, 0x8a7a5a, 4, 70)
+      if (++this.pulls % 3 === 0) burst(this, me.avatar.image.x, this.groundY, 0x8a7a5a, 4, 70)
     }
     if (this.prompt) punch(this, this.prompt, 0.08, 60)
   }
@@ -418,7 +360,7 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
       if (time - this.lastDust[dragged] > 260) {
         this.lastDust[dragged] = time
         for (const p of this.pullers) {
-          if (p.team === dragged) burst(this, p.sprite.x, this.groundY, 0x8a7a5a, 5, 90)
+          if (p.team === dragged) burst(this, p.avatar.image.x, this.groundY, 0x8a7a5a, 5, 90)
         }
       }
     }
@@ -527,7 +469,15 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
       const i = idx[p.team]++
       const dir = p.team === 'red' ? -1 : 1
       const x = knotX + dir * (this.gapFromKnot + i * this.spacing)
-      p.sprite.setX(Math.round(x)).setTexture(time < p.heaveUntil ? p.heave : p.brace)
+      // Lean back (away from the knot) to brace, further on a heave; at the whistle the winners
+      // cheer and the losers are flattened.
+      const heaving = time < p.heaveUntil
+      const end = this.snap?.done ? this.winner() : null
+      p.avatar
+        .setExpression(end ? (end === p.team ? 'happy' : 'ko') : heaving ? 'hurt' : 'idle')
+        .tick(time)
+      p.avatar.image.setX(Math.round(x)).setAngle(dir * (end ? 0 : heaving ? 22 : 10))
+      p.shadow.setX(Math.round(x))
     }
     for (const t of ['red', 'blue'] as const) {
       const label = this.extra[t]
@@ -536,10 +486,14 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
       label.setX(knotX + dir * (this.gapFromKnot + (idx[t] - 0.5) * this.spacing))
     }
     const me = this.pullers.find((p) => p.id === this.selfId)
-    if (me && this.marker) {
-      const bob = Math.round(Math.sin(time / 160) * 3)
-      this.marker.setVisible(true).setPosition(me.sprite.x, this.groundY - 12 * this.ps - 4 + bob)
-    }
+    if (me)
+      this.marker?.place(me.avatar.image.x, me.avatar.image.y - me.avatar.image.displayHeight, time)
+  }
+
+  // The side the knot ended on (null = dead even).
+  private winner(): TeamId | null {
+    const offset = this.snap?.offset ?? 0
+    return offset < 0 ? 'red' : offset > 0 ? 'blue' : null
   }
 
   private updatePrompt(snap: TugOfWarSnapshot, team: TeamId | undefined): void {

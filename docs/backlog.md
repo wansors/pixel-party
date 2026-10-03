@@ -482,6 +482,26 @@ cluster below. Catalog section F.
       a designer-made avatar set (front/side/top-down variants + a few poses) that every scene reuses,
       so a player looks like "their" avatar in every game; (4) migrate the scenes to it (one shared
       sprite module instead of per-scene ASCII grids). *Requested 2026-09-28; needs design input.*
+- [ ] **Weird Trivia (`weird-trivia`)** — a *fast* trivia round where the questions are **not** general
+      knowledge but very strange, absurd, hard-to-believe facts: bizarre animal biology, odd laws, weird
+      world records, "which of these is real?". The laugh is the "no way that's true!" moment when the
+      answer reveals. *Requested 2026-10-03.*
+        - Reuse the Trivia engine and scene (A3) with its own seeded question bank and a shorter answer
+          window (fast rounds). Ship it as its own catalog entry so line-ups can pick it on its own.
+        - Every answer must be a **real, verifiable fact** (no invented trivia); the distractors are
+          plausible-but-absurd. Each question gets a one-line "fun fact" shown on the reveal.
+        - Bank written natively in EN and ES (localized jokes, not literal translations).
+        - Mobile-friendly (four big answer buttons). Axes: knowledge + reflexes.
+- [ ] **Dark / acid humor pass** — review the games and give some of them a touch of black, acid humor:
+      elimination stamps, round-result taglines, game-over and waiting quips, NPC reactions (the Freeze
+      Doll, the Glass Bridge crowd, the rope turners, the Quick Draw undertaker…), loading/intro blurbs.
+      *Requested 2026-10-03.*
+        - Aim at the situation and at the loser's pride (friendly banter for a LAN party of friends),
+          never at real people or groups.
+        - Written per language (EN and ES each get their own jokes), through the i18n keys.
+        - Start with an inventory of the existing flavor lines (e.g. the round-result taglines "Nailed
+          it!" / "Loser!!") and pick the games where it fits. Open question: a host toggle for the
+          spicier lines.
 - [ ] Manual mini-game selection/editor by the host.
 - [ ] Spectator mode.
 - [ ] Custom trivia packs.

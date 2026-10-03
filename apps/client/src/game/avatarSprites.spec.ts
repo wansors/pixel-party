@@ -59,6 +59,21 @@ describe('avatar sprites', () => {
     }
   })
 
+  it('draws the stride frames on the feet row only', () => {
+    for (const avatar of AVATARS) {
+      for (const pose of POSES) {
+        const still = avatarPixels(avatar, pose, 'idle', 0)
+        const steps = pose === 'side' ? [1] : [1, 2]
+        for (const step of steps as (1 | 2)[]) {
+          const moving = avatarPixels(avatar, pose, 'idle', step)
+          expect(JSON.stringify(moving)).not.toBe(JSON.stringify(still))
+          // Everything above the feet (and their outline row) is untouched.
+          expect(JSON.stringify(moving.slice(0, 13))).toBe(JSON.stringify(still.slice(0, 13)))
+        }
+      }
+    }
+  })
+
   it('derives the palette from the identity color', () => {
     const p = avatarPalette(0xff3e7f)
     expect(p.B).toBe(0xff3e7f)

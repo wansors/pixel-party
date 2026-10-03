@@ -1,36 +1,36 @@
 import { type AthleticsFoot, PALETTE, type TrackRaceSnapshot, type TrackRunner } from '@pp/shared'
 import type Phaser from 'phaser'
+import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, flash, floatText, shake, showBanner } from '../fx'
 import { bodyStyle, ensureBevelPanel, fitFontSize, headlineStyle } from '../pixelStyle'
+import { YouMarker, nameTagStyle } from '../playerMarks'
 import { MiniGameScene } from './MiniGameScene'
 import {
   ATHLETE_H,
-  ATHLETE_W,
-  type AthletePose,
   GRASS,
+  METRES_PER_FRAME,
   RunnerTracker,
   StridePad,
-  athleteTexture,
   ensureCheckerTexture,
   ensureCrowdTile,
   ensureHurdleTexture,
   ensureTrackTile,
-  runFrame,
 } from './athleticsKit'
 
 // Mirrors the server's trackRace.ts AIR_MS: how long a hurdle jump stays airborne.
 const AIR_MS = 480
 const HURDLE_M = 1.07 // hurdle height, metres
 const JUMP_M = 1.1 // peak of the drawn jump arc, metres
-const SPRITE_M = 2.2 // world metres the athlete sprite spans (head room included)
+const SPRITE_M = 2.2 // world metres the athlete's box spans (head room included)
 const STUMBLE_MS = 260
 
+// Each athlete is the player's lobby avatar in side view: two-frame strides tied to the distance run,
+// crouched in the blocks, tucked over a hurdle, wincing on a stumble, happy past the line.
 interface RunnerView {
-  sprite: Phaser.GameObjects.Image
+  avatar: AvatarSprite
   label: Phaser.GameObjects.Text
   color: number
   lane: number
-  pose: AthletePose | ''
   airStart: number // client time the current jump started (-1 = grounded)
   stumbleAt: number
 }
@@ -54,7 +54,7 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
   private finishLine?: Phaser.GameObjects.Image
   private progress?: Phaser.GameObjects.Graphics
   private clock?: Phaser.GameObjects.Text
-  private marker?: Phaser.GameObjects.Text
+  private marker?: YouMarker
   private banner?: Phaser.GameObjects.Text
   private subline?: Phaser.GameObjects.Text
   private built = false
@@ -78,7 +78,7 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     super.create()
     this.tracker.reset()
     for (const v of this.views.values()) {
-      v.sprite.destroy()
+      v.avatar.destroy()
       v.label.destroy()
     }
     this.views.clear()
@@ -135,19 +135,7 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
       .setOrigin(0.5)
       .setDepth(950)
       .setVisible(false)
-    this.marker = this.add
-      .text(
-        0,
-        0,
-        '▼',
-        headlineStyle(this.compact ? 12 : 16, PALETTE.text, {
-          stroke: '#10121c',
-          strokeThickness: 3,
-        }),
-      )
-      .setOrigin(0.5, 1)
-      .setDepth(650)
-      .setVisible(false)
+    this.marker = new YouMarker(this, this.compact ? 12 : 16, 650)
   }
 
   // --- Layout (on the first snapshot, once the lane count is known) --------------------------------
@@ -237,6 +225,11 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     })
   }
 
+  // The avatar stands in the athlete's box (SPRITE_M tall) at a crisp size, inside its own lane.
+  private avatarSize(): number {
+    return avatarPx(this.spriteScale * ATHLETE_H * 0.8)
+  }
+
   private laneTop(lane: number): number {
     return this.trackTop + lane * this.laneH
   }
@@ -250,23 +243,30 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     if (!v) {
       const color = this.state.colorOf(r.id, PALETTE.cyan)
       const mine = r.id === this.selfId
+      const avatar = new AvatarSprite(
+        this,
+        this.state.avatarOf(r.id),
+        color,
+        this.avatarSize(),
+        'side',
+      )
+      avatar.image
+        .setOrigin(0.5, 1)
+        .setPosition(0, this.footY(lane))
+        .setDepth(101 + lane * 2)
       v = {
-        sprite: this.add
-          .image(0, this.footY(lane), athleteTexture(this, 'set', color))
-          .setOrigin(0.5, 1)
-          .setScale(this.spriteScale)
-          .setDepth(101 + lane * 2),
+        avatar,
         label: this.add
-          .text(0, 0, mine ? this.t('game.common.you') : this.state.nameOf(r.id), {
-            ...bodyStyle(this.compact ? 10 : 12, color, { fontStyle: 'bold' }),
-            stroke: '#10121c',
-            strokeThickness: 3,
-          })
+          .text(
+            0,
+            0,
+            mine ? this.t('game.common.you') : this.state.nameOf(r.id),
+            nameTagStyle(this.compact ? 8 : 10, color),
+          )
           .setOrigin(1, 0.5)
           .setDepth(640),
         color,
         lane,
-        pose: 'set',
         airStart: -1,
         stumbleAt: -1,
       }
@@ -373,29 +373,33 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     if (r.air && v.airStart < 0) v.airStart = this.arrivedAt - r.airT * AIR_MS
     const airT = v.airStart >= 0 ? (now - v.airStart) / AIR_MS : -1
     if (airT > 1) v.airStart = -1
-    let pose: AthletePose
-    if (snap.phase === 'set' || r.held) pose = 'set'
-    else if (v.airStart >= 0) pose = 'hurdle'
-    else if (r.v < 0.4) pose = r.x < 0.5 && r.finishMs === null ? 'set' : 'stand'
-    else pose = runFrame(x)
-    if (pose !== v.pose) {
-      v.pose = pose
-      v.sprite.setTexture(athleteTexture(this, pose, v.color))
-    }
-    const lift =
-      v.airStart >= 0 ? Math.sin(Math.max(0, Math.min(1, airT)) * Math.PI) * JUMP_M * this.ppm : 0
+    const crouched =
+      snap.phase === 'set' || r.held || (r.v < 0.4 && r.x < 0.5 && r.finishMs === null)
+    const airborne = v.airStart >= 0
+    const running = !crouched && !airborne && r.v >= 0.4
     const stumbling = v.stumbleAt >= 0 && now - v.stumbleAt < STUMBLE_MS
-    v.sprite.setPosition(sx, this.footY(lane) - lift).setAngle(stumbling ? 18 : 0)
-    const headY = this.footY(lane) - lift - ATHLETE_H * this.spriteScale
-    // Name tag trails the runner inside its own lane (the sprite's head pokes into the lane above).
+    // Strides follow the distance run (two frames per METRES_PER_FRAME * 2), not the clock.
+    const stride = Math.floor(x / (METRES_PER_FRAME * 2)) % 2
+    v.avatar
+      .setStep(airborne ? 1 : running ? (stride as 0 | 1) : 0)
+      .setExpression(stumbling ? 'hurt' : r.finishMs !== null ? 'happy' : 'idle')
+      .tick(now)
+    const lift = airborne
+      ? Math.sin(Math.max(0, Math.min(1, airT)) * Math.PI) * JUMP_M * this.ppm
+      : 0
+    // Lean: deep in the blocks, forward while running, a tuck over the hurdle, a lurch on a stumble.
+    const lean = stumbling ? 22 : crouched ? 16 : airborne ? -6 : running ? 6 : 0
+    const bob = running && stride === 1 ? -Math.max(1, Math.round(this.avatarSize() / 24)) : 0
+    v.avatar.image.setPosition(sx, this.footY(lane) - lift + bob).setAngle(lean)
+    const headY = this.footY(lane) - lift - this.avatarSize()
+    // Name tag trails the runner inside its own lane (the avatar's head pokes into the lane above).
     v.label.setPosition(
-      Math.max(v.label.width + 4, sx - (ATHLETE_W / 2) * this.spriteScale * 0.6),
+      Math.max(v.label.width + 4, sx - this.avatarSize() * 0.32),
       this.footY(lane) - this.laneH * 0.4,
     )
     if (mine) {
-      this.marker
-        ?.setPosition(sx, headY - (this.compact ? 12 : 16) - Math.abs(Math.sin(now / 200)) * 4)
-        .setVisible(r.finishMs === null)
+      if (r.finishMs === null) this.marker?.place(sx, headY, now)
+      else this.marker?.hide()
       if (r.finishMs === null) this.pad?.setSpeed(r.v)
     }
   }
@@ -467,7 +471,7 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
       const before = this.prev.get(r.id)
       const mine = r.id === this.selfId
       const view = this.views.get(r.id)
-      const sx = view?.sprite.x ?? 0
+      const sx = view?.avatar.image.x ?? 0
       const y = this.footY(lane) - this.laneH * 0.6
       if (before && !before.falseStart && r.falseStart) {
         if (mine) {
@@ -512,7 +516,7 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
         if (me.knocked.includes(i)) return
         this.sfx.tick()
         const view = this.views.get(me.id)
-        if (view) burst(this, view.sprite.x, this.footY(view.lane), PALETTE.lime, 6, 120)
+        if (view) burst(this, view.avatar.image.x, this.footY(view.lane), PALETTE.lime, 6, 120)
       })
     }
 
@@ -546,7 +550,7 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     this.goHideAt = 0
     this.pad?.setEnabled(false, false)
     this.pad?.setSpeed(0)
-    this.marker?.setVisible(false)
+    this.marker?.hide()
     const others = (this.snap?.runners ?? []).some((r) => r.id !== me.id && r.finishMs === null)
     this.subline?.setText(others ? this.t('game.common.waiting') : '').setVisible(others)
     if (!withFx) return
@@ -554,8 +558,9 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     else this.sfx.coin()
     const view = this.views.get(me.id)
     if (view) {
-      burst(this, view.sprite.x, view.sprite.y - 40, view.color, 24, 260)
-      burst(this, view.sprite.x, view.sprite.y - 40, PALETTE.amber, 16, 200)
+      const img = view.avatar.image
+      burst(this, img.x, img.y - 40, view.color, 24, 260)
+      burst(this, img.x, img.y - 40, PALETTE.amber, 16, 200)
     }
   }
 

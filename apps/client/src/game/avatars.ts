@@ -4,16 +4,18 @@ import {
   AVATAR_SIZE,
   type AvatarExpression,
   type AvatarPose,
+  type AvatarStep,
   avatarPalette,
   avatarPixels,
 } from './avatarSprites'
 
-export type { AvatarExpression, AvatarPose } from './avatarSprites'
+export type { AvatarExpression, AvatarPose, AvatarStep } from './avatarSprites'
 export { AVATAR_SIZE, toAvatarId } from './avatarSprites'
 
 // Generates (and caches) a Phaser texture of `avatar` in the player's identity color, in a pose (front,
-// side facing right — flip it to face left — or back) and with an expression (idle, blink, happy, hurt,
-// KO). `pixel` is the size of one sprite pixel in texture pixels; scale the image with setDisplaySize.
+// side facing right — flip it to face left — or back), with an expression (idle, blink, happy, hurt,
+// KO) and a stride frame. `pixel` is the size of one sprite pixel in texture pixels; scale the image
+// with setDisplaySize.
 export function ensureAvatarTexture(
   scene: Phaser.Scene,
   avatar: AvatarId,
@@ -21,12 +23,13 @@ export function ensureAvatarTexture(
   pixel = 4,
   pose: AvatarPose = 'front',
   expression: AvatarExpression = 'idle',
+  step: AvatarStep = 0,
 ): string {
-  const key = `pp-avatar-${avatar}-${pose}-${expression}-${color.toString(16)}-${pixel}`
+  const key = `pp-avatar-${avatar}-${pose}-${expression}-${step}-${color.toString(16)}-${pixel}`
   if (scene.textures.exists(key)) return key
   const palette = avatarPalette(color)
   const g = scene.make.graphics({ x: 0, y: 0 }, false)
-  avatarPixels(avatar, pose, expression).forEach((row, y) => {
+  avatarPixels(avatar, pose, expression, step).forEach((row, y) => {
     row.forEach((role, x) => {
       if (!role) return
       g.fillStyle(palette[role], 1)
@@ -41,7 +44,7 @@ export function ensureAvatarTexture(
 // Display sizes that keep a 16×16 avatar crisp: every sprite pixel covers the same number of screen
 // pixels (24 is the one half-step, for small UI). avatarPx gives the largest one that fits the room a
 // layout has (never below 16).
-const AVATAR_STEPS = [16, 24, 32, 48, 64, 80, 96, 112, 128] as const
+const AVATAR_STEPS = [16, 24, 32, 48, 64, 80, 96, 112, 128, 160, 192, 224, 256] as const
 
 export function avatarPx(maxPx: number): number {
   let best: number = AVATAR_STEPS[0]
@@ -59,6 +62,7 @@ export class AvatarSprite {
   readonly image: Phaser.GameObjects.Image
   private pose: AvatarPose
   private expression: AvatarExpression = 'idle'
+  private step: AvatarStep = 0
   // Players blink at different moments (derived from the identity color, stable across frames).
   private readonly blinkOffset: number
 
@@ -71,7 +75,7 @@ export class AvatarSprite {
   ) {
     this.pose = pose
     this.blinkOffset = (color % 997) * 37
-    this.image = scene.add.image(0, 0, this.textureFor(pose, 'idle')).setDisplaySize(size, size)
+    this.image = scene.add.image(0, 0, this.textureFor(pose, 'idle', 0)).setDisplaySize(size, size)
   }
 
   setPose(pose: AvatarPose): this {
@@ -100,6 +104,21 @@ export class AvatarSprite {
     return this
   }
 
+  // Walking/running: alternates the two stride frames while `moving` (side view: feet apart, then
+  // passing under the body; front/back: one foot lifted, then the other). Still = both feet down.
+  walk(moving: boolean, time: number, periodMs = 150): this {
+    const phase = Math.floor(time / periodMs) % 2
+    if (!moving) this.step = 0
+    else if (this.pose === 'side') this.step = phase === 0 ? 0 : 1
+    else this.step = phase === 0 ? 1 : 2
+    return this
+  }
+
+  setStep(step: AvatarStep): this {
+    this.step = step
+    return this
+  }
+
   setExpression(expression: AvatarExpression): this {
     this.expression = expression
     return this
@@ -111,7 +130,7 @@ export class AvatarSprite {
     const blink =
       this.expression === 'idle' && (time + this.blinkOffset) % BLINK_EVERY_MS < BLINK_MS
     const pose = this.pose === 'back' && this.expression !== 'idle' ? 'front' : this.pose
-    const key = this.textureFor(pose, blink ? 'blink' : this.expression)
+    const key = this.textureFor(pose, blink ? 'blink' : this.expression, this.step)
     if (this.image.texture.key !== key) this.image.setTexture(key)
   }
 
@@ -119,7 +138,7 @@ export class AvatarSprite {
     this.image.destroy()
   }
 
-  private textureFor(pose: AvatarPose, expression: AvatarExpression): string {
-    return ensureAvatarTexture(this.scene, this.avatar, this.color, 4, pose, expression)
+  private textureFor(pose: AvatarPose, expression: AvatarExpression, step: AvatarStep): string {
+    return ensureAvatarTexture(this.scene, this.avatar, this.color, 4, pose, expression, step)
   }
 }

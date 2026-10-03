@@ -1,15 +1,16 @@
 import { type MazeSprintSnapshot, PALETTE } from '@pp/shared'
 import type Phaser from 'phaser'
+import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, flash, floatText, punch, showBanner } from '../fx'
 import {
   bodyStyle,
   ensurePixelBlock,
   ensurePixelGrid,
-  ensurePixelOrb,
   fitFontSize,
   headlineStyle,
   shade,
 } from '../pixelStyle'
+import { YouMarker } from '../playerMarks'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 type Dir = 'up' | 'down' | 'left' | 'right'
@@ -41,10 +42,13 @@ const FLAG_ROWS = [
   'ppp_____',
 ]
 
+// A player in the maze: their lobby avatar, facing the way it last stepped.
 interface Token {
+  avatar: AvatarSprite
   img: Phaser.GameObjects.Image
   cell: number
   slot: number
+  movedAt: number
 }
 
 interface PadKey {
@@ -54,14 +58,14 @@ interface PadKey {
 }
 
 // Maze Sprint canvas. Renders the ONE shared maze (identical for everyone, drawn once as chunky
-// beveled walls) plus every player's token in their identity color, with the finish flag in the exit
+// beveled walls) plus every player as their lobby avatar, with the finish flag in the exit
 // cell and a breadcrumb trail of where you have been. Movement is server-validated: keys and the
 // arcade D-pad just send an intent. A wall bump is predicted locally from the same wall data for
 // instant feedback; the token itself only moves when the snapshot says so.
 export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
   private built = false
   private trail?: Phaser.GameObjects.Graphics
-  private halo?: Phaser.GameObjects.Arc
+  private marker?: YouMarker
   private flag?: Phaser.GameObjects.Image
   private banner?: Phaser.GameObjects.Text
   private subline?: Phaser.GameObjects.Text
@@ -307,11 +311,7 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
       .image(exit.x + c * 0.08, exit.y, flagKey)
       .setDisplaySize(c * 0.5, c * 0.62)
       .setDepth(6)
-    this.halo = this.add
-      .circle(0, 0, c * 0.36)
-      .setStrokeStyle(2, PALETTE.text, 0.9)
-      .setDepth(19)
-      .setVisible(false)
+    this.marker = new YouMarker(this, c < 40 ? 8 : 12, 25)
     this.built = true
   }
 
@@ -337,10 +337,14 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
     if (!snap) return
     if (!this.built) this.build(snap)
     this.flag?.setAngle(Math.sin(time / 300) * 4)
-    const mine = this.tokens.get(this.selfId)
-    if (mine && this.halo?.visible) {
-      this.halo.setPosition(mine.img.x, mine.img.y).setScale(1 + Math.sin(time / 180) * 0.08)
+    for (const [id, token] of this.tokens) {
+      token.avatar
+        .walk(time - token.movedAt < MOVE_MS, time, MOVE_MS / 2)
+        .setExpression(this.finished.has(id) ? 'happy' : 'idle')
+        .tick(time)
     }
+    const mine = this.tokens.get(this.selfId)
+    if (mine) this.marker?.place(mine.img.x, mine.img.y - mine.img.displayHeight / 2, time)
     if (this.state.tick === this.lastTick) return
     this.lastTick = this.state.tick
     this.hud?.setScore(this.t('game.mazeSprint.steps', { n: snap.progress[this.selfId] ?? 0 }))
@@ -361,27 +365,23 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
       const slot = mine ? 0 : (i % 4) + 1
       let token = this.tokens.get(id)
       if (!token) {
-        const color = this.state.colorOf(id)
-        const key = ensurePixelOrb(this, `pp-maze-dot-${color.toString(16)}`, 10, color)
-        const d = this.cell * (mine ? 0.5 : 0.34)
+        const d = avatarPx(Math.max(16, this.cell * (mine ? 0.8 : 0.5)))
         const { x, y } = this.tokenPos(cell, slot)
-        token = {
-          img: this.add
-            .image(x, y, key)
-            .setDisplaySize(d, d)
-            .setAlpha(mine ? 1 : 0.8)
-            .setDepth(mine ? 20 : 15),
-          cell,
-          slot,
-        }
+        const avatar = new AvatarSprite(this, this.state.avatarOf(id), this.state.colorOf(id), d)
+        avatar.image
+          .setPosition(x, y)
+          .setAlpha(mine ? 1 : 0.85)
+          .setDepth(mine ? 20 : 15)
+        token = { avatar, img: avatar.image, cell, slot, movedAt: Number.NEGATIVE_INFINITY }
         this.tokens.set(id, token)
-        if (mine) {
-          this.halo?.setVisible(true)
-          this.markVisited(cell)
-        }
+        if (mine) this.markVisited(cell)
         return
       }
       if (token.cell === cell) return
+      const from = this.cellCenter(token.cell)
+      const to = this.cellCenter(cell)
+      token.avatar.faceMotion(to.x - from.x, to.y - from.y, 0)
+      token.movedAt = this.time.now
       token.cell = cell
       const { x, y } = this.tokenPos(cell, slot)
       this.tweens.killTweensOf(token.img)

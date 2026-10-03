@@ -1,13 +1,15 @@
 import { PALETTE, type PixelRainSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
-import { addBanner, burst, flash, floatText, punch, ring, shake, showBanner } from '../fx'
+import { AvatarSprite } from '../avatars'
+import { addBanner, burst, flash, floatText, ring, shake, showBanner } from '../fx'
 import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
 import { bodyStyle, ensurePixelGrid, fitFontSize, headlineStyle, shade } from '../pixelStyle'
+import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // Mirrors the server's pixelRain.ts tuning: a block resolves against the avatar once its centre reaches
 // HIT_Y and hits when that centre is within ±AVATAR_HALF (normalized x) of the avatar's centre. The
-// slime is drawn exactly so wide that "the block visibly touches it" == "the server counts a hit".
+// avatar is drawn exactly so wide that "the block visibly touches it" == "the server counts a hit".
 const HIT_Y = 0.9
 const AVATAR_HALF = 0.09
 const NEAR_MISS = 0.05 // a landing this much outside the hit zone earns a "NICE!"
@@ -28,59 +30,6 @@ const BLOCK_ROWS = [
   'oooooooo',
 ]
 
-// The player's slime: an 18x12 dome (half-width per row), outlined, shaded, with eyes that look the way
-// it is sliding (-1 left, 0 ahead, 1 right) or crossed-out eyes once it has been squashed.
-const SLIME_W = 18
-const SLIME_HALF_WIDTHS = [3, 5, 6, 7, 8, 9, 9, 9, 9, 9, 9, 8]
-
-function slimeRows(look: -1 | 0 | 1, dead: boolean): string[] {
-  const inside = (x: number, y: number): boolean => {
-    const hw = SLIME_HALF_WIDTHS[y]
-    return hw !== undefined && x >= SLIME_W / 2 - hw && x < SLIME_W / 2 + hw
-  }
-  const grid: string[][] = SLIME_HALF_WIDTHS.map((_, y) =>
-    Array.from({ length: SLIME_W }, (_, x): string => {
-      if (!inside(x, y)) return '_'
-      if (!inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1)) {
-        return 'o'
-      }
-      if (y >= 9) return 'd'
-      if ((y === 2 && x >= 5 && x <= 7) || (y === 3 && x === 4)) return 'h'
-      return 'b'
-    }),
-  )
-  const put = (x: number, y: number, c: string): void => {
-    const row = grid[y]
-    if (row && row[x] !== undefined) row[x] = c
-  }
-  if (dead) {
-    for (const cx of [5, 12]) {
-      for (const [dx, dy] of [
-        [-1, -1],
-        [1, -1],
-        [0, 0],
-        [-1, 1],
-        [1, 1],
-      ] as const) {
-        put(cx + dx, 5 + dy, 'k')
-      }
-    }
-    for (let x = 7; x <= 10; x++) put(x, 8, 'k')
-  } else {
-    for (const ex of [5, 11]) {
-      for (let y = 4; y <= 6; y++) {
-        for (let dx = 0; dx < 2; dx++) {
-          const pupil = y >= 5 && (look === 0 || (look < 0 ? dx === 0 : dx === 1))
-          put(ex + dx, y, pupil ? 'k' : 'w')
-        }
-      }
-    }
-    put(8, 8, 'k')
-    put(9, 8, 'k')
-  }
-  return grid.map((row) => row.join(''))
-}
-
 interface Drop {
   block: Phaser.GameObjects.Image
   ghost: Phaser.GameObjects.Image
@@ -92,38 +41,38 @@ interface Drop {
 
 // Pixel Rain canvas (Phase 5). The server owns the falling stream + eliminations; this renders the
 // blocks smoothed through the snapshot interpolator (with a ground "shadow" telegraphing where each one
-// lands) and the player's own slime locally (drag / ◀ ▶). A strip under the HUD shows who is still in.
+// lands) and the player's own avatar locally (drag / ◀ ▶). A strip under the HUD shows who is still in.
 export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
-  private avatar?: Phaser.GameObjects.Image
+  // You: your lobby avatar, looking the way you slide, wobbling like jelly.
+  private avatar?: AvatarSprite
   private banner?: Phaser.GameObjects.Text
   private subline?: Phaser.GameObjects.Text
   private readonly drops = new Map<number, Drop>()
   private readonly interp = new SnapshotInterpolator<PixelRainSnapshot>(100)
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
-  private roster = new Map<string, Phaser.GameObjects.Image>()
+  // Who is still in: avatar + name chips under the HUD (KO face once squashed).
+  private strip?: PlayerStrip
+  private rosterIds: string[] = []
   private blockKeys: string[] = []
-  private slimeKeys: string[] = []
-  private deadKey = ''
   private lastTick = -1
   private avatarX = 0.5
   private renderedX = 0.5
   private lastSentX = -1
   private lastSentAt = 0
-  private look: -1 | 0 | 1 = 0
+  private movedAt = 0
   private alive = true
   private started = false
   private lastStanding = false
   private lastAlive: Record<string, boolean> = {}
   private selfColor = 0
   private compact = false
-  // Layout: normalized y 0 → y0 (top of the sky), HIT_Y → y90 (block touching the slime's head).
+  // Layout: normalized y 0 → y0 (top of the sky), HIT_Y → y90 (block touching the avatar's head).
   private y0 = 0
   private y90 = 0
   private groundY = 0
   private blockSize = 0
   private avatarScale = { x: 1, y: 1 }
   private rosterY = 0
-  private rosterIcon = 0
 
   constructor(...deps: SceneDeps) {
     super('pixel-rain', ...deps)
@@ -136,14 +85,13 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
     this.avatarX = 0.5
     this.renderedX = 0.5
     this.lastSentX = -1
-    this.look = 0
     this.alive = true
     this.started = false
     this.lastStanding = false
     this.lastAlive = {}
     for (const d of this.drops.values()) this.destroyDrop(d)
     this.drops.clear()
-    this.roster.clear()
+    this.rosterIds = []
 
     const { width, height } = this.scale
     this.compact = Math.min(width, height) < 520
@@ -155,12 +103,6 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
         legend: { o: shade(c, -0.55), h: shade(c, 0.4), b: c, d: shade(c, -0.25), w: PALETTE.text },
       }),
     )
-    this.slimeKeys = ([-1, 0, 1] as const).map((look) => this.slimeKey(this.selfColor, look))
-    this.deadKey = ensurePixelGrid(this, {
-      key: 'pp-rain-slime-dead',
-      rows: slimeRows(0, true),
-      legend: this.slimeLegend(PALETTE.frame),
-    })
 
     // Skyline silhouette behind the rain + a wet street along the bottom.
     const groundH = Math.max(20, Math.round(height * 0.05))
@@ -183,22 +125,35 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
       .setOrigin(0.5)
       .setAlpha(0.75)
 
-    // The slime: exactly as wide as the server's hit zone minus one block (see AVATAR_HALF above).
+    // The avatar: exactly as wide as the server's hit zone minus one block (see AVATAR_HALF above).
+    // Its size follows the hit zone, not the crisp avatar steps: the hit contract wins.
     this.blockSize = Math.max(20, Math.round(width * 0.06))
     const avatarW = Math.max(this.blockSize * 1.5, width * AVATAR_HALF * 2 - this.blockSize)
-    const avatarH = avatarW * (SLIME_HALF_WIDTHS.length / SLIME_W)
-    this.avatar = this.add
-      .image(width / 2, this.groundY + 2, this.slimeKeys[1] ?? '')
+    this.avatar = new AvatarSprite(
+      this,
+      this.state.avatarOf(this.selfId),
+      this.selfColor,
+      Math.round(avatarW),
+    )
+    this.avatar.image
       .setOrigin(0.5, 1)
-      .setDisplaySize(avatarW, avatarH)
+      .setPosition(width / 2, this.groundY + 2)
       .setDepth(30)
-    this.avatarScale = { x: this.avatar.scaleX, y: this.avatar.scaleY }
+    this.avatarScale = { x: this.avatar.image.scaleX, y: this.avatar.image.scaleY }
 
     const rowH = this.compact ? 20 : 26
     this.rosterY = this.top + rowH / 2
-    this.rosterIcon = rowH
+    this.strip = new PlayerStrip(
+      this,
+      width / 2,
+      this.rosterY,
+      width - 24,
+      this.compact ? 11 : 13,
+      1,
+    )
     this.y0 = this.top + rowH + 6 + this.blockSize / 2
-    this.y90 = this.groundY + 2 - avatarH - this.blockSize / 2
+    // Blocks resolve where they touch the top of the avatar's head (row 1 of its 16-row grid).
+    this.y90 = this.groundY + 2 - avatarW * (15 / 16) - this.blockSize / 2
 
     this.banner = addBanner(this)
     this.subline = this.add
@@ -220,25 +175,6 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.aim(p.x))
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (p.isDown) this.aim(p.x)
-    })
-  }
-
-  private slimeLegend(color: number): Record<string, number> {
-    return {
-      o: shade(color, -0.6),
-      b: color,
-      h: shade(color, 0.45),
-      d: shade(color, -0.25),
-      w: PALETTE.text,
-      k: PALETTE.bg,
-    }
-  }
-
-  private slimeKey(color: number, look: -1 | 0 | 1): string {
-    return ensurePixelGrid(this, {
-      key: `pp-rain-slime-${color.toString(16)}-${look}`,
-      rows: slimeRows(look, false),
-      legend: this.slimeLegend(color),
     })
   }
 
@@ -299,25 +235,32 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
   private renderAvatar(now: number): void {
     const avatar = this.avatar
     if (!avatar) return
-    avatar.setX(this.avatarX * this.scale.width)
+    avatar.image.setX(this.avatarX * this.scale.width)
+    avatar.tick(now)
     if (!this.alive) return
-    // Movement since the last rendered frame (drag, taps or keys) decides where the eyes look.
+    // Sliding turns the avatar sideways (facing the way it goes); standing still faces the rain.
     const moved = this.avatarX - this.renderedX
     this.renderedX = this.avatarX
-    const look: -1 | 0 | 1 = moved < -0.0005 ? -1 : moved > 0.0005 ? 1 : this.look
-    if (look !== this.look) {
-      this.look = look
-      avatar.setTexture(this.slimeKeys[look + 1] ?? '')
-    }
+    if (Math.abs(moved) > 0.0005) avatar.setPose('side').face(moved)
+    else if (now - this.movedAt > 180) avatar.setPose('front').image.setFlipX(false)
+    if (Math.abs(moved) > 0.0005) this.movedAt = now
     // Jelly wobble: squash/stretch around the base scale.
     const j = Math.sin(now / 150) * 0.035
-    avatar.setScale(this.avatarScale.x * (1 + j), this.avatarScale.y * (1 - j))
+    avatar.image.setScale(this.avatarScale.x * (1 + j), this.avatarScale.y * (1 - j))
   }
 
   // Discrete events (eliminations, last one standing) straight from the authoritative snapshot.
   private onSnapshot(snap: PixelRainSnapshot): void {
     const ids = Object.keys(snap.alive)
-    if (this.roster.size === 0 && ids.length > 0) this.buildRoster(ids)
+    if (this.rosterIds.length === 0) this.rosterIds = ids
+    this.strip?.set(
+      this.rosterIds.map((id) => ({
+        text: this.label(id),
+        avatar: this.state.avatarOf(id),
+        color: this.state.colorOf(id),
+        dim: snap.alive[id] === false,
+      })),
+    )
     const survivors = ids.filter((id) => snap.alive[id] !== false).length
     this.hud?.setScore(this.t('game.pixelRain.alive', { n: survivors, total: ids.length }))
     const meAlive = snap.alive[this.selfId] !== false
@@ -345,48 +288,34 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
       const text = this.t('game.pixelRain.lastStanding')
       const half = text.length * 8 + 4
       const width = this.scale.width
-      const x = Phaser.Math.Clamp(this.avatar?.x ?? width / 2, half, Math.max(half, width - half))
+      const x = Phaser.Math.Clamp(
+        this.avatar?.image.x ?? width / 2,
+        half,
+        Math.max(half, width - half),
+      )
       floatText(this, x, this.y90 - 20, text, PALETTE.lime, 16)
     }
   }
 
-  private buildRoster(ids: string[]): void {
-    const { width } = this.scale
-    const h = this.rosterIcon * 0.8
-    const w = Math.min(h * (SLIME_W / SLIME_HALF_WIDTHS.length), (width - 24) / ids.length - 6)
-    const iconH = w * (SLIME_HALF_WIDTHS.length / SLIME_W)
-    const step = w + 6
-    const startX = width / 2 - ((ids.length - 1) * step) / 2
-    ids.forEach((id, i) => {
-      const icon = this.add
-        .image(startX + i * step, this.rosterY, this.slimeKey(this.state.colorOf(id), 0))
-        .setDisplaySize(w, iconH)
-      if (id === this.selfId) {
-        this.add.rectangle(icon.x, this.rosterY + iconH / 2 + 3, w, 2, PALETTE.text).setAlpha(0.8)
-      }
-      this.roster.set(id, icon)
-    })
-  }
-
-  // A rival (or, on a silent resync, anyone) got squashed: grey out their roster icon.
+  // A rival got squashed (their chip dims with a KO face on the next strip update): a pop on it.
   private markOut(id: string, withFx: boolean): void {
-    const icon = this.roster.get(id)
-    if (!icon) return
-    icon.setTexture(this.deadKey).setAlpha(0.6)
     if (!withFx || id === this.selfId) return
+    const at = this.strip?.positionOf(this.rosterIds.indexOf(id))
     this.sfx.pop()
-    punch(this, icon, 0.4, 120)
-    burst(this, icon.x, icon.y, this.state.colorOf(id), 8, 120)
-    floatText(this, icon.x, icon.y + this.rosterIcon, this.t('game.common.out'), PALETTE.red, 16)
+    if (!at) return
+    burst(this, at.x, at.y, this.state.colorOf(id), 8, 120)
+    floatText(this, at.x, at.y + 20, this.t('game.common.out'), PALETTE.red, 16)
   }
 
   private becomeOut(withFx: boolean): void {
     this.alive = false
     this.markOut(this.selfId, false)
-    const avatar = this.avatar
-    if (avatar) {
-      avatar.setTexture(this.deadKey).setScale(this.avatarScale.x, this.avatarScale.y * 0.7)
-      avatar.setAlpha(0.8)
+    const avatar = this.avatar?.image
+    if (this.avatar && avatar) {
+      // Squashed flat: KO face, greyed, pressed into the street.
+      this.avatar.setPose('front').setExpression('ko')
+      avatar.setFlipX(false).setTint(0x9aa0b8)
+      avatar.setScale(this.avatarScale.x * 1.1, this.avatarScale.y * 0.7).setAlpha(0.85)
     }
     if (withFx && avatar) {
       const cy = avatar.y - avatar.displayHeight / 2
@@ -487,7 +416,7 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
       .setAlpha(0.15 + 0.55 * closeness)
   }
 
-  // A block left the snapshot: it fell past the slime line. Finish its fall locally and shatter it.
+  // A block left the snapshot: it fell past the avatar line. Finish its fall locally and shatter it.
   private landDrop(drop: Drop, width: number): void {
     drop.shadow.destroy()
     drop.ghost.destroy()

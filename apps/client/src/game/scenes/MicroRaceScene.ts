@@ -9,6 +9,7 @@ import {
   sampleMicroRaceTrack,
 } from '@pp/shared'
 import type Phaser from 'phaser'
+import { ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, flash, floatText, ring, shake, showBanner } from '../fx'
 import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
 import {
@@ -20,6 +21,7 @@ import {
   hexToCss,
   shade,
 } from '../pixelStyle'
+import { YouMarker, nameTagStyle } from '../playerMarks'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 import {
   CAR_COLS,
@@ -43,6 +45,8 @@ const BANNER_MS = 1200
 
 interface CarView {
   sprite: Phaser.GameObjects.Image
+  // The driver: the player's lobby avatar riding in the cockpit (turns with the car).
+  pilot: Phaser.GameObjects.Image
   shadow: Phaser.GameObjects.Image
   label: Phaser.GameObjects.Text
   color: number
@@ -90,7 +94,7 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
   private lampKeys = { off: '', red: '', green: '' }
   private lit = -1
   private lightsUntil = 0
-  private marker?: Phaser.GameObjects.Text
+  private marker?: YouMarker
   private banner?: Phaser.GameObjects.Text
   private subline?: Phaser.GameObjects.Text
   private bannerUntil = 0
@@ -117,6 +121,7 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     this.interp.reset()
     for (const c of this.cars.values()) {
       c.sprite.destroy()
+      c.pilot.destroy()
       c.shadow.destroy()
       c.label.destroy()
     }
@@ -223,19 +228,7 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
       )
     }
 
-    this.marker = this.add
-      .text(
-        0,
-        0,
-        '▼',
-        headlineStyle(this.compact ? 12 : 16, PALETTE.text, {
-          stroke: '#10121c',
-          strokeThickness: 3,
-        }),
-      )
-      .setOrigin(0.5, 1)
-      .setDepth(40)
-      .setVisible(false)
+    this.marker = new YouMarker(this, this.compact ? 12 : 16, 40)
     // Banners go on whichever half of the view the player's car isn't in (see placeBanner).
     const bannerY = this.top + this.view.h * 0.3
     this.banner = addBanner(this).setY(bannerY)
@@ -382,17 +375,17 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
           .image(0, 0, this.carKey(color))
           .setDisplaySize(w, h)
           .setDepth(mine ? 21 : 20),
+        pilot: this.add
+          .image(0, 0, ensureAvatarTexture(this, this.state.avatarOf(c.id), color, 2))
+          .setDisplaySize(h * 0.62, h * 0.62)
+          .setDepth(mine ? 21.5 : 20.5),
         shadow: this.add
           .image(0, 0, this.shadowKey())
           .setDisplaySize(w, h)
           .setAlpha(0.35)
           .setDepth(15),
         label: this.add
-          .text(0, 0, this.label(c.id), {
-            ...bodyStyle(this.compact ? 10 : 12, color, { fontStyle: 'bold' }),
-            stroke: '#10121c',
-            strokeThickness: 3,
-          })
+          .text(0, 0, this.label(c.id), nameTagStyle(this.compact ? 8 : 10, color))
           .setOrigin(0.5, 1)
           .setDepth(30),
         color,
@@ -705,6 +698,7 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
       const p = this.toScreen(v.wx, v.wy)
       const heading = Math.round(v.a / HEADING_STEP) * HEADING_STEP
       v.sprite.setPosition(p.x, p.y).setRotation(heading)
+      v.pilot.setPosition(p.x, p.y).setRotation(heading)
       v.shadow.setPosition(p.x + lift, p.y + lift * 1.5).setRotation(heading)
       v.label.setPosition(p.x, p.y - CAR_COLS * TEXEL * this.zoom * 0.5 - 2)
       const mine = c.id === this.selfId
@@ -740,13 +734,7 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     }
     this.selfPrev = { x: v.wx, y: v.wy }
     v.label.setVisible(false)
-    this.marker
-      ?.setPosition(
-        p.x,
-        p.y - CAR_COLS * TEXEL * this.zoom * 0.5 - 2 - Math.abs(Math.sin(now / 200)) * 4,
-      )
-      .setColor(hexToCss(v.color))
-      .setVisible(true)
+    this.marker?.place(p.x, p.y - CAR_COLS * TEXEL * this.zoom * 0.5, now)
     if (c.off && this.selfSpeed > 40 && now - this.lastDustAt > 150) {
       this.lastDustAt = now
       const bx = p.x - Math.cos(v.a) * 12 * this.zoom

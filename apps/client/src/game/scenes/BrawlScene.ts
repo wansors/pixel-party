@@ -1,4 +1,4 @@
-import { BRAWL, type BrawlAction, type BrawlFighter, type BrawlSnapshot, PALETTE } from '@pp/shared'
+import { BRAWL, type BrawlAction, type BrawlSnapshot, PALETTE } from '@pp/shared'
 import Phaser from 'phaser'
 import { type AvatarExpression, AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, eliminate, flash, floatText, shake, showBanner } from '../fx'

@@ -17,11 +17,16 @@ import { AVATARS, type AvatarId } from '@pp/shared'
 
 export type AvatarPose = 'front' | 'side' | 'back'
 export type AvatarExpression = 'idle' | 'blink' | 'happy' | 'hurt' | 'ko'
+// Walk/run frames: 0 = both feet down; side view: 1 = feet passing under the body; front and back
+// views: 1 = left foot lifted, 2 = right foot lifted.
+export type AvatarStep = 0 | 1 | 2
 
 // Final pixel roles (after shading, outline and eyes).
 export type AvatarRole = 'O' | 'B' | 'H' | 'S' | 'D' | 'M' | 'N' | 'P' | 'K' | 'W' | 'Y' | 'Z'
 
 export const AVATAR_SIZE = 16
+// Every grid stands on this row (the feet), so all six share one ground line.
+const FEET_ROW = 14
 
 const FRONT: Record<AvatarId, readonly string[]> = {
   cat: [
@@ -382,19 +387,53 @@ export function toAvatarId(value: string | undefined): AvatarId {
 // Fixed-colour features (the rest of the letters are shaded from the body or the light tone).
 const FEATURE: Record<string, AvatarRole> = { s: 'D', p: 'P', k: 'K', w: 'W' }
 
+// A stride frame: rewrites the feet row of a view (see AvatarStep).
+function stepFeet(row: string[], pose: AvatarPose, step: AvatarStep): void {
+  const runs: [number, number][] = []
+  for (let x = 0; x < row.length; ) {
+    if (row[x] === '.') {
+      x++
+      continue
+    }
+    let end = x
+    while (end < row.length && row[end] !== '.') end++
+    runs.push([x, end])
+    x = end
+  }
+  const first = runs[0]
+  const last = runs[runs.length - 1]
+  if (step === 0 || !first || !last || runs.length < 2) return
+  if (pose === 'side') {
+    const ch = row[first[0]] ?? '#'
+    const w = Math.min(
+      4,
+      runs.reduce((n, [a, b]) => n + b - a, 0),
+    )
+    const start = Math.round((first[0] + last[1] - w) / 2)
+    row.fill('.')
+    for (let x = start; x < start + w; x++) row[x] = ch
+  } else {
+    const [a, b] = step === 1 ? first : last
+    for (let x = a; x < b; x++) row[x] = '.'
+  }
+}
+
 const cache = new Map<string, (AvatarRole | null)[][]>()
 
-// The sprite as a 16×16 grid of roles (null = transparent): silhouette + features, eyes for the
-// expression, shading and the outline. Pure and cached.
+// The sprite as a 16×16 grid of roles (null = transparent): silhouette + features, the stride frame,
+// eyes for the expression, shading and the outline. Pure and cached.
 export function avatarPixels(
   avatar: AvatarId,
   pose: AvatarPose = 'front',
   expression: AvatarExpression = 'idle',
+  step: AvatarStep = 0,
 ): (AvatarRole | null)[][] {
-  const key = `${avatar}:${pose}:${expression}`
+  const key = `${avatar}:${pose}:${expression}:${step}`
   const hit = cache.get(key)
   if (hit) return hit
   const rows = (SPRITES[pose][avatar] ?? FRONT.cat).map((r) => [...r])
+  const feet = rows[FEET_ROW]
+  if (feet) stepFeet(feet, pose, step)
   const n = AVATAR_SIZE
   const at = (x: number, y: number): string => rows[y]?.[x] ?? '.'
   const filled = (x: number, y: number): boolean => at(x, y) !== '.'
