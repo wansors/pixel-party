@@ -569,6 +569,17 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
       'Two laps wheel-to-wheel: tuck into the slipstream, hit the boost pads, take the flag first.',
     axes: ['precision', 'reflexes'],
   },
+  {
+    id: 'honeycomb-cut',
+    name: 'Honeycomb Cut',
+    format: 'ffa',
+    realtime: false,
+    mobileFriendly: true,
+    durationSec: 45,
+    blurb:
+      'Trace the shape in the candy with your needle. Stray off the line or rush and it cracks!',
+    axes: ['precision', 'nerve'],
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

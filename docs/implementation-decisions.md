@@ -486,3 +486,8 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   room is now `loadComponent`-lazy and the avatar grids moved to a Phaser-free `avatarSprites.ts`
   (the join screen's picker had started importing Phaser through `pixelStyle`): initial bundle 2.09 MB
   → 387 kB, the room chunk (Phaser + all scenes) loads on entering a room.
+- **G4 Honeycomb Cut** (`honeycomb-cut`, mobile-friendly; a suggested extra of the elimination
+  cluster): the shapes are pure polyline generators in `@pp/shared` so both sides draw the same outline;
+  the server marks cut segments from needle samples (continuity window of 12 segments) and owns cracks
+  (off-line distance and a speed-stress rule). The speed limit was tightened to 0.5 candy-widths/s after
+  the first tests: at 0.9 the whole outline could be raced in under 2 s.

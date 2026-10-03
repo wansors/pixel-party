@@ -343,6 +343,10 @@
       "speed-circuit": {
         "name": "Speed Circuit",
         "blurb": "Two laps wheel-to-wheel: tuck into the slipstream, hit the boost pads, take the flag first."
+      },
+      "honeycomb-cut": {
+        "name": "Honeycomb Cut",
+        "blurb": "Trace the shape in the candy with your needle. Stray off the line or rush and it cracks!"
       }
     }
   },
@@ -750,6 +754,14 @@
       "split": "SPLIT {{time}}",
       "circuitStatus": "LAP {{lap}}/{{laps}} · P{{pos}}",
       "lap": "LAP {{lap}}!"
+    },
+    "honeycomb": {
+      "pressure": "PRESSURE",
+      "crack": "CRACK!",
+      "cracks": "CRACKS {{n}}/{{max}}",
+      "done": "CUT OUT IN {{s}}s!",
+      "slow": "TOO FAST! EASE OFF",
+      "hint": "Hold and trace the line with the needle"
     }
   }
 }

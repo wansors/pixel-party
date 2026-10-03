@@ -328,14 +328,16 @@ cluster below. Catalog section F.
 - [x] **Pixel Weight ("guess the weight")** — E12 (`pixel-weight`, shipped 2026-07-22): a pixel object
       flashes, then guess its filled-pixel count on a slider; points scale with closeness. Server owns
       the counts. *Balance variant not built.*
-- [ ] **Quick Tetris** — E13: short, fast Tetris sprint (compact variant of E10 Line Clear Sprint);
+- [x] **Quick Tetris** — E13 (`quick-tetris`, shipped 2026-08-22; ticked 2026-10-03): short, fast
+      Tetris sprint (compact variant of E10 Line Clear Sprint);
       identical seeded piece sequence, clear the most lines in a short window. *P3, rides the action wave.*
 - [x] **Sudoku Race** — E14 (`sudoku-race`, shipped 2026-08-21): everyone races the same seeded 4×4
       sudoku (2×2 boxes, 8 of 16 cells blank); tap a blank to cycle it 0→1→2→3→4→0. Winner is
       first-to-solve, else most correct cells placed. The solved grid is drawn from a canonical valid
       sudoku via seeded digit relabeling + row/col/band/stack permutations (no backtracking solver
       needed) and never sent on the wire — only fills + a correctness count.
-- [ ] **Bubble Pop ("Bust-a-Move")** — E15: bubble-shooter puzzle — aim and shoot coloured bubbles
+- [x] **Bubble Pop ("Bust-a-Move")** — E15 (`bubble-pop`, shipped 2026-08-22; ticked 2026-10-03):
+      bubble-shooter puzzle — aim and shoot coloured bubbles
       upward at a hanging cluster; 3+ touching same-colour bubbles pop and unattached bubbles drop for a
       bonus. Same seeded starting board + shot-colour queue for everyone; server owns the grid and
       validates each shot. Ranked by bubbles cleared (finishers by fastest board-clear). *P3 — latency-
@@ -464,7 +466,8 @@ cluster below. Catalog section F.
           ~1 s cooldown) to bump someone out of a doorway. This is what makes it a party game.
         - Real-time movement → **PC-first** (WASD/arrows + Space). Touch gets drag-to-move + a dash
           button (playable, not promised). Axes: speed + nerve.
-  - [ ] *Suggested extras in the same spirit (not requested — keep or drop)*: **Honeycomb Cut**
+  - [ ] *Suggested extras in the same spirit (not requested — kept, built one by one)*: **Honeycomb Cut**
+        (*shipped 2026-10-03, catalog G4*)
         (carve a shape out of a candy by tracing its outline; press too hard or leave the line and it
         cracks → mouse/touch precision), **Jump Rope** (a giant rope swings faster and faster; tap to
         jump in rhythm or get swept off), **Marbles Duel** (1v1 guess odd/even of the marbles your

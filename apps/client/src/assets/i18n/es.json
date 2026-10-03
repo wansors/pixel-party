@@ -343,6 +343,10 @@
       "speed-circuit": {
         "name": "Circuito de Velocidad",
         "blurb": "Dos vueltas rueda con rueda: métete en el rebufo, pisa los turbos y llega primero a la bandera."
+      },
+      "honeycomb-cut": {
+        "name": "Galleta de Miel",
+        "blurb": "Recorta la forma de la galleta con la aguja. ¡Si te sales de la línea o vas con prisa, se agrieta!"
       }
     }
   },
@@ -750,6 +754,14 @@
       "split": "PARCIAL {{time}}",
       "circuitStatus": "VUELTA {{lap}}/{{laps}} · P{{pos}}",
       "lap": "¡VUELTA {{lap}}!"
+    },
+    "honeycomb": {
+      "pressure": "PRESIÓN",
+      "crack": "¡CRAC!",
+      "cracks": "GRIETAS {{n}}/{{max}}",
+      "done": "¡RECORTADA EN {{s}}s!",
+      "slow": "¡DEMASIADO DEPRISA! FRENA",
+      "hint": "Mantén pulsado y repasa la línea con la aguja"
     }
   }
 }

@@ -53,7 +53,8 @@ Then (2026-10-02) the roadmap wave (D22), one game at a time: G1 Glass Bridge (`
 Freeze Doll (`freeze-doll`), G3 Room Rush (`room-rush`), I1 Sumo ICE (`sumo-ice`), I2 Pang (`pang`),
 I3 Star Blaster (`star-blaster`), I4 Asteroids Arena (`asteroids`), I5 Bomber Express
 (`bomber-express`), I6 Street Brawl (`brawl`), and the racing cluster's F6 Rally Stage (`rally-stage`)
-and F7 Speed Circuit (`speed-circuit`). **51 mini-games total.**
+and F7 Speed Circuit (`speed-circuit`); then the cluster's suggested extras, G4 Honeycomb Cut
+(`honeycomb-cut`). **52 mini-games total.**
 
 ---
 
@@ -470,6 +471,21 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
   call's victims tie). Stat: seconds survived. The round ends when one player is left.
 - **Latency**: high (continuous steering + shoving) — snapshot interpolation for every body.
 
+### G4. ✅ Honeycomb Cut (the dalgona candy) — implemented (`honeycomb-cut`)
+- **Concept**: everyone gets the same seeded shape (circle, triangle, star or umbrella) pressed into a
+  honeycomb candy and carves it out with a needle.
+- **Type**: FFA · **Input**: hold the mouse button / a finger and trace the outline · **Duration**:
+  45 s cap · **Banter**: 💥💥 · **Mobile-friendly**: yes (finger tracing is natural)
+- **Rules**: the outline is 160 segments; while the needle is on the line (≤ 0.028 of the candy) the
+  segment under it is cut, and so is the stretch since the last sample if they're close along the
+  outline (lifting the needle or jumping across cuts nothing in between). Further than 0.055 off the
+  line cracks the candy; so does rushing (needle speed over 0.5 candy-widths/s builds stress). A crack
+  grants 0.6 s of grace; the third breaks the candy — ELIMINATED. Cut every segment to pop the shape out.
+- **Win condition / Result**: finishing time (`12.4s`); then intact candies by progress, broken ones
+  last (`63%`).
+- **Latency**: low — the server judges needle samples (sent every 30 ms); the client draws your trail
+  at once and a pressure gauge from the same speed rule.
+
 ## I. Arcade classics, party-sized (2026-10-02)
 
 Real-time FFA reworks of arcade classics, keyboard-first (PC). Players are drawn as their lobby
@@ -571,7 +587,7 @@ avatar. See `implementation-decisions.md` D22.
 | Knowledge | A3 |
 | Mental math | E2 |
 | Memory | A4, A11, E8 |
-| Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4, F6, I2 |
+| Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4, F6, G4, I2 |
 | Survival / dodging | A7, A8, B3, I1, I3, I5 |
 | Nerve / chance | D1, D3, E5, G1, G2, G3 |
 | Teamwork | C1, C2, C3 |
@@ -581,7 +597,7 @@ avatar. See `implementation-decisions.md` D22.
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G3, I1–I6 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G4, I1–I6 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7 |
 | Team | C1, C2, C3 |
 
