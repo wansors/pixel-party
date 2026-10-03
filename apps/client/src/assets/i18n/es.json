@@ -351,6 +351,10 @@
       "jump-rope": {
         "name": "Comba Gigante",
         "blurb": "Una comba gigante gira cada vez más rápido: toca para saltar cuando pase bajo tus pies. ¡Dos fallos y estás fuera!"
+      },
+      "marbles-duel": {
+        "name": "Duelo de Canicas",
+        "blurb": "¿Par o impar? Esconde canicas en el puño y apuesta por las de tu rival. Gánalas todas para ganar el duelo."
       }
     }
   },
@@ -772,6 +776,21 @@
       "jumps": "SALTOS {{n}}",
       "trip": "¡TROPIEZO!",
       "survived": "¡SIGUES SALTANDO!"
+    },
+    "marbles": {
+      "hide": "ESCONDER",
+      "odd": "IMPAR",
+      "even": "PAR",
+      "hidePrompt": "ESCONDE CANICAS",
+      "guessPrompt": "APUESTA · ¿PAR O IMPAR?",
+      "waiting": "Esperando a {{name}}…",
+      "turn": "Turno {{n}}",
+      "theirs": "{{name}} · {{n}}",
+      "mine": "TUS CANICAS · {{n}}",
+      "reveal": "{{n}} · ¡{{parity}}!",
+      "youTake": "¡Te llevas {{n}}!",
+      "theyTake": "Se lleva {{n}}",
+      "bye": "Sin rival esta ronda: ¡victoria gratis!"
     }
   }
 }

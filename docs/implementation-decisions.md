@@ -393,7 +393,7 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   Revisit if hosts keep picking PC-only games for phone players: the client could report a coarse
   "touch device" hint on JOIN and the lobby could warn.
 
-### D22 — Catalog growth: roadmap game wave (elimination rounds, arcade classics, racers) — IN PROGRESS
+### D22 — Catalog growth: roadmap game wave (elimination rounds, arcade classics, racers) — DONE
 
 - **Date**: 2026-10-02. **Context**: the 2026-09-28/29 backlog ideas (`backlog.md` → *New mini-game
   ideas* and the *Squid Game-style elimination cluster*) are implemented **one game at a time**, each
@@ -495,3 +495,10 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   seeded jitter — reading the rhythm is the skill), judged per scheduled pass; two hearts so an early
   slip isn't instant elimination. The rope is drawn as a flattened arc whose middle swings from well over
   the heads to under the feet, behind the jumpers on the way up and in front on the way down.
+- **G6 Marbles Duel** (`marbles-duel`, mobile-friendly; a suggested extra): the duel format like Quick
+  Draw — seeded pairs, per-player views in one public snapshot, winners/draws rank 0. Simultaneous
+  secret choices resolve as soon as both are in (no waiting out the timer); the hidden count only goes
+  on the wire in the reveal. **Wave summary** (2026-10-02/03): 14 games — the 3 requested elimination
+  rounds + 3 suggested extras, 6 arcade classics, 2 racers — each shipped with domain tests, the full
+  gate (lint, determinism, typecheck, server + client tests, production build) and desktop + phone
+  playtests driven by real-input bot strategies.

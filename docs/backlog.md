@@ -466,11 +466,11 @@ cluster below. Catalog section F.
           ~1 s cooldown) to bump someone out of a doorway. This is what makes it a party game.
         - Real-time movement → **PC-first** (WASD/arrows + Space). Touch gets drag-to-move + a dash
           button (playable, not promised). Axes: speed + nerve.
-  - [ ] *Suggested extras in the same spirit (not requested — kept, built one by one)*: **Honeycomb Cut**
+  - [x] *Suggested extras in the same spirit (not requested — kept, built one by one)*: **Honeycomb Cut**
         (*shipped 2026-10-03, catalog G4*)
         (carve a shape out of a candy by tracing its outline; press too hard or leave the line and it
         cracks → mouse/touch precision), **Jump Rope** (*shipped 2026-10-03, catalog G5*; a giant rope swings faster and faster; tap to
-        jump in rhythm or get swept off), **Marbles Duel** (1v1 guess odd/even of the marbles your
+        jump in rhythm or get swept off), **Marbles Duel** (*shipped 2026-10-03, catalog G6*; 1v1 guess odd/even of the marbles your
         rival hides — quick bluffing duel).
 - [ ] **Visual consistency audit across all mini-games** — review every scene side by side and make
       them read as one game. Today each scene draws its own player figure (Pixel Dash's capped runner,

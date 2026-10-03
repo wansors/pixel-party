@@ -351,6 +351,10 @@
       "jump-rope": {
         "name": "Jump Rope",
         "blurb": "A giant rope swings faster and faster: tap to jump as it sweeps under you. Two misses and you are out!"
+      },
+      "marbles-duel": {
+        "name": "Marbles Duel",
+        "blurb": "Odd or even? Hide marbles in your fist, bet on your rival’s. Win them all to win the duel."
       }
     }
   },
@@ -772,6 +776,21 @@
       "jumps": "JUMPS {{n}}",
       "trip": "TRIP!",
       "survived": "STILL JUMPING!"
+    },
+    "marbles": {
+      "hide": "HIDE",
+      "odd": "ODD",
+      "even": "EVEN",
+      "hidePrompt": "HIDE SOME MARBLES",
+      "guessPrompt": "BET · ODD OR EVEN?",
+      "waiting": "Waiting for {{name}}…",
+      "turn": "Turn {{n}}",
+      "theirs": "{{name}} · {{n}}",
+      "mine": "YOURS · {{n}}",
+      "reveal": "{{n}} · {{parity}}!",
+      "youTake": "You take {{n}}!",
+      "theyTake": "They take {{n}}",
+      "bye": "No opponent this round — free win!"
     }
   }
 }

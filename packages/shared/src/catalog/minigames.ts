@@ -591,6 +591,17 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
       'A giant rope swings faster and faster: tap to jump as it sweeps under you. Two misses and you are out!',
     axes: ['reflexes', 'focus'],
   },
+  {
+    id: 'marbles-duel',
+    name: 'Marbles Duel',
+    format: 'duel',
+    realtime: false,
+    mobileFriendly: true,
+    durationSec: 50,
+    blurb:
+      'Odd or even? Hide marbles in your fist, bet on your rival’s. Win them all to win the duel.',
+    axes: ['nerve', 'focus'],
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

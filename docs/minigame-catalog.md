@@ -54,7 +54,8 @@ Freeze Doll (`freeze-doll`), G3 Room Rush (`room-rush`), I1 Sumo ICE (`sumo-ice`
 I3 Star Blaster (`star-blaster`), I4 Asteroids Arena (`asteroids`), I5 Bomber Express
 (`bomber-express`), I6 Street Brawl (`brawl`), and the racing cluster's F6 Rally Stage (`rally-stage`)
 and F7 Speed Circuit (`speed-circuit`); then the cluster's suggested extras, G4 Honeycomb Cut
-(`honeycomb-cut`) and G5 Jump Rope (`jump-rope`). **53 mini-games total.**
+(`honeycomb-cut`), G5 Jump Rope (`jump-rope`) and G6 Marbles Duel (`marbles-duel`). **54 mini-games
+total — every game idea on the roadmap is built.**
 
 ---
 
@@ -499,6 +500,18 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
 - **Latency**: low/medium — passes are judged at their scheduled instant against the server's jump
   time; your own jump animates the moment you press.
 
+### G6. ✅ Marbles Duel (odd or even) — implemented (`marbles-duel`)
+- **Concept**: the marbles game as a quick 1v1 bluffing duel.
+- **Type**: Duel (seeded simultaneous pairs; an odd player out gets a bye win) · **Input**: − / + to
+  pick a number, then HIDE — or ODD / EVEN (keys ←/→, SPACE, O, E) · **Duration**: 50 s cap ·
+  **Banter**: 💥💥 · **Mobile-friendly**: yes
+- **Rules**: 10 marbles each. Every turn one player hides 1…all of theirs in a fist while the other
+  bets 1…all of theirs and calls odd or even — both at once (6 s; a timeout plays a seeded pick, bet 1).
+  Right call: the guesser takes the bet from the hider; wrong: the guesser pays it (capped by what the
+  loser holds). Roles swap every turn. The number hidden is never on the wire before the reveal.
+- **Win condition / Result**: take all their marbles; at the bell, more marbles wins (equal = draw).
+  Winners and draws rank 0, losers 1 (`18`).
+
 ## I. Arcade classics, party-sized (2026-10-02)
 
 Real-time FFA reworks of arcade classics, keyboard-first (PC). Players are drawn as their lobby
@@ -602,7 +615,7 @@ avatar. See `implementation-decisions.md` D22.
 | Memory | A4, A11, E8 |
 | Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4, F6, G4, I2 |
 | Survival / dodging | A7, A8, B3, I1, I3, I5 |
-| Nerve / chance | D1, D3, E5, G1, G2, G3 |
+| Nerve / chance | D1, D3, E5, G1, G2, G3, G6 |
 | Teamwork | C1, C2, C3 |
 | Head-to-head rivalry | B1, B2, B3, E7, I4, I6 |
 
@@ -611,7 +624,7 @@ avatar. See `implementation-decisions.md` D22.
 | Format | Mini-games |
 |--------|-----------|
 | Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6 |
-| Duel (1v1 / bracket) | B1, B2, B3, E7 |
+| Duel (1v1 / bracket) | B1, B2, B3, E7, G6 |
 | Team | C1, C2, C3 |
 
 ## MVP selection & shipping order

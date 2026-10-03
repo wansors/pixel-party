@@ -20,6 +20,7 @@ import { JavelinThrowScene } from './JavelinThrowScene'
 import { JumpRopeScene } from './JumpRopeScene'
 import { LineClearSprintScene } from './LineClearSprintScene'
 import { LongJumpScene } from './LongJumpScene'
+import { MarblesDuelScene } from './MarblesDuelScene'
 import { MatchPairsScene } from './MatchPairsScene'
 import { MazeSprintScene } from './MazeSprintScene'
 import { MemoryFlashScene } from './MemoryFlashScene'
@@ -108,6 +109,7 @@ export const SCENES: Readonly<Record<string, SceneCtor>> = {
   'speed-circuit': SpeedCircuitScene,
   'honeycomb-cut': HoneycombCutScene,
   'jump-rope': JumpRopeScene,
+  'marbles-duel': MarblesDuelScene,
   'tug-of-war': TugOfWarScene,
   'bomb-relay': BombRelayScene,
   'fleet-battle': FleetBattleScene,
