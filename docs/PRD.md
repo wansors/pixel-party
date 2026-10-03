@@ -19,7 +19,7 @@ their own device**: every client renders the full mini-game and shows its own vi
 real time with the rest.
 
 ### Value proposition
-- Instant group fun for **4–10 players**, nothing to install (just a browser and a link/code).
+- Instant group fun for **4–12 players** (usually up to 8), nothing to install (just a browser and a link/code).
 - Short, replayable matches: 10–20 minute sessions with a variety of mini-games.
 - **Highly competitive and banter-driven** (*pique*): overtakes, comebacks, and laugh-out-loud moments
   are the point — a ranking plus catch-up/handicap keeps every session close.
@@ -34,7 +34,7 @@ real time with the rest.
 ## 2. Goals and success metrics
 
 ### Product goals
-1. Let a group (**4–10 players**) play a full session with zero setup friction.
+1. Let a group (**4–12 players**, usually up to 8) play a full session with zero setup friction.
 2. Offer a catalog of mini-games that vary in mechanics, input type, and format (individual/duel/team).
 3. Keep every session competitive and fun via a ranking plus catch-up/handicap mechanics.
 4. Keep the real-time experience smooth and fair for all players.
@@ -114,8 +114,9 @@ outcomes. See `minigame-catalog.md` §H and `scoring-system.md`.
 ### 5.3 Lobby
 - List of connected players (nickname, avatar, "ready" status).
 - Host configures: number of rounds, mini-game selection (random or manual), difficulty/timers.
-- Host starts the match. Design range is **4–10 players** (the sweet spot for banter); the technical
-  minimum to start is **2**, and team games need ≥ 4.
+- Host starts the match. Design range is **4–8 players** (the sweet spot for banter), up to **12**.
+  Every mini-game declares the headcounts it supports (hard min/max + a recommended range): the lobby
+  only offers the games that fit the room, and a game outside its range sits the session out (D27).
 
 ### 5.4 Mini-game round
 1. **Intro**: screen with the mini-game name, brief rules, and a countdown.
@@ -134,7 +135,8 @@ outcomes. See `minigame-catalog.md` §H and `scoring-system.md`.
 ### FR-1 — Room management
 - FR-1.1 Create a room with a unique, shareable code.
 - FR-1.2 Join by code or direct link.
-- FR-1.3 Configurable player limit per room (design range 4–10; default max 10; team games need ≥ 4).
+- FR-1.3 Configurable player limit per room (usual party 4–8; default and ceiling 12); each mini-game
+  declares its min/max/recommended players and only the ones that fit the room can be picked (D27).
 - FR-1.4 Ephemeral room: destroyed after the session ends or after inactivity (timeout).
 - FR-1.5 Host role with configuration and start permissions; automatic transfer if the host leaves.
 
@@ -258,7 +260,7 @@ The scope is delivered **incrementally by phases** — see `backlog.md` for the 
 deliberately minimal; formats, handicap, and analysis come in later phases.
 
 ### MVP (v1 — Phase 0)
-- Create/join a room by code (4–10 players); lobby with player list.
+- Create/join a room by code (up to 12 players); lobby with player list.
 - **Fixed default number of rounds** (host-configurable from Phase 1); random mini-game selection.
 - **3 individual, latency-tolerant mini-games**: Quick reaction (A1), Button masher (A2), Color Trap
   (E1). Trivia (A3) and Balloon Chicken (D1) are the fast-follows (see `minigame-ideas.md`, `backlog.md`).

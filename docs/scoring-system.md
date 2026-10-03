@@ -25,7 +25,7 @@ but the **accumulation across the session**.
 ## 2. Points per mini-game (position-based award)
 
 Each mini-game produces a **player ranking** (1st, 2nd, 3rd…). The engine translates position into
-points using an award table. Default table for a room of up to **10 players** (the max, PRD FR-1.3):
+points using an award table. Default table for a room of up to **12 players** (the max, PRD FR-1.3):
 
 | Position | Points |
 |----------|--------|
@@ -38,11 +38,14 @@ points using an award table. Default table for a room of up to **10 players** (t
 | 7th | 2 |
 | 8th | 1 |
 | 9th | 1 |
-| 10th | 0 |
+| 10th | 1 |
+| 11th | 1 |
+| 12th | 0 |
 
 Notes:
 - The table is **configurable**; the engine only needs "position → points".
-- Scales to any number of players: with N players, the first N rows are used (covers the 4–10 range).
+- Scales to any number of players: with N players, the first N rows are used (covers 1–12; each game
+  declares the headcounts it supports, D27).
 - Deliberate design: strong reward for 1st, but a **compressed, flat tail** (deliberate ties in the
   lower half) so trailing players stay within comeback range and only last place scores 0.
 
@@ -155,7 +158,7 @@ alive until the end.
 
 | Parameter | Default | Notes |
 |-----------|---------|-------|
-| Position award table | 10/7/5/4/3/2/2/1/1/0 | Adjustable; covers up to 10 players |
+| Position award table | 10/7/5/4/3/2/2/1/1/1/1/0 | Adjustable; covers up to 12 players |
 | Rounds per session | 4 (TBD, PRD §12) | |
 | Bonuses | Disabled in MVP | Speed, double final round, stars |
 | Handicap / catch-up | Disabled in MVP | Mechanical (in-game) + scoring; capped |

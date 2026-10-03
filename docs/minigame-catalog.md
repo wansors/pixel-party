@@ -8,7 +8,8 @@ Initial mini-game catalog. Each one is designed for the **each player on their o
 
 ## Design pillars
 
-- **Party scale**: built for **4–10 players** in the same session.
+- **Party scale**: built for **4–12 players** in the same session (usually up to 8); each game declares
+  its own range — hard min/max plus a recommended band — in `MINIGAMES[].players` (D27).
 - **Competitive and banter-driven**: the point is the rivalry and the trash talk (*pique*) — moments
   that make the group laugh.
 - **Variety of formats**: a mix of **individual (free-for-all)**, **duels (1v1 / bracket)**, and
@@ -171,7 +172,7 @@ Then (2026-10-03) J1 Weird Trivia (`weird-trivia`), the first brand-new idea aft
 
 ### B3. ✅ Sumo Push — implemented (`sumo-push`)
 - **Concept**: two pixel sumos in a ring; shove the opponent out with timed pushes.
-- **Type**: Duel (1v1) or FFA arena (up to 10 in one ring) · **Input**: tap/direction · **Duration**: ~30 s · **Banter**: 💥💥💥
+- **Type**: Duel (1v1) or FFA arena (up to 12 in one ring) · **Input**: tap/direction · **Duration**: ~30 s · **Banter**: 💥💥💥
 - **Rules**: physics shove; last one in the ring wins. FFA variant = battle royale. Touch/mouse: hold
   where you want to push — the direction is aimed from your own wrestler (2026-09-26; it used to be
   measured from the ring centre); arrow keys also work.

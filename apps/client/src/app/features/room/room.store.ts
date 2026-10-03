@@ -17,6 +17,8 @@ import {
   TEAMS,
   type TeamId,
   type TeamRoundResult,
+  fitsPlayers,
+  playableGames,
 } from '@pp/shared'
 import { GameClient } from '../../../game/GameClient'
 import { toAvatarId } from '../../../game/avatarSprites'
@@ -140,6 +142,15 @@ export class RoomStore {
   readonly myReady = computed(() => this.me()?.ready ?? false)
   readonly readyCount = computed(() => this.players().filter((p) => p.ready && p.connected).length)
   readonly connectedCount = computed(() => this.players().filter((p) => p.connected).length)
+  // The part of the line-up this headcount actually plays (D27): picked games whose player range fits
+  // the connected players. The rest stay picked and come back if people join or leave.
+  readonly playableGameIds = computed(() =>
+    playableGames(this.selectedGameIds(), this.connectedCount()),
+  )
+  // Rounds as the session will run them: the engine caps the count at the playable line-up.
+  readonly effectiveRounds = computed(() =>
+    Math.min(this.rounds() || this.playableGameIds().length, this.playableGameIds().length),
+  )
 
   // The round being played / just played, for the header ("ROUND 2/5 · FRUIT CATCH").
   readonly currentRound = computed(() => {
@@ -318,13 +329,18 @@ export class RoomStore {
           this.sendJoin()
           break
         }
-        if (!msg.ok)
-          this.message.set(
-            this.transloco.translate('room.intentRejected', {
-              intent: msg.intent,
-              reason: msg.reason ?? '',
-            }),
-          )
+        if (msg.ok) break
+        // A reason with its own copy reads as a sentence; the rest fall back to "INTENT rejected: x".
+        if (msg.reason === 'no_games_fit') {
+          this.message.set(this.transloco.translate(`reason.${msg.reason}`))
+          break
+        }
+        this.message.set(
+          this.transloco.translate('room.intentRejected', {
+            intent: msg.intent,
+            reason: msg.reason ?? '',
+          }),
+        )
         break
       case 'ERROR':
         this.message.set(msg.reason)
@@ -452,8 +468,12 @@ export class RoomStore {
     this.configure(this.selectedGameIds().filter((g) => !drop.has(g)))
   }
 
+  fits(id: MiniGameId): boolean {
+    return fitsPlayers(id, this.connectedCount())
+  }
+
   setRounds(value: number): void {
-    const max = Math.max(1, this.selectedGameIds().length)
+    const max = Math.max(1, this.playableGameIds().length)
     this.configure(this.selectedGameIds(), Math.max(1, Math.min(max, Math.round(value) || 1)))
   }
 

@@ -18,10 +18,11 @@ describe('awardPoints', () => {
     expect(out.get('c')).toBe(DEFAULT_AWARD_TABLE[2])
   })
 
-  test('last of a full room scores 0', () => {
-    const ids = Array.from({ length: 10 }, (_, i) => `p${i}`)
+  test('last of a full 12-player room scores 0, the rest of the tail scores', () => {
+    const ids = Array.from({ length: 12 }, (_, i) => `p${i}`)
     const out = awardPoints({ placements: ids })
-    expect(out.get('p9')).toBe(0)
+    expect(out.get('p11')).toBe(0)
+    expect(out.get('p10')).toBe(1)
   })
 })
 

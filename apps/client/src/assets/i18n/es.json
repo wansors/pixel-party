@@ -62,7 +62,14 @@
       "noGames": "Elige al menos un juego, hombre",
       "you": "tú",
       "mobileFilter": "Móvil",
-      "mobileHint": "Se juega bien con el móvil"
+      "mobileHint": "Se juega bien con el móvil",
+      "idealFilter": "Ideal para {{n}}",
+      "idealHint": "Solo los juegos que pegan con la gente que hay en la sala",
+      "playersHint": "Ideal con {{best}} jugadores · se juega con {{range}}",
+      "needsPlayers": "Hacen falta {{range}} jugadores",
+      "sittingOut": "· {{n}} en el banquillo",
+      "sittingOutHint": "Juegos elegidos que no encajan con tanta gente: se saltan esta partida y vuelven si cambia el número de jugadores",
+      "noGamesFit": "Ningún juego elegido vale para {{n}} jugadores"
     },
     "intro": {
       "round": "Ronda",
@@ -203,7 +210,8 @@
     "room_not_found": "Esa sala no existe",
     "room_full": "La sala está a tope",
     "session_in_progress": "La partida ya ha empezado",
-    "name_taken": "Ese nombre ya lo tiene otro"
+    "name_taken": "Ese nombre ya lo tiene otro",
+    "no_games_fit": "Ningún juego elegido vale para tantos jugadores"
   },
   "catalog": {
     "axis": {

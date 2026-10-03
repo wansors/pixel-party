@@ -62,7 +62,9 @@ Documentation lives in `docs/`:
 - `technical-architecture.md` — stack & architecture (mirrors `../utopia-offline`).
 - `art-direction.md` — retro classic-arcade pixel-art visual identity (§6.1: the player character spec).
 - `visual-audit.md` — how every mini-game draws the players (inventory + migration to the avatar set).
-- `backlog.md` — phased roadmap (MVP first, then incremental epics); tracks implementation status.
+- `backlog.md` — phased roadmap (MVP first, then incremental epics); tracks implementation status and
+  the *Next iterations* TODO list.
+- `player-fit-audit.md` — per-game player range + the balance/correctness audit of all 55 games (D27).
 - `implementation-decisions.md` — KISS decision log (what was built/deferred and why; revertable).
 
 ## Code layout (implemented)
@@ -108,7 +110,8 @@ Documentation lives in `docs/`:
 One domain module (`domain/minigames/<id>.ts` implementing `MiniGame`) + registry entry + shared wire
 types in `packages/shared/src/games/` + one Phaser scene extending `MiniGameScene` (key === mini-game
 id) registered in `game/scenes/index.ts` + a `MINIGAMES` catalog entry (incl. the required
-`mobileFriendly` call) + `catalog.minigame.<id>` name/blurb in both `en.json` and `es.json`. The session engine and wire contract don't change.
+`mobileFriendly` call and the `players` fit — hard min/max + recommended range, D27) +
+`catalog.minigame.<id>` name/blurb in both `en.json` and `es.json`. The session engine and wire contract don't change.
 
 ### Project skills (`.claude/skills/`)
 `verify-all` (full quality gate; bootstraps Bun if missing), `playtest-screenshots` (bots + headless
@@ -156,3 +159,6 @@ blueprint in `docs/technical-architecture.md`.
 - **PC-first** (keyboard/mouse on a big screen, D21). Every scene still has touch controls and must not
   break at phone sizes, but only games flagged `mobileFriendly` in the catalog promise a good phone
   experience (lobby badge + "Mobile" filter, "Best on PC" on the round intro).
+- **Rooms of up to 12 players** (usually 4–8). Every mini-game declares the headcounts it supports
+  (`MINIGAMES[].players`, D27): the lobby only lets the host pick games that fit the connected players
+  and the engine skips the rest. Per-game ranges and the balance audit: `docs/player-fit-audit.md`.

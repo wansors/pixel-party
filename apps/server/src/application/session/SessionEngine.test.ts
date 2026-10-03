@@ -181,11 +181,38 @@ describe('SessionEngine', () => {
     expect(captured.some((m) => m.type === 'FINAL_RANKING')).toBe(true)
   })
 
+  test('skips picked games whose player range does not fit the headcount (D27)', () => {
+    const room = Room.create('FIT', 12)
+    room.add(Player.create({ id: 'a', name: 'a', color: '#fff', avatar: 'x' }))
+    // A duel needs a second player: a solo host only plays the game that fits one.
+    room.configure(['sink-the-fleet', 'button-masher'], 2)
+
+    let t = 0
+    const clock: Clock = { now: () => t }
+    const captured: ServerMsg[] = []
+    const engine = new SessionEngine(
+      room,
+      { toRoom: (_c, m) => captured.push(m) },
+      clock,
+      noRandom,
+      CONFIG,
+    )
+    engine.start()
+    for (let i = 0; i < 400 && !engine.isFinished; i++) {
+      t += 1000 / CONFIG.tickHz
+      engine.tick()
+    }
+
+    const intros = captured.flatMap((m) => (m.type === 'ROUND_INTRO' ? [m] : []))
+    expect(intros.map((m) => m.minigameId)).toEqual(['button-masher'])
+    expect(intros[0]?.totalRounds).toBe(1)
+  })
+
   test('caps rounds at the number of distinct games (no-repeat)', () => {
     const room = Room.create('CAP', 10)
     room.add(Player.create({ id: 'a', name: 'a', color: '#fff', avatar: 'x' }))
-    // Two distinct games but five rounds requested — a no-repeat session plays only two.
-    room.configure(['button-masher', 'reaction-duel'], 5)
+    // Two distinct solo-friendly games but five rounds requested — a no-repeat session plays only two.
+    room.configure(['button-masher', 'color-trap'], 5)
 
     let t = 0
     const clock: Clock = { now: () => t }

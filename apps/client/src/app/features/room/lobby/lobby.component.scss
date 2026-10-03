@@ -236,6 +236,10 @@
     color: var(--c-lime);
     font-size: var(--fs-xs);
   }
+  .sit-out {
+    margin-left: 0.4rem;
+    color: var(--c-amber);
+  }
   .bulk {
     display: flex;
     gap: 0.8rem;
@@ -297,12 +301,12 @@
   }
 }
 
-// The mobile filter sits apart from the skill axes (it narrows by device, not by skill).
-.mobile-filter {
+// The headcount and mobile filters sit apart from the skill axes (they narrow by room, not by skill).
+.extra-filter .axis-chip {
+  --chip-color: var(--c-cyan);
+}
+.push {
   margin-left: auto;
-  .axis-chip {
-    --chip-color: var(--c-cyan);
-  }
 }
 
 // Tiny pixel phone: a tall outlined rectangle with a thicker "chin".
@@ -372,6 +376,9 @@
   &:disabled:not(.selected) {
     opacity: 0.55;
   }
+  &.unfit {
+    opacity: 0.4;
+  }
 
   .gname {
     font-size: var(--fs-sm);
@@ -396,6 +403,7 @@
   }
   .meta {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.3rem;
   }
@@ -404,13 +412,31 @@
     height: 0.5rem;
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
   }
+  .blurb.needs {
+    color: var(--c-red);
+  }
   .mobile-tag {
     display: inline-flex;
     margin-left: 0.2rem;
     color: var(--c-cyan);
   }
-  .format {
+  .players {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
     margin-left: auto;
+    color: var(--c-dim);
+    font-size: var(--fs-xs);
+    white-space: nowrap;
+    &.ideal {
+      color: var(--c-lime);
+    }
+  }
+  &.unfit .players {
+    color: var(--c-red);
+  }
+  .format {
+    white-space: nowrap;
     color: var(--c-magenta);
     font-size: var(--fs-xs);
     text-transform: uppercase;

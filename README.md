@@ -14,7 +14,8 @@ session-wide ranking.
 </p>
 
 > Current status: **feature-complete for its LAN-party scope** — 55 mini-games (free-for-all, team and
-> 1v1 duels), lobby + host setup, server-authoritative sessions with a cumulative ranking, post-match
+> 1v1 duels) for rooms of up to 12 players, each tagged with the player counts it suits, lobby + host
+> setup, server-authoritative sessions with a cumulative ranking, post-match
 > skill radar, catch-up handicap, reconnect, EN/ES, chiptune audio and a retro arcade look. See
 > [Running locally](#running-locally) and [`docs/backlog.md`](docs/backlog.md).
 
@@ -26,6 +27,7 @@ session-wide ranking.
 | [`docs/minigame-catalog.md`](docs/minigame-catalog.md) | Mini-game catalog with mechanics, rules, win condition, and scoring (grows over time). |
 | [`docs/minigame-ideas.md`](docs/minigame-ideas.md) | ~30 mini-game ideas ranked by priority (fun, healthy competition, effort, latency). |
 | [`docs/scoring-system.md`](docs/scoring-system.md) | Scoring across mini-games, session ranking, tiebreakers, and handicap. |
+| [`docs/player-fit-audit.md`](docs/player-fit-audit.md) | Per-game player range (min/max/recommended) and the balance & correctness audit of all 55 games. |
 | [`docs/technical-architecture.md`](docs/technical-architecture.md) | Stack & architecture — mirrors the `utopia-offline` reference project. |
 | [`docs/art-direction.md`](docs/art-direction.md) | Retro classic-arcade pixel-art visual identity (web, HUD, scoreboards). |
 | [`docs/backlog.md`](docs/backlog.md) | Phased roadmap: minimal MVP first, then incremental epics. |

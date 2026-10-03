@@ -109,8 +109,13 @@
           <span class="count">
             {{
               'room.lobby.selectedCount'
-                | transloco: { n: store.selectedGameIds().length, total: totalGames }
+                | transloco: { n: store.playableGameIds().length, total: totalGames }
             }}
+            @if (sittingOut() > 0) {
+              <span class="sit-out" [title]="'room.lobby.sittingOutHint' | transloco">
+                {{ 'room.lobby.sittingOut' | transloco: { n: sittingOut() } }}
+              </span>
+            }
           </span>
         </h3>
         @if (store.isHost()) {
@@ -150,7 +155,20 @@
             </button>
           </li>
         }
-        <li class="mobile-filter">
+        <li class="extra-filter push">
+          <button
+            type="button"
+            class="axis-chip"
+            [class.active]="idealOnly()"
+            [attr.aria-pressed]="idealOnly()"
+            [title]="'room.lobby.idealHint' | transloco"
+            (click)="idealOnly.set(!idealOnly())"
+          >
+            <i class="people" aria-hidden="true"></i>
+            {{ 'room.lobby.idealFilter' | transloco: { n: store.connectedCount() } }}
+          </button>
+        </li>
+        <li class="extra-filter">
           <button
             type="button"
             class="axis-chip"
@@ -171,22 +189,29 @@
             <button
               type="button"
               class="game-card"
-              [class.selected]="store.isSelected(g.id)"
-              [disabled]="!store.isHost()"
-              [attr.aria-pressed]="store.isSelected(g.id)"
+              [class.selected]="store.isSelected(g.id) && store.fits(g.id)"
+              [class.unfit]="!store.fits(g.id)"
+              [disabled]="!store.isHost() || !store.fits(g.id)"
+              [attr.aria-pressed]="store.isSelected(g.id) && store.fits(g.id)"
               (click)="store.toggleGame(g.id)"
             >
               <span class="gname">{{ catalog.minigameName(g.id) }}</span>
               @if (store.isHost()) {
                 <span
                   class="check tick-box"
-                  [class.on]="store.isSelected(g.id)"
+                  [class.on]="store.isSelected(g.id) && store.fits(g.id)"
                   aria-hidden="true"
                 >
                   <i class="tick"></i>
                 </span>
               }
-              <span class="blurb">{{ catalog.minigameBlurb(g.id) }}</span>
+              @if (store.fits(g.id)) {
+                <span class="blurb">{{ catalog.minigameBlurb(g.id) }}</span>
+              } @else {
+                <span class="blurb needs">
+                  {{ 'room.lobby.needsPlayers' | transloco: { range: range(g.players.min, g.players.max) } }}
+                </span>
+              }
               <span class="meta">
                 @for (a of g.axes; track a) {
                   <span class="axis-dot" [style.background]="axisColor(a)" [title]="catalog.axisLabel(a)"></span>
@@ -200,6 +225,20 @@
                     ><i class="phone"></i
                   ></span>
                 }
+                <span
+                  class="players"
+                  [class.ideal]="isIdeal(g)"
+                  [title]="
+                    'room.lobby.playersHint'
+                      | transloco
+                        : {
+                            best: range(g.players.best[0], g.players.best[1]),
+                            range: range(g.players.min, g.players.max),
+                          }
+                  "
+                  ><i class="people" aria-hidden="true"></i
+                  >{{ range(g.players.best[0], g.players.best[1]) }}</span
+                >
                 @if (g.format !== 'ffa') {
                   <span class="format">{{ 'room.format.' + g.format | transloco }}</span>
                 }
@@ -218,18 +257,18 @@
             <button
               type="button"
               class="mini step"
-              [disabled]="store.rounds() <= 1"
+              [disabled]="store.effectiveRounds() <= 1"
               (click)="stepRounds(-1)"
             >
               −
             </button>
           }
-          <span class="value">{{ store.rounds() }}</span>
+          <span class="value">{{ store.effectiveRounds() }}</span>
           @if (store.isHost()) {
             <button
               type="button"
               class="mini step"
-              [disabled]="store.rounds() >= store.selectedGameIds().length"
+              [disabled]="store.effectiveRounds() >= store.playableGameIds().length"
               (click)="stepRounds(1)"
             >
               +
@@ -246,7 +285,7 @@
           <span class="tick-box" aria-hidden="true"><i class="tick"></i></span>
           {{ 'room.lobby.handicap' | transloco }}
         </label>
-        @if (store.selectedGameIds().length > 0) {
+        @if (store.playableGameIds().length > 0) {
           <div class="coverage" [title]="'room.lobby.coverage' | transloco">
             <app-skill-radar
               [data]="coverage()"
@@ -279,13 +318,15 @@
       <button
         type="button"
         class="arcade-btn primary start"
-        [disabled]="store.selectedGameIds().length === 0"
+        [disabled]="store.playableGameIds().length === 0"
         (click)="store.start()"
       >
         ▶ {{ 'room.lobby.start' | transloco }}
       </button>
       @if (store.selectedGameIds().length === 0) {
         <span class="hint">{{ 'room.lobby.noGames' | transloco }}</span>
+      } @else if (store.playableGameIds().length === 0) {
+        <span class="hint">{{ 'room.lobby.noGamesFit' | transloco: { n: store.connectedCount() } }}</span>
       }
     } @else {
       <span class="hint blink">{{ 'room.lobby.waitingHost' | transloco }}</span>

@@ -55,6 +55,10 @@ export class Room {
   get hasConnectedPlayers(): boolean {
     return this.list().some((p) => p.connected)
   }
+  // The headcount a session is sized for: games are picked by their player range against it (D27).
+  get connectedCount(): number {
+    return this.list().filter((p) => p.connected).length
+  }
 
   list(): Player[] {
     return [...this.players.values()]

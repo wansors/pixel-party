@@ -36,7 +36,9 @@ cd "$WORK" && timeout 180 bun shoot.ts <tag>-phone 390x844 fruit-catch
   Spanish (check that longer Spanish strings still fit), `--keys=ArrowRight,Space*800` replaces the
   default interaction (four canvas clicks + Space) with key taps / holds (`Key*ms`; puppeteer key names),
   `--more=N` adds N more in-play shots (`-play3`…), one every 3 s, re-running the interaction first —
-  use them to exercise a game's real controls (hold-to-move, LEFT/RIGHT choices) instead of junk.
+  use them to exercise a game's real controls (hold-to-move, LEFT/RIGHT choices) instead of junk,
+  `--bots=N` sets how many bots join (default 3 → a 4-player room; `--bots=11` fills a 12-player room
+  to check crowded layouts — mind each game's player range, D27).
 - Output: `$WORK/shots/<tag>/NNN-<phase>.png` — look at them with the Read tool.
 - Per game: `-intro` (≈1.8 s into the countdown), `-play1` (≈1.5 s into the round), `-play2` (after a
   few clicks + Space, ≈4 s later), `-finish` (the frozen last frame with the FINISH stamp),
@@ -45,7 +47,7 @@ cd "$WORK" && timeout 180 bun shoot.ts <tag>-phone 390x844 fruit-catch
   scene threw inside its frame hook; `Missing translation` means an i18n gap.
 - Use unique tags when several agents shoot in parallel, and keep runs targeted (each costs a Chrome
   plus a full round's duration).
-- **Smart bots**: if `bots/<game-id>.ts` exists, all three bots play that game for real — its default
+- **Smart bots**: if `bots/<game-id>.ts` exists, every bot plays that game for real — its default
   export `(snapshot, myPlayerId) => input | input[] | null` runs every 150 ms per bot. Add one when a
   game's key moments (a room locking, a lap, a knockout) never happen with junk inputs. Strategies
   that need shared game data (the racers' course geometry) import it from `$PP_REPO` — run

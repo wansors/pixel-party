@@ -191,6 +191,28 @@ img {
   }
 }
 
+// ── Pixel bust ──────────────────────────────────────────────────────────────
+// Head over shoulders in the current color: the "players" icon (lobby player ranges, D27).
+.people {
+  position: relative;
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.3rem;
+  margin-top: 0.3rem;
+  background: currentColor;
+  border-radius: 2px 2px 0 0;
+  flex-shrink: 0;
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0.14rem;
+    top: -0.32rem;
+    width: 0.27rem;
+    height: 0.27rem;
+    background: currentColor;
+  }
+}
+
 // ── Pixel checkbox ──────────────────────────────────────────────────────────
 // An outlined square showing the pixel tick when on: add `.on`, or put it right after a (visually
 // hidden) checkbox input. `--tick-box-on` sets the "on" color (lime by default).

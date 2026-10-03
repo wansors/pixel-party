@@ -18,12 +18,15 @@ party with friends** — one process, on one local network, no accounts — whic
 permanently **stateless, anonymous, and single-instance by design**: no database (D15), no further
 social/polish phase (D16), no multi-instance scaling (D17). What remains open-ended is growing the
 mini-game catalog with brand-new ideas. Design decisions from the clear-out pass are logged in
-[`implementation-decisions.md`](implementation-decisions.md) (D1–D26). The game is **PC-first**; 37
-of the 55 games are tagged `mobileFriendly` (lobby badge + filter, D21).
+[`implementation-decisions.md`](implementation-decisions.md) (D1–D27). The game is **PC-first**; 37
+of the 55 games are tagged `mobileFriendly` (lobby badge + filter, D21). Rooms hold up to **12
+players** (usually 4–8) and every game declares the headcounts it supports (D27); the per-game
+player-fit & balance audit ([`player-fit-audit.md`](player-fit-audit.md)) feeds the
+**[Next iterations](#next-iterations--player-fit--balance-audit-2026-10-03)** list below.
 
 ### Foundation & platform
 - Bun workspaces monorepo, hexagonal server, `@pp/shared` wire contracts, Biome + TS strict +
-  determinism gate + **GitHub Actions CI**. Test suite: **385 server/shared + 24 client (Karma)**, green.
+  determinism gate + **GitHub Actions CI**. Test suite: **447 server/shared + 24 client (Karma)**, green.
 - Server-authoritative, deterministic core (seeded `Random` + `Clock` ports; the domain never touches
   `Math.random`/`Date.now`). Bun-native WS with a hand-written shape validator (no Zod).
 - Angular 20 shell + Phaser 3 (decoupled); **i18n EN/ES** (Transloco) across the UI + every scene;
@@ -37,6 +40,9 @@ of the 55 games are tagged `mobileFriendly` (lobby badge + filter, D21).
   (auto-on-disconnect + manual) + kick, idle-room reaper, observability (JSON logs + `/api/metrics`).
 - Scoring: position→points table with tie-averaging; **final-ranking tiebreakers** (most 1st places →
   best average position, `domain/services/finalRanking`).
+- **Player fit (D27)**: rooms of up to 12; each game's hard min/max + recommended range on the lobby
+  card, unfit games greyed out and skipped by the engine, a "Best for N" filter, START refused when no
+  picked game fits.
 
 ### Mini-games — 55 (pluggable domain module + Phaser scene each)
 - **48 FFA**: `reaction-duel`, `button-masher`, `color-trap`, `trivia`, `weird-trivia`,
@@ -62,6 +68,121 @@ of the 55 games are tagged `mobileFriendly` (lobby badge + filter, D21).
 (the remaining polish & social items — avatars/customization, emotes, in-room chat, public matchmaking —
 dropped, D16; audio and i18n already shipped in Phase 0). Every candidate in `minigame-ideas.md` (35 of
 35) is now built; growing the catalog further means proposing new ideas, not clearing the existing list.
+
+## Next iterations — player-fit & balance audit (2026-10-03)
+
+Found by the one-by-one audit of all 55 games ([`player-fit-audit.md`](player-fit-audit.md), D27).
+Ordered by payoff. The cross-cutting fixes come first because each one helps many games.
+
+### P1 — Cross-cutting correctness
+- [ ] **Disconnected seats.** The engine hands `init` every seat, connected or not. Hand it only the
+      connected players and rank dropped seats last. That fixes:
+  - rounds held to their full timer (the "all done" early finish in maze, tetris, bubble-pop,
+    honeycomb, weird-trivia, freeze-doll, higher-lower, stop-clock…);
+  - free duel wins, and two dropped players "drawing" like winners;
+  - the Tug of War average and the bomb parked on a dropped Bomb Relay holder;
+  - free KOs or kills on idle ships and fighters (brawl, asteroids), and Star Blaster's auto-fire
+    scoring for AFK seats.
+- [ ] **Never-acted ranks last among equals.** The idle-wins-tiebreak bug is in memory-flash, simon,
+      pixel-weight, pixel-split and match-pairs. Related cases:
+  - freeze-doll: a runner who never moved ranks above eliminated ones;
+  - fruit-catch: an idle basket still scores.
+- [ ] **Duel scoring in 3 tiers** (win, then draw or bye, then loss), ranked inside each tier by a
+      per-game margin: Quick Draw ms, Pong point difference, Sink hits, marble count. Also rotate byes
+      across rounds, and give the bye player a live duel to watch instead of 20–50 s of waiting.
+- [ ] **Teams.**
+  - Pick with the seed which team gets the odd member and which team starts (Fleet Battle: red
+    always fires first and wins 53–60 %).
+  - Refuse START when a team game would run with an empty team, and warn on a size gap greater
+    than 1.
+- [ ] **Durations.** Make the catalog `durationSec` match what each module was tuned for:
+  - Simon: 45–60 s.
+  - Sink the Fleet: 60 s, or "a hit shoots again" (73–99 % of duels end on the timer today).
+  - Pixel Pong: 45 s, or a golden point at the timer.
+
+### P2 — Balance: real issues
+- [ ] `balloon-chicken`: one shared seeded burst sequence instead of luck-of-the-draw thresholds;
+      pumping at the buzzer busts (or scores half); consider hiding rivals' counts until they cash out.
+- [ ] `higher-lower`: a miss should cost something (end the run, or add a BANK choice); per-player
+      seeded decks, or send only rivals' streaks.
+- [ ] `sudoku-race`: generate only unique puzzles (a tiny 4×4 solver), or accept any valid completion.
+- [ ] `honeycomb-cut`: rank unfinished players by progress with a crack penalty, not as a separate
+      lower group.
+- [ ] `simon`: at the same level, dying sooner must not rank higher. Tiebreak on completed levels, then
+      position, then last-clear time.
+- [ ] `pixel-weight`: procedural object variants and a bigger pool so counts can't be memorised.
+- [ ] `pixel-rain`: spawn across the full width (or clamp the avatar to the spawn band), cap avatar
+      speed on the server, and ramp up the spawn rate.
+- [ ] `pixel-dash`: a jump outside any window should cost something (airtime cooldown or a lost
+      clear); break ties on timing accuracy.
+- [ ] `sumo-push`: a shrinking ring or a dash impulse, so a centre-holder can be pushed out (2-player
+      rounds always draw).
+- [ ] `hurdles-110m`: no drag while airborne, plus a test that a clean run beats knocking every hurdle
+      at 10 and 15 taps/s.
+- [ ] `glass-bridge`: credit players still queued at timeout, rank by blind rows survived, and cut the
+      decide time at 10+ players, then raise max to 12.
+- [ ] `bomber-express`: add 2 spawn cells, (5,3) and (11,9), and shuffle spawns with the seed, then
+      raise max to 12.
+
+### P3 — Correctness bugs
+- [ ] `color-trap`: a tap in the last ~150 ms of a prompt shows +1 but the server drops it. Add a grace
+      window for the previous prompt, or stop accepting taps at 0.
+- [ ] `stop-clock`: the result stat must use the penalised error (an idle player shows "0.00 off").
+- [ ] `sumo-ice`: the rescue spot uses `b.id.length` (always 36), so every rescue lands on the same
+      point and bodies stack there. Derive it from the player index or the seed.
+- [ ] `snake-arena`: a 2-deep turn queue (two quick turns in one step drop one).
+- [ ] `line-clear-sprint` / `quick-tetris`: end the round when no board can advance; a topped-out
+      player counts as finished.
+- [ ] `bubble-pop`: fix the jammed-board softlock (treat it as finished, or scroll the stack); shots
+      should stop at the first filled cell; fix the "fastest clear" blurb.
+- [ ] `dash-100m` / `hurdles-110m`: the track overflows the HUD on landscape phones from 6–10 runners
+      (lane floor of 16 px). The dash is mobile-friendly.
+- [ ] `quick-draw`: no tap is a loss.
+- [ ] `room-rush`: with 2 left, lock the room on the first player to reach N (or tiebreak by time
+      inside); call bigger numbers at 10+ alive.
+- [ ] `trivia`: give a verdict for an answer that lands in the last snapshot interval; reveal the right
+      answer and close a question early once everyone has answered (as Weird Trivia does).
+
+### P4 — 12-player layout
+- [ ] Show every player, or the top N **plus yourself**, instead of a silent cap:
+  - `MAX_CHIPS` 6 in `QuizSceneBase`, Number Rush, Quick Math, Odd One Out and Higher/Lower;
+  - `MAX_LANES` 6 in Button Masher;
+  - `MAX_ROWS` 8 in Reaction;
+  - `MAX_RIVALS` 9 in the Tetris base and 8 in Simon;
+  - 8 rows in Roulette.
+- [ ] `PlayerStrip` at 9+ players: slice names or use 2 rows. Affects memory-flash, pixel-hoops,
+      pixel-weight and pixel-split, and on phones pixel-rain, honeycomb-cut and the field events.
+- [ ] Crowded visuals:
+  - pang and star-blaster: rival thumbnail labels overlap;
+  - balloon-chicken: tokens need 2 rows;
+  - jump-rope: avatar size should follow N;
+  - long-jump and javelin: spread the flag labels;
+  - rally: spread the start slots;
+  - maze-sprint: rival corner slots stack.
+
+### P5 — Minor balance & polish
+- [ ] `quick-math`: put the right answer at a random sorted position (it's a middle value 86 % of the
+      time).
+- [ ] Free misses:
+  - odd-one-out and color-trap: a wrong-tap cooldown or penalty;
+  - bug-smash: bombs should cost something at 0;
+  - button-masher: a server-side cap on presses per second.
+- [ ] `pixel-split`: partial credit. `pixel-roulette`: drop its radar axis (luck isn't nerve).
+- [ ] Fairness:
+  - `match-pairs`: a per-player permutation of the pairs;
+  - `maze-sprint`: hide rival positions and add a server-side step limit (key-repeat rates
+    differ between machines);
+  - `micro-race`: slipstream or a reverse grid by standings;
+  - `asteroids`: scale the rock supply with N;
+  - `brawl`: seeded spawn shuffle and assist credit;
+  - `fruit-catch`: a tiebreak;
+  - `tug-of-war`: show the per-member average on the plates.
+- [ ] Private state off the wire: send per-player views for higher-lower, simon, match-pairs and sudoku
+      (devtools-only today).
+- [ ] Latency-judged timing in reaction-duel, pixel-dash and pixel-beat: client-side timing bounded by
+      the server, or a calibration tap.
+- [ ] Playtest tooling: the rally and circuit bots stay parked when `PP_REPO` is unset. Default it to
+      the git root.
 
 ## How this backlog works
 
@@ -409,7 +530,7 @@ cluster below. Catalog section F.
         below, not a per-scene figure. If the audit hasn't landed yet, build these games on the lobby
         avatar sprites directly, so they never need migrating.
   - [x] **Freeze Doll** (`freeze-doll`, "Red Light, Green Light" — the laser one) — *Shipped
-        2026-10-02 (catalog G2, D22).* Race down your own lane toward a giant pixel doll. One lane per player (up to 10), so there are no collisions and
+        2026-10-02 (catalog G2, D22).* Race down your own lane toward a giant pixel doll. One lane per player (up to 12), so there are no collisions and
         it stays readable on the big screen.
         - **Movement with momentum (the core skill):** hold WALK to move. Releasing does not stop you
           dead: you glide for ~150 ms. An optional **RUN** key (Shift, or a second touch button) is

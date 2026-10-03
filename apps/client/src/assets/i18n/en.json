@@ -62,7 +62,14 @@
       "noGames": "Pick at least one game",
       "you": "you",
       "mobileFilter": "Mobile",
-      "mobileHint": "Plays well on a phone"
+      "mobileHint": "Plays well on a phone",
+      "idealFilter": "Best for {{n}}",
+      "idealHint": "Only games whose recommended player count fits this room",
+      "playersHint": "Best with {{best}} players · plays {{range}}",
+      "needsPlayers": "Needs {{range}} players",
+      "sittingOut": "· {{n}} sit out",
+      "sittingOutHint": "Picked games that don’t fit this many players: they skip this session and come back if the headcount changes",
+      "noGamesFit": "No picked game fits {{n}} players"
     },
     "intro": {
       "round": "Round",
@@ -200,7 +207,8 @@
     "room_not_found": "Room not found",
     "room_full": "Room is full",
     "session_in_progress": "Session already in progress",
-    "name_taken": "That name is taken"
+    "name_taken": "That name is taken",
+    "no_games_fit": "No picked game fits this many players"
   },
   "catalog": {
     "axis": {

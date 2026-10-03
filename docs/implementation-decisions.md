@@ -266,7 +266,7 @@ misses — each would be speculative or gated, and the project rule is "nothing 
 - **What**: the icebox item "multi-instance scaling with a Redis pub/sub backplane" and the open
   scaling question in `technical-architecture.md` §10 are closed, not deferred. Pixel Party runs as one
   Bun process; there is no plan to ever run more than one.
-- **Why**: **the deployment target is a LAN party** (D15, D16) — a handful of rooms of 4–10 players on
+- **Why**: **the deployment target is a LAN party** (D15, D16) — a handful of rooms of 4–12 players on
   one local network, run from a single machine on that network. That's an inherently single-instance
   load; a pub/sub backplane exists to fan a WS topic out across processes/hosts for internet-scale
   traffic, which this project will never see. Building it would be pure speculation with no consumer.
@@ -627,3 +627,42 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   (`core/i18n/stat-i18n.ts`, `room.stat.*`) and switches the decimal mark ("0,42 de error"). A new stat
   word shows in English until it gets an entry there.
 - The rule lives in the `add-i18n-keys` skill so new strings keep the voice.
+
+### D27 — Rooms of up to 12; every game declares its player range; one-by-one balance audit — DONE
+
+- **Date**: 2026-10-03. **Context**: the user wants sessions of up to 12 players (usually up to 8),
+  with each game saying how many players it is for, and the lobby only offering the games that fit.
+- **Each game's range**. `MiniGameMeta.players = { min, max, best: [lo, hi] }` in `@pp/shared`.
+  - `min` and `max` are hard limits.
+  - `best` is where the game is most fun.
+  - Helpers: `fitsPlayers`, `idealForPlayers` and `playableGames`.
+  - All 55 values come from a one-by-one audit: code reading plus seeded headless simulations at 1,
+    2, 8 and 12 players, written up in `player-fit-audit.md`.
+  - The rules:
+    - `min` 2 or more for last-standing, head-to-head, duel and relay games.
+    - `min` 1 only for genuine score attacks and time trials.
+    - `max` 12 unless spawns or turn time really break. That leaves Glass Bridge (turns run out)
+      and Bomber Express (10 spawn cells) at 10 until their fixes land.
+- **Who counts**: the connected players.
+  - **Lobby**:
+    - Each card shows the recommended range, green when the room is inside it.
+    - Games outside their range are greyed out, can't be toggled, and say "Needs 4-12 players".
+    - A "Best for N" filter.
+    - The header counts only playable picks, plus "N sit out".
+    - The rounds stepper and the skill coverage follow the playable line-up.
+  - **Engine**: `SessionEngine.start` draws only from the playable picks.
+  - **Server**: START is refused with `no_games_fit` when the host's picks all miss, instead of the
+    silent Button Masher fallback.
+- **Picks stay selected when out of range.** Out-of-range picks stay in the host's line-up and come
+  back when the headcount changes, so a friend dropping off for a minute doesn't wipe the host's
+  choices. They simply don't play while the headcount is outside their range.
+- **12 seats**. `MAX_ROOM_PLAYERS = 12` (`ROOM_MAX_PLAYERS` may only lower it). Two more player colours
+  were added (silver and tan). The award table grows to 12 positions — 10/7/5/4/3/2/2/1/1/1/1/0 — so
+  only last place in a full room scores 0.
+- **Kept out on purpose**:
+  - Fit is checked when the session starts, not again mid-session.
+  - Team games don't check team balance yet.
+  - The audit's balance and correctness findings were **not** fixed here: they are the prioritised
+    *Next iterations* list in `backlog.md`, cross-cutting fixes first (disconnected seats, the
+    idle-wins tiebreak, duel tiers).
+- **Revertable**: widen every range to 1–12 and the lobby and engine behave as before.

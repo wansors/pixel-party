@@ -4,13 +4,14 @@
 // $PP_SHOTS_DIR/<tag>/ (default ./shots/<tag>/).
 //
 // Usage: bun shoot.ts <tag> <width>x<height> <game-id>[,<game-id>...] [--join] [--lobby] [--me-host]
-//        [--lang=es] [--keys=ArrowRight,Space*800] [--more=3]
+//        [--lang=es] [--keys=ArrowRight,Space*800] [--more=3] [--bots=11]
 // Bots: a game with a strategy module in ./bots/<game-id>.ts is played for real by all three bots
 // (default export `(snapshot, myPlayerId) => input | input[] | null`, called every 150 ms); other games
 // get generic junk inputs.
 // --keys: what the browser player presses after the play1 shot (default: four canvas clicks + Space).
 //         `Key` taps it, `Key*ms` holds it for ms. Key names are puppeteer's (ArrowLeft, KeyA, Space…).
 // --more: extra in-play shots (play3, play4…), one every 3 s, repeating the --keys sequence before each.
+// --bots: how many bots join (default 3, so a 4-player room with "Me"); 11 fills a 12-player room.
 // Env:   PP_CLIENT (http://localhost:4200)  PP_SERVER (http://localhost:3000)
 //        CHROME (auto-detected)  PP_SHOTS_DIR (./shots)
 import { existsSync } from 'node:fs'
@@ -75,8 +76,21 @@ const host = bot('HostBot', '#ff3e7f', 'fox', (m) => {
   for (const l of listeners) l(m)
 })
 await Bun.sleep(300)
-bot('Luna', '#8be94b', 'owl')
-bot('Rex', '#ffcf4b', 'dog')
+const botCount = Number(flags.find((f) => f.startsWith('--bots='))?.slice('--bots='.length) ?? 3)
+const CREW = [
+  ['Luna', '#8be94b', 'owl'],
+  ['Rex', '#ffcf4b', 'dog'],
+  ['Kiko', '#29d3f2', 'frog'],
+  ['Maru', '#b06bff', 'cat'],
+  ['Toni', '#ff7b3d', 'bear'],
+  ['Bea', '#4be3c3', 'fox'],
+  ['Nico', '#5b8cff', 'owl'],
+  ['Sole', '#f062d0', 'cat'],
+  ['Pepe', '#d8d8e0', 'dog'],
+  ['Inés', '#c8915a', 'bear'],
+] as const
+for (const [name, color, avatar] of CREW.slice(0, Math.max(0, botCount - 1)))
+  bot(name, color, avatar)
 
 const browser = await puppeteer.launch({
   executablePath: CHROME,

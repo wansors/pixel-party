@@ -22,8 +22,8 @@ export const PALETTE = {
 
 export const hexToCss = (hex: number): string => `#${hex.toString(16).padStart(6, '0')}`
 
-// Reserved player hues — highly distinct and high-contrast so rows stay readable side by side. A room
-// hands these out in order; paired everywhere with the player's avatar + name (never color alone).
+// Reserved player hues — highly distinct and high-contrast so rows stay readable side by side; one per
+// seat of a full 12-player room. Paired everywhere with the player's avatar + name (never color alone).
 export const PLAYER_COLORS: readonly string[] = [
   '#ff3e7f',
   '#29d3f2',
@@ -35,6 +35,8 @@ export const PLAYER_COLORS: readonly string[] = [
   '#ff5252',
   '#5b8cff',
   '#f062d0',
+  '#d8d8e0',
+  '#c8915a',
 ]
 
 // Preset pixel-avatar sprite ids (the "monigote" set). Sprite grids live client-side.

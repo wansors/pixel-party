@@ -120,3 +120,23 @@ describe('REJOIN while the previous socket is still open (page reload race)', ()
     b.ws.close()
   })
 })
+
+describe('START_SESSION with a line-up that does not fit the headcount (D27)', () => {
+  test('is refused instead of falling back to a default game', async () => {
+    const code = await createRoom()
+    const host = await connect(code)
+    host.ws.send(JSON.stringify({ type: 'JOIN', name: 'Solo', color: '#ff3e7f', avatar: 'cat' }))
+    await host.next('WELCOME')
+
+    // A duel needs a second player, so a solo host has nothing to play.
+    host.ws.send(
+      JSON.stringify({ type: 'HOST_CONFIG', minigameIds: ['sink-the-fleet'], rounds: 1 }),
+    )
+    await host.next('LOBBY_STATE')
+    host.ws.send(JSON.stringify({ type: 'START_SESSION' }))
+    const ack = await host.next('ACK')
+    expect(ack).toMatchObject({ intent: 'START_SESSION', ok: false, reason: 'no_games_fit' })
+
+    host.ws.close()
+  })
+})

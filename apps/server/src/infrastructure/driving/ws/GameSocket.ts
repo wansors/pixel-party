@@ -1,5 +1,5 @@
 import type { ClientMsg, PlayerDto, ServerMsg } from '@pp/shared'
-import { MINIGAMES_BY_ID, PROTOCOL_VERSION, TEAM_IDS } from '@pp/shared'
+import { MINIGAMES_BY_ID, PROTOCOL_VERSION, TEAM_IDS, playableGames } from '@pp/shared'
 import type { ServerWebSocket } from 'bun'
 import type { Clock } from '../../../application/ports/Clock'
 import type { LiveRoomRegistry } from '../../../application/ports/LiveRoomRegistry'
@@ -282,6 +282,14 @@ export function startGameServer(deps: GameSocketDeps) {
     }
     if (room.phase !== 'lobby' || manager.isRunning(room.code)) {
       send(ws, { type: 'ACK', intent: 'START_SESSION', ok: false, reason: 'already_started' })
+      return
+    }
+    // A line-up where no game fits the headcount (D27) would silently fall back to a default game.
+    if (
+      room.minigameIds.length > 0 &&
+      playableGames(room.minigameIds, room.connectedCount).length === 0
+    ) {
+      send(ws, { type: 'ACK', intent: 'START_SESSION', ok: false, reason: 'no_games_fit' })
       return
     }
     // The engine drives the round loop and sets the room phase; it publishes ROUND_INTRO immediately.

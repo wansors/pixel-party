@@ -30,10 +30,23 @@ export const SKILL_AXES: readonly SkillAxis[] = [
   'focus',
 ]
 
+// A room's hard ceiling. The server's ROOM_MAX_PLAYERS may lower it; no game is built for more.
+export const MAX_ROOM_PLAYERS = 12
+
+// Who a game is built for (D27). `min`/`max` are hard limits: the lobby only offers a game while the
+// room's connected headcount is inside them, and the session engine skips it otherwise. `best` is the
+// sweet spot — where the game is most fun — shown on the lobby card and used by the "ideal" filter.
+export interface PlayerFit {
+  readonly min: number
+  readonly max: number
+  readonly best: readonly [number, number]
+}
+
 export interface MiniGameMeta {
   readonly id: MiniGameId
   readonly name: string
   readonly format: MiniGameFormat
+  readonly players: PlayerFit
   // Whether the server runs a continuous fixed-timestep tick for this game (real-time) or it resolves
   // on intent/timeout only (turn-based / instantaneous scoring).
   readonly realtime: boolean
@@ -49,13 +62,13 @@ export interface MiniGameMeta {
   readonly axes: readonly SkillAxis[]
 }
 
-// Two starter descriptors so the registry/lobby have something concrete to list. Real games land as
-// their domain modules + scenes are built out.
+// The catalog: one descriptor per mini-game, in lobby order.
 export const MINIGAMES: readonly MiniGameMeta[] = [
   {
     id: 'reaction-duel',
     name: 'Reaction Duel',
     format: 'ffa',
+    players: { min: 2, max: 12, best: [3, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 0,
@@ -66,6 +79,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'button-masher',
     name: 'Button Masher',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 10,
@@ -76,6 +90,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'color-trap',
     name: 'Color Trap',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [3, 12] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 22,
@@ -86,6 +101,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'trivia',
     name: 'Lightning Quiz',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [3, 12] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -96,6 +112,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'weird-trivia',
     name: 'Weird Trivia',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [3, 12] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 50,
@@ -106,6 +123,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'balloon-chicken',
     name: 'Balloon Chicken',
     format: 'ffa',
+    players: { min: 2, max: 12, best: [3, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 20,
@@ -116,6 +134,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'number-rush',
     name: 'Number Rush',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -126,6 +145,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'quick-math',
     name: 'Quick Math',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 10] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -136,6 +156,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'odd-one-out',
     name: 'Odd One Out',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 10] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -146,6 +167,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'higher-lower',
     name: 'Higher or Lower',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 22,
@@ -156,6 +178,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'bug-smash',
     name: 'Bug Smash',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 10] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -166,6 +189,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'stop-clock',
     name: 'Stop the Clock',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 25,
@@ -176,6 +200,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'memory-flash',
     name: 'Memory Flash',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -186,6 +211,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'simon',
     name: 'Simon',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -196,6 +222,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'pixel-hoops',
     name: 'Pixel Hoops',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -206,6 +233,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'pixel-weight',
     name: 'Pixel Weight',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -216,6 +244,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'pixel-split',
     name: 'Pixel Split',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -226,6 +255,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'tug-of-war',
     name: 'Tug of War',
     format: 'team',
+    players: { min: 2, max: 12, best: [4, 10] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 15,
@@ -236,6 +266,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'sink-the-fleet',
     name: 'Sink the Fleet',
     format: 'duel',
+    players: { min: 2, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -246,6 +277,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'bomb-relay',
     name: 'Bomb Relay',
     format: 'team',
+    players: { min: 4, max: 12, best: [4, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 25,
@@ -256,6 +288,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'fruit-catch',
     name: 'Fruit Catch',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 10] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -266,6 +299,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'pixel-rain',
     name: 'Pixel Rain',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [3, 10] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -276,6 +310,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'pixel-dash',
     name: 'Pixel Dash',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -286,6 +321,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'snake-arena',
     name: 'Snake Arena',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 10] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 30,
@@ -296,6 +332,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'pixel-pong',
     name: 'Pixel Pong',
     format: 'duel',
+    players: { min: 2, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -306,6 +343,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'sumo-push',
     name: 'Sumo Push',
     format: 'ffa',
+    players: { min: 3, max: 12, best: [4, 8] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 30,
@@ -316,6 +354,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'match-pairs',
     name: 'Match',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 10] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -326,6 +365,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'quick-draw',
     name: 'Quick Draw',
     format: 'duel',
+    players: { min: 2, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 20,
@@ -336,6 +376,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'pixel-roulette',
     name: 'Pixel Roulette',
     format: 'ffa',
+    players: { min: 2, max: 12, best: [4, 12] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 15,
@@ -346,6 +387,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'sudoku-race',
     name: 'Sudoku Race',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 10] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -356,6 +398,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'pixel-beat',
     name: 'Pixel Beat',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 12] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 40,
@@ -366,6 +409,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'fleet-battle',
     name: 'Fleet Battle',
     format: 'team',
+    players: { min: 4, max: 12, best: [4, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 90,
@@ -376,6 +420,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'maze-sprint',
     name: 'Maze Sprint',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 45,
@@ -386,6 +431,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'line-clear-sprint',
     name: 'Line Clear Sprint',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 10] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 60,
@@ -396,6 +442,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'quick-tetris',
     name: 'Quick Tetris',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 45,
@@ -406,6 +453,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'bubble-pop',
     name: 'Bubble Pop',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 10] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 60,
@@ -416,6 +464,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'micro-race',
     name: 'Micro Race',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [3, 8] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 90,
@@ -426,6 +475,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'dash-100m',
     name: '100m Dash',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
@@ -436,6 +486,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'hurdles-110m',
     name: '110m Hurdles',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 35,
@@ -446,6 +497,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'long-jump',
     name: 'Long Jump',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 10] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 45,
@@ -457,6 +509,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'javelin-throw',
     name: 'Javelin',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 10] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 45,
@@ -467,6 +520,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'glass-bridge',
     name: 'Glass Bridge',
     format: 'ffa',
+    players: { min: 2, max: 10, best: [4, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 75,
@@ -477,6 +531,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'freeze-doll',
     name: 'Freeze Doll',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [3, 12] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 50,
@@ -487,6 +542,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'room-rush',
     name: 'Room Rush',
     format: 'ffa',
+    players: { min: 3, max: 12, best: [5, 12] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 75,
@@ -497,6 +553,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'sumo-ice',
     name: 'Sumo ICE',
     format: 'ffa',
+    players: { min: 2, max: 12, best: [3, 8] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 45,
@@ -507,6 +564,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'pang',
     name: 'Pang',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 12] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 50,
@@ -518,6 +576,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'star-blaster',
     name: 'Star Blaster',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 10] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 50,
@@ -529,6 +588,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'asteroids',
     name: 'Asteroids Arena',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [3, 8] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 60,
@@ -539,6 +599,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'bomber-express',
     name: 'Bomber Express',
     format: 'ffa',
+    players: { min: 2, max: 10, best: [3, 8] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 60,
@@ -550,6 +611,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'brawl',
     name: 'Street Brawl',
     format: 'ffa',
+    players: { min: 2, max: 12, best: [3, 8] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 75,
@@ -561,6 +623,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'rally-stage',
     name: 'Rally Stage',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 12] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 70,
@@ -572,6 +635,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'speed-circuit',
     name: 'Speed Circuit',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [4, 10] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 100,
@@ -583,6 +647,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'honeycomb-cut',
     name: 'Honeycomb Cut',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 10] },
     realtime: false,
     mobileFriendly: true,
     durationSec: 45,
@@ -594,6 +659,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'jump-rope',
     name: 'Jump Rope',
     format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 12] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 50,
@@ -605,6 +671,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'marbles-duel',
     name: 'Marbles Duel',
     format: 'duel',
+    players: { min: 2, max: 12, best: [2, 8] },
     realtime: false,
     mobileFriendly: true,
     durationSec: 50,
@@ -617,3 +684,20 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(
   MINIGAMES.map((m) => [m.id, m]),
 )
+
+// Whether a headcount is inside the game's hard limits (an unknown id fits nobody).
+export function fitsPlayers(id: MiniGameId, count: number): boolean {
+  const fit = MINIGAMES_BY_ID.get(id)?.players
+  return fit !== undefined && count >= fit.min && count <= fit.max
+}
+
+// The part of a line-up that a room of `count` players can actually play (distinct, in pick order).
+export function playableGames(ids: readonly MiniGameId[], count: number): MiniGameId[] {
+  return [...new Set(ids)].filter((id) => fitsPlayers(id, count))
+}
+
+// Whether a headcount is inside the game's recommended range.
+export function idealForPlayers(id: MiniGameId, count: number): boolean {
+  const best = MINIGAMES_BY_ID.get(id)?.players.best
+  return best !== undefined && count >= best[0] && count <= best[1]
+}

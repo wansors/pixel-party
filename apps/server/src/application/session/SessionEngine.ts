@@ -9,7 +9,7 @@ import type {
   TeamId,
   TeamRoundResult,
 } from '@pp/shared'
-import { MINIGAMES_BY_ID } from '@pp/shared'
+import { MINIGAMES_BY_ID, playableGames } from '@pp/shared'
 import type { Room } from '../../domain/entities/Room'
 import type { MiniGame, NormalizedResult, PlayerId } from '../../domain/minigames/MiniGame'
 import { createMiniGame } from '../../domain/minigames/registry'
@@ -91,10 +91,10 @@ export class SessionEngine {
 
   start(): void {
     // No-repeat within a session: draw distinct games from the pool and cap the round count at the
-    // number of distinct games (a game never plays twice in one session).
-    const pool = this.room.minigameIds.length
-      ? [...new Set(this.room.minigameIds)]
-      : ['button-masher']
+    // number of distinct games (a game never plays twice in one session). Games whose player range
+    // doesn't fit the room's headcount sit the session out (D27); Button Masher fits any room.
+    const playable = playableGames(this.room.minigameIds, this.room.connectedCount)
+    const pool = playable.length ? playable : ['button-masher']
     const requested = this.room.rounds > 0 ? this.room.rounds : pool.length
     this.sequence = this.orderPool(pool, Math.min(requested, pool.length)) as MiniGameId[]
     this.roundIndex = 0

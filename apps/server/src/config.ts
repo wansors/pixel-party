@@ -1,3 +1,5 @@
+import { MAX_ROOM_PLAYERS } from '@pp/shared'
+
 const isDevelopment = process.env.NODE_ENV === 'development'
 
 // Coerce an operator-supplied env integer with a documented default and a floor: a non-numeric or
@@ -32,7 +34,11 @@ export const config = {
   seed: envInt(process.env.RNG_SEED, 1, 0),
   wsIdleTimeoutSec: envInt(process.env.WS_IDLE_TIMEOUT_SEC, 60),
   roomCodeLen: envInt(process.env.ROOM_CODE_LEN, 4),
-  roomMaxPlayers: envInt(process.env.ROOM_MAX_PLAYERS, 10),
+  // Capped at the catalog's ceiling: no mini-game is built (or player-count tagged) for more.
+  roomMaxPlayers: Math.min(
+    MAX_ROOM_PLAYERS,
+    envInt(process.env.ROOM_MAX_PLAYERS, MAX_ROOM_PLAYERS),
+  ),
   roomIdleTimeoutSec: envInt(process.env.ROOM_IDLE_TIMEOUT_SEC, 900),
   // Bounded scoring catch-up (Phase 3). Ships OFF; enable per deployment while tuning. The cap is an
   // integer percent (default 20 → up to +20% for the furthest-behind player).

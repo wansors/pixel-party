@@ -91,9 +91,14 @@ Shared kit — reuse before writing a private helper (duplicates were hoisted ou
    touch targets ≥ 44 px. The game is PC-first: set the catalog's `mobileFriendly` honestly (true only
    if it plays comfortably with touch on a portrait phone), but never let a scene break on one. Press Start 2P is ~1 em per glyph and crispest at multiples of 8 px — keep
    headline strings short, long sentences in `bodyStyle`. In-font symbols: ★ ▲ ▼ ◀ ▶ ← → ↑ ↓ ×.
-6. Cosmetic randomness that all players should see alike is derived from ids/indices (not
+6. Player counts: declare the catalog's `players` fit honestly (D27, `docs/player-fit-audit.md`) —
+   `min` 2+ for last-standing/head-to-head games, `max` only up to what spawns/lanes/layout really
+   hold (12 is the room ceiling), `best` where it's most fun. Check a full room with the playtest's
+   `--bots=11`: show every player (or the top N **plus yourself**), never drop rows silently, and keep
+   rounds ending early when the remaining seats can't act.
+7. Cosmetic randomness that all players should see alike is derived from ids/indices (not
    `Math.random`); domain code never uses `Math.random`/`Date.now` (`bun run lint:determinism`).
-7. Short header comment per scene; Biome style; no dead code / `any`.
+8. Short header comment per scene; Biome style; no dead code / `any`.
 
 References: `ButtonMasherScene.ts` (tap game: arcade button + player-colored race lanes),
 `FruitCatchScene.ts` (real-time: interpolation, procedural sprites, catch/bomb feedback).

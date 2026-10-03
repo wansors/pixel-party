@@ -8,6 +8,7 @@ import {
   SKILL_AXES,
   type SkillAxis,
   hexToCss,
+  idealForPlayers,
 } from '@pp/shared'
 import { CatalogI18nService } from '../../../core/i18n/catalog-i18n.service'
 import { PixelAvatarComponent } from '../../../shared/pixel-avatar.component'
@@ -38,21 +39,36 @@ export class LobbyComponent {
   // Mobile filter (client-only, combines with the axis filter): Pixel Party is PC-first, so when some
   // players joined from their phones the host can narrow the grid to the games that play well there.
   readonly mobileOnly = signal(false)
+  // "Ideal for N" filter (client-only, combines with the others): only games whose recommended player
+  // range holds the current headcount (D27).
+  readonly idealOnly = signal(false)
 
   // Host sees the whole catalog (narrowed by the filters); everyone else just sees the line-up.
   readonly shownGames = computed<readonly MiniGameMeta[]>(() => {
     const axis = this.axisFilter()
     const mobile = this.mobileOnly()
+    const ideal = this.idealOnly()
+    const count = this.store.connectedCount()
     const pool = this.store.isHost()
       ? MINIGAMES
       : MINIGAMES.filter((g) => this.store.selectedGameIds().includes(g.id))
-    return pool.filter((g) => (!axis || g.axes.includes(axis)) && (!mobile || g.mobileFriendly))
+    return pool.filter(
+      (g) =>
+        (!axis || g.axes.includes(axis)) &&
+        (!mobile || g.mobileFriendly) &&
+        (!ideal || idealForPlayers(g.id, count)),
+    )
   })
+
+  // Picked games that sit this headcount out (outside their player range).
+  readonly sittingOut = computed(
+    () => this.store.selectedGameIds().length - this.store.playableGameIds().length,
+  )
 
   // Aggregate skill coverage of the current line-up, as a 0..1 radar per axis (relative to whichever
   // axis the selection leans on most) — a "what will this session train" preview.
   readonly coverage = computed(() => {
-    const ids = new Set(this.store.selectedGameIds())
+    const ids = new Set(this.store.playableGameIds())
     const counts = new Map<SkillAxis, number>()
     for (const g of MINIGAMES) {
       if (!ids.has(g.id)) continue
@@ -81,7 +97,16 @@ export class LobbyComponent {
   }
 
   selectShown(): void {
-    this.store.selectGames(this.shownGames().map((g) => g.id))
+    this.store.selectGames(this.shownGames().flatMap((g) => (this.store.fits(g.id) ? [g.id] : [])))
+  }
+
+  // "3-8" — a player range as the card shows it (one number when both ends match).
+  range(lo: number, hi: number): string {
+    return lo === hi ? `${lo}` : `${lo}-${hi}`
+  }
+
+  isIdeal(g: MiniGameMeta): boolean {
+    return idealForPlayers(g.id, this.store.connectedCount())
   }
 
   deselectShown(): void {
@@ -89,7 +114,7 @@ export class LobbyComponent {
   }
 
   stepRounds(delta: number): void {
-    this.store.setRounds(this.store.rounds() + delta)
+    this.store.setRounds(this.store.effectiveRounds() + delta)
   }
 
   // Clipboard API needs a secure context (localhost qualifies, plain LAN IPs don't) — fall back to
