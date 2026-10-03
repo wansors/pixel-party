@@ -504,6 +504,17 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
       'Harpoon the bouncing balloons: each hit splits them smaller. Most pops wins, dodge them all!',
     axes: ['precision', 'reflexes'],
   },
+  {
+    id: 'star-blaster',
+    name: 'Star Blaster',
+    format: 'ffa',
+    realtime: true,
+    mobileFriendly: false,
+    durationSec: 50,
+    blurb:
+      'Same waves for everyone: weave through the bullet storm, your ship fires itself. Top score wins.',
+    axes: ['reflexes', 'focus'],
+  },
 ]
 
 export const MINIGAMES_BY_ID: ReadonlyMap<MiniGameId, MiniGameMeta> = new Map(

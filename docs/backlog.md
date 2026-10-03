@@ -365,7 +365,8 @@ cluster below. Catalog section F.
         everyone starts fully powered up (**fire range 5+, 5 bombs, speed boost by default**) so it's
         chaos from second one, with extra power-ups dropping from crates. Last one standing, then most
         knock-outs. Seeded crate layout; server owns the grid, bombs and chain reactions.
-  - [ ] **Vertical shooter** (bullet-hell shmup) — a vertically scrolling ship: dodge bullet patterns and
+  - [x] **Vertical shooter** (`star-blaster`, bullet-hell shmup) — *Shipped 2026-10-03 as Star
+        Blaster (catalog I3, D22).* A vertically scrolling ship: dodge bullet patterns and
         destroy targets. Same seeded waves for everyone (own lane/viewport each, so it's a fair race);
         ranked by score, hits taken cost points/lives.
   - [x] **Pang** (`pang`, Buster Bros style) — *Shipped 2026-10-02 (catalog I2, D22; own arena per

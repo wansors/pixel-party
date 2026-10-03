@@ -39,6 +39,7 @@ import { RouletteScene } from './RouletteScene'
 import { SimonScene } from './SimonScene'
 import { SinkTheFleetScene } from './SinkTheFleetScene'
 import { SnakeArenaScene } from './SnakeArenaScene'
+import { StarBlasterScene } from './StarBlasterScene'
 import { StopClockScene } from './StopClockScene'
 import { SudokuRaceScene } from './SudokuRaceScene'
 import { SumoIceScene } from './SumoIceScene'
@@ -92,6 +93,7 @@ export const SCENES: Readonly<Record<string, SceneCtor>> = {
   'room-rush': RoomRushScene,
   'sumo-ice': SumoIceScene,
   pang: PangScene,
+  'star-blaster': StarBlasterScene,
   'tug-of-war': TugOfWarScene,
   'bomb-relay': BombRelayScene,
   'fleet-battle': FleetBattleScene,

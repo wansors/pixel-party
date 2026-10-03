@@ -319,6 +319,10 @@
       "pang": {
         "name": "Pang",
         "blurb": "Harpoon the bouncing balloons: each hit splits them smaller. Most pops wins, dodge them all!"
+      },
+      "star-blaster": {
+        "name": "Star Blaster",
+        "blurb": "Same waves for everyone: weave through the bullet storm, your ship fires itself. Top score wins."
       }
     }
   },
@@ -686,6 +690,11 @@
       "waveUp": "WAVE {{n}}!",
       "hint": "← → walk · SPACE fires the harpoon",
       "popped": "{{n}} POPPED"
+    },
+    "starBlaster": {
+      "score": "{{n}} PTS",
+      "warning": "WARNING! BOSS",
+      "final": "{{n}} POINTS"
     }
   }
 }

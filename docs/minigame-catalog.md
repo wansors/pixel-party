@@ -50,8 +50,8 @@ Then (2026-09-28) a new sports wave (section F): F1 100 m Dash (`dash-100m`), F2
 (`hurdles-110m`), F3 Long Jump (`long-jump`), F4 Javelin (`javelin-throw`) and F5 Micro Race
 (`micro-race`). **40 mini-games total.**
 Then (2026-10-02) the roadmap wave (D22), one game at a time: G1 Glass Bridge (`glass-bridge`), G2
-Freeze Doll (`freeze-doll`), G3 Room Rush (`room-rush`), I1 Sumo ICE (`sumo-ice`), I2 Pang (`pang`).
-**45 mini-games total.**
+Freeze Doll (`freeze-doll`), G3 Room Rush (`room-rush`), I1 Sumo ICE (`sumo-ice`), I2 Pang (`pang`),
+I3 Star Blaster (`star-blaster`). **46 mini-games total.**
 
 ---
 
@@ -477,20 +477,35 @@ avatar. See `implementation-decisions.md` D22.
 - **Latency**: medium — the client runs the same balloon physics between snapshots (`PANG` constants
   are shared), and on wide screens shows everyone else's arena as a live thumbnail.
 
+### I3. ✅ Star Blaster (vertical shmup) — implemented (`star-blaster`)
+- **Concept**: a vertically scrolling shooter in your own viewport — everyone faces the **same seeded
+  attack script**: drone formations, gunners that hover and spray rings/fans, a boss for the last
+  ~16 s. The ship (your color, your avatar in the cockpit) fires on its own; you steer to aim and dodge.
+- **Type**: FFA · **Input**: arrows / WASD or hold the pointer where you want the ship · **Duration**:
+  50 s · **Banter**: 💥💥 · **Mobile-friendly**: no
+- **Rules**: drones (1 HP, 10 pts) swoop down and veer off before the ship's zone; gunners (5 HP,
+  50 pts); the boss (60 HP, 400 pts). A bullet or a ram costs one of 3 lives and 25 points, then 2 s of
+  blinking; a rammed drone is destroyed (no points). Out of lives, you're out. Bullet-hell hitbox (the
+  ship's sprite is bigger than its 0.018 hit radius).
+- **Win condition / Result**: highest score (`640`), then lives left.
+- **Latency**: medium — enemies and bullet patterns are a pure function of (seed, time) evaluated on
+  both sides; tuned with simulated pilots (an idle ship loses ~1 life per round, a dodging one ~0.1 and
+  scores ~2.3× more).
+
 ---
 
 ## Variety coverage
 
 | Axis | Covered by |
 |------|------------|
-| Reflexes / reaction | A1, A6, B1, E7, F5, G2 |
+| Reflexes / reaction | A1, A6, B1, E7, F5, G2, I3 |
 | Attention / focus (inhibition) | E1, E3, E4, G1 |
 | Speed / endurance | A2, A9, C1, F1, F2, G3 |
 | Knowledge | A3 |
 | Mental math | E2 |
 | Memory | A4, A11, E8 |
 | Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4, I2 |
-| Survival / dodging | A7, A8, B3, I1 |
+| Survival / dodging | A7, A8, B3, I1, I3 |
 | Nerve / chance | D1, D3, E5, G1, G2, G3 |
 | Teamwork | C1, C2, C3 |
 | Head-to-head rivalry | B1, B2, B3, E7 |
@@ -499,7 +514,7 @@ avatar. See `implementation-decisions.md` D22.
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1–G3, I1–I2 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F5, G1–G3, I1–I3 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7 |
 | Team | C1, C2, C3 |
 

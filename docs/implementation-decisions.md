@@ -446,3 +446,11 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   snapshots (gravity, walls, a fixed bounce height per size) instead of interpolating — balloons split
   and vanish, so an id-less list can't be lerped. Snapshots carry every arena (~3 KB at 10 players),
   which also feeds the thumbnails of the others on wide screens.
+- **I3 Star Blaster** (`star-blaster`, PC-first; the backlog's "Vertical shooter"): a broadcast
+  snapshot can't carry ten viewports of bullets, so the whole attack script (enemy paths, emission
+  times, ring/fan/spiral patterns) lives in `@pp/shared` as a pure function of a seed and time; the
+  wire carries per player only the ship, score/lives, the enemies they destroyed (an enemy only fires
+  while alive *for that player*) and the bullets that hit them. The ship's own fire is cosmetic on the
+  client (the server resolves hits). Tuned with simulated pilots: drones were first ramming players at
+  the bottom, so they now veer off before the ship's zone; ring 8 / fan 5 / boss spiral 4, bullet speeds
+  0.3–0.4, a small hitbox and a 2 s shield.

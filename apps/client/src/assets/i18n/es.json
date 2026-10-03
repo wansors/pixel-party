@@ -319,6 +319,10 @@
       "pang": {
         "name": "Pang",
         "blurb": "Arponea los globos que rebotan: cada impacto los divide en otros más pequeños. Gana quien más reviente, ¡y esquívalos!"
+      },
+      "star-blaster": {
+        "name": "Star Blaster",
+        "blurb": "Las mismas oleadas para todos: esquiva la lluvia de balas, tu nave dispara sola. Gana la mejor puntuación."
       }
     }
   },
@@ -686,6 +690,11 @@
       "waveUp": "¡OLEADA {{n}}!",
       "hint": "← → andar · ESPACIO lanza el arpón",
       "popped": "{{n}} REVENTADOS"
+    },
+    "starBlaster": {
+      "score": "{{n}} PTS",
+      "warning": "¡CUIDADO! JEFE",
+      "final": "{{n}} PUNTOS"
     }
   }
 }
