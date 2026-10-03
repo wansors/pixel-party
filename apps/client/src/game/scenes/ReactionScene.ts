@@ -15,7 +15,11 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 const WAIT_BG = 0x5c1422
 const GO_BG = 0x14683e
 const OUT_BG = 0x2a1a24
-const MAX_ROWS = 8
+// Results board: one column up to this many players (and while rows stay at least BOARD_MIN_ROW_H
+// tall), then two (three on a short landscape screen).
+const BOARD_ONE_COLUMN = 8
+const BOARD_MIN_ROW_H = 18
+const BOARD_COL_GAP = 12
 // Cosmetic rating of the player's own time (never scoring — the server ranks the raw ms).
 const RATINGS: readonly [number, string, number][] = [
   [220, 'game.common.perfect', PALETTE.amber],
@@ -34,8 +38,10 @@ interface Row {
 // Reaction Duel canvas: the whole screen is the signal. A red field with a pixel traffic light
 // waits for green; tap (or Space) after it turns. The green moment is scheduled locally from the
 // snapshot's `greenInMs`, so the switch lands on time instead of up to one snapshot late — never
-// early, because the estimate only ever carries extra delay. Everyone's times / false starts fill a
-// board below as they arrive, in each player's color.
+// early, because the estimate only ever carries extra delay. A tap also reports this client's own
+// reaction time (from the frame that showed green), which the server credits within bounds so the
+// network round trip stays out of the score. Every player's time / false start fills a board below
+// (two columns in a big room) as they arrive, in each player's color.
 export class ReactionScene extends MiniGameScene<ReactionSnapshot> {
   private bg?: Phaser.GameObjects.Rectangle
   private redLamp?: Phaser.GameObjects.Image
@@ -48,7 +54,11 @@ export class ReactionScene extends MiniGameScene<ReactionSnapshot> {
   private keys = { redOn: '', redOff: '', greenOn: '', greenOff: '' }
   private titleSize = 56
   private titleMaxW = 0
+  private boardTop = 0
   private greenAtLocal = Number.POSITIVE_INFINITY
+  // performance.now() of the frame that turned this screen green (null: not green yet, or it turned
+  // green before a relayout restart — then the server's own timing is used).
+  private greenShownAt: number | null = null
   private lastTick = -1
   private wasGreen = false
   private resolved = false
@@ -62,6 +72,7 @@ export class ReactionScene extends MiniGameScene<ReactionSnapshot> {
     this.rows = []
     this.shown.clear()
     this.greenAtLocal = Number.POSITIVE_INFINITY
+    this.greenShownAt = null
     this.lastTick = -1
     this.wasGreen = false
     this.resolved = false
@@ -123,36 +134,8 @@ export class ReactionScene extends MiniGameScene<ReactionSnapshot> {
       .setOrigin(0.5, 0)
       .setDepth(10)
 
-    // Everyone's result board along the bottom.
-    const boardTop = lightY + lamp * 1.55 + (compact ? 56 : 70)
-    const rowH = Math.max(18, Math.min(compact ? 24 : 30, (height - boardTop - 10) / MAX_ROWS))
-    const boardW = Math.min(width * 0.92, 520)
-    const left = cx - boardW / 2
-    for (let i = 0; i < MAX_ROWS; i++) {
-      const y = boardTop + i * rowH + rowH / 2
-      if (y + rowH / 2 > height - 4) break
-      const frame = this.add
-        .rectangle(cx, y, boardW, rowH - 3, PALETTE.bg, 0.72)
-        .setStrokeStyle(2, PALETTE.text)
-        .setDepth(5)
-      // Each row leads with the player's avatar (texture set per player in renderBoard).
-      const icon = avatarPx(rowH - 4)
-      const swatch = this.add
-        .image(left + 8, y, ensureAvatarTexture(this, 'cat', PALETTE.dim, 1))
-        .setOrigin(0, 0.5)
-        .setDisplaySize(icon, icon)
-        .setDepth(6)
-      const name = this.add
-        .text(left + 14 + icon, y, '', bodyStyle(compact ? 13 : 16, PALETTE.text))
-        .setOrigin(0, 0.5)
-        .setDepth(6)
-      const value = this.add
-        .text(left + boardW - 10, y, '', headlineStyle(compact ? 8 : 16, PALETTE.text))
-        .setOrigin(1, 0.5)
-        .setDepth(6)
-      this.rows.push({ swatch, name, value, frame, key: '' })
-      for (const o of [frame, swatch, name, value]) o.setVisible(false)
-    }
+    // Everyone's result board along the bottom: built on the first snapshot, which names the players.
+    this.boardTop = lightY + lamp * 1.55 + (compact ? 56 : 70)
 
     this.input.on('pointerdown', () => this.tap())
     this.onKey('SPACE', () => this.tap())
@@ -162,9 +145,10 @@ export class ReactionScene extends MiniGameScene<ReactionSnapshot> {
 
   private tap(): void {
     const snap = this.snap
-    if (!snap || this.resolved) return
+    if (!snap || this.resolved || !snap.players.includes(this.selfId)) return
     if (snap.falseStarts.includes(this.selfId) || this.selfId in snap.reactions) return
-    this.sendInput({ kind: 'tap' })
+    const ms = this.greenShownAt === null ? undefined : performance.now() - this.greenShownAt
+    this.sendInput(ms === undefined ? { kind: 'tap' } : { kind: 'tap', ms: Math.round(ms) })
     // Instant "got it" on a post-green tap; the time itself arrives with the next snapshot.
     if (this.wasGreen && this.greenLamp) {
       punch(this, this.greenLamp, -0.12, 70)
@@ -188,6 +172,7 @@ export class ReactionScene extends MiniGameScene<ReactionSnapshot> {
 
   protected frame(snap: ReactionSnapshot | null, time: number): void {
     if (!snap) return
+    if (this.rows.length === 0) this.buildBoard(snap.players.length)
     const now = this.time.now
     if (this.state.tick !== this.lastTick) {
       this.lastTick = this.state.tick
@@ -217,6 +202,7 @@ export class ReactionScene extends MiniGameScene<ReactionSnapshot> {
 
   private goMoment(quiet: boolean): void {
     this.wasGreen = true
+    if (!quiet) this.greenShownAt = performance.now()
     this.bg?.setFillStyle(this.resolved ? OUT_BG : GO_BG)
     this.redLamp?.setTexture(this.keys.redOff).setAlpha(1)
     this.greenLamp?.setTexture(this.keys.greenOn)
@@ -255,19 +241,54 @@ export class ReactionScene extends MiniGameScene<ReactionSnapshot> {
     if (rating) floatText(this, x, y + this.title.height, this.t(rating[1]), rating[2], 24)
   }
 
-  // Every known player: fastest first, then those still waiting, then false starts.
+  // One row per round player, filled column by column. One column fits most rooms; a big room (or a
+  // short landscape screen) gets two or three, as the width allows.
+  private buildBoard(n: number): void {
+    const { width, height } = this.scale
+    const compact = Math.min(width, height) < 520
+    const avail = height - this.boardTop - 6
+    const colsFor = (w: number): number => Math.floor((width * 0.94 + BOARD_COL_GAP) / w)
+    let cols = n > BOARD_ONE_COLUMN && colsFor(320) >= 2 ? 2 : 1
+    while (cols < 3 && avail / Math.ceil(n / cols) < BOARD_MIN_ROW_H && colsFor(260) > cols) cols++
+    const perCol = Math.ceil(n / cols)
+    const rowH = Math.max(16, Math.min(compact ? 24 : 30, avail / perCol))
+    const boardW = Math.min(520, (width * 0.94 - BOARD_COL_GAP * (cols - 1)) / cols)
+    const left0 = width / 2 - (cols * boardW + (cols - 1) * BOARD_COL_GAP) / 2
+    const icon = avatarPx(rowH - 4)
+    for (let i = 0; i < n; i++) {
+      const left = left0 + Math.floor(i / perCol) * (boardW + BOARD_COL_GAP)
+      const y = this.boardTop + (i % perCol) * rowH + rowH / 2
+      const frame = this.add
+        .rectangle(left + boardW / 2, y, boardW, rowH - 3, PALETTE.bg, 0.72)
+        .setStrokeStyle(2, PALETTE.text)
+        .setDepth(5)
+      // Each row leads with the player's avatar (texture set per player in renderBoard).
+      const swatch = this.add
+        .image(left + 8, y, ensureAvatarTexture(this, 'cat', PALETTE.dim, 1))
+        .setOrigin(0, 0.5)
+        .setDisplaySize(icon, icon)
+        .setDepth(6)
+      const name = this.add
+        .text(left + 14 + icon, y, '', bodyStyle(compact || rowH < 22 ? 13 : 16, PALETTE.text))
+        .setOrigin(0, 0.5)
+        .setDepth(6)
+      const value = this.add
+        .text(left + boardW - 10, y, '', headlineStyle(compact || rowH < 22 ? 8 : 16, PALETTE.text))
+        .setOrigin(1, 0.5)
+        .setDepth(6)
+      this.rows.push({ swatch, name, value, frame, key: '' })
+      for (const o of [frame, swatch, name, value]) o.setVisible(false)
+    }
+  }
+
+  // Every round player: fastest first, then those still waiting, then false starts.
   private renderBoard(snap: ReactionSnapshot): void {
-    const ids = new Set([
-      ...Object.keys(this.state.names),
-      ...Object.keys(snap.reactions),
-      ...snap.falseStarts,
-    ])
     const order = (id: string): number => {
       const ms = snap.reactions[id]
       if (typeof ms === 'number') return ms
       return snap.falseStarts.includes(id) ? 2e9 : 1e9
     }
-    const ranked = [...ids].sort((a, b) => order(a) - order(b))
+    const ranked = [...snap.players].sort((a, b) => order(a) - order(b))
     this.rows.forEach((row, i) => {
       const id = ranked[i]
       const visible = id !== undefined

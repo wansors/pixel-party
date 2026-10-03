@@ -9,7 +9,8 @@ const OPEN_COLOR = PALETTE.panelAlt
 const CLEARED_COLOR = shade(PALETTE.lime, -0.72)
 const WRONG_COLOR = shade(PALETTE.red, -0.35)
 const MILESTONE = 5
-const MAX_CHIPS = 6
+// Every player gets a chip; rooms bigger than this get an extra strip row.
+const CHIPS_PER_ROW = 6
 
 interface Cell {
   image: Phaser.GameObjects.Image
@@ -65,7 +66,8 @@ export class NumberRushScene extends MiniGameScene<NumberRushSnapshot> {
     this.boardTop = this.top + promptSize + (compact ? 26 : 34)
 
     const chipSize = compact ? 11 : 13
-    const stripRows = width < 600 ? 2 : 1
+    const roster = Object.keys(this.state.names).length
+    const stripRows = (width < 600 ? 2 : 1) + (roster > CHIPS_PER_ROW ? 1 : 0)
     const hintY = height - (compact ? 14 : 18)
     this.hint = this.add.text(cx, hintY, '', bodyStyle(compact ? 12 : 15)).setOrigin(0.5)
     const stripY = hintY - 14 - stripRows * PlayerStrip.rowH(chipSize)
@@ -125,7 +127,7 @@ export class NumberRushScene extends MiniGameScene<NumberRushSnapshot> {
   private tap(index: number): void {
     const snap = this.snap
     const cell = this.cells[index]
-    if (!snap || !cell || snap.remainingMs <= 0) return
+    if (!snap || !cell || snap.remainingMs <= 0 || !(this.selfId in snap.progress)) return
     const target = this.next(snap)
     if (target > snap.grid.length || cell.cleared) return
     this.sendInput({ kind: 'tap', cell: index })
@@ -189,12 +191,11 @@ export class NumberRushScene extends MiniGameScene<NumberRushSnapshot> {
 
     const chips = Object.entries(snap.progress)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, MAX_CHIPS)
       .map(([id, p]) => {
         const name = this.label(id).slice(0, 10).toUpperCase()
         const n = Math.min(total, p - 1)
         return {
-          text: `${name} ${n}/${total}${p > total ? ' ✓' : ''}`,
+          text: `${name} ${n}/${total}${p > total ? '✓' : ''}`,
           avatar: this.state.avatarOf(id),
           color: this.state.colorOf(id),
         }

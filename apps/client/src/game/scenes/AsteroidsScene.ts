@@ -12,7 +12,8 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 // ring while shielded). Rocks
 // are lumpy pixel boulders in three sizes; bullets take their shooter's color. Everything is
 // extrapolated from the snapshot's velocities between updates; your own heading is predicted from
-// your held keys. ←/→ (A/D) turn, ↑/W thrust, SPACE fires — or the four hold buttons.
+// your held keys. A ship whose pilot hasn't touched the controls yet is a faded ghost (nothing hits it).
+// ←/→ (A/D) turn, ↑/W thrust, SPACE fires — or the four hold buttons.
 
 const W = ASTEROIDS.w
 const H = ASTEROIDS.h
@@ -75,6 +76,8 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
     ptr: number
   }[] = []
   private keys = { left: false, right: false, thrust: false, fire: false }
+  // Controls go out only once the player has pressed something (an untouched ship stays parked).
+  private touched = false
   private sent = ''
   private sentAt = 0
   private lastTick = -1
@@ -94,6 +97,7 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
     this.ships = new Map()
     this.buttons = []
     this.keys = { left: false, right: false, thrust: false, fire: false }
+    this.touched = false
     this.sent = ''
     this.sentAt = 0
     this.lastTick = -1
@@ -140,6 +144,7 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
       const button = { act: spec.act, img, up, down, ptr: -1 }
       img.on('pointerdown', (p: Phaser.Input.Pointer) => {
         button.ptr = p.id
+        this.touched = true
       })
       this.buttons.push(button)
       x += spec.w + gap
@@ -152,6 +157,7 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
       for (const n of names) {
         kb?.on(`keydown-${n}`, () => {
           this.keys[k] = true
+          this.touched = true
         })
         kb?.on(`keyup-${n}`, () => {
           this.keys[k] = false
@@ -237,7 +243,13 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
       if (b.img.texture.key !== (on ? b.down : b.up)) b.img.setTexture(on ? b.down : b.up)
     }
     const key = `${rot}${thrust ? 1 : 0}${fire ? 1 : 0}`
-    if ((key !== this.sent || time - this.sentAt > 300) && this.snap && !this.state.final) {
+    const flying = this.snap?.ships.some((s) => s.id === this.selfId) ?? false
+    if (
+      this.touched &&
+      flying &&
+      (key !== this.sent || time - this.sentAt > 300) &&
+      !this.state.final
+    ) {
       this.sent = key
       this.sentAt = time
       this.sendInput({ kind: 'controls', rot, thrust, fire })
@@ -295,6 +307,13 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
 
   private paintShips(snap: AsteroidsSnapshot, since: number, time: number, myRot: number): void {
     const g = this.g as Phaser.GameObjects.Graphics
+    // A pilot who left the round is gone from the sky.
+    for (const [id, view] of this.ships) {
+      if (snap.ships.some((s) => s.id === id)) continue
+      view.avatar.destroy()
+      this.ships.delete(id)
+      if (id === this.selfId) this.marker?.hide()
+    }
     for (const s of snap.ships) {
       let view = this.ships.get(s.id)
       if (!view) {
@@ -325,14 +344,14 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
       view.avatar.image
         .setPosition(Math.round(p.x), Math.round(p.y))
         .setAngle(rot * 10)
-        .setAlpha(s.shield ? (Math.floor(time / 100) % 2 ? 0.5 : 1) : 1)
+        .setAlpha(s.idle ? 0.35 : s.shield ? (Math.floor(time / 100) % 2 ? 0.5 : 1) : 1)
       const color = this.state.colorOf(s.id)
       const r = this.shipPx * 0.62
       const cos = Math.cos(a)
       const sin = Math.sin(a)
-      g.fillStyle(0x0b0f1f, 0.6)
+      g.fillStyle(0x0b0f1f, s.idle ? 0.25 : 0.6)
       g.fillCircle(p.x, p.y, r)
-      g.lineStyle(2, color, 0.9)
+      g.lineStyle(2, color, s.idle ? 0.35 : 0.9)
       g.strokeCircle(p.x, p.y, r)
       g.fillStyle(0xffffff, 0.35)
       g.fillCircle(p.x - r * 0.45, p.y - r * 0.45, Math.max(2, r * 0.14))
@@ -379,7 +398,7 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
           text: `${this.label(s.id)} ${s.score}`,
           avatar: this.state.avatarOf(s.id),
           color: this.state.colorOf(s.id),
-          dim: !s.alive,
+          dim: !s.alive || s.idle,
         })),
     )
     if (!prev || this.firstSnapshot) return

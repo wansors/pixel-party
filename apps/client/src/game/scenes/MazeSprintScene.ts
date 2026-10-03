@@ -1,6 +1,6 @@
 import { type MazeSprintSnapshot, PALETTE } from '@pp/shared'
 import type Phaser from 'phaser'
-import { AvatarSprite, avatarPx } from '../avatars'
+import { AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, flash, floatText, punch, showBanner } from '../fx'
 import {
   bodyStyle,
@@ -8,6 +8,7 @@ import {
   ensurePixelGrid,
   fitFontSize,
   headlineStyle,
+  hexToCss,
   shade,
 } from '../pixelStyle'
 import { YouMarker } from '../playerMarks'
@@ -27,6 +28,14 @@ const GLYPH: Record<Dir, string> = { up: '▲', down: '▼', left: '◀', right:
 const MOVE_MS = 90
 // After our last key press, snapshots may not include that move yet: keep the local guess meanwhile.
 const PREDICT_HOLD_MS = 150
+// Walking pace, the same on every machine: a held key or pad button steps every STEP_MS after a first
+// HOLD_DELAY_MS (the OS key repeat is ignored), and a press faster than that waits its turn. The server
+// drops steps under 90 ms apart, so this pace never loses one.
+const STEP_MS = 100
+const HOLD_DELAY_MS = 220
+// Rival progress bars: row height bounds (two columns when one doesn't fit a full room).
+const BAR_ROW_MAX = 24
+const BAR_ROW_MIN = 16
 
 // Checkered finish flag on a pole, 8x10 cells.
 const FLAG_ROWS = [
@@ -57,11 +66,19 @@ interface PadKey {
   y: number
 }
 
+// One player's row in the progress panel: their avatar and name; the bar is drawn on a shared Graphics.
+interface BarRow {
+  icon: Phaser.GameObjects.Image
+  name: Phaser.GameObjects.Text
+}
+
 // Maze Sprint canvas. Renders the ONE shared maze (identical for everyone, drawn once as chunky
-// beveled walls) plus every player as their lobby avatar, with the finish flag in the exit
-// cell and a breadcrumb trail of where you have been. Movement is server-validated: keys and the
-// arcade D-pad just send an intent. A wall bump is predicted locally from the same wall data for
-// instant feedback; the token itself only moves when the snapshot says so.
+// beveled walls) with your lobby avatar in it, the finish flag in the exit cell and a breadcrumb trail
+// of where you have been. Rivals show as progress bars (steps left to the exit) beside the maze — their
+// spots would give the path away — and step into the maze once you finish. Movement is
+// server-validated: keys and the arcade D-pad just send an intent, at a fixed pace. A wall bump is
+// predicted locally from the same wall data for instant feedback; the token itself only moves when the
+// snapshot says so.
 export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
   private built = false
   private trail?: Phaser.GameObjects.Graphics
@@ -71,6 +88,11 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
   private subline?: Phaser.GameObjects.Text
   private readonly tokens = new Map<string, Token>()
   private readonly pad = new Map<Dir, PadKey>()
+  private readonly keys = new Map<Dir, Phaser.Input.Keyboard.Key[]>()
+  private readonly barRows = new Map<string, BarRow>()
+  private barsGfx?: Phaser.GameObjects.Graphics
+  private barsKey = ''
+  private panel = { x: 0, y: 0, w: 0, h: 0 }
   private padKey = ''
   private padDownKey = ''
   private area = { x: 0, y: 0, size: 0 }
@@ -81,8 +103,18 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
   private visited = new Set<number>()
   private predicted = 0
   private lastMoveAt = Number.NEGATIVE_INFINITY
+  // Pacing: the direction held (key or pad), a press waiting for the next step slot, and the slots.
+  private heldDir?: Dir
+  private padHeld?: Dir
+  private queuedDir?: Dir
+  private nextStepAt = 0
+  private repeatAt = 0
   private lastTick = -1
   private done = false
+  // Rivals' tokens are in the maze (after you finish, or when just watching).
+  private revealed = false
+  // Joined after the round started (not in its snapshot): watch only.
+  private spectating = false
   private synced = false
   private finished = new Set<string>()
   private selfColor = 0
@@ -97,11 +129,21 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
     this.built = false
     this.tokens.clear()
     this.pad.clear()
+    this.keys.clear()
+    this.barRows.clear()
+    this.barsKey = ''
     this.visited = new Set()
     this.predicted = 0
     this.lastMoveAt = Number.NEGATIVE_INFINITY
+    this.heldDir = undefined
+    this.padHeld = undefined
+    this.queuedDir = undefined
+    this.nextStepAt = 0
+    this.repeatAt = 0
     this.lastTick = -1
     this.done = false
+    this.revealed = false
+    this.spectating = false
     this.synced = false
     this.finished = new Set()
 
@@ -118,17 +160,25 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
     let dpadX: number
     let dpadY: number
     if (landscape) {
-      const size = Math.min(height - this.top - hintH - pad * 2, width - dpadW - pad * 4)
-      this.area = { x: pad + (width - dpadW - pad * 3 - size) / 2, y: this.top + pad, size }
-      dpadX = width - pad * 1.5 - dpadW / 2
-      dpadY = this.area.y + size / 2
+      // Maze on the left; a column on the right with the rivals' bars over the D-pad.
+      const colW = Math.max(dpadW, this.compact ? 160 : 260)
+      const size = Math.min(height - this.top - hintH - pad * 2, width - colW - pad * 3)
+      this.area = { x: pad + (width - colW - pad * 3 - size) / 2, y: this.top + pad, size }
+      const colX = width - pad - colW
+      dpadX = colX + colW / 2
+      dpadY = this.area.y + size - dpadH / 2
+      this.panel = { x: colX, y: this.area.y, w: colW, h: size - dpadH - pad }
     } else {
-      const size = Math.min(width - pad * 2, height - this.top - hintH - dpadH - pad * 3)
+      // Maze on top, the rivals' bars under it, the D-pad at the bottom.
+      const panelH = this.compact ? 6 * BAR_ROW_MIN : 6 * BAR_ROW_MAX
+      const size = Math.min(width - pad * 2, height - this.top - hintH - dpadH - panelH - pad * 4)
       this.area = { x: (width - size) / 2, y: this.top + pad, size }
+      this.panel = { x: pad, y: this.area.y + size + pad, w: width - pad * 2, h: panelH }
       dpadX = width / 2
-      dpadY = (this.area.y + size + height - hintH) / 2
+      dpadY = (this.panel.y + panelH + height - hintH) / 2
     }
     this.buildPad(dpadX, dpadY, btn, gap)
+    this.barsGfx = this.add.graphics()
 
     this.add
       .text(
@@ -165,7 +215,14 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
       ['A', 'left'],
       ['D', 'right'],
     ]
-    for (const [key, dir] of keys) this.onKey(key, () => this.move(dir), { repeat: true })
+    for (const [key, dir] of keys) {
+      this.onKey(key, () => this.press(dir))
+      const held = this.input.keyboard?.addKey(key)
+      if (held) this.keys.set(dir, [...(this.keys.get(dir) ?? []), held])
+    }
+    this.input.on('pointerup', () => {
+      this.padHeld = undefined
+    })
   }
 
   // Arcade D-pad: beveled keys with a pressed (darker, sunk) state, ≥ 48 px on phones.
@@ -185,7 +242,13 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
         .image(x, y, this.padKey)
         .setDisplaySize(btn, btn)
         .setInteractive({ useHandCursor: true })
-      img.on('pointerdown', () => this.move(dir))
+      img.on('pointerdown', () => {
+        this.padHeld = dir
+        this.press(dir)
+      })
+      img.on('pointerout', () => {
+        if (this.padHeld === dir) this.padHeld = undefined
+      })
       const label = this.add
         .text(x, y, GLYPH[dir], headlineStyle(this.compact ? 16 : 24, PALETTE.text))
         .setOrigin(0.5)
@@ -204,8 +267,35 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
     })
   }
 
-  private move(dir: Dir): void {
+  // A key or pad press: step now if the pace allows, else as soon as it does; holding it repeats.
+  private press(dir: Dir): void {
     this.pressKey(dir)
+    if (this.spectating) return
+    const now = this.time.now
+    this.heldDir = dir
+    this.repeatAt = now + HOLD_DELAY_MS
+    if (now >= this.nextStepAt) this.move(dir)
+    else this.queuedDir = dir
+  }
+
+  // Paced steps: a press that came early, then the held direction's repeats.
+  private pace(now: number): void {
+    const held = this.heldDir
+    if (held && this.padHeld !== held && !this.keys.get(held)?.some((k) => k.isDown)) {
+      this.heldDir = undefined
+    }
+    if (now < this.nextStepAt) return
+    if (this.queuedDir) {
+      this.move(this.queuedDir)
+      this.queuedDir = undefined
+    } else if (this.heldDir && now >= this.repeatAt) {
+      this.pressKey(this.heldDir)
+      this.move(this.heldDir)
+    }
+  }
+
+  private move(dir: Dir): void {
+    this.nextStepAt = this.time.now + STEP_MS
     this.sendInput({ kind: 'move', dir })
     if (!this.built || this.done) {
       this.sfx.click()
@@ -336,6 +426,7 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
   protected frame(snap: MazeSprintSnapshot | null, time: number): void {
     if (!snap) return
     if (!this.built) this.build(snap)
+    this.pace(this.time.now)
     this.flag?.setAngle(Math.sin(time / 300) * 4)
     for (const [id, token] of this.tokens) {
       token.avatar
@@ -347,9 +438,21 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
     if (mine) this.marker?.place(mine.img.x, mine.img.y - mine.img.displayHeight / 2, time)
     if (this.state.tick === this.lastTick) return
     this.lastTick = this.state.tick
-    this.hud?.setScore(this.t('game.mazeSprint.steps', { n: snap.progress[this.selfId] ?? 0 }))
-    this.syncTokens(snap)
+    if (!this.synced) {
+      // Watching a race you're not in: there's nothing to hide.
+      this.spectating = !(this.selfId in snap.pos)
+      this.revealed = this.spectating
+      for (const key of this.spectating ? this.pad.values() : []) {
+        key.img.setVisible(false)
+        key.label.setVisible(false)
+      }
+    }
+    if (!this.spectating) {
+      this.hud?.setScore(this.t('game.mazeSprint.steps', { n: snap.progress[this.selfId] ?? 0 }))
+    }
     this.trackFinishes(snap)
+    this.syncTokens(snap)
+    this.renderBars(snap)
   }
 
   private syncTokens(snap: MazeSprintSnapshot): void {
@@ -362,6 +465,8 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
     ids.forEach((id, i) => {
       const cell = snap.pos[id] ?? 0
       const mine = id === this.selfId
+      // While you race, rivals stay off the maze (their spots would show you the way).
+      if (!mine && !this.revealed) return
       const slot = mine ? 0 : (i % 4) + 1
       let token = this.tokens.get(id)
       if (!token) {
@@ -412,11 +517,84 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
       this.finished.add(id)
       if (id === this.selfId) {
         this.done = true
+        this.revealed = true
         this.onFinish(i + 1, !first)
       } else if (!first) {
         this.sfx.pop()
         burst(this, exit.x, exit.y, this.state.colorOf(id), 12, 160)
       }
+    })
+  }
+
+  // Everyone's progress as bars (steps done out of the start's distance to the exit), finishers first,
+  // then whoever is closest. One column, or two when a full room wouldn't fit the panel.
+  private renderBars(snap: MazeSprintSnapshot): void {
+    const g = this.barsGfx
+    if (!g || snap.startDist <= 0) return
+    const ids = Object.keys(snap.pos).sort((a, b) => {
+      const da = snap.doneAt[a] ?? 0
+      const db = snap.doneAt[b] ?? 0
+      if (da > 0 !== db > 0) return da > 0 ? -1 : 1
+      return da > 0 ? da - db : (snap.dist[a] ?? 0) - (snap.dist[b] ?? 0)
+    })
+    const key = ids.map((id) => `${id}:${snap.dist[id]}:${snap.doneAt[id]}`).join('|')
+    if (key === this.barsKey) return
+    this.barsKey = key
+    const { x, y, w, h } = this.panel
+    const cols = h / ids.length >= BAR_ROW_MIN || w < 300 ? 1 : 2
+    const perCol = Math.ceil(ids.length / cols)
+    const rowH = Math.max(10, Math.min(BAR_ROW_MAX, Math.floor(h / perCol)))
+    const gap = 12
+    const colW = (w - gap * (cols - 1)) / cols
+    const icon = Math.min(16, rowH - 2)
+    const nameW = Math.min(colW * 0.35, 96)
+    const font = Math.max(8, Math.min(this.compact ? 11 : 13, rowH - 6))
+    g.clear()
+    ids.forEach((id, i) => {
+      const rx = x + Math.floor(i / perCol) * (colW + gap)
+      const cy = y + (i % perCol) * rowH + rowH / 2
+      const color = this.state.colorOf(id)
+      const done = (snap.doneAt[id] ?? 0) > 0
+      let row = this.barRows.get(id)
+      if (!row) {
+        row = {
+          icon: this.add.image(0, 0, ensureAvatarTexture(this, this.state.avatarOf(id), color, 1)),
+          name: this.add
+            .text(0, 0, '', bodyStyle(font, color, { fontStyle: 'bold' }))
+            .setOrigin(0, 0.5),
+        }
+        this.barRows.set(id, row)
+      }
+      row.icon
+        .setTexture(
+          ensureAvatarTexture(
+            this,
+            this.state.avatarOf(id),
+            color,
+            1,
+            'front',
+            done ? 'happy' : 'idle',
+          ),
+        )
+        .setDisplaySize(icon, icon)
+        .setPosition(rx + icon / 2, cy)
+      const label = `${done ? '★' : ''}${this.label(id)}`
+      row.name
+        .setFontSize(font)
+        .setText(label)
+        .setColor(hexToCss(id === this.selfId ? PALETTE.amber : color))
+      for (let n = label.length - 1; n > 2 && row.name.width > nameW; n--) {
+        row.name.setText(`${label.slice(0, n)}…`)
+      }
+      row.name.setPosition(rx + icon + 4, cy)
+      const bx = rx + icon + 8 + nameW
+      const bw = Math.max(8, colW - (bx - rx))
+      const bh = Math.max(4, Math.round(rowH * 0.45))
+      const progress = done ? 1 : 1 - (snap.dist[id] ?? snap.startDist) / snap.startDist
+      g.fillStyle(PALETTE.panelAlt, 1)
+      g.fillRect(bx, cy - bh / 2, bw, bh)
+      g.fillStyle(done ? PALETTE.amber : color, 1)
+      g.fillRect(bx, cy - bh / 2, Math.round(bw * Math.max(0, Math.min(1, progress))), bh)
     })
   }
 

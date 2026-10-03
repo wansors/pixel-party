@@ -2,15 +2,22 @@ import type { ButtonMasherInput, ButtonMasherSnapshot } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 10_000
+// Counted presses per player per rolling second: about the best a human finger manages, so an
+// autoclicker or a three-finger drum roll ties with the fastest masher instead of trivially beating them.
+export const MASHER_MAX_PRESSES_PER_SEC = 15
+const RATE_WINDOW_MS = 1000
 
 export interface ButtonMasherState {
   counts: Map<PlayerId, number>
+  // playerId -> times of the presses counted in the last RATE_WINDOW_MS (oldest first).
+  recent: Map<PlayerId, number[]>
   startedAt: number
   endsAt: number
 }
 
-// Real-time FFA: every player mashes; the server counts presses inside the round window and ranks by
-// count. Pure — no clock/RNG access; time arrives as `now`, randomness (unused here) via the port.
+// Real-time FFA: every player mashes; the server counts presses inside the round window (up to
+// MASHER_MAX_PRESSES_PER_SEC each) and ranks by count. Pure — no clock/RNG access; time arrives as
+// `now`, randomness (unused here) via the port.
 export class ButtonMasher implements MiniGame<ButtonMasherState, ButtonMasherInput> {
   readonly id = 'button-masher'
   readonly format = 'ffa' as const
@@ -20,6 +27,7 @@ export class ButtonMasher implements MiniGame<ButtonMasherState, ButtonMasherInp
       typeof ctx.config?.durationMs === 'number' ? ctx.config.durationMs : DEFAULT_DURATION_MS
     return {
       counts: new Map(ctx.players.map((id) => [id, 0])),
+      recent: new Map(ctx.players.map((id) => [id, []])),
       startedAt: ctx.now,
       endsAt: ctx.now + durationMs,
     }
@@ -34,7 +42,11 @@ export class ButtonMasher implements MiniGame<ButtonMasherState, ButtonMasherInp
     // Only count presses inside the window and only for players who are in this round.
     if (input.kind !== 'mash') return state
     if (now < state.startedAt || now >= state.endsAt) return state
-    if (!state.counts.has(playerId)) return state
+    const recent = state.recent.get(playerId)
+    if (!recent) return state
+    while (recent.length > 0 && (recent[0] as number) <= now - RATE_WINDOW_MS) recent.shift()
+    if (recent.length >= MASHER_MAX_PRESSES_PER_SEC) return state
+    recent.push(now)
     state.counts.set(playerId, (state.counts.get(playerId) ?? 0) + 1)
     return state
   }

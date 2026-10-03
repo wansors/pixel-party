@@ -21,6 +21,8 @@ interface Carver {
   cut: boolean[]
   cracks: number
   broken: boolean
+  // Gone from the round (disconnected past the grace period): carves no more, counts as done.
+  left: boolean
   doneAt: number | null
   lastSeg: number
   last: { x: number; y: number; t: number } | null
@@ -69,6 +71,7 @@ export class HoneycombCut implements MiniGame<HoneycombState, HoneycombInput> {
         cut: new Array<boolean>(HONEYCOMB.segments).fill(false),
         cracks: 0,
         broken: false,
+        left: false,
         doneAt: null,
         lastSeg: -1,
         last: null,
@@ -94,7 +97,7 @@ export class HoneycombCut implements MiniGame<HoneycombState, HoneycombInput> {
   ): HoneycombState {
     if (input?.kind !== 'needle' || now >= state.endsAt) return state
     const c = state.carvers.get(playerId)
-    if (!c || c.broken || c.doneAt !== null) return state
+    if (!c || c.broken || c.left || c.doneAt !== null) return state
     if (!isUnit(input.x) || !isUnit(input.y) || typeof input.down !== 'boolean') return state
     if (!input.down) {
       c.lastSeg = -1
@@ -157,31 +160,44 @@ export class HoneycombCut implements MiniGame<HoneycombState, HoneycombInput> {
     if (c.cracks >= HONEYCOMB.cracks) c.broken = true
   }
 
+  leave(state: HoneycombState, playerId: PlayerId): HoneycombState {
+    const c = state.carvers.get(playerId)
+    if (c) c.left = true
+    return state
+  }
+
   isFinished(state: HoneycombState, now: number): boolean {
     if (now >= state.endsAt) return true
-    return [...state.carvers.values()].every((c) => c.broken || c.doneAt !== null)
+    return [...state.carvers.values()].every((c) => c.broken || c.left || c.doneAt !== null)
   }
 
   private progress(c: Carver): number {
     return c.cut.filter(Boolean).length / c.cut.length
   }
 
+  // What an unfinished candy counts for: the share of the outline cut, halved once it has broken — a
+  // crack costs half the work, but a near-finished candy that snaps still beats barely scratching one.
+  private credit(c: Carver): number {
+    return this.progress(c) * (c.broken ? HONEYCOMB.brokenShare : 1)
+  }
+
+  // Finishers first, fastest first; then everyone else on one scale — the credited cut, fewer cracks
+  // breaking a tie — so a crack costs work instead of dropping a carver below every untouched candy.
   getResult(state: HoneycombState): NormalizedResult {
-    const group = (c: Carver): number => (c.doneAt !== null ? 0 : c.broken ? 2 : 1)
-    const key = (c: Carver): number => (c.doneAt !== null ? c.doneAt : -this.progress(c))
-    const sorted = [...state.carvers.values()].sort(
-      (a, b) => group(a) - group(b) || key(a) - key(b),
-    )
+    const finished = (c: Carver): number => (c.doneAt !== null ? 0 : 1)
+    const key = (c: Carver): number => (c.doneAt !== null ? c.doneAt : -this.credit(c))
+    const order = (a: Carver, b: Carver): number =>
+      finished(a) - finished(b) || key(a) - key(b) || a.cracks - b.cracks
+    const sorted = [...state.carvers.values()].sort(order)
     const ranks: Record<PlayerId, number> = {}
     const stats: Record<PlayerId, string> = {}
     sorted.forEach((c, i) => {
       const prev = sorted[i - 1]
-      const tied = prev && group(prev) === group(c) && key(prev) === key(c)
-      ranks[c.id] = tied && prev ? (ranks[prev.id] ?? i) : i
+      ranks[c.id] = prev && order(prev, c) === 0 ? (ranks[prev.id] ?? i) : i
       stats[c.id] =
         c.doneAt !== null
           ? `${((c.doneAt - state.startedAt) / 1000).toFixed(1)}s`
-          : `${Math.floor(this.progress(c) * 100)}%`
+          : `${Math.floor(this.credit(c) * 100)}%`
     })
     return { placements: sorted.map((c) => c.id), ranks, stats }
   }
@@ -197,6 +213,7 @@ export class HoneycombCut implements MiniGame<HoneycombState, HoneycombInput> {
           progress: Math.round(this.progress(c) * 1000) / 1000,
           cracks: c.cracks,
           broken: c.broken,
+          left: c.left,
           doneMs: c.doneAt === null ? null : c.doneAt - state.startedAt,
         }
       }),

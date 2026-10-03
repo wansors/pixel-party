@@ -10,8 +10,10 @@ import {
   collides,
   createPlayerBoard,
   createQueue,
+  hardDrop,
   lockPiece,
   renderBoard,
+  restartBoard,
   tryRotate,
 } from './tetrisCore'
 
@@ -97,6 +99,25 @@ describe('tetrisCore', () => {
       expect(v).toBeGreaterThanOrEqual(0)
       expect(v).toBeLessThan(SHAPES.length)
     }
+  })
+})
+
+describe('tetrisCore restartBoard', () => {
+  test('empties a topped-out board and respawns the piece that could not spawn', () => {
+    const queue = [0, 1, 2, 3]
+    const p = createPlayerBoard(queue)
+    for (let i = 0; i < ROWS * 2 && !p.toppedOut; i++) hardDrop(p, queue)
+    expect(p.toppedOut).toBe(true)
+    const lines = p.linesCleared
+    const next = p.queueIndex
+    restartBoard(p, queue)
+    expect(p.toppedOut).toBe(false)
+    expect(p.board.every((c) => c === 0)).toBe(true)
+    expect(p.current.shapeIndex).toBe(queue[next % queue.length])
+    expect(p.current.y).toBe(0)
+    // The queue and the score carry on.
+    expect(p.queueIndex).toBe(next)
+    expect(p.linesCleared).toBe(lines)
   })
 })
 

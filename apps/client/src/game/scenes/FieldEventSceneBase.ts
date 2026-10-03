@@ -555,7 +555,13 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
     const me = snap.athletes.find((a) => a.id === this.selfId)
     const first = this.firstSnapshot || this.prev === undefined
     this.updateBoards(snap, !first)
-    if (!me) return
+    if (!me) {
+      // Not in this round (joined late): just watch the flags go in.
+      this.pad?.setEnabled(false, false)
+      this.athlete?.image.setVisible(false)
+      this.javelin?.setVisible(false)
+      return
+    }
     const prev = this.prev
     this.prev = me
     this.updateControls(me)
@@ -679,19 +685,19 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
         }
       }),
     )
-    snap.athletes.forEach((a, i) => {
+    let moved = false
+    for (const a of snap.athletes) {
       const best = this.bestOf(a)
       const before = this.prevBests.get(a.id) ?? null
       this.prevBests.set(a.id, best)
-      if (best === null) return
+      if (best === null) continue
       const flag = this.flagOf(a.id)
-      if (flag.best === best) return
+      if (flag.best === best) continue
       flag.best = best
+      moved = true
       const x = (snap.foulLine + best) * this.ppm
       flag.img.setPosition(x, this.groundY).setVisible(true)
-      flag.label
-        .setPosition(x + 2, this.groundY - flag.img.height - 2 - (i % 3) * 11)
-        .setVisible(true)
+      flag.label.setVisible(true)
       if (withFx && a.id !== this.selfId && (before === null || best > before)) {
         ring(
           this,
@@ -701,7 +707,30 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
           26,
         )
       }
-    })
+    }
+    if (moved) this.stackFlagLabels()
+  }
+
+  // Flag names stack above the flags without overlapping: in rank order (best mark first), each takes
+  // the lowest row where it clears every name already there, up to the sky's height.
+  private stackFlagLabels(): void {
+    const flags = [...this.flags.values()].filter((f) => f.best >= 0)
+    const first = flags[0]
+    if (!first) return
+    const rowH = Math.round(first.label.height * 0.8)
+    const base = this.groundY - first.img.height - 2
+    const maxRows = Math.max(1, Math.floor((base - first.label.height - this.worldTop) / rowH) + 1)
+    const rows: [number, number][][] = Array.from({ length: maxRows }, () => [])
+    flags.sort((a, b) => b.best - a.best)
+    for (const f of flags) {
+      const x0 = f.img.x + 2
+      const x1 = x0 + f.label.width + 4
+      const free = (row: number): boolean => !rows[row]?.some(([a, b]) => x0 < b && x1 > a)
+      let row = 0
+      while (row < maxRows - 1 && !free(row)) row++
+      rows[row]?.push([x0, x1])
+      f.label.setPosition(x0, base - row * rowH)
+    }
   }
 
   private flagOf(id: string): {

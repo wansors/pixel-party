@@ -7,6 +7,11 @@
 //
 // The server owns the bridge: a row's tempered side only goes on the wire once it is revealed (someone
 // landed on it or fell through the other one), plus the glint during a flash.
+//
+// Scoring (★): +1 per blind step — a jump onto a row nobody had revealed, made without a glint for it —
+// and +1 for crossing. Walking solved rows and jumping on a glint you saw are safe but score nothing,
+// so the vest order and waiting for the lightning don't decide the ranking. A turn the buzzer cut short
+// (still on the bridge or still queued) is credited +1, the average worth of a turn.
 
 export type GlassSide = 'L' | 'R'
 
@@ -17,7 +22,8 @@ export interface GlassBridgeRow {
   broken: GlassSide | null
 }
 
-export type GlassBridgeStatus = 'queue' | 'active' | 'crossed' | 'fallen'
+// left = disconnected mid-round (their turn is skipped).
+export type GlassBridgeStatus = 'queue' | 'active' | 'crossed' | 'fallen' | 'left'
 
 export interface GlassBridgePlayer {
   id: string
@@ -27,6 +33,8 @@ export interface GlassBridgePlayer {
   // Row the player stands on: -1 = start platform, `rows` = finish platform. A fallen player keeps the
   // row they fell through.
   pos: number
+  // ★ so far (see Scoring above) — the ranking measure.
+  score: number
 }
 
 // What the bridge is doing right now (drives the client animation).
@@ -43,7 +51,8 @@ export interface GlassBridgeSnapshot {
   // Row the active player is deciding / jumping to (null when nobody is on the bridge).
   target: number | null
   jumpSide: GlassSide | null
-  // Time left in the current decide window (the jump timer) and its full length.
+  // Time left in the current decide window (the jump timer) and its full length (shorter in big rooms,
+  // so every vest gets a turn).
   decideMs: number
   decideTotalMs: number
   // Present only while a lightning flash is lit: the tempered side of the row being decided. `id`

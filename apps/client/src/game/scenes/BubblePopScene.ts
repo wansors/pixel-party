@@ -1,7 +1,7 @@
 import { type BubblePopBoard, type BubblePopSnapshot, PALETTE } from '@pp/shared'
 import Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
-import { addBanner, burst, floatText, punch, ring, shake, showBanner } from '../fx'
+import { addBanner, burst, flash, floatText, punch, ring, shake, showBanner } from '../fx'
 import { bodyStyle, ensurePixelGrid, ensurePixelOrb, headlineStyle, shade } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -22,13 +22,13 @@ function bubbleKey(colorId: number): string {
 
 // Where a shot up `col` sticks: mirrors the server's landingRow (bubblePop.ts) so the aim guide shows
 // the real landing cell — the bubble travels up from the bottom and stops under the first bubble in
-// its way (or at the ceiling). -1 = the column is full and the shot is wasted. Cosmetic only.
+// its way, the lowest one (or at the ceiling). -1 = the column is filled to the bottom row and the shot
+// is wasted. Cosmetic only.
 function landingRow(grid: readonly number[], rows: number, cols: number, col: number): number {
   for (let row = rows - 1; row >= 0; row--) {
-    if ((grid[row * cols + col] ?? 0) !== 0) continue
-    if (row === 0 || (grid[(row - 1) * cols + col] ?? 0) !== 0) return row
+    if ((grid[row * cols + col] ?? 0) !== 0) return row === rows - 1 ? -1 : row + 1
   }
-  return -1
+  return 0
 }
 
 // A little pixel cannon the loaded bubble sits on.
@@ -44,8 +44,9 @@ const CANNON = [
 
 // Bubble Pop canvas. Renders this player's own board under a riveted ceiling; aim a column by
 // pointing / dragging (or ← →) and release (or Space / ↑) to fire the loaded bubble from the cannon.
-// A dotted guide + ghost bubble show where it will stick (an X when the column is full). The shot flies
-// up its lane, then the new board is applied: popped groups burst in their colour with a "+n" pop.
+// A dotted guide + ghost bubble show where it will stick (an X when the column is blocked at the
+// bottom). The shot flies up its lane, then the new board is applied: popped groups burst in their
+// colour with a "+n" pop. A board blocked in every column is jammed: the cannon is done for the round.
 export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
   private orbs: Phaser.GameObjects.Image[] = []
   private laneGfx?: Phaser.GameObjects.Graphics
@@ -74,6 +75,7 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
   private wastedShot = false
   private prevScore = 0
   private prevDone = false
+  private prevJammed = false
   private guideKey = ''
 
   constructor(...deps: SceneDeps) {
@@ -91,6 +93,7 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
     this.wastedShot = false
     this.prevScore = 0
     this.prevDone = false
+    this.prevJammed = false
     this.guideKey = ''
     for (const value of Object.keys(COLOR_HEX)) {
       const id = Number(value)
@@ -292,16 +295,15 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
 
   private fire(): void {
     const board = this.myBoard()
-    if (!this.built || !board || board.done || this.flying > 0) return
+    if (!this.built || !board || board.done || board.jammed || this.flying > 0) return
     const col = this.aim
     this.sfx.click()
     this.sendInput({ kind: 'shoot', col })
     const grid = this.shown.length ? this.shown : board.grid
     const row = landingRow(grid, this.rows, this.cols, col)
     this.wastedShot = row === -1
-    // The shot flies up its lane to where it sticks (or to the top of a full column, and fizzles).
-    const toY =
-      row === -1 ? this.cellY(Math.max(0, this.firstEmptyFromBottom(grid, col))) : this.cellY(row)
+    // The shot flies up its lane to where it sticks (or bounces off the blocked bottom, and fizzles).
+    const toY = row === -1 ? this.cellY(this.rows) : this.cellY(row)
     const fromY = this.launcherY
     const shot = this.add
       .image(this.cellX(col), fromY, bubbleKey(board.nextColor))
@@ -335,20 +337,18 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
     })
   }
 
-  // Row just below the lowest bubble in a column (where a full column's shot visibly fizzles).
-  private firstEmptyFromBottom(grid: readonly number[], col: number): number {
-    for (let row = this.rows - 1; row >= 0; row--) {
-      if ((grid[row * this.cols + col] ?? 0) !== 0) return Math.min(this.rows - 1, row + 1)
-    }
-    return 0
-  }
-
   protected frame(snap: BubblePopSnapshot | null, time: number): void {
     if (!snap) return
     if (!this.built) this.build(snap)
     this.gunner?.tick(time)
     const board = snap.boards[this.selfId]
-    if (!board) return
+    if (!board) {
+      // A spectator (joined mid-round) has no board: an idle, unmanned cannon.
+      this.gunner?.image.setVisible(false)
+      this.loaded?.setVisible(false)
+      this.hint?.setVisible(false)
+      return
+    }
     this.hud?.setScore(this.t('game.common.pts', { n: board.score }))
     // Hold board updates while a shot is in flight, so pops happen when it lands.
     this.pending = board
@@ -385,7 +385,9 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
     if (popped.length > 0) this.popFx(popped, prev, board.score - this.prevScore)
     this.prevScore = board.score
     if (board.done && !this.prevDone) this.showCleared()
+    if (board.jammed && !this.prevJammed) this.showJammed(prev.length > 0)
     this.prevDone = board.done
+    this.prevJammed = board.jammed
     if (changed) this.guideKey = ''
   }
 
@@ -423,7 +425,7 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
     const g = this.guideGfx
     if (!g || !this.ghost || !this.blocked) return
     const grid = this.shown.length ? this.shown : board.grid
-    const row = board.done ? -2 : landingRow(grid, this.rows, this.cols, this.aim)
+    const row = board.done || board.jammed ? -2 : landingRow(grid, this.rows, this.cols, this.aim)
     const key = `${this.aim}:${row}:${board.nextColor}`
     if (key === this.guideKey) return
     this.guideKey = key
@@ -458,5 +460,20 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
     this.cannon?.setVisible(false)
     this.loaded?.setVisible(false)
     this.gunner?.setExpression('happy')
+  }
+
+  // Every column blocked at the bottom: the board can't take another shot. Out for the round.
+  private showJammed(withFx: boolean): void {
+    if (withFx) {
+      this.sfx.wrong()
+      shake(this, 0.012, 260)
+      flash(this, PALETTE.red, 160)
+    }
+    if (this.banner) showBanner(this, this.banner, this.t('game.bubblePop.jammed'), PALETTE.red)
+    this.waitText?.setText(this.t('game.common.waiting'))
+    this.hint?.setVisible(false)
+    this.cannon?.setAlpha(0.4)
+    this.loaded?.setVisible(false)
+    this.gunner?.setExpression('hurt')
   }
 }

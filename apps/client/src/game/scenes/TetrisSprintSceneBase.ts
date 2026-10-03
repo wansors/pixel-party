@@ -26,7 +26,9 @@ const PIECE_COLORS: Record<number, number> = {
 }
 const DEAD = 9
 const TOPPLE_ROW_MS = 45
-const MAX_RIVALS = 9
+// Standings rows beside the well: as tall as fits the well (between these bounds), everyone if they fit,
+// else the top ones plus yourself.
+const ROW_MIN = 16
 const CLEAR_WORDS = ['', '', 'game.common.nice', 'game.common.great', 'game.common.perfect']
 
 function kebabToCamel(key: string): string {
@@ -75,7 +77,7 @@ interface ArcadeButton {
 }
 
 interface RivalRow {
-  // The rival's avatar (KO face once topped out).
+  // The player's avatar (KO face while topped out).
   pip: Phaser.GameObjects.Image
   name: Phaser.GameObjects.Text
   lines: Phaser.GameObjects.Text
@@ -83,10 +85,10 @@ interface RivalRow {
 
 // Shared canvas for the two Tetris-style sprint games (line-clear-sprint, quick-tetris): both render
 // only THIS player's own board (server-owned, falling piece already baked into `grid`) inside an arcade
-// well, with a rivals' lines panel (and quick-tetris' target meter) beside it, and send move / rotate /
-// drop inputs from the keyboard or four arcade buttons. Line clears, top-outs and finishing are derived
-// from snapshot deltas. Subclasses only pick the scene key (=== mini-game id), which also names the
-// i18n namespace.
+// well, with a live standings panel (and quick-tetris' target meter) beside it, and send move / rotate /
+// drop inputs from the keyboard or four arcade buttons. Line clears, top-outs (final in quick-tetris; a
+// penalty and a fresh board in line-clear-sprint) and finishing are derived from snapshot deltas.
+// Subclasses only pick the scene key (=== mini-game id), which also names the i18n namespace.
 export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSnapshot> {
   private readonly i18nNs: string
   private cells: Phaser.GameObjects.Image[] = []
@@ -101,6 +103,7 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
   private readonly buttons = new Map<Action, ArcadeButton>()
   private rivalRows: RivalRow[] = []
   private rivalsKey = ''
+  private panel = { x: 0, y: 0, w: 0, h: 0 }
   private prevGrid: number[] = []
   private lastTick = -1
   private lastLines = 0
@@ -285,17 +288,21 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
       this.meter = this.add.graphics()
       px += meterW + gap
     }
-    this.buildRivals(px, y, panelW)
+    this.panel = { x: px, y, w: panelW, h: boardH }
 
     this.banner?.setY(y + boardH * 0.42)
     this.subline?.setY(y + boardH * 0.42 + (this.compact ? 34 : 46))
     this.built = true
   }
 
-  private buildRivals(x: number, y: number, w: number): void {
-    const rowH = this.compact ? 22 : 30
-    const font = this.compact ? 11 : 14
-    for (let i = 0; i < MAX_RIVALS; i++) {
+  // One row per player that fits the well's height (built once the player count is known).
+  private buildRivals(count: number): void {
+    const { x, y, w, h } = this.panel
+    const rowH = Math.max(ROW_MIN, Math.min(this.compact ? 22 : 30, Math.floor(h / count)))
+    const rows = Math.min(count, Math.floor(h / rowH))
+    const small = this.compact || rowH < 22
+    const font = small ? 11 : 14
+    for (let i = 0; i < rows; i++) {
       const ry = y + i * rowH + rowH / 2
       this.rivalRows.push({
         pip: this.add
@@ -307,7 +314,7 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
           .setOrigin(0, 0.5)
           .setVisible(false),
         lines: this.add
-          .text(x + w, ry, '', headlineStyle(this.compact ? 8 : 16, PALETTE.text))
+          .text(x + w, ry, '', headlineStyle(small ? 8 : 16, PALETTE.text))
           .setOrigin(1, 0.5)
           .setVisible(false),
       })
@@ -321,10 +328,11 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
   protected frame(snap: TetrisSprintSnapshot | null): void {
     if (!snap) return
     if (!this.built) this.build(snap)
+    // A spectator (joined mid-round) has no board of their own: just the standings.
     const board = snap.boards[this.selfId]
-    if (board && this.state.tick !== this.lastTick) {
+    if (this.state.tick !== this.lastTick) {
       this.lastTick = this.state.tick
-      this.onBoard(board, snap)
+      if (board) this.onBoard(board, snap)
       this.renderRivals(snap)
     }
     if (board) this.renderGrid(board)
@@ -339,6 +347,8 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
     )
     this.drawMeter(board.linesCleared, snap.targetLines)
     const done = (board.doneAt ?? 0) > 0
+    // Line Clear Sprint restarts a topped-out board (minus a few lines); in Quick Tetris it's final.
+    const restarts = snap.topOutPenalty !== undefined
     if (!this.synced) {
       // First snapshot of this (possibly restarted) scene: adopt the state without replaying fx.
       this.synced = true
@@ -346,11 +356,12 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
     } else {
       const cleared = board.linesCleared - this.lastLines
       if (cleared > 0) this.onClear(cleared, board.grid)
-      if (board.toppedOut && !this.wasTopped) this.onToppedOut()
+      if (board.toppedOut && !this.wasTopped) this.onToppedOut(this.lastLines - board.linesCleared)
+      if (!board.toppedOut && this.wasTopped) this.onRestart()
       if (done && !this.wasDone) this.onDone()
     }
-    if (done) this.showEnd(this.t(`${ns}.win`), PALETTE.lime)
-    else if (board.toppedOut) this.showEnd(this.t(`${ns}.toppedOut`), PALETTE.red)
+    if (done) this.showEnd(this.t(`${ns}.win`), PALETTE.lime, true)
+    else if (board.toppedOut) this.showEnd(this.t(`${ns}.toppedOut`), PALETTE.red, !restarts)
     this.lastLines = board.linesCleared
     this.wasTopped = board.toppedOut
     this.wasDone = done
@@ -423,11 +434,24 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
     }
   }
 
-  private onToppedOut(): void {
+  // `lost`: lines the top-out cost (Line Clear Sprint's penalty), shown over the crumbling stack.
+  private onToppedOut(lost: number): void {
     this.toppedAt = this.time.now
     this.sfx.wrong()
     shake(this, 0.012, 260)
     flash(this, PALETTE.red, 160)
+    if (lost <= 0) return
+    const { x, y, cell, cols, rows } = this.well
+    floatText(this, x + (cols * cell) / 2, y + (rows * cell) / 2, `-${lost}`, PALETTE.red, 24)
+  }
+
+  // A topped-out board came back empty (Line Clear Sprint): clear the banner and go again.
+  private onRestart(): void {
+    this.banner?.setVisible(false)
+    this.subline?.setVisible(false)
+    this.sfx.go()
+    const { x, y, cell, cols } = this.well
+    burst(this, x + (cols * cell) / 2, y + cell, PALETTE.cyan, 12, 200)
   }
 
   private onDone(): void {
@@ -440,12 +464,13 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
     }
   }
 
-  private showEnd(text: string, color: number): void {
+  // `waiting`: the board is done for the round (adds the "waiting for the others" line).
+  private showEnd(text: string, color: number, waiting: boolean): void {
     const banner = this.banner
     if (!banner) return
     banner.setFontSize(fitFontSize(text, this.scale.width * 0.9, this.compact ? 24 : 32))
     showBanner(this, banner, text, color)
-    this.subline?.setText(this.t('game.common.waiting')).setVisible(true)
+    if (waiting) this.subline?.setText(this.t('game.common.waiting')).setVisible(true)
   }
 
   // Quick Tetris' target meter: one segment per target line, filling bottom-up.
@@ -468,20 +493,23 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
     }
   }
 
-  // Rivals' live line counts (the snapshot's top-level `progress`), best first, in their colors.
+  // Live standings (the snapshot's top-level `progress`), best first, in each player's color — everyone
+  // when they fit beside the well, else the leaders plus yourself in the last row.
   private renderRivals(snap: TetrisSprintSnapshot): void {
-    const rivals = Object.entries(snap.progress)
-      .filter(([id]) => id !== this.selfId)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, MAX_RIVALS)
-    const key = rivals
+    if (this.rivalRows.length === 0) this.buildRivals(Object.keys(snap.progress).length)
+    const ranked = Object.entries(snap.progress).sort((a, b) => b[1] - a[1])
+    const rows = this.rivalRows.length
+    let shown = ranked.slice(0, rows)
+    const mine = ranked.find(([id]) => id === this.selfId)
+    if (mine && !shown.includes(mine)) shown = [...shown.slice(0, rows - 1), mine]
+    const key = shown
       .map(([id, n]) => `${id}:${n}:${snap.boards[id]?.toppedOut}:${snap.boards[id]?.doneAt}`)
       .join('|')
     if (key === this.rivalsKey) return
     this.rivalsKey = key
     const maxChars = this.compact ? 7 : 14
     this.rivalRows.forEach((row, i) => {
-      const entry = rivals[i]
+      const entry = shown[i]
       row.pip.setVisible(!!entry)
       row.name.setVisible(!!entry)
       row.lines.setVisible(!!entry)
@@ -496,8 +524,8 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
         .setTexture(ensureAvatarTexture(this, this.state.avatarOf(id), color, 1, 'front', face))
         .setAlpha(alpha)
       row.name
-        .setText(`${finished ? '★' : ''}${this.state.nameOf(id).slice(0, maxChars)}`)
-        .setColor(hexToCss(color))
+        .setText(`${finished ? '★' : ''}${this.label(id).slice(0, maxChars)}`)
+        .setColor(hexToCss(id === this.selfId ? PALETTE.amber : color))
         .setAlpha(alpha)
       row.lines.setText(String(n)).setAlpha(alpha)
     })

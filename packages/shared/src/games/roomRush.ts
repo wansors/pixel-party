@@ -2,9 +2,9 @@
 // rotating carousel in the middle and ROOM_RUSH.slots small rooms around the edge, each with a door
 // facing the centre. Every call runs in phases:
 //   music  — everyone is held on the turning carousel; the doors stay shut;
-//   call   — a number N is called and the doors of ⌊(survivors − 1) ÷ N⌋ rooms open. A room that has
-//            held exactly N players for ROOM_RUSH.lockMs locks (door slams, those inside are safe);
-//   reveal — the buzzer went: anyone not in a locked room (or one holding exactly N) is eliminated.
+//   call   — a number N is called and the doors of ⌊(survivors − 1) ÷ N⌋ rooms open. The moment a room
+//            holds N players its door slams (those inside are safe; a late arrival is bounced out);
+//   reveal — the buzzer went: anyone not in a locked room is eliminated.
 // Players steer and dash (a short shove-y burst) with sumo-style bouncy collisions. The server owns the
 // physics, the rooms and every elimination; geometry is shared so both sides draw the same walls.
 
@@ -17,7 +17,6 @@ export const ROOM_RUSH = {
   door: 0.034,
   carouselR: 0.18,
   playerR: 0.03,
-  lockMs: 500,
 } as const
 
 // Angle (radians) of a room slot around the arena centre — slot 0 at the top, clockwise on screen.
@@ -29,9 +28,8 @@ export type RoomRushPhase = 'music' | 'call' | 'reveal'
 
 export interface RoomRushRoom {
   slot: number
-  // Players inside right now, and how long the room has held exactly N (0…ROOM_RUSH.lockMs).
+  // Players inside right now (N once it locks).
   count: number
-  holdMs: number
   locked: boolean
 }
 

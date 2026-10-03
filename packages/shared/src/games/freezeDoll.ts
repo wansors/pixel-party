@@ -9,8 +9,16 @@
 // skill is stopping in time. The server owns the doll timeline, the physics and every hit.
 
 // The laser sweep: the first lane is judged FREEZE_DOLL_SWEEP.delayMs after RED starts, the last one
-// `.ms` later (lanes in between evenly). Shared so the client draws the beam where the server judges.
+// `.ms` later (lanes in between evenly). Each RED it starts at a seeded lane and runs one way, wrapping
+// round at the edge of the field, so every lane is as likely to be judged early as late (an edge lane
+// isn't alternately first and last). Shared so the client draws the beam where the server judges.
 export const FREEZE_DOLL_SWEEP = { delayMs: 100, ms: 400 } as const
+
+// How far into the sweep `lane` is reached: 0 = the first lane judged (`from`), 1 = the last one.
+export function freezeDollSweepAt(lane: number, lanes: number, from: number, dir: 1 | -1): number {
+  if (lanes <= 1) return 0
+  return (((((lane - from) * dir) % lanes) + lanes) % lanes) / (lanes - 1)
+}
 
 // ready = the opening beat before the first chant (nobody can move yet, nobody is judged).
 export type FreezeDollLight = 'ready' | 'green' | 'turn' | 'red'
@@ -35,8 +43,10 @@ export interface FreezeDollSnapshot {
   // GREEN: the chant's full nominal length and how far into it we are (a sudden spin cuts it short).
   songMs: number
   songElapsedMs: number
-  // RED: time since the doll faced the field, and the sweep direction (1 = lane 0 first).
+  // RED: time since the doll faced the field, the lane the sweep starts at and its direction (1 =
+  // toward higher lanes) — see freezeDollSweepAt.
   redElapsedMs: number
+  sweepFrom: number
   sweepDir: 1 | -1
   lanes: number
   runners: FreezeDollRunner[]

@@ -16,9 +16,10 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // Room Rush ("Mingle"): a top-down arena — a spinning carousel in the middle and ten little rooms around
 // the edge, doors facing the centre. During the music everyone rides the carousel; then a number is
-// called, some doors open and each open room shows a live "count/N" counter. Hold exactly N for half a
-// second and the door slams shut (safe!); at the buzzer everyone else is ELIMINATED. Steer with the
-// arrows/WASD or by holding the pointer where you want to go; SPACE / the DASH button shoves.
+// called, some doors open and each open room shows a live "count/N" counter. The moment a room holds
+// exactly N its door slams shut (safe!); at the buzzer everyone else is ELIMINATED — unless nobody made
+// it, then the call is replayed. Steer with the arrows/WASD or by holding the pointer where you want to
+// go; SPACE / the DASH button shoves.
 
 const SPIN = 0.45 // carousel rad/s (mirrors the server, to extrapolate the wedges between snapshots)
 const WEDGES = 8
@@ -57,6 +58,8 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
   private aim?: { x: number; y: number }
   private aimPointer = -1
   private dir = { dx: 0, dy: 0 }
+  // Nothing is sent until you steer for the first time (an untouched seat must stay idle).
+  private steered = false
   private sentDir = ''
   private sentAt = 0
   private lastTick = -1
@@ -81,6 +84,7 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
     this.aim = undefined
     this.aimPointer = -1
     this.dir = { dx: 0, dy: 0 }
+    this.steered = false
     this.sentDir = ''
     this.sentAt = 0
     this.lastTick = -1
@@ -250,14 +254,15 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
       this.interp.push(snap, time)
       this.onSnapshot(snap)
     }
-    this.steer(time)
+    this.steer(snap, time)
     this.paintCarousel(snap, time - this.snapAt)
     this.paintRooms(snap, time)
     this.paintPlayers(time)
     this.paintChrome(snap, time)
   }
 
-  private steer(time: number): void {
+  private steer(snap: RoomRushSnapshot, time: number): void {
+    if (!snap.players.some((p) => p.id === this.selfId && p.alive)) return
     const keys = this.cursors
     const w = this.wasd
     const kx =
@@ -273,6 +278,8 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
       // A dead zone around your own avatar, so holding still on yourself really stops.
       this.dir = Math.hypot(dx, dy) < this.avatarPx * 0.4 ? { dx: 0, dy: 0 } : { dx, dy }
     } else this.dir = { dx: 0, dy: 0 }
+    if (kx !== 0 || ky !== 0 || this.aim) this.steered = true
+    if (!this.steered) return
     const mag = Math.hypot(this.dir.dx, this.dir.dy)
     const key =
       mag < 0.001
@@ -302,10 +309,7 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
           this.bannerUntil = this.time.now + 900
           shake(this, 0.004, 120)
         } else if (snap.phase === 'reveal') this.onBuzzer(snap, me)
-        else if (snap.phase === 'music') {
-          this.sfx.tick()
-          for (const id of snap.players.filter((p) => !p.alive).map((p) => p.id)) this.fadeOut(id)
-        }
+        else if (snap.phase === 'music') this.sfx.tick()
       } else {
         for (const p of snap.players) if (!p.alive) this.fadeOut(p.id, false)
       }
@@ -313,6 +317,9 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
       this.lastPhase = snap.phase
       this.lastCall = snap.call
     }
+    // The eliminated stay on the floor through the reveal (for their stamp); anyone out otherwise (a
+    // player who left mid-call) just fades.
+    if (snap.phase !== 'reveal') for (const p of snap.players) if (!p.alive) this.fadeOut(p.id)
     for (const room of snap.rooms) {
       if (!room.locked || this.lockedSeen.has(room.slot)) continue
       this.lockedSeen.add(room.slot)
@@ -327,6 +334,18 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
 
   private onBuzzer(snap: RoomRushSnapshot, me: RoomRushPlayer | undefined): void {
     const size = this.compact ? 12 : 16
+    if (snap.outThisCall.length === 0 && !snap.players.some((p) => p.safe)) {
+      // Nobody made it: the call is replayed.
+      this.sfx.wrong()
+      showBanner(
+        this,
+        this.banner as Phaser.GameObjects.Text,
+        this.t('game.roomRush.wipeout'),
+        PALETTE.orange,
+      )
+      this.bannerUntil = this.time.now + 1200
+      return
+    }
     if (snap.outThisCall.length > 0) this.sfx.eliminated()
     for (const id of snap.outThisCall) {
       const p = snap.players.find((q) => q.id === id)
@@ -418,27 +437,13 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
       const text = room ? `${room.count}/${snap.n}` : ''
       if (label.text !== text) label.setText(text)
       if (!room) continue
+      // Lime once locked, amber with one spot left (the next one in slams the door).
       const color = room.locked
         ? PALETTE.lime
-        : room.count > snap.n
-          ? PALETTE.red
-          : room.count === snap.n
-            ? PALETTE.amber
-            : PALETTE.text
+        : room.count === snap.n - 1
+          ? PALETTE.amber
+          : PALETTE.text
       label.setColor(hexToCss(color))
-      if (room.count === snap.n && !room.locked && room.holdMs > 0) {
-        // Lock progress around the counter.
-        g.lineStyle(3, PALETTE.lime, 1)
-        g.beginPath()
-        g.arc(
-          label.x,
-          label.y,
-          label.width * 0.75,
-          -Math.PI / 2,
-          -Math.PI / 2 + (room.holdMs / ROOM_RUSH.lockMs) * Math.PI * 2,
-        )
-        g.strokePath()
-      }
     }
   }
 
@@ -522,7 +527,7 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
         fitFontSize(prompt.text, this.scale.width - 24, this.compact ? 12 : 16),
       )
     }
-    if (this.state.final && this.banner && !this.banner.visible) {
+    if (this.state.final && me && this.banner && !this.banner.visible) {
       showBanner(
         this,
         this.banner,

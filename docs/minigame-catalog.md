@@ -67,23 +67,30 @@ Then (2026-10-03) J1 Weird Trivia (`weird-trivia`), the first brand-new idea aft
 ### A1. ⭐ ✅ Quick reaction ("Go!") — implemented (`reaction-duel`)
 - **Concept**: the screen is red; at a random moment it turns green. First to tap wins. Tapping early is
   penalized.
-- **Type**: FFA · **Input**: tap · **Duration**: 15–30 s (several rounds) · **Banter**: 💥💥
-- **Rules**: 3 rounds. After a random delay (2–6 s) the screen turns green; reaction time is measured.
-  Jumping the gun = disqualified that round.
-- **Win condition**: lowest accumulated reaction time. · **Result**: ranking by total time (lower wins).
-- **Latency**: low (timestamp vs. server clock). · **Complexity**: low.
+- **Type**: FFA · **Input**: tap · **Duration**: one shot, ~2–10 s · **Banter**: 💥💥
+- **Rules**: after a seeded delay (1.5–4.5 s) the screen turns green; everyone has 5 s to tap. A tap that
+  reaches the server before green is a false start. The time credited is the client's own (its screen
+  turning green → the tap, so the round trip doesn't count), bounded by the server's measurement: never
+  under 100 ms, never more than 150 ms better than the server saw, never worse.
+- **Win condition**: fastest valid reaction. · **Result**: ranking by time (lower wins); false starts
+  and no-taps share last.
+- **Latency**: low (client-timed, server-bounded). · **Complexity**: low.
 
 ### A2. ⭐ ✅ Frantic tap ("Button masher") — implemented (`button-masher`)
 - **Concept**: tap as many times as you can in a fixed time.
 - **Type**: FFA · **Input**: repeated tap · **Duration**: 10 s · **Banter**: 💥💥
-- **Rules**: 10 s of free tapping; valid taps counted (server rate-limit anti-macro).
+- **Rules**: 10 s of free tapping; the server counts at most 15 presses per rolling second (about the
+  best a finger manages), so an autoclicker only ties the fastest masher.
 - **Win condition**: highest tap count. · **Result**: ranking by count (higher wins).
 - **Latency**: low (aggregate count sent). · **Complexity**: low.
 
 ### A3. ✅ Lightning quiz ("Trivia") — implemented (`trivia`)
 - **Concept**: multiple-choice questions; rewards correctness and speed.
-- **Type**: FFA · **Input**: tap on option · **Duration**: 30 s (4 questions) · **Banter**: 💥💥
-- **Rules**: per-question time limit (7.5 s). Points for correct answer + speed bonus.
+- **Type**: FFA · **Input**: tap on option · **Duration**: up to 36 s (4 questions) · **Banter**: 💥💥
+- **Rules**: each question has a 7 s answer window (it closes early once everyone still in the round
+  has answered), then a 2 s reveal: the right tile lights up and every player's avatar pops onto the
+  tile they picked. A right answer scores 1000 + a speed bonus of up to 1000, banked the moment it lands
+  (the "lightning" verdict); wrong or no answer = 0. The phases live in `quizCore`, shared with J1.
 - **Win condition**: highest total score. · **Result**: ranking by points.
 - **Latency**: low. · **Complexity**: medium (question bank + i18n).
 - **The bank** (2026-10-03, D24): 53 general-knowledge questions, server-side (`triviaBank.ts`),
@@ -92,9 +99,12 @@ Then (2026-10-03) J1 Weird Trivia (`weird-trivia`), the first brand-new idea aft
 
 ### A4. ✅ Sequence memory ("Simon") — implemented (`simon`)
 - **Concept**: repeat a growing sequence of colors/sounds.
-- **Type**: FFA · **Input**: tap · **Duration**: up to ~30 s · **Banter**: 💥
-- **Rules**: everyone sees the same growing sequence; a mistake eliminates you; furthest survives.
-- **Win condition**: longest sequence reached (tiebreak by time). · **Result**: ranking by level.
+- **Type**: FFA · **Input**: tap · **Duration**: up to 60 s · **Banter**: 💥
+- **Rules**: one seeded growing sequence, replayed at your own pace; a mistake eliminates you. Each
+  player sees it through their own seeded relabelling of the four pads (same rhythm and repeats, so
+  equally hard), so a rival further ahead on the room-wide snapshot never shows you your next pads.
+- **Win condition**: most levels completed; ties go to how far into the current replay the run got,
+  then to whoever cleared their last level sooner. · **Result**: ranking by level.
 - **Latency**: low. · **Complexity**: low/medium.
 
 ### A5. ✅ Pixel Hoops ("Basketball") — implemented (`pixel-hoops`)
@@ -108,74 +118,99 @@ Then (2026-10-03) J1 Weird Trivia (`weird-trivia`), the first brand-new idea aft
 ### A6. ✅ Bug smash ("Whack-a-mole") — implemented (`bug-smash`)
 - **Concept**: pixel bugs pop out of holes; smash them before they hide. Some bugs penalize.
 - **Type**: FFA · **Input**: tap · **Duration**: 30 s · **Banter**: 💥💥
-- **Rules**: identical spawn sequence (common seed). Good bugs +, bomb bugs −.
+- **Rules**: identical spawn sequence (common seed). A bug +1, a bomb −1 — even at 0 (a score can go
+  negative), so a bomb always hurts.
 - **Win condition**: highest score. · **Result**: ranking by score.
 - **Latency**: low. · **Complexity**: low/medium.
 
 ### A7. ✅ Pixel rain ("Dodge") — implemented (`pixel-rain`)
 - **Concept**: move an avatar to dodge falling objects; survive as long as possible.
 - **Type**: FFA (own board, same seed) · **Input**: drag/keyboard · **Duration**: up to ~30 s · **Banter**: 💥💥
-- **Rules**: identical obstacle pattern (same seed); eliminated on collision. In a multiplayer round
-  the round ends as soon as only one player is left standing (2026-09-26 — no more waiting out the
-  clock alone); a solo round runs until the player is out or time is up.
+- **Rules**: identical obstacle pattern (same seed); eliminated on collision. Blocks spawn across the
+  whole width (0.03–0.97) while the avatar is held inside it (0.12–0.88), so hugging a wall buys
+  nothing; the avatar slides toward the dragged/steered spot at most 1.6 widths/s (no teleporting out
+  from under a block). The rain thickens over the round: by the end the gaps are ×0.45 and the fall
+  times ×0.6. In a multiplayer round the round ends as soon as only one player is left standing
+  (a player who leaves is out); a solo round runs until the player is out or time is up.
 - **Win condition**: longest survival. · **Result**: ranking by time.
 - **Latency**: medium (client sim, server validates final time). · **Complexity**: medium.
 
 ### A8. ✅ Snake Arena — implemented (`snake-arena`)
 - **Concept**: classic snake — grow by eating pixels, don't crash into walls or your own tail.
 - **Type**: FFA (own board, same food seed) · **Input**: swipe/keyboard · **Duration**: up to ~30 s · **Banter**: 💥💥
-- **Rules**: same food layout for everyone; crashing eliminates you.
-- **Win condition**: longest snake / longest survival. · **Result**: ranking by length.
+- **Rules**: same food layout for everyone; crashing eliminates you. Up to two turns are buffered ahead
+  of the next step, so two quick taps inside one step (a U-turn) both apply.
+- **Win condition**: longest snake; equal lengths go to whoever reached it first, then to a snake still
+  alive. · **Result**: ranking by length.
 - **Latency**: medium. · **Complexity**: medium.
 
 ### A9. ✅ Pixel Dash ("Platform race") — implemented (`pixel-dash`)
 - **Concept**: short auto-runner/obstacle sprint; first to the flag wins.
 - **Type**: FFA (own track, identical layout) · **Input**: tap to jump · **Duration**: up to ~30 s · **Banter**: 💥💥💥
-- **Rules**: identical track; mistakes cost time, not lives.
-- **Win condition**: fastest finish. · **Result**: ranking by finish time.
+- **Rules**: identical track; each obstacle reaches the runner at a fixed time. A jump keeps you
+  airborne 380 ms and clears an obstacle arriving in that span (60 ms of grace for the tap's trip); an
+  obstacle that gets through is a stumble. Back on the ground you need 150 ms before jumping again —
+  400 ms more after a jump that cleared nothing — so mashing loses to timing.
+- **Win condition**: most obstacles cleared; ties go to the more accurate jumper (smallest summed gap
+  between each clearing jump and the ideal one, apex over the obstacle). · **Result**: ranking by
+  clears.
 - **Latency**: medium (client sim + server validation). · **Complexity**: medium/high.
 
 ### A10. ✅ Stop the clock ("Timing") — implemented (`stop-clock`)
 - **Concept**: a fast-moving bar/needle; stop it as close to the target as possible.
 - **Type**: FFA · **Input**: tap · **Duration**: 20–30 s (3 attempts) · **Banter**: 💥💥
-- **Rules**: 3 attempts; summed distance to target. Lower = better.
+- **Rules**: 3 attempts; summed distance to target. Lower = better. An attempt never made (time ran out,
+  or the player left) is charged the worst error (1.00), and the result shows that penalised total.
 - **Win condition**: lowest accumulated error. · **Result**: ranking by error.
 - **Latency**: low. · **Complexity**: low.
 
 ### A11. ✅ Speed puzzle ("Match") — implemented (`match-pairs`)
 - **Concept**: memory/card game — uncover matching pairs fastest / with fewest attempts.
-- **Type**: FFA (own board, same layout) · **Input**: tap · **Duration**: up to ~30 s · **Banter**: 💥
-- **Rules**: identical board; win by matching everything first / fewest misses.
-- **Win condition**: first to complete (tiebreak by attempts). · **Result**: ranking by time/attempts.
+- **Type**: FFA (own board, same pairs) · **Input**: tap · **Duration**: up to ~30 s · **Banter**: 💥
+- **Rules**: everyone gets the same 8 pairs, each dealt in their own seeded 4×4 layout (equally hard,
+  but a neighbour's screen — or a rival's reveals on the room-wide snapshot — says nothing about yours).
+- **Win condition**: first to complete; non-finishers by pairs matched, then fewer misses.
+  · **Result**: ranking by time/pairs/attempts.
 - **Latency**: low. · **Complexity**: medium.
 
 ---
 
 ## B. Duels — 1v1 / bracket
 
-> Players are paired into 1v1 matches; winners advance in a bracket, or all pairs play simultaneously and
-> results feed the round ranking. Great for building rivalries.
+> Players are seeded into 1v1 pairs and every pair plays at once. An odd player out gets a bye — it goes
+> to whoever has had the fewest so far, so byes rotate — and watches a live duel. Duels rank across the
+> room in three tiers (D28): wins, then draws and byes, then losses, each tier ordered by the game's
+> margin. A player who leaves forfeits: their opponent wins on the spot. Great for building rivalries.
 
 ### B1. ✅ Pixel Pong — implemented (`pixel-pong`)
-- **Concept**: classic pong, 1v1. First to N points.
-- **Type**: Duel (bracket) · **Input**: drag paddle · **Duration**: ~30 s per match · **Banter**: 💥💥💥
-- **Rules**: standard pong; ball speeds up over time.
-- **Win condition**: first to N points. · **Result**: bracket standing → round ranking.
+- **Concept**: classic pong, 1v1. First to 5 points.
+- **Type**: Duel (simultaneous pairs) · **Input**: drag paddle · **Duration**: 45 s (+ up to 10 s of
+  golden point) · **Banter**: 💥💥💥
+- **Rules**: standard pong; ball speeds up over time. At the bell the leader wins; a tied duel plays a
+  **golden point** (next point wins) for up to 10 s more, then it's a draw.
+- **Win condition**: first to 5 points, or ahead at the bell. · **Result**: the duel tiers, by point
+  difference.
 - **Latency**: high (real-time 1v1; needs interpolation/prediction). · **Complexity**: high.
 
-### B2. Sink the Fleet ("Battleship")
+### B2. ✅ Sink the Fleet ("Battleship") — implemented (`sink-the-fleet`)
 - **Concept**: classic battleship — place your fleet, then take turns firing at the opponent's grid.
-- **Type**: Duel (1v1, can pair many simultaneously) · **Input**: tap grid cell · **Duration**: ~30 s · **Banter**: 💥💥💥
-- **Rules**: quick placement phase (auto-place option), then alternating shots with a turn timer.
-- **Win condition**: sink the enemy fleet first. · **Result**: win/loss → round ranking.
+- **Type**: Duel (simultaneous pairs) · **Input**: tap grid cell · **Duration**: 60 s · **Banter**: 💥💥💥
+- **Rules**: a 5×5 grid, a seeded auto-placed fleet (3 + 2 + 2 cells, never on the wire), then turns of
+  5 s (a timeout passes the turn). **A hit shoots again**; a miss hands the turn over.
+- **Win condition**: sink the enemy fleet first; at the bell, more hits, then fewer shots fired (equal
+  on both = draw). · **Result**: the duel tiers, by hits landed minus hits taken.
 - **Latency**: low (turn-based). · **Complexity**: medium.
 
 ### B3. ✅ Sumo Push — implemented (`sumo-push`)
-- **Concept**: two pixel sumos in a ring; shove the opponent out with timed pushes.
-- **Type**: Duel (1v1) or FFA arena (up to 12 in one ring) · **Input**: tap/direction · **Duration**: ~30 s · **Banter**: 💥💥💥
-- **Rules**: physics shove; last one in the ring wins. FFA variant = battle royale. Touch/mouse: hold
-  where you want to push — the direction is aimed from your own wrestler (2026-09-26; it used to be
-  measured from the ring centre); arrow keys also work.
+- **Concept**: pixel sumos in a ring; shove and charge the others out.
+- **Type**: FFA arena (2–12 in one ring; two players make a 1v1 bout) · **Input**: direction + DASH ·
+  **Duration**: ~30 s · **Banter**: 💥💥💥
+- **Rules**: physics shove; last one in the ring wins (battle royale). Touch/mouse: hold where you want
+  to push — the direction is aimed from your own wrestler; arrow keys also work. **DASH** (SPACE / the
+  DASH button) bursts you toward where you push, once per 1.5 s; collisions are elastic, so a dash's
+  momentum goes into whoever it hits (miss, and you may fly out yourself). The ring holds its size
+  for the first 40 % of the round, then shrinks to narrower than a wrestler by the bell, so holding the
+  centre isn't a lock.
 - **Win condition**: last standing / longest in-ring. · **Result**: ranking by survival.
 - **Latency**: high (FFA arena) / medium (1v1). · **Complexity**: high.
 
@@ -183,34 +218,45 @@ Then (2026-10-03) J1 Weird Trivia (`weird-trivia`), the first brand-new idea aft
 
 ## C. Team-based
 
-> Players are split into teams (e.g., 2 teams of up to 5). Team result awards points to all members.
-> Requires ≥ 4 players; team assignment can be random or host-set.
+> Players are split into two teams (red/blue; a balanced seeded assignment the host can move or
+> shuffle). Team result awards points to all members. Each game declares its own minimum (Tug of War 2,
+> Bomb Relay and Fleet Battle 4), and a team game needs someone connected on each side (D28).
 
-### C1. Tug of War
+### C1. ✅ Tug of War — implemented (`tug-of-war`)
 - **Concept**: two teams button-mash to drag the pixel rope to their side.
-- **Type**: Team · **Input**: repeated tap · **Duration**: ~20–30 s · **Banter**: 💥💥💥
+- **Type**: Team · **Input**: repeated tap · **Duration**: 15 s · **Banter**: 💥💥💥
 - **Rules**: progress is the team's *average* pulls-per-member, which is already fair for uneven team
-  sizes without needing a separate handicap hook (see §H).
-- **Win condition**: pull the marker past your line. · **Result**: winning team ranks above.
+  sizes without needing a separate handicap hook (see §H); the HUD shows each team's pulls per head. A
+  member who leaves stops counting (their pulls and their seat), so a dropped teammate doesn't drag the
+  average down.
+- **Win condition**: open a lead of 25 pulls per member (instant), or lead at the bell. · **Result**:
+  winning team ranks above (equal averages draw).
 - **Latency**: low (aggregate rates). · **Complexity**: low/medium.
 
-### C2. Bomb Relay ("Hot potato")
-- **Concept**: a lit pixel bomb is passed around the team; solve a quick micro-task to pass it on before
-  it explodes. It blows up in whoever holds it.
-- **Type**: Team (or FFA circle) · **Input**: tap/mini-task · **Duration**: ~30–45 s · **Banter**: 💥💥💥
-- **Rules**: hold time ticks down; pass by completing the micro-task. Fewer explosions = better.
-- **Win condition**: team with fewest explosions. · **Result**: team ranking.
+### C2. ✅ Bomb Relay ("Hot potato") — implemented (`bomb-relay`)
+- **Concept**: a lit pixel bomb is passed around the team; mash to pass it on before it explodes. It
+  blows up in whoever holds it.
+- **Type**: Team · **Input**: repeated tap · **Duration**: 25 s · **Banter**: 💥💥💥
+- **Rules**: one bomb per team, one holder at a time. The holder mashes 12 times to pass it on (+1
+  relay) before a hidden seeded fuse (2.5–5 s) runs out; if it blows, the team takes an explosion and
+  the bomb moves on. A holder who doesn't mash for 1.8 s is skipped ("TOO SLOW!"): the bomb moves on
+  with a fresh fuse and no relay credit. A member who leaves drops out of the chain. A team's pace is
+  its members' mashing speed, whatever its size.
+- **Win condition**: most relays (fewer explosions breaks ties). · **Result**: team ranking.
 - **Latency**: medium. · **Complexity**: medium.
 
 ### C3. ✅ Fleet Battle (team variant of Sink the Fleet) — implemented (`fleet-battle`)
 - **Concept**: two teams (red/blue) each defend one SHARED fleet; members coordinate shots against the
-  enemy team's fleet. *Implemented: turn alternates by team rather than a per-turn shot budget — during
-  a team's turn, the first valid `fire` from any of its members consumes that turn slot (and passes it
-  to the other team), so any teammate can jump in; a stalling team forfeits its turn on a timeout.*
+  enemy team's fleet. *Implemented: turn alternates by team (the seed picks who opens) rather than a
+  per-turn shot budget. Each 6 s team turn has a **captain** — the team's members take it in turns, in
+  a seeded order (a leaver drops out) — who fires alone for the first 3 s; then any teammate may. The
+  first valid `fire` consumes the turn and passes it to the other team; a stalling team forfeits its
+  turn on a timeout.*
 - **Type**: Team · **Input**: tap grid · **Duration**: ~90 s · **Banter**: 💥💥
-- **Rules**: same seeded auto-placed fleet + hit/miss mechanic as Sink the Fleet, scoped to team fleets.
-- **Win condition**: sink the enemy fleet first (a draw at the timer is decided by damage dealt).
-  · **Result**: team ranking.
+- **Rules**: same seeded auto-placed fleet + hit/miss mechanic as Sink the Fleet, scoped to team fleets
+  (here every shot passes the turn).
+- **Win condition**: sink the enemy fleet first; at the timer, more damage dealt, then fewer shots for
+  it (which also offsets the opening team's extra shot), else a draw. · **Result**: team ranking.
 - **Latency**: low (turn-based). · **Complexity**: medium.
 
 ---
@@ -218,18 +264,25 @@ Then (2026-10-03) J1 Weird Trivia (`weird-trivia`), the first brand-new idea aft
 ## D. Chaos / party (banter-first)
 
 ### D1. ✅ Balloon Chicken ("Nerve") — implemented (`balloon-chicken`)
-- **Concept**: pump a pixel balloon for points — but it bursts at a random threshold. Cash out before it
-  pops or lose it all. Pure nerve, maximum trash talk.
+- **Concept**: pump pixel balloons for points — but each bursts at a hidden threshold. Cash out before
+  it pops or lose that balloon. Pure nerve, maximum trash talk.
 - **Type**: FFA · **Input**: tap to pump, tap to cash out · **Duration**: ~20 s · **Banter**: 💥💥💥
-- **Rules**: each pump adds points; a hidden (server-side) threshold bursts it → 0 for that player.
-- **Win condition**: highest banked points. · **Result**: ranking by banked points.
+- **Rules**: three balloons each, one after the other, the **same seeded sequence for everyone**
+  (balloon k bursts on the same pump for all, somewhere in 4–18; never on the wire). Each pump +10;
+  CASH OUT banks the balloon in hand and brings the next; a burst loses it. A balloon still in hand at
+  the buzzer bursts, so walking away has to be a choice. Scenes show rivals' balloon status, not their
+  pump count.
+- **Win condition**: highest banked points. · **Result**: ranking by banked points (ties share).
 - **Latency**: low (server owns the threshold). · **Complexity**: low.
 
 ### D2. ✅ Fruit Catch — implemented (`fruit-catch`)
 - **Concept**: catch falling fruit in a basket; avoid the bombs.
 - **Type**: FFA (same seed) · **Input**: drag · **Duration**: 30 s · **Banter**: 💥💥
-- **Rules**: identical drop pattern; fruit +, bombs reset combo.
-- **Win condition**: highest score. · **Result**: ranking by score.
+- **Rules**: identical drop pattern; a fruit +1, a bomb −1 (never below 0) and breaks the combo. Items
+  fall linearly, so the client draws them on the server's clock (`ServerClock`): what you see reaching
+  the basket is what gets judged.
+- **Win condition**: highest score; ties go to fewer bombs caught, then the longer best combo.
+  · **Result**: ranking by score.
 - **Latency**: low/medium. · **Complexity**: low/medium.
 
 ### D3. ✅ Pixel Roulette ("Luck") — implemented (`pixel-roulette`)
@@ -250,53 +303,78 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
 - **E2. ✅ Quick Math** — fast arithmetic; answer as many as possible before the timer. *Implemented
   (`quick-math`): seeded question pool (+ − ×), self-paced, ranked by correct count (tiebreak fewer
   wrong); a wrong answer starts a 1.2 s answer cooldown (buttons greyed behind a draining bar), so
-  mashing one button is slower than doing the sums.* FFA · tap · 30 s · low effort · low latency · banter 💥💥.
+  mashing one button is slower than doing the sums. The three near-miss decoys sit within 5 of the
+  answer, and how many fall below it is drawn uniformly, so the answer's rank among the sorted choices
+  gives nothing away ("pick a middle one" is a plain 1-in-4 guess).* FFA · tap · 30 s · low effort ·
+  low latency · banter 💥💥.
 - **E3. ✅ Odd One Out** — spot the single different pixel/tile in a grid; grid grows each round.
   *Implemented (`odd-one-out`): seeded board sequence, grid grows + brightness gap shrinks per level;
-  the odd tile differs in brightness (not hue alone) for accessibility; ranked by level reached.*
-  FFA · tap · up to 45 s · low effort · low latency · banter 💥💥.
+  the odd tile differs in brightness (not hue alone) for accessibility; a wrong tile costs a 1 s tap
+  cooldown, so tapping everything is slower than looking; ranked by level reached.*
+  FFA · tap · 30 s · low effort · low latency · banter 💥💥.
 - **E4. ✅ Number Rush (Schulte grid)** — tap numbers 1→N in order as fast as possible. *Implemented
   (`number-rush`): one shared seeded 5×5 layout, self-paced; ranked by numbers cleared, finishers by
   time.* FFA · tap · 20–30 s · low effort · low latency · banter 💥💥.
-- **E5. ✅ Higher or Lower** — guess if the next pixel card is higher/lower; streak = points, one wrong
-  ends it. *Implemented (`higher-lower`): one shared seeded deck; server owns upcoming cards (never
-  revealed early); ranked by streak.* FFA · tap · 20 s · low effort · low latency · banter 💥💥💥 (nerve).
+- **E5. ✅ Higher or Lower** — guess if the next pixel card is higher/lower to build a streak, and know
+  when to stop. *Implemented (`higher-lower`): each player gets their own seeded deck (a shared one
+  leaked your next card through a rival's face-up one); the server owns upcoming cards (never revealed
+  early). A right guess extends the streak; **BANK** stops and keeps it; a miss ends the run and
+  **halves** it; still playing at the buzzer keeps it. Odds swing with the face-up card, so when to bank
+  is the game. Ranked by score alone (equal scores tie); the round ends once nobody is still playing.*
+  FFA · tap · 22 s · low effort · low latency · banter 💥💥💥 (nerve).
 - **E6. ✅ Pixel Beat** — tap to the rhythm; hit the beats on time. *Implemented (`pixel-beat`): one
   seeded beat timeline (metronome + slight jitter) shared by everyone; a tap within a tight window of a
-  not-yet-scored beat scores big, a looser window scores small, a miss breaks the streak.* FFA · tap ·
-  ~40 s · medium effort · low/medium latency · banter 💥💥.
+  not-yet-scored beat scores big, a looser window scores small, a miss breaks the streak. A tap is judged
+  at the client's own round time (`at`), trusted only between 250 ms behind and 50 ms ahead of the
+  server's measurement, so network lag doesn't eat the PERFECT window; the first tap in reach of a
+  beat consumes it, so spamming lands early for a GOOD at best.* FFA · tap · ~40 s · medium effort ·
+  low/medium latency · banter 💥💥.
 - **E7. ✅ Quick Draw Duel** — implemented (`quick-draw`); — western reaction shootout: draw first when "FIRE!" flashes, 1v1.
-  Duel · tap · ~15 s/match · low effort · medium latency · banter 💥💥💥.
+  *Simultaneous seeded pairs (see §B); a tap before FIRE loses, and if neither draws before the bell
+  both lose (no draws). Ranked in the duel tiers: winners by reaction time, the bye, then losers —
+  beaten by a quicker draw first, then the no-shows, then the false starts.*
+  Duel · tap · up to 20 s · low effort · medium latency · banter 💥💥💥.
 - **E8. ✅ Memory Flash** — a burst of pixels flashes; answer how many of a target appeared. *Implemented
-  (`memory-flash`): seeded board sequence, self-paced; client flashes then asks; server owns the counts.*
-  FFA · tap · 25 s · low effort · low latency · banter 💥💥.
+  (`memory-flash`): seeded board sequence, self-paced; client flashes then asks; server owns the counts.
+  Ranked by right answers; ties go to whoever got their last right answer in sooner (a wrong answer
+  never moves it).* FFA · tap · 30 s · low effort · low latency · banter 💥💥.
 - **E9. ✅ Maze Sprint** — navigate a small maze to the exit fastest (identical maze for all).
   *Implemented (`maze-sprint`): one seeded 9×9 perfect maze (iterative randomized-DFS carve, always
-  fully connected) shared by everyone; each player moves their own position through it independently.
-  Ranked by finish time, then by BFS distance-remaining-to-exit for non-finishers.* FFA · arrow
-  keys/WASD + on-screen buttons · up to 45 s · medium effort · low latency · banter 💥💥.
+  fully connected) shared by everyone; each player moves their own position through it independently,
+  at most one step per 90 ms (a held key walks at the same pace on every machine). While you race,
+  rivals show only as progress bars — their distance to the exit, since their spot would give the path
+  away — and their positions appear once you finish. Ranked by finish time, then by BFS
+  distance-remaining-to-exit for non-finishers.* FFA · arrow keys/WASD + on-screen buttons · up to
+  45 s · medium effort · low latency · banter 💥💥.
 - **E10. ✅ Line Clear Sprint** — Tetris-like: clear N lines fastest. *Implemented
   (`line-clear-sprint`): a simplified Tetris engine (rotation + wall kicks; shared with Quick Tetris, see E13) on a
-  6×12 board; maximize lines cleared in a fixed 60 s window, ranked by lines cleared (a survivor
-  outranks a topped-out player at an equal score).* FFA · move/drop (keyboard + on-screen buttons) ·
-  60 s · high effort · low latency · banter 💥.
+  6×12 board; maximize lines cleared in a fixed 60 s window. Topping out isn't the end: it costs 2
+  lines (never below 0) and a 1.5 s freeze, then the board restarts empty — nobody sits out the rest of
+  the round. Ranked by lines cleared, fewer top-outs breaking ties.* FFA · move/drop (keyboard +
+  on-screen buttons) · 60 s · high effort · low latency · banter 💥.
 - **E11. ✅ Pixel Split ("cut in half")** — implemented (`pixel-split`): a seeded pixel-art object is
   shown; drag a vertical cut so both halves hold the **same number of filled pixels**. Scored against
   the best split the object allows (odd counts can't split perfectly), so the optimal cut always scores
-  full points. Same seeded object set for everyone; server owns the per-column counts and scores the
+  full points; a worse cut earns partial credit, `⌊10 × (1 − excess ÷ (total ÷ 2))⌋` for `excess` pixels
+  of imbalance beyond the best cut — one column off still scores about half, a 3:1 split nothing. Same
+  seeded object set for everyone; server owns the per-column counts and scores the
   cut. Since 2026-09-26 each puzzle is also **placed with the seeded RNG** (mirrored on a coin flip and
   dropped at a random offset inside a wider frame), so the ideal cut is no longer always in the same
   spot; counts and the best possible split are recomputed from the placed grid. FFA · drag · ~30 s
   (several objects) · low/medium effort · low latency · banter 💥💥.
 - **E12. ✅ Pixel Weight ("guess the weight")** — implemented (`pixel-weight`): a pixel-art object
   flashes briefly, then hides; guess **how many filled pixels** it had on a slider. Points scale with
-  closeness (`max(0, 10 − |error|)`); several objects. Seeded objects; server owns the counts. *Pixel
-  Balance variant not built.* FFA · slider · ~30 s · low effort · low latency · banter 💥💥.
+  closeness (`max(0, 10 − |error|)`); several objects. Seeded objects; server owns the counts. Every
+  puzzle is a **seeded variant** of its object (`pixelVariant`: up to two inner rows/columns repeated, a
+  few edge pixels nibbled off or grown on, mirrored on a coin flip), so a count learnt in one round is
+  no use in the next. *Pixel Balance variant not built.* FFA · slider · ~30 s · low effort · low
+  latency · banter 💥💥.
 - **E13. ✅ Quick Tetris** — a short, fast Tetris sprint (compact variant of **E10**): identical seeded
   piece sequence for all; clear as many lines as possible in a fixed short window (or reach N lines
   fastest). *Implemented (`quick-tetris`): the same shared Tetris engine as Line Clear Sprint (with
   rotation + wall kicks), tuned to a 45 s window with a race to `TARGET_LINES = 8` — finishers ranked by time, others by
-  lines cleared.* FFA · move/drop (keyboard + on-screen buttons) · ~45 s · high effort · low latency ·
+  lines cleared. Here a top-out is final, and the round ends early once every board has finished or
+  topped out.* FFA · move/drop (keyboard + on-screen buttons) · ~45 s · high effort · low latency ·
   banter 💥💥.
 - **E14. ✅ Sudoku Race** — everyone solves the **same seeded** Sudoku. *Implemented (`sudoku-race`): a
   4×4 grid (2×2 boxes), 8 of 16 cells blank; select a cell, then enter a digit from the number pad
@@ -305,27 +383,37 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
   old tap-to-cycle input plus the lock made brute-forcing every cell the best strategy). Winner is whoever
   completes it first; if nobody finishes in time, rank by **most correct cells placed** (server
   validates each cell, so a wrong entry never counts). The solved grid comes from a canonical valid
-  sudoku via seeded digit relabeling + row/col/band/stack permutations — always valid, no backtracking
-  solver needed — and the solution never goes on the wire.* FFA · tap cell + number pad · ~30 s ·
-  medium effort · low latency · banter 💥💥.
+  sudoku via seeded digit relabeling + row/col/band/stack permutations, and the blanks are picked so the
+  puzzle has a **unique solution** (a small solution counter rejects any blank that would allow a
+  second one) — so the only digit that fits a blank is the solution's and a valid digit is never marked
+  wrong. Each player races their own copy under a seeded symmetry (relabelled digits, shuffled
+  rows/columns, optional transpose): the same puzzle logically, but a neighbour's screen or a rival's
+  board on the room-wide snapshot is no help. The solution never goes on the wire.* FFA · tap cell +
+  number pad · ~30 s · medium effort · low latency · banter 💥💥.
 - **E15. ✅ Bubble Pop ("Bust-a-Move")** — bubble-shooter puzzle: aim and shoot coloured bubbles upward at a
   hanging cluster; **3+ same-colour bubbles that touch pop**, and any bubbles left unattached drop for a
   bonus. Same **seeded** starting layout + shot-colour queue for everyone, so it's a fair race on an
-  identical board; server owns the grid and validates each shot (client can't fake a clear). Ranked by
-  bubbles cleared (finishers by fastest board-clear). *Implemented (`bubble-pop`): a simplified
-  rectangular grid (8×7) with "choose a column" aim stands in for a true hex-grid shooter — the pop
-  (4-directional flood fill, 3+ same colour) and floating-bubble-drop rules are the real thing.* FFA ·
-  tap a column to shoot · ~60 s · medium/high effort · low latency · banter 💥💥.
+  identical board; server owns the grid and validates each shot (client can't fake a clear). Ranked:
+  full clears first (fastest first), then most bubbles popped. *Implemented (`bubble-pop`): a
+  simplified rectangular grid (8×7) with "choose a column" aim stands in for a true hex-grid shooter —
+  the pop (4-directional flood fill, 3+ same colour) and floating-bubble-drop rules are the real thing.
+  A shot sticks under the lowest bubble in its column (at the ceiling in an empty one); a column filled
+  to the bottom row takes no more shots, and once every column is, the board is **JAMMED** — out of
+  shots for the round, ranked below a live board on equal points. The round ends early once every
+  board is cleared or jammed.* FFA · tap a column to shoot · ~60 s · medium/high effort · low latency ·
+  banter 💥💥.
 
 ### E1 (full card). ⭐ ✅ Color Trap ("Stroop") — implemented (`color-trap`)
 - **Concept**: a color word (e.g., "RED") is shown in a mismatched ink color (e.g., blue). Tap the
   button matching the **ink color**, not the word it spells. The brain-fight is the joke.
-- **Type**: FFA · **Input**: tap · **Duration**: 20–30 s (several fast rounds) · **Banter**: 💥💥💥
-- **Rules**: same word/ink sequence for everyone (common seed). Each round shows a prompt + a small set
-  of color buttons; correct tap scores, wrong tap or timeout scores nothing. Short per-prompt window
-  (~1.5–2 s) keeps the pressure high.
-- **Win condition**: most correct answers (tiebreak by total response time). · **Result**: ranking by
-  correct count, then speed.
+- **Type**: FFA · **Input**: tap · **Duration**: ~22 s (12 prompts) · **Banter**: 💥💥💥
+- **Rules**: same word/ink sequence for everyone (common seed). Each prompt shows a word + a small set
+  of color buttons and takes one answer: the ink color +1, a wrong color **−1** (so blind guessing
+  loses on average), a timeout 0. A short per-prompt window (1.8 s) keeps the pressure high; an answer
+  still in flight counts for 300 ms after its prompt closes (the client stops taking taps at its own
+  zero).
+- **Win condition**: most points; ties go to fewer wrong taps, then the faster total response time.
+  · **Result**: ranking by points, then care, then speed.
 - **Latency**: low (server owns the seed; validates taps against the shown prompt). · **Complexity**: low.
 - **Accessibility**: never color-only — pair each color button with a distinct shape/symbol and label
   so the mismatch is still solvable without color discrimination (see cross-cutting notes).
@@ -367,9 +455,10 @@ every runner from the snapshot's `x` + `v`, so what a player sees lines up with 
 - **Concept**: the dash plus a JUMP button and the regulation layout (first hurdle at 13.72 m, then every
   9.14 m, ten in all).
 - **Type**: FFA · **Input**: L/R + JUMP (SPACE / ↑) · **Duration**: ~15–25 s (35 s cap) · **Banter**: 💥💥💥
-- **Rules**: a jump is airborne for 480 ms (≈4.5 m at a good sprint) and strides don't count in the air.
+- **Rules**: a jump is airborne for 480 ms (≈4.5 m at a good sprint); strides don't count in the air, but
+  there's no drag either — the runner carries their speed through it, so a clean jump costs little.
   A hurdle is cleared only if the runner is airborne at the moment of crossing (server back-dates the
-  crossing within the tick); otherwise it is knocked flat and the runner keeps just 40% of their speed.
+  crossing within the tick); otherwise it is knocked flat and the runner keeps just 15% of their speed.
 - **Win condition / Result**: as F1. · **Latency**: medium/high (jump timing; mitigated by dead
   reckoning + an immediately predicted local hop).
 
@@ -398,12 +487,15 @@ every runner from the snapshot's `x` + `v`, so what a player sees lines up with 
 - **Rules**: start lights (2.4 s), staggered grid in seeded order. Arcade car physics: slight drift, much
   slower off the road, steering loosens at top speed (brake for hairpins), punchy car-to-car bumps.
   Lap progress only advances near the road you were on; straying for 1.5 s puts you back where you left
-  it (no shortcuts). Once the first car takes the flag the rest get 12 s.
+  it (no shortcuts). **Slipstream**: tucked in behind a car (≤ 110 units, in its wake, same heading)
+  gives +10 % top speed / +15 % acceleration (wind lines) — the way back up from the back of the grid.
+  A driver who leaves becomes a ghost (no contact, no slipstream) that no longer holds the race open
+  (likewise in F6/F7). Once the first car takes the flag the rest get 12 s.
 - **Win condition / Result**: finishers by time (`1:02.3`), the rest by laps + progress (`LAP 2`).
 - **Latency**: high (continuous steering) — snapshot interpolation for every car.
 
-F6 and F7 run on the same car engine as F5 (`raceCore`: arcade physics, bumps, the windowed road
-follower and the stray-car rescue), on courses bigger than a screen — the scene follows your car (a
+F6 and F7 run on the same car engine as F5 (`raceCore`: arcade physics, bumps, the slipstream, the
+windowed road follower and the stray-car rescue), on courses bigger than a screen — the scene follows your car (a
 chase camera) with a minimap of the whole course. Cars carry their driver's lobby avatar.
 
 ### F6. ✅ Rally Stage — implemented (`rally-stage`)
@@ -411,8 +503,9 @@ chase camera) with a minimap of the whole course. Cars carry their driver's lobb
   gravel (loose: grip 4.2, 93 % top speed) and tarmac stretches.
 - **Type**: FFA, everyone at once as **ghosts** (no contact) · **Input**: as F5 · **Duration**: ~25–45 s
   (70 s cap; 15 s finish window after the first car) · **Banter**: 💥💥 · **Mobile-friendly**: no
-- **Rules**: start lights, then race to the stage end; three checkpoints pop split times. Off the road
-  the car slows hard; straying from your stretch for 1.5 s puts you back on the road.
+- **Rules**: start lights (everyone side by side, spread across the start line), then race to the stage
+  end; three checkpoints pop split times. Off the road the car slows hard; straying from your stretch
+  for 1.5 s puts you back on the road.
 - **Win condition / Result**: finish time (`0:26.8`), unfinished by distance (`64%`).
 
 ### F7. ✅ Speed Circuit — implemented (`speed-circuit`)
@@ -427,8 +520,8 @@ chase camera) with a minimap of the whole course. Cars carry their driver's lobb
 
 ## G. Elimination rounds — Squid Game-style (2026-10-02)
 
-Short, tense FFA rounds where watching friends get zapped is the show. Ranked by elimination order
-(survivors share 1st); eliminated players stay on screen, dimmed, and keep a way to take part; each
+Short, tense FFA rounds where watching friends get zapped is the show. Mostly ranked by elimination
+order (survivors share 1st; Glass Bridge scores ★ instead — see each card); eliminated players stay on screen, dimmed, and keep a way to take part; each
 exit is a big moment (`fx.eliminate`: ELIMINATED! stamp, pixel burst, sting). Players are drawn as their
 lobby avatar. Original names and art. See `implementation-decisions.md` D22.
 
@@ -439,10 +532,16 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
 - **Type**: FFA · **Input**: LEFT / RIGHT (← → / A D, the two big buttons, or a tap on the panel) ·
   **Duration**: ~30–60 s (75 s cap) · **Banter**: 💥💥💥 · **Mobile-friendly**: yes
 - **Rules**: rows = players + 2 (4–12). Already-solved rows are auto-walked; each unknown row is a 4 s
-  jump timer (hesitate and you're pushed onto a seeded side). A lightning flash every 3–5.6 s shows a
-  tiny glint on the tempered panel of the row being decided (easy to miss). Everyone not jumping —
-  queued, fallen or safe — can point LEFT/RIGHT at that row: colored **heckle arrows**, honest or not.
-- **Win condition / Result**: rows reached (`4/10`); everyone who crosses shares 1st.
+  jump timer (3.8 s at 10 players, 3.6 at 11, 3.5 at 12, so every vest gets a turn before the buzzer;
+  hesitate and you're pushed onto a seeded side). A lightning flash every 3–5.6 s shows a tiny glint on
+  the tempered panel of the row being decided (easy to miss). Everyone not jumping — queued, fallen or
+  safe — can point LEFT/RIGHT at that row: colored **heckle arrows**, honest or not. Once the whole
+  bridge is solved, everyone still queued crosses together; a player who leaves has their turn skipped.
+- **Win condition / Result**: **★** — +1 per **blind step** (a row nobody had revealed, jumped without
+  having seen its glint ≥ 250 ms earlier) and +1 for crossing; walking solved rows or jumping on a
+  glint is safe but earns nothing, so the vest order doesn't decide the ranking. A turn the buzzer cut
+  short (still on the bridge or queued) is credited +1, a turn's average worth. Equal ★ share a rank
+  (`★3 · 4/10`).
 - **Latency**: low (turn-based taps; the glint is held ≥ 2 snapshots). · **Complexity**: medium.
 
 ### G2. ✅ Freeze Doll ("Red Light, Green Light") — implemented (`freeze-doll`)
@@ -454,8 +553,9 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
   (shorter as the round goes on; the first one is long and calm) — she turns when it ends, after a
   500 ms head twitch. Some twitches are fake-outs (she looks away again and the chant resumes); from
   the third cycle a sudden spin can cut the chant short. On RED her laser sweeps across the lanes (from
-  100 ms to 500 ms after she faces the field, direction alternating each turn) and every lane it has
-  reached is watched until she looks away. Momentum: releasing WALK slides ~150 ms, RUN (1.6× faster)
+  100 ms to 500 ms after she faces the field, from a seeded lane in a seeded direction, wrapping round
+  at the edge — so no lane is always judged first or last) and every lane it has reached is watched
+  until she looks away. Momentum: releasing WALK slides ~150 ms, RUN (1.6× faster)
   ~400 ms — running pays only if you stop early. Two hearts: the first hit stuns for 1 s and knocks you
   back 15 % of the field (one hit per RED at most), the second eliminates you.
 - **Win condition / Result**: finishers by time (`31.2s`), then distance (`64%`), then the eliminated
@@ -469,11 +569,13 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
 - **Type**: FFA · **Input**: arrows / WASD or hold the pointer where you want to go; SPACE / DASH to
   shove · **Duration**: 3–6 calls, ~30–70 s (75 s cap) · **Banter**: 💥💥💥 · **Mobile-friendly**: no
 - **Rules**: each call: MUSIC (4–5.6 s, everyone held on the turning carousel, doors shut) → CALL
-  (6.5 s, a number N in 1–4, N ≤ survivors − 1, and ⌊(survivors − 1) ÷ N⌋ rooms open — capacity always
-  below the survivors) → buzzer. A room that holds exactly N for 0.5 s locks: the door slams and those
-  inside are safe (that half second is the window to barge in and spoil it); at the buzzer anyone not
-  in a locked room — or one holding exactly N — is ELIMINATED. The final two get one room for one.
-  Sumo-style bouncy bodies, real walls (the door is the only way in), a dash (0.85 burst, 1 s cooldown).
+  (6.5 s, a number N in 1–4 — 2–4 while 10+ survive — N ≤ survivors − 1, and ⌊(survivors − 1) ÷ N⌋
+  rooms open — capacity always below the survivors) → buzzer. The moment a room holds N its door slams
+  and those inside are safe; anyone arriving in the same instant beyond N is bounced back out the door.
+  At the buzzer anyone not in a locked room is ELIMINATED — unless nobody made it in: then nobody is out
+  and the call is replayed (no wipeout tie). The final two get one room for one. Sumo-style bouncy bodies, real
+  walls (the door is the only way in), a dash (0.85 burst, 1 s cooldown); survivors respawn on a ring
+  wide enough that nobody starts overlapping.
 - **Win condition / Result**: survivors share 1st; then by the call each player fell in (the same
   call's victims tie). Stat: seconds survived. The round ends when one player is left.
 - **Latency**: high (continuous steering + shoving) — snapshot interpolation for every body.
@@ -488,8 +590,9 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
   outline (lifting the needle or jumping across cuts nothing in between). Further than 0.055 off the
   line cracks the candy; so does rushing (needle speed over 0.5 candy-widths/s builds stress). A crack
   grants 0.6 s of grace; the third breaks the candy — ELIMINATED. Cut every segment to pop the shape out.
-- **Win condition / Result**: finishing time (`12.4s`); then intact candies by progress, broken ones
-  last (`63%`).
+- **Win condition / Result**: finishing time (`12.4s`); then everyone else by the share of the outline
+  cut, a broken candy counting half of it (fewer cracks breaks a tie) — a crack costs work, but a
+  nearly finished candy that snaps still beats a barely scratched one (`63%`).
 - **Latency**: low — the server judges needle samples (sent every 30 ms); the client draws your trail
   at once and a pressure gauge from the same speed rule.
 
@@ -508,7 +611,7 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
 
 ### G6. ✅ Marbles Duel (odd or even) — implemented (`marbles-duel`)
 - **Concept**: the marbles game as a quick 1v1 bluffing duel.
-- **Type**: Duel (seeded simultaneous pairs; an odd player out gets a bye win) · **Input**: − / + to
+- **Type**: Duel (seeded simultaneous pairs; an odd player out gets a bye, see §B) · **Input**: − / + to
   pick a number, then HIDE — or ODD / EVEN (keys ←/→, SPACE, O, E) · **Duration**: 50 s cap ·
   **Banter**: 💥💥 · **Mobile-friendly**: yes
 - **Rules**: 10 marbles each. Every turn one player hides 1…all of theirs in a fist while the other
@@ -516,7 +619,8 @@ lobby avatar. Original names and art. See `implementation-decisions.md` D22.
   Right call: the guesser takes the bet from the hider; wrong: the guesser pays it (capped by what the
   loser holds). Roles swap every turn. The number hidden is never on the wire before the reveal.
 - **Win condition / Result**: take all their marbles; at the bell, more marbles wins (equal = draw).
-  Winners and draws rank 0, losers 1 (`18`).
+  Ranked in the duel tiers — wins, then draws and the bye, then losses — each by marbles held (the bye
+  counts as 10) (`18`).
 
 ## I. Arcade classics, party-sized (2026-10-02)
 
@@ -529,11 +633,13 @@ avatar. See `implementation-decisions.md` D22.
   ~20–45 s (45 s cap) · **Banter**: 💥💥💥 · **Mobile-friendly**: no (continuous steering, like B3)
 - **Rules**: a 13×13 floe of ice tiles inside a circle. Nothing melts for 6 s; then a seeded order eats
   it edge-first but irregularly (a jitter of ~28 % of the radius punches holes), each tile cracking for
-  1.5 s before it sinks; only a 3×3 core is left for the last 8 s. Ice physics: weak grip (accel 1.1),
-  little friction (0.55/s, vs 2.0 on the dohyo) and bouncier shoves. A body over open water falls in —
-  the first time a **lifebuoy** fishes it back onto the core (1.2 s as a ghost, no collisions), the
-  second time it's out.
-- **Win condition / Result**: last one standing; the rest by survival time (`21s`).
+  1.5 s before it sinks; only the never-melting core is left for the last 8 s — 3×3 tiles, or 13 (one
+  more on each side) with 10+ players. Ice physics: weak grip (accel 1.1), little friction (0.55/s, vs
+  2.0 on the dohyo) and bouncier shoves. A body over open water falls in — the first time a
+  **lifebuoy** fishes it back onto the core, on the clearest of 8 spots around the centre (never on top
+  of someone; 1.2 s as a ghost, no collisions), the second time it's out.
+- **Win condition / Result**: last one standing; the rest by survival time (`21s`); among equal times
+  (still in at the buzzer) an unused lifebuoy ranks first.
 - **Latency**: high (continuous steering) — snapshot interpolation for every body.
 
 ### I2. ✅ Pang — implemented (`pang`)
@@ -553,7 +659,8 @@ avatar. See `implementation-decisions.md` D22.
 ### I3. ✅ Star Blaster (vertical shmup) — implemented (`star-blaster`)
 - **Concept**: a vertically scrolling shooter in your own viewport — everyone faces the **same seeded
   attack script**: drone formations, gunners that hover and spray rings/fans, a boss for the last
-  ~16 s. The ship (your color, your avatar in the cockpit) fires on its own; you steer to aim and dodge.
+  ~16 s. The ship (your color, your avatar in the cockpit) fires on its own from your first steer on
+  ("MOVE TO OPEN FIRE!" — an idle seat never fires or scores); you steer to aim and dodge.
 - **Type**: FFA · **Input**: arrows / WASD or hold the pointer where you want the ship · **Duration**:
   50 s · **Banter**: 💥💥 · **Mobile-friendly**: no
 - **Rules**: drones (1 HP, 10 pts) swoop down and veer off before the ship's zone; gunners (5 HP,
@@ -573,7 +680,11 @@ avatar. See `implementation-decisions.md` D22.
 - **Rules**: inertia ships (thrust 0.95, light drag, 0.75 top speed), a gun with a 220 ms cadence and
   4 bullets in flight. Rocks split big → medium → small → gone and pay 20 / 50 / 100; a rival ship pays
   250. A rock or a rival's bullet blows you up — back in 2 s at the safest of a few seeded spots, with
-  2 s of shield. The field is topped up with big rocks (away from ships) whenever it thins out.
+  2 s of shield. The field is topped up with big rocks (away from ships) whenever it thins out; the
+  supply is tuned for 4 pilots and scales with a bigger field (start rocks and the mass floor ×√(N/4),
+  refills N/4 times as often), so rocks per pilot hold. A ship whose pilot hasn't touched the controls
+  yet is a parked ghost — bullets and rocks pass through it (no free kill) — and gets a fresh shield
+  when they do. A pilot who leaves takes the ship out of the sky; its score stands.
 - **Win condition / Result**: highest score (`1830`), then kills.
 - **Latency**: high — ships, rocks and bullets are extrapolated from the snapshot's velocities; your own
   heading is predicted from your held keys. Ships are their pilot's lobby avatar, turned to the heading.
@@ -584,12 +695,14 @@ avatar. See `implementation-decisions.md` D22.
 - **Type**: FFA · **Input**: arrows / WASD (or the d-pad) to walk, SPACE / BOMB to drop one ·
   **Duration**: ~15–60 s (60 s cap) · **Banter**: 💥💥💥 · **Mobile-friendly**: no
 - **Rules**: a 17×13 grid — border walls, a pillar on every even/even cell, a seeded 60 % scatter of
-  crates (each spawn cell and its neighbours kept clear; up to 10 spawns). Tile-to-tile movement
+  crates (each spawn cell and its neighbours kept clear; up to 12 spawn cells, dealt to the players
+  with the round's seed, not by join order). Tile-to-tile movement
   (150 ms per tile at the start). Bombs blow after 2.2 s in a cross that stops at walls and at the first
   crate (which it breaks), setting off any bomb in its path (chain reactions); flames burn 0.55 s. A
   third of the crates hide a power-up: +fire (to 9), +bomb (to 8), faster boots. Bombs block the way.
 - **Win condition / Result**: last one standing; then knock-outs scored (a self-KO scores nothing),
-  then who lasted longer (`2 KO`).
+  then who lasted longer, then crates broken (which also splits survivors at the buzzer) (`2 KO`). A
+  player who leaves is out on the spot, with no KO credited to anyone.
 - **Latency**: medium — steps are interpolated client-side from the snapshot's step progress.
 
 ### I6. ✅ Street Brawl (Streets of Rage) — implemented (`brawl`)
@@ -602,8 +715,12 @@ avatar. See `implementation-decisions.md` D22.
   whoever is right next to you (16, knock-down, tossed 0.25 away). Knocked down = untouchable for
   0.9 s, then 0.6 s of guard. Items drop on a seeded schedule (max 4 on the street): a pipe (14 damage,
   longer reach, 6 swings), a bottle (one 22-damage knock-down, then it smashes), roast chicken (+30 HP).
-  Knocked down while armed, you drop it. 0 HP = K.O. for good.
-- **Win condition / Result**: last one standing; then K.O.s dealt; then HP left / time lasted (`2 KO`).
+  Knocked down while armed, you drop it. 0 HP = K.O. for good. Spawn spots are evenly spaced and dealt
+  in a seeded order (nobody owns the safer end seats by joining first); a fighter who leaves is out,
+  crediting nobody.
+- **Win condition / Result**: last one standing; then K.O. credit — the finisher takes half of each
+  K.O., the other half is split by the damage everyone (finisher included) dealt that fighter, so
+  softening someone up counts; then HP left / time lasted (`1.5 KO`).
 - **Latency**: medium — attacks resolve on the server as they arrive; walks are eased and
   dead-reckoned on the client.
 
@@ -617,9 +734,9 @@ avatar. See `implementation-decisions.md` D22.
   the "no way that's true!" moment at the reveal.
 - **Type**: FFA · **Input**: tap one of four answers (keys 1–4) · **Duration**: 50 s (5 questions) ·
   **Banter**: 💥💥💥 · **Mobile-friendly**: yes
-- **Rules**: the Lightning Quiz scoring (a right answer = 1000 + a speed bonus of up to 1000; wrong or
-  no answer = 0). Each question has a 6 s answer window, which closes early once everybody has locked
-  in. Then a 4 s reveal: the right tile lights up, every player's avatar pops onto the tile they picked
+- **Rules**: the Lightning Quiz phases and scoring (`quizCore`: a right answer = 1000 + a speed bonus of
+  up to 1000; wrong or no answer = 0). Each question has a 6 s answer window, which closes early once
+  everybody still in the round has locked in. Then a 4 s reveal: the right tile lights up, every player's avatar pops onto the tile they picked
   (grinning or wincing), the board shows a one-line fun fact and the room gets a quip ("NOBODY KNEW!",
   "3 FELL FOR IT!"). Points are banked at the reveal, so locking in gives nothing away.
 - **The bank**: 63 facts, server-side (`weirdTriviaBank.ts`), each written natively in EN and ES (own

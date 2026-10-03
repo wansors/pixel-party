@@ -55,7 +55,42 @@ describe('TugOfWar', () => {
     state = game.onInput(state, 'a', { kind: 'pull' }, 2000) // after end
     state = game.onInput(state, 'ghost', { kind: 'pull' }, 10) // not in a team
     const snap = game.snapshot(state, 10)
-    expect(snap.red).toBe(0)
-    expect(snap.blue).toBe(0)
+    expect(snap.avg).toEqual({ red: 0, blue: 0 })
+  })
+
+  test('the snapshot shows pulls per member, which is what moves the rope', () => {
+    const game = new TugOfWar()
+    let state = game.init({
+      ...baseCtx(),
+      players: ['a', 'b', 'c', 'd', 'e'],
+      teams: { a: 'red', b: 'red', c: 'blue', d: 'blue', e: 'blue' },
+    })
+    for (let i = 0; i < 6; i++) state = game.onInput(state, 'a', { kind: 'pull' }, 10)
+    for (let i = 0; i < 7; i++) state = game.onInput(state, 'c', { kind: 'pull' }, 10)
+    const snap = game.snapshot(state, 10)
+    expect(snap.avg).toEqual({ red: 3, blue: 2.3 }) // 6/2 vs 7/3: fewer pulls, but red leads
+    expect(snap.offset).toBeLessThan(0)
+  })
+
+  test('a member who leaves stops counting in the average', () => {
+    const game = new TugOfWar()
+    let state = game.init(baseCtx())
+    for (let i = 0; i < 10; i++) {
+      state = game.onInput(state, 'a', { kind: 'pull' }, 10)
+      state = game.onInput(state, 'c', { kind: 'pull' }, 10)
+    }
+    // b (red) never pulls and drops: red's average is a's alone from now on.
+    state = game.leave(state, 'b')
+    let snap = game.snapshot(state, 20)
+    expect(snap.avg).toEqual({ red: 10, blue: 5 })
+    expect(snap.teams.b).toBeUndefined()
+    state = game.onInput(state, 'b', { kind: 'pull' }, 30) // gone: ignored
+    expect(game.snapshot(state, 30).avg.red).toBe(10)
+    // A team emptied by leavers pulls nothing (no division by zero) and loses the tug.
+    state = game.leave(state, 'a')
+    snap = game.snapshot(state, 40)
+    expect(snap.avg.red).toBe(0)
+    expect(Number.isFinite(snap.offset)).toBe(true)
+    expect(game.getResult(state).ranks).toEqual({ red: 1, blue: 0 })
   })
 })

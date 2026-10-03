@@ -40,6 +40,9 @@ function postRows(): string[] {
   return rows
 }
 
+// One decimal, until a long round's averages reach three digits (keeps the plate's number narrow).
+const formatAvg = (avg: number): string => (avg < 100 ? avg.toFixed(1) : String(Math.round(avg)))
+
 interface Puller {
   id: string
   team: TeamId
@@ -51,13 +54,15 @@ interface Puller {
 // Tug of War (team) canvas: a pixel rope with a pennant on its knot, red pullers on the left and blue on
 // the right (each member drawn in their own identity color), goal posts in the team colors. The rope
 // springs toward the server's offset so every change in balance lurches visibly; the team that drags
-// the knot to its own post wins. Tap / SPACE = one pull (team members only).
+// the knot to its own post wins. The plates show each team's pulls PER HEAD — the average is what
+// moves the rope, so a smaller team isn't behind on raw totals. A member who left is greyed out.
+// Tap / SPACE = one pull (team members only).
 export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
   private rope?: Phaser.GameObjects.Graphics
   private pennant?: Phaser.GameObjects.Image
   private pennantKeys: Record<TeamId | 'even', string> = { red: '', blue: '', even: '' }
   private posts: Partial<Record<TeamId, Phaser.GameObjects.Image>> = {}
-  private counts: Partial<Record<TeamId, Phaser.GameObjects.Text>> = {}
+  private avgs: Partial<Record<TeamId, Phaser.GameObjects.Text>> = {}
   private prompt?: Phaser.GameObjects.Text
   private hint?: Phaser.GameObjects.Text
   private marker?: YouMarker
@@ -77,7 +82,7 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
   private vel = 0
   private wobble = 0
   private lastOffset = 0
-  private lastTotals: Record<TeamId, number> = { red: 0, blue: 0 }
+  private lastAvg: Record<TeamId, number> = { red: 0, blue: 0 }
   private leader: TeamId | null = null
   private danger: TeamId | null = null
   private lastDust: Record<TeamId, number> = { red: 0, blue: 0 }
@@ -93,13 +98,13 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
     this.pullers = []
     this.extra = {}
     this.posts = {}
-    this.counts = {}
+    this.avgs = {}
     this.built = false
     this.disp = 0
     this.vel = 0
     this.wobble = 0
     this.lastOffset = 0
-    this.lastTotals = { red: 0, blue: 0 }
+    this.lastAvg = { red: 0, blue: 0 }
     this.leader = null
     this.danger = null
     this.ended = false
@@ -168,7 +173,8 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
     this.onKey('SPACE', () => this.pull())
   }
 
-  // Team plates: name + running pull total, red top-left, blue top-right.
+  // Team plates: name over a "per head" caption + the team's average pulls per member, red top-left,
+  // blue top-right.
   private drawPlates(compact: boolean): void {
     const { width } = this.scale
     const w = Math.min(width * 0.4, 240)
@@ -188,13 +194,21 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
       const align = team === 'red' ? 0 : 1
       const tx = team === 'red' ? x + 12 : x + w - 12
       this.add
-        .text(tx, y + h / 2, this.t(`team.${team}`).toUpperCase(), headlineStyle(16, color))
+        .text(tx, y + h * 0.36, this.t(`team.${team}`).toUpperCase(), headlineStyle(16, color))
         .setOrigin(align, 0.5)
-      this.counts[team] = this.add
+      this.add
+        .text(
+          tx,
+          y + h * 0.36 + (compact ? 12 : 16),
+          this.t('game.tugOfWar.perHead'),
+          bodyStyle(compact ? 11 : 13, PALETTE.dim),
+        )
+        .setOrigin(align, 0)
+      this.avgs[team] = this.add
         .text(
           team === 'red' ? x + w - 12 : x + 12,
           y + h / 2,
-          '0',
+          '0.0',
           headlineStyle(compact ? 16 : 24, PALETTE.text),
         )
         .setOrigin(1 - align, 0.5)
@@ -329,11 +343,11 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
       team ? `${this.t('game.tugOfWar.team')}: ${this.t(`team.${team}`).toUpperCase()}` : '',
     )
     // First snapshot (fresh round or relayout restart): adopt the state as the baseline — the rope
-    // sits where it is, the totals show, and no "RED LEADS!" / "ALMOST!" replays.
+    // sits where it is, the averages show, and no "RED LEADS!" / "ALMOST!" replays.
     if (this.firstSnapshot) {
       for (const t of ['red', 'blue'] as const) {
-        this.lastTotals[t] = snap[t]
-        this.counts[t]?.setText(String(snap[t]))
+        this.lastAvg[t] = snap.avg[t]
+        this.avgs[t]?.setText(formatAvg(snap.avg[t]))
       }
       this.disp = snap.offset
       this.lastOffset = snap.offset
@@ -342,14 +356,15 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
       this.danger = snap.offset <= -DANGER ? 'red' : snap.offset >= DANGER ? 'blue' : null
     }
     for (const t of ['red', 'blue'] as const) {
-      const total = snap[t]
-      const text = this.counts[t]
-      if (total > this.lastTotals[t]) {
-        text?.setText(String(total))
+      const avg = snap.avg[t]
+      const text = this.avgs[t]
+      if (avg !== this.lastAvg[t]) text?.setText(formatAvg(avg))
+      // A leaver can move the average either way; only a rise is a pull.
+      if (avg > this.lastAvg[t]) {
         if (text) punch(this, text, 0.18, 70)
         for (const p of this.pullers) if (p.team === t) p.heaveUntil = time + 110
       }
-      this.lastTotals[t] = total
+      this.lastAvg[t] = avg
     }
 
     const change = snap.offset - this.lastOffset
@@ -470,13 +485,19 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
       const dir = p.team === 'red' ? -1 : 1
       const x = knotX + dir * (this.gapFromKnot + i * this.spacing)
       // Lean back (away from the knot) to brace, further on a heave; at the whistle the winners
-      // cheer and the losers are flattened.
-      const heaving = time < p.heaveUntil
+      // cheer and the losers are flattened. A member who left has let go: greyed out and limp.
+      const gone = this.snap !== null && !(p.id in this.snap.teams)
+      const heaving = time < p.heaveUntil && !gone
       const end = this.snap?.done ? this.winner() : null
       p.avatar
-        .setExpression(end ? (end === p.team ? 'happy' : 'ko') : heaving ? 'hurt' : 'idle')
+        .setExpression(
+          end ? (end === p.team ? 'happy' : 'ko') : gone ? 'ko' : heaving ? 'hurt' : 'idle',
+        )
         .tick(time)
-      p.avatar.image.setX(Math.round(x)).setAngle(dir * (end ? 0 : heaving ? 22 : 10))
+      p.avatar.image
+        .setX(Math.round(x))
+        .setAngle(dir * (end || gone ? 0 : heaving ? 22 : 10))
+        .setAlpha(gone ? 0.4 : 1)
       p.shadow.setX(Math.round(x))
     }
     for (const t of ['red', 'blue'] as const) {

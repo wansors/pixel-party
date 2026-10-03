@@ -68,6 +68,8 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
   private wasd?: Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>
   private aim?: { x: number; y: number }
   private aimPointer = -1
+  // The last drive sent (the server starts every car parked).
+  private sent = { steer: 0, throttle: 0 }
   private lastSentAt = 0
   private lastTick = -1
   private snapAt = 0
@@ -97,6 +99,7 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
     this.views = new Map()
     this.aim = undefined
     this.aimPointer = -1
+    this.sent = { steer: 0, throttle: 0 }
     this.lastSentAt = 0
     this.lastTick = -1
     this.snapAt = 0
@@ -248,9 +251,10 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
       v.pilot
         .setPosition(v.x - Math.cos(v.a) * 2, v.y - Math.sin(v.a) * 2)
         .setRotation(v.a + Math.PI / 2)
-      const ghost = this.kind === 'stage' && c.id !== this.selfId
-      v.body.setAlpha(ghost ? 0.55 : 1)
-      v.pilot.setAlpha(ghost ? 0.55 : 1)
+      // Stage rivals are ghosts; a driver who left fades out further (no contact any more).
+      const alpha = c.gone ? 0.3 : this.kind === 'stage' && c.id !== this.selfId ? 0.55 : 1
+      v.body.setAlpha(alpha)
+      v.pilot.setAlpha(alpha)
       // Trails: dust off-road / on gravel, wind lines in a slipstream, a flame on boost.
       const bx = v.x - Math.cos(v.a) * 18
       const by = v.y - Math.sin(v.a) * 18
@@ -367,7 +371,14 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
         throttle: Math.abs(diff) > 2.3 ? 0.45 : dist < 30 ? 0.3 : 1,
       }
     }
-    if (time - this.lastSentAt > SEND_EVERY_MS && snap.cars.some((c) => c.id === this.selfId)) {
+    // The server holds the last drive: send changes only (rate-limited), never an idle heartbeat.
+    const changed = drive.steer !== this.sent.steer || drive.throttle !== this.sent.throttle
+    if (
+      changed &&
+      time - this.lastSentAt > SEND_EVERY_MS &&
+      snap.cars.some((c) => c.id === this.selfId)
+    ) {
+      this.sent = drive
       this.lastSentAt = time
       this.sendInput({ kind: 'drive', ...drive })
     }
@@ -383,7 +394,7 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
         text: `${c.pos}. ${this.label(c.id)}${c.finishMs !== null ? ' ✓' : ''}`,
         avatar: this.state.avatarOf(c.id),
         color: this.state.colorOf(c.id),
-        dim: false,
+        dim: c.gone,
       })),
     )
     if (!prev || this.firstSnapshot) {

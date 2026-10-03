@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { PIXEL_OBJECTS, type PixelCell, columnCounts } from '@pp/shared'
 import type { Random } from '../ports/Random'
-import { PixelSplit } from './pixelSplit'
+import { PixelSplit, splitPoints } from './pixelSplit'
 
 // Deterministic seed; the exact object order doesn't matter — the tests read counts off the puzzle.
 const zero: Random = { next: () => 0 }
@@ -71,9 +71,47 @@ describe('PixelSplit', () => {
     s = game.onInput(s, 'a', { kind: 'cut', index: 0, cut: 1 }, 100) // extreme left cut
     const left = leftOf(puzzle.cols, 1)
     const error = Math.abs(left - (puzzle.total - left))
-    const expected = Math.max(0, 10 - (error - puzzle.minError))
-    expect(s.score.get('a')).toBe(expected)
-    expect(s.score.get('a')).toBeLessThanOrEqual(10)
+    expect(s.score.get('a')).toBe(splitPoints(error - puzzle.minError, puzzle.total))
+    expect(s.score.get('a')).toBeLessThan(10)
+  })
+
+  test('partial credit falls off in proportion to the extra imbalance, to 0 at a 3:1 split', () => {
+    expect(splitPoints(0, 80)).toBe(10)
+    expect(splitPoints(1, 80)).toBe(9)
+    expect(splitPoints(20, 80)).toBe(5)
+    expect(splitPoints(40, 80)).toBe(0)
+    expect(splitPoints(70, 80)).toBe(0)
+  })
+
+  test('one column off the best cut still earns partial credit (not ≈ 0 as before)', () => {
+    const game = new PixelSplit()
+    const scores: number[] = []
+    for (let seed = 1; seed <= 40; seed++) {
+      let s = init(['a'], 0, seeded(seed))
+      s.puzzles.forEach((puzzle, index) => {
+        const best = bestCut(puzzle.cols).cut
+        const off = best + 1 < puzzle.object.cols ? best + 1 : best - 1
+        const before = s.score.get('a') ?? 0
+        s = game.onInput(s, 'a', { kind: 'cut', index, cut: off }, 100 + index)
+        scores.push((s.score.get('a') ?? 0) - before)
+      })
+    }
+    expect(Math.min(...scores)).toBeGreaterThan(0)
+    const mean = scores.reduce((a, b) => a + b, 0) / scores.length
+    expect(mean).toBeGreaterThan(4)
+    expect(mean).toBeLessThan(8)
+  })
+
+  test('a leaver is skipped to the end so the round finishes once the rest are done', () => {
+    const game = new PixelSplit()
+    let s = init(['a', 'gone'])
+    s.puzzles.forEach((_, index) => {
+      s = game.onInput(s, 'a', { kind: 'cut', index, cut: 1 }, 100 + index)
+    })
+    expect(game.isFinished(s, 500)).toBe(false)
+    s = game.leave(s, 'gone', 500)
+    expect(game.isFinished(s, 500)).toBe(true)
+    expect(game.snapshot(s, 500).objects.gone).toBeNull()
   })
 
   test('stale index is ignored', () => {
@@ -143,7 +181,7 @@ describe('PixelSplit', () => {
         const cut = index % 2 === 0 ? best.cut : 1
         const left = leftOf(puzzle.cols, cut)
         const error = Math.abs(left - (puzzle.total - left))
-        expected += index % 2 === 0 ? 10 : Math.max(0, 10 - (error - puzzle.minError))
+        expected += index % 2 === 0 ? 10 : splitPoints(error - puzzle.minError, puzzle.total)
         s = game.onInput(s, 'a', { kind: 'cut', index, cut }, 100 + index)
         expect(s.score.get('a')).toBe(expected)
       })

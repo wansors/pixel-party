@@ -164,6 +164,14 @@ abstract class FieldEvent implements MiniGame<FieldEventState, FieldEventInput> 
     return state
   }
 
+  // An athlete who left is done: their marks so far stand, their remaining attempts don't hold the
+  // round open.
+  leave(state: FieldEventState, playerId: PlayerId, now: number): FieldEventState {
+    const a = state.athletes.get(playerId)
+    if (a && a.phase !== 'done') this.enter(a, 'done', now)
+    return state
+  }
+
   isFinished(state: FieldEventState, now: number): boolean {
     if (now >= state.endsAt) return true
     return state.players.every((p) => state.athletes.get(p)?.phase === 'done')

@@ -12,6 +12,11 @@ export interface PixelBeatSnapshot {
   remainingMs: number
 }
 
+// One tap. `at` is the tap's round time on the client's own timeline (ms since round start, the clock
+// the notes are drawn on), so it's judged against what the player saw rather than when it reached the
+// server. The server credits it only within a bounded latency window of its own measurement (and uses
+// its own when `at` is absent).
 export interface PixelBeatInput {
   kind: 'tap'
+  at?: number
 }

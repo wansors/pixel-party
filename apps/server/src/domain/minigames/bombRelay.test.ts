@@ -42,6 +42,68 @@ describe('BombRelay', () => {
     expect(red?.holderId).toBe('b')
   })
 
+  test('an idle holder is skipped: no relay, no boom, a fresh fuse for the next one', () => {
+    const game = new BombRelay()
+    let state = game.init(ctx())
+    state = game.tick(state, 0, 1700)
+    expect(game.snapshot(state, 1700).teams.red?.holderId).toBe('a')
+    state = game.tick(state, 0, 1800) // 1.8 s holding it without a single mash
+    const red = game.snapshot(state, 1800).teams.red
+    expect(red?.holderId).toBe('b')
+    expect(red?.relays).toBe(0)
+    expect(red?.explosions).toBe(0)
+    // The fuse was re-armed at the skip: nothing blows at the old 2500 ms mark.
+    state = game.tick(state, 0, 2500)
+    expect(game.snapshot(state, 2500).teams.red?.explosions).toBe(0)
+    expect(game.snapshot(state, 2500).teams.red?.holderId).toBe('b')
+  })
+
+  test('mashing keeps the idle skip away', () => {
+    const game = new BombRelay()
+    let state = game.init(ctx())
+    state = game.onInput(state, 'a', { kind: 'mash' }, 1000)
+    state = game.tick(state, 0, 1800)
+    expect(game.snapshot(state, 1800).teams.red?.holderId).toBe('a')
+  })
+
+  test('a leaver drops out of the chain; the bomb never parks on them', () => {
+    const game = new BombRelay()
+    const base = ctx()
+    let state = game.init({
+      ...base,
+      players: ['a', 'b', 'e', 'c', 'd'],
+      teams: { ...base.teams, e: 'red' },
+    })
+    for (let i = 0; i < LEG_TAPS; i++) state = game.onInput(state, 'a', { kind: 'mash' }, 100)
+    for (let i = 0; i < 4; i++) state = game.onInput(state, 'b', { kind: 'mash' }, 200)
+    // Someone else leaving keeps the bomb (and the leg) where it is.
+    state = game.leave(state, 'a', 300)
+    let red = game.snapshot(state, 300).teams.red
+    expect(red?.members).toEqual(['b', 'e'])
+    expect(red?.holderId).toBe('b')
+    expect(red?.legProgress).toBe(4)
+    // The holder leaving hands the bomb straight to the next member.
+    state = game.leave(state, 'b', 400)
+    red = game.snapshot(state, 400).teams.red
+    expect(red?.holderId).toBe('e')
+    expect(red?.legProgress).toBe(0)
+    // A lone member passes to themself, and the relay still scores.
+    for (let i = 0; i < LEG_TAPS; i++) state = game.onInput(state, 'e', { kind: 'mash' }, 500)
+    expect(game.snapshot(state, 500).teams.red?.relays).toBe(2)
+    expect(game.getResult(state).stats?.a).toBe('2 passes') // leavers keep their team's line
+  })
+
+  test('a team everyone left stops ticking without blowing up', () => {
+    const game = new BombRelay()
+    let state = game.init(ctx())
+    state = game.leave(state, 'a', 0)
+    state = game.leave(state, 'b', 0)
+    for (let t = 0; t <= 20_000; t += 50) state = game.tick(state, 50, t)
+    const red = game.snapshot(state, 20_000).teams.red
+    expect(red?.explosions).toBe(0)
+    expect(red?.holderId).toBe('')
+  })
+
   test('ranks teams by relays (winner rank 0)', () => {
     const game = new BombRelay()
     let state = game.init(ctx())

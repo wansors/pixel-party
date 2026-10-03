@@ -5,7 +5,8 @@ import { burst, floatText, punch } from '../fx'
 import { bodyStyle, ensurePixelOrb, headlineStyle, hexToCss, shade } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
-const MAX_LANES = 6
+// Lanes shorter than this go into two columns (a full room on a short landscape screen).
+const MIN_LANE_H = 16
 
 interface Lane {
   name: Phaser.GameObjects.Text
@@ -14,18 +15,23 @@ interface Lane {
   track: Phaser.GameObjects.Rectangle
   // The player's avatar running at the head of their bar.
   runner: Phaser.GameObjects.Image
+  left: number
+  width: number
+  // Name characters that fit left of the track (two columns leave no margin to spill into).
+  nameChars: number
 }
 
 // Button Masher canvas: a giant arcade button to hammer (tap / Space) plus a live "race" of every
-// player's press count, drawn as lanes in their own colors. One MINIGAME_INPUT per press.
+// player's press count, drawn as lanes in their own colors (one per player, leader on top). One
+// MINIGAME_INPUT per press; the server caps how many presses a second count.
 export class ButtonMasherScene extends MiniGameScene<ButtonMasherSnapshot> {
   private countText?: Phaser.GameObjects.Text
   private button?: Phaser.GameObjects.Image
   private buttonKey = ''
   private buttonDownKey = ''
   private lanes: Lane[] = []
-  private laneLeft = 0
-  private laneWidth = 0
+  private lanesTop = 0
+  private lanesBottom = 0
   private lastCount = 0
 
   constructor(...deps: SceneDeps) {
@@ -72,32 +78,9 @@ export class ButtonMasherScene extends MiniGameScene<ButtonMasherSnapshot> {
       .setOrigin(0.5)
       .setDepth(5)
 
-    // Race lanes: one row per player (top 6), bar length relative to the current leader.
-    const lanesTop = buttonY + d / 2 + (compact ? 18 : 28)
-    const laneH = Math.min(compact ? 20 : 26, (height - lanesTop - 30) / MAX_LANES)
-    this.laneLeft = width * 0.12 + (compact ? 70 : 110)
-    this.laneWidth = width * 0.76 - (compact ? 110 : 160)
-    for (let i = 0; i < MAX_LANES; i++) {
-      const y = lanesTop + i * laneH + laneH / 2
-      const name = this.add
-        .text(this.laneLeft - 10, y, '', bodyStyle(compact ? 11 : 14, PALETTE.text))
-        .setOrigin(1, 0.5)
-      const track = this.add
-        .rectangle(this.laneLeft, y, this.laneWidth, laneH * 0.6, PALETTE.panelAlt)
-        .setOrigin(0, 0.5)
-      const bar = this.add
-        .rectangle(this.laneLeft, y, 0, laneH * 0.6, PALETTE.lime)
-        .setOrigin(0, 0.5)
-      const count = this.add
-        .text(this.laneLeft + this.laneWidth + 18, y, '', headlineStyle(compact ? 10 : 13))
-        .setOrigin(0, 0.5)
-      const runner = this.add
-        .image(this.laneLeft, y + laneH * 0.3, ensureAvatarTexture(this, 'cat', PALETTE.dim, 1))
-        .setOrigin(0.5, 1)
-        .setDisplaySize(avatarPx(laneH), avatarPx(laneH))
-        .setDepth(2)
-      this.lanes.push({ name, count, bar, track, runner })
-    }
+    // Race lanes: built on the first snapshot, which names the round's players.
+    this.lanesTop = buttonY + d / 2 + (compact ? 18 : 28)
+    this.lanesBottom = height - 30
 
     this.add
       .text(cx, height - 16, this.t('game.buttonMasher.hint'), bodyStyle(compact ? 12 : 15))
@@ -107,8 +90,44 @@ export class ButtonMasherScene extends MiniGameScene<ButtonMasherSnapshot> {
     this.onKey('SPACE', () => this.mash())
   }
 
+  // One lane per player, bar length relative to the current leader. They stack in one column while
+  // lanes stay at least MIN_LANE_H tall, else they split into two side by side.
+  private buildLanes(n: number): void {
+    const { width, height } = this.scale
+    const compact = Math.min(width, height) < 520
+    const avail = this.lanesBottom - this.lanesTop
+    const cols = avail / n < MIN_LANE_H && width >= 640 ? 2 : 1
+    const perCol = Math.ceil(n / cols)
+    const laneH = Math.min(compact ? 20 : 26, avail / perCol)
+    const colW = (width * (cols === 1 ? 0.76 : 0.94)) / cols
+    const nameW = compact ? 70 : 110
+    const countW = compact ? 40 : 50
+    const font = compact || laneH < 20 ? 11 : 14
+    const margin = cols === 1 ? (width - colW) / 2 : 0
+    const nameChars = Math.floor((nameW - 10 + margin) / (font * 0.62))
+    for (let i = 0; i < n; i++) {
+      const left = (width - cols * colW) / 2 + Math.floor(i / perCol) * colW + nameW
+      const laneWidth = colW - nameW - countW
+      const y = this.lanesTop + (i % perCol) * laneH + laneH / 2
+      const name = this.add.text(left - 10, y, '', bodyStyle(font, PALETTE.text)).setOrigin(1, 0.5)
+      const track = this.add
+        .rectangle(left, y, laneWidth, laneH * 0.6, PALETTE.panelAlt)
+        .setOrigin(0, 0.5)
+      const bar = this.add.rectangle(left, y, 0, laneH * 0.6, PALETTE.lime).setOrigin(0, 0.5)
+      const count = this.add
+        .text(left + laneWidth + 12, y, '', headlineStyle(compact || laneH < 20 ? 8 : 13))
+        .setOrigin(0, 0.5)
+      const runner = this.add
+        .image(left, y + laneH * 0.3, ensureAvatarTexture(this, 'cat', PALETTE.dim, 1))
+        .setOrigin(0.5, 1)
+        .setDisplaySize(avatarPx(laneH), avatarPx(laneH))
+        .setDepth(2)
+      this.lanes.push({ name, count, bar, track, runner, left, width: laneWidth, nameChars })
+    }
+  }
+
   private mash(): void {
-    if (!this.snap || this.snap.remainingMs <= 0) return
+    if (!this.snap || this.snap.remainingMs <= 0 || !(this.selfId in this.snap.counts)) return
     this.sfx.click()
     this.sendInput({ kind: 'mash' })
     if (!this.button) return
@@ -119,6 +138,7 @@ export class ButtonMasherScene extends MiniGameScene<ButtonMasherSnapshot> {
 
   protected frame(snap: ButtonMasherSnapshot | null): void {
     if (!snap) return
+    if (this.lanes.length === 0) this.buildLanes(Object.keys(snap.counts).length)
     const mine = snap.counts[this.selfId] ?? 0
     this.hud?.setScore(this.t('game.common.pts', { n: mine }))
     // A relayout restart mid-round adopts the count silently (no "+37" for every press so far).
@@ -158,9 +178,9 @@ export class ButtonMasherScene extends MiniGameScene<ButtonMasherSnapshot> {
       if (!entry) return
       const [id, n] = entry
       const color = this.state.colorOf(id, PALETTE.lime)
-      lane.name.setText(this.label(id)).setColor(hexToCss(color))
+      lane.name.setText(this.label(id).slice(0, lane.nameChars)).setColor(hexToCss(color))
       lane.count.setText(String(n))
-      const barW = Math.max(2, (n / lead) * this.laneWidth)
+      const barW = Math.max(2, (n / lead) * lane.width)
       lane.bar.setFillStyle(color).setSize(barW, lane.bar.height)
       // Strides while mashing; the leader grins.
       const step = n > 0 ? Math.floor(this.time.now / 110) % 2 : 0
@@ -176,7 +196,7 @@ export class ButtonMasherScene extends MiniGameScene<ButtonMasherSnapshot> {
             step as 0 | 1,
           ),
         )
-        .setX(Math.round(this.laneLeft + barW))
+        .setX(Math.round(lane.left + barW))
       lane.track.setStrokeStyle(id === this.selfId ? 2 : 0, PALETTE.text)
     })
   }

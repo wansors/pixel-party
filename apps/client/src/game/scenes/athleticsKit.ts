@@ -20,10 +20,11 @@ export const METRES_PER_FRAME = 0.55
 export const TARTAN = 0xc4553d
 export const GRASS = 0x3f8f3a
 
-// A repeating strip of `lanes` tartan lanes, each `laneH` px tall, with white lane lines.
+// A repeating strip of `lanes` tartan lanes, each `laneH` px tall (fractional heights round per line),
+// with white lane lines.
 export function ensureTrackTile(scene: Phaser.Scene, lanes: number, laneH: number): string {
   const h = Math.max(1, Math.round(lanes * laneH))
-  const key = `pp-ath-track-${lanes}x${Math.round(laneH)}`
+  const key = `pp-ath-track-${lanes}x${laneH.toFixed(2)}`
   if (scene.textures.exists(key)) return key
   const w = 64
   const g = scene.make.graphics({ x: 0, y: 0 })
@@ -231,8 +232,8 @@ const SPEED_FULL = 11.5 // m/s that fills the speed meter
 
 // The arcade two-button run pad along the bottom of the canvas: big LEFT / RIGHT buttons (the one to
 // hit next glows), an optional middle action button (JUMP / THROW, press-and-hold aware) and a
-// segmented speed meter above them. Also binds the keyboard: ← / A / Z and → / D / X for the feet,
-// SPACE / ↑ / W for the action.
+// segmented speed meter above them — slimmer on a landscape phone, where height is scarce. Also binds
+// the keyboard: ← / A / Z and → / D / X for the feet, SPACE / ↑ / W for the action.
 export class StridePad {
   readonly top: number
   private readonly left: Phaser.GameObjects.Image
@@ -259,10 +260,11 @@ export class StridePad {
   ) {
     const { width, height } = scene.scale
     const compact = Math.min(width, height) < 520
+    const short = height < 420
     const padW = Math.min(width - 16, 760)
-    const btnH = compact ? 96 : 84
-    const gap = compact ? 8 : 12
-    const bottom = height - (compact ? 10 : 34)
+    const btnH = short ? 56 : compact ? 96 : 84
+    const gap = short ? 6 : compact ? 8 : 12
+    const bottom = height - (short ? 6 : compact ? 10 : 34)
     const y = bottom - btnH / 2
     const x0 = (width - padW) / 2
     const withAction = opts.action !== undefined
@@ -333,7 +335,7 @@ export class StridePad {
     }
 
     // Speed meter strip above the buttons.
-    const meterH = compact ? 8 : 10
+    const meterH = short ? 6 : compact ? 8 : 10
     this.meterBox = { x: x0, y: y - btnH / 2 - gap - meterH, w: padW, h: meterH }
     this.meter = scene.add.graphics().setDepth(700)
     scene.add
@@ -341,7 +343,7 @@ export class StridePad {
       .setOrigin(0, 1)
       .setDepth(700)
     this.glow = scene.add.graphics().setDepth(702)
-    this.top = this.meterBox.y - (compact ? 14 : 16)
+    this.top = this.meterBox.y - (short ? 12 : compact ? 14 : 16)
 
     const kb = scene.input.keyboard
     const bind = (names: string[], down: () => void, up?: () => void): void => {

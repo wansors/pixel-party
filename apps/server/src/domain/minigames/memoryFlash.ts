@@ -25,6 +25,8 @@ export interface MemoryFlashState {
   // playerId -> board index the player is on (also how many puzzles they have seen).
   pointer: Map<PlayerId, number>
   correct: Map<PlayerId, number>
+  // ms into the round of the player's last CORRECT answer — the tiebreak (sooner wins). A wrong answer
+  // doesn't move it, so missing faster never beats matching the score.
   lastClearMs: Map<PlayerId, number>
 }
 
@@ -114,9 +116,15 @@ export class MemoryFlash implements MiniGame<MemoryFlashState, MemoryFlashInput>
     if (ptr === undefined || ptr >= state.boards.length || input.level !== ptr) return state
     if (input.value === state.answers[ptr]) {
       state.correct.set(playerId, (state.correct.get(playerId) ?? 0) + 1)
+      state.lastClearMs.set(playerId, now - state.startedAt)
     }
     state.pointer.set(playerId, ptr + 1)
-    state.lastClearMs.set(playerId, now - state.startedAt)
+    return state
+  }
+
+  // A player who left is done: skip them to the end so the round can finish once everyone else is.
+  leave(state: MemoryFlashState, playerId: PlayerId, _now: number): MemoryFlashState {
+    if (state.pointer.has(playerId)) state.pointer.set(playerId, state.boards.length)
     return state
   }
 

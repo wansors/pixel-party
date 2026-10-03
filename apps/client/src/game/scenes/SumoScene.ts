@@ -1,9 +1,15 @@
 import { PALETTE, type SumoBody, type SumoSnapshot } from '@pp/shared'
 import type Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
-import { addBanner, burst, flash, floatText, ring, shake, showBanner } from '../fx'
+import { addBanner, burst, flash, floatText, punch, ring, shake, showBanner } from '../fx'
 import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
-import { bodyStyle, ensurePixelGrid, fitFontSize, headlineStyle } from '../pixelStyle'
+import {
+  bodyStyle,
+  ensurePixelGrid,
+  ensurePixelOrb,
+  fitFontSize,
+  headlineStyle,
+} from '../pixelStyle'
 import { YouMarker, addShadow, nameTagStyle } from '../playerMarks'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -13,6 +19,9 @@ const PLAYER_R = 0.05
 const DEFAULT_RING = 0.42
 const CONTACT = PLAYER_R * 2 * 1.3
 const IMPACT_COOLDOWN_MS = 400
+// The server's dash cooldown, plus a little so a press it would still refuse is never sent.
+const DASH_COOLDOWN_MS = 1500 + 50
+const SEND_EVERY_MS = 60
 
 // Order-independent id for a pair of wrestlers (per-pair contact / cooldown tracking).
 function pairKey(a: SumoBody, b: SumoBody): string {
@@ -66,9 +75,10 @@ interface Rikishi {
 }
 
 // Sumo Push canvas (Phase 5). Shared arena: every wrestler is rendered from the snapshot (interpolated
-// by id) on a pixel dohyo drawn to the server's exact ring size; the player steers their own with a
-// drag vector from the ring centre (or the arrow keys). Shoves, ring-outs and the last one standing
-// are derived from snapshot deltas.
+// by id) on a pixel dohyo drawn to the server's exact ring size, which shrinks over the round; the
+// player steers their own with a drag vector from the ring centre (or the arrow keys) and dashes with
+// Space or the DASH button (a second finger on touch). Shoves, dashes, ring-outs and the last one
+// standing are derived from snapshot deltas.
 export class SumoScene extends MiniGameScene<SumoSnapshot> {
   private dohyo?: Phaser.GameObjects.Image
   private shadow?: Phaser.GameObjects.Rectangle
@@ -82,14 +92,23 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
   private prevSnap?: SumoSnapshot
   private pairDist = new Map<string, number>()
   private impactAt = new Map<string, number>()
-  private wrestlerKeys = new Map<number, string>()
   private lastTick = -1
   private dir = { dx: 0, dy: 0 }
-  // Where the held pointer is: every frame the push direction is re-aimed from the player's own
-  // wrestler toward it, so "hold where you want to go" keeps working as the wrestler moves.
+  // Where the held pointer is (and which pointer steers): every frame the push direction is re-aimed
+  // from the player's own wrestler toward it, so "hold where you want to go" keeps working as the
+  // wrestler moves.
   private aim?: { x: number; y: number }
+  private steerPointer = -1
   private keyDriven = false
   private lastSentAt = 0
+  private sentDir = ''
+  // The DASH button: its orb (the touch target) and the whole button (shadow + orb + label).
+  private dashBtn?: Phaser.GameObjects.Image
+  private dashUi?: Phaser.GameObjects.Container
+  private dashReadyAt = 0
+  private dashReady = true
+  // Joined after the round started (not in its snapshot): watch only.
+  private spectating = false
   private synced = false
   private wasAlive = true
   private won = false
@@ -110,7 +129,12 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     this.lastTick = -1
     this.dir = { dx: 0, dy: 0 }
     this.aim = undefined
+    this.steerPointer = -1
     this.keyDriven = false
+    this.sentDir = ''
+    this.dashReadyAt = 0
+    this.dashReady = true
+    this.spectating = false
     this.synced = false
     this.wasAlive = true
     this.won = false
@@ -184,16 +208,81 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
       .setDepth(950)
       .setVisible(false)
 
+    this.buildDashButton(width, height, hintH, pad)
     this.cursors = this.input.keyboard?.createCursorKeys()
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.steer(p))
+    this.onKey('SPACE', () => this.dash())
+    // Steer with one finger, dash with another.
+    this.input.addPointer(1)
+    this.input.on(
+      'pointerdown',
+      (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
+        if (this.dashBtn && over.includes(this.dashBtn)) return
+        this.steerPointer = p.id
+        this.steer(p)
+      },
+    )
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (p.isDown) this.steer(p)
+      if (p.isDown && p.id === this.steerPointer) this.steer(p)
     })
-    this.input.on('pointerup', () => {
+    this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
+      if (p.id !== this.steerPointer) return
+      this.steerPointer = -1
       this.aim = undefined
       this.dir = { dx: 0, dy: 0 }
-      this.sendInput({ kind: 'move', dx: 0, dy: 0 })
     })
+  }
+
+  // A round DASH button in the bottom-right corner (Space does the same); greyed while it recharges.
+  private buildDashButton(width: number, height: number, hintH: number, pad: number): void {
+    const d = this.compact ? 64 : 80
+    const shadow = this.add.ellipse(0, d * 0.42, d * 0.95, d * 0.26, 0x000000).setAlpha(0.4)
+    this.dashBtn = this.add
+      .image(0, 0, ensurePixelOrb(this, 'pp-sumo-dash', 16, PALETTE.magenta))
+      .setDisplaySize(d, d)
+      .setInteractive({ useHandCursor: true })
+    this.dashBtn.on('pointerdown', () => this.dash())
+    const label = this.add
+      .text(
+        0,
+        0,
+        this.t('game.sumoPush.dash'),
+        bodyStyle(this.compact ? 11 : 13, PALETTE.bg, { fontStyle: 'bold' }),
+      )
+      .setOrigin(0.5)
+    this.dashUi = this.add
+      .container(width - pad - d / 2, height - hintH - pad - d / 2, [shadow, this.dashBtn, label])
+      .setDepth(40)
+  }
+
+  // Charge toward where you push (the server ignores a dash with no direction, or still recharging).
+  private dash(): void {
+    const now = this.time.now
+    if (this.spectating || !this.wasAlive || now < this.dashReadyAt || !this.hasDir()) return
+    this.pushDir(now, true)
+    this.sendInput({ kind: 'dash' })
+    this.dashReadyAt = now + DASH_COOLDOWN_MS
+    this.setDashReady(false)
+    this.sfx.pad(3)
+  }
+
+  private setDashReady(ready: boolean): void {
+    if (ready === this.dashReady || !this.dashUi) return
+    this.dashReady = ready
+    this.dashUi.setAlpha(ready ? 1 : 0.4)
+    if (ready && this.dashBtn) punch(this, this.dashBtn, 0.12, 90)
+  }
+
+  // Sends the push direction when it changes (a unit vector, rounded so jitter doesn't spam), never as
+  // a heartbeat: an idle player sends nothing.
+  private pushDir(now: number, force = false): void {
+    const mag = Math.hypot(this.dir.dx, this.dir.dy)
+    const dx = mag > 0 ? Math.round((this.dir.dx / mag) * 20) / 20 : 0
+    const dy = mag > 0 ? Math.round((this.dir.dy / mag) * 20) / 20 : 0
+    const key = `${dx},${dy}`
+    if (key === this.sentDir || (!force && now - this.lastSentAt < SEND_EVERY_MS)) return
+    this.sentDir = key
+    this.lastSentAt = now
+    this.sendInput({ kind: 'move', dx, dy })
   }
 
   // Scales the dohyo so its bale ring sits exactly on the snapshot's ring radius.
@@ -241,10 +330,8 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     } else if (this.aim) {
       this.dir = this.aimFromSelf(this.aim)
     }
-    if (now - this.lastSentAt > 60) {
-      this.lastSentAt = now
-      this.sendInput({ kind: 'move', dx: this.dir.dx, dy: this.dir.dy })
-    }
+    if (!this.spectating && this.wasAlive) this.pushDir(now)
+    if (!this.dashReady && now >= this.dashReadyAt) this.setDashReady(true)
 
     this.renderBodies(now)
   }
@@ -252,10 +339,6 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
   // Discrete events per fresh snapshot: shoves (a pair's distance dips into contact), ring-outs, the
   // last one standing.
   private onSnapshot(snap: SumoSnapshot, now: number): void {
-    if (snap.ring !== this.ringR) {
-      this.ringR = snap.ring
-      this.fitDohyo()
-    }
     const alive = snap.bodies.filter((b) => b.alive)
     this.hud?.setScore(
       this.t('game.sumoPush.alive', { n: alive.length, total: snap.bodies.length }),
@@ -266,6 +349,11 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
 
     if (!this.synced) {
       this.synced = true
+      this.spectating = !me
+      if (this.spectating) {
+        this.wasAlive = false
+        this.dashUi?.setVisible(false)
+      }
       for (const b of snap.bodies) {
         if (b.alive) continue
         const body = this.bodyOf(b)
@@ -297,6 +385,7 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
         this.checkImpact(alive[i] as SumoBody, alive[j] as SumoBody, now)
       }
     }
+    for (const b of alive) if (b.dashing && !prevById.get(b.id)?.dashing) this.onDash(b)
 
     for (const b of snap.bodies) {
       const before = prevById.get(b.id)
@@ -333,6 +422,15 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     }
   }
 
+  // Someone charges: a dust streak behind them (and a whoosh when it's you).
+  private onDash(b: SumoBody): void {
+    const body = this.bodies.get(b.id)
+    if (!body) return
+    burst(this, body.px, body.py, 0xe6cf9f, 10, 140)
+    ring(this, body.px, body.py, body.color, this.arena.size * PLAYER_R * 2)
+    if (b.id === this.selfId) shake(this, 0.004, 90)
+  }
+
   private ringOut(b: SumoBody): void {
     const body = this.bodyOf(b)
     body.out = true
@@ -349,6 +447,7 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     body.out = true
     this.wasAlive = false
     this.marker?.hide()
+    this.dashUi?.setVisible(false)
     if (withFx) {
       const p = this.toScreen(b.x, b.y)
       this.sfx.wrong()
@@ -423,6 +522,12 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     const sample = this.interp.sample(now)
     this.arrow?.clear()
     if (!sample) return
+    // The ring closes in smoothly between snapshots.
+    const ringR = lerp(sample.from.ring, sample.to.ring, sample.t)
+    if (ringR !== this.ringR) {
+      this.ringR = ringR
+      this.fitDohyo()
+    }
     const fromById = new Map(sample.from.bodies.map((b) => [b.id, b]))
     const radius = this.arena.size * PLAYER_R
     for (const b of sample.to.bodies) {

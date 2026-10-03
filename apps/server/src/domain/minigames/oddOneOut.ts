@@ -1,4 +1,9 @@
-import type { OddOneOutBoard, OddOneOutInput, OddOneOutSnapshot } from '@pp/shared'
+import {
+  ODD_ONE_OUT_WRONG_COOLDOWN_MS,
+  type OddOneOutBoard,
+  type OddOneOutInput,
+  type OddOneOutSnapshot,
+} from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 40_000
@@ -13,11 +18,16 @@ export interface OddOneOutState {
   level: Map<PlayerId, number>
   // playerId -> ms at the player's last clear, to break ties (faster = better).
   lastClearMs: Map<PlayerId, number>
+  // playerId -> time until which that player's taps are ignored (wrong-tile penalty).
+  cooldownUntil: Map<PlayerId, number>
+  // Players gone mid-round: the "everybody cleared every board" early out stops waiting for them.
+  gone: Set<PlayerId>
 }
 
 // Real-time FFA "spot the different tile". A seeded sequence of boards (grid grows, brightness gap
 // shrinks) is shared by everyone; each player advances at their own pace. The odd tile differs in
-// brightness — not hue alone — so it is solvable without color discrimination. Pure domain logic.
+// brightness — not hue alone — so it is solvable without color discrimination. A wrong tile costs a
+// short tap cooldown, so hunting by tapping everything is slower than looking. Pure domain logic.
 export class OddOneOut implements MiniGame<OddOneOutState, OddOneOutInput> {
   readonly id = 'odd-one-out'
   readonly format = 'ffa' as const
@@ -55,6 +65,8 @@ export class OddOneOut implements MiniGame<OddOneOutState, OddOneOutInput> {
       endsAt: ctx.now + durationMs,
       level: new Map(ctx.players.map((id) => [id, 0])),
       lastClearMs: new Map(ctx.players.map((id) => [id, 0])),
+      cooldownUntil: new Map(ctx.players.map((id) => [id, 0])),
+      gone: new Set(),
     }
   }
 
@@ -69,17 +81,27 @@ export class OddOneOut implements MiniGame<OddOneOutState, OddOneOutInput> {
     if (now >= state.endsAt) return state
     const lvl = state.level.get(playerId)
     if (lvl === undefined || lvl >= state.boards.length || input.level !== lvl) return state
+    if (now < (state.cooldownUntil.get(playerId) ?? 0)) return state
     const board = state.boards[lvl] as OddOneOutBoard
-    // Wrong tile is ignored — no penalty, just keep hunting.
-    if (input.cell !== board.oddCell) return state
+    if (input.cell !== board.oddCell) {
+      state.cooldownUntil.set(playerId, now + ODD_ONE_OUT_WRONG_COOLDOWN_MS)
+      return state
+    }
     state.level.set(playerId, lvl + 1)
     state.lastClearMs.set(playerId, now - state.startedAt)
     return state
   }
 
+  leave(state: OddOneOutState, playerId: PlayerId): OddOneOutState {
+    state.gone.add(playerId)
+    return state
+  }
+
   isFinished(state: OddOneOutState, now: number): boolean {
     if (now >= state.endsAt) return true
-    return state.players.every((id) => (state.level.get(id) ?? 0) >= state.boards.length)
+    return state.players.every(
+      (id) => state.gone.has(id) || (state.level.get(id) ?? 0) >= state.boards.length,
+    )
   }
 
   getResult(state: OddOneOutState): NormalizedResult {
@@ -106,13 +128,16 @@ export class OddOneOut implements MiniGame<OddOneOutState, OddOneOutInput> {
 
   snapshot(state: OddOneOutState, now: number): OddOneOutSnapshot {
     const boards: Record<PlayerId, OddOneOutBoard | null> = {}
+    const cooldowns: Record<PlayerId, number> = {}
     for (const id of state.players) {
       const lvl = state.level.get(id) ?? 0
       boards[id] = state.boards[lvl] ?? null
+      cooldowns[id] = Math.max(0, (state.cooldownUntil.get(id) ?? 0) - now)
     }
     return {
       boards,
       scores: Object.fromEntries(state.level),
+      cooldowns,
       remainingMs: Math.max(0, state.endsAt - now),
     }
   }

@@ -78,6 +78,13 @@ export class PixelHoops implements MiniGame<PixelHoopsState, PixelHoopsInput> {
     return state
   }
 
+  // A player who left is done: skip them past the last shot so the round can finish once everyone else
+  // is.
+  leave(state: PixelHoopsState, playerId: PlayerId, _now: number): PixelHoopsState {
+    if (state.pointer.has(playerId)) state.pointer.set(playerId, state.shots.length)
+    return state
+  }
+
   isFinished(state: PixelHoopsState, now: number): boolean {
     if (now >= state.endsAt) return true
     return state.players.every((id) => (state.pointer.get(id) ?? 0) >= state.shots.length)

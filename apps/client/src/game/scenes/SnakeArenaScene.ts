@@ -280,7 +280,8 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
     this.started = true
     const me = snap.snakes[this.selfId]
     const myFood = snap.food[this.selfId]
-    this.hud?.setScore(this.t('game.snakeArena.length', { n: me?.len ?? 0 }))
+    // A spectator (joined mid-round) has no snake: just the rivals' boards.
+    if (me) this.hud?.setScore(this.t('game.snakeArena.length', { n: me.len }))
     if (this.rivals.length === 0) this.buildRivals(snap)
     this.renderRivals(snap, first)
 

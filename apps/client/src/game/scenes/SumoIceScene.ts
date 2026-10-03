@@ -66,6 +66,8 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
   private wasd?: Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>
   private aim?: { x: number; y: number }
   private aimPointer = -1
+  // Nothing is sent until you steer for the first time (an untouched seat must stay idle).
+  private steered = false
   private sentDir = ''
   private sentAt = 0
   private lastTick = -1
@@ -88,6 +90,7 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
     this.views = new Map()
     this.aim = undefined
     this.aimPointer = -1
+    this.steered = false
     this.sentDir = ''
     this.sentAt = 0
     this.lastTick = -1
@@ -161,7 +164,7 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
       this.interp.push(snap, time)
       this.onSnapshot(snap, time)
     }
-    this.steer(time)
+    this.steer(snap, time)
     this.paintTiles(snap, time)
     this.paintBodies(time)
   }
@@ -221,7 +224,8 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
     this.tiles = next
   }
 
-  private steer(time: number): void {
+  private steer(snap: SumoIceSnapshot, time: number): void {
+    if (!snap.bodies.some((b) => b.id === this.selfId && b.alive)) return
     const keys = this.cursors
     const w = this.wasd
     const kx =
@@ -234,6 +238,8 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
       const dy = this.aim.y - (me?.y ?? this.arena.cy)
       dir = Math.hypot(dx, dy) < this.avatarPx * 0.4 ? { dx: 0, dy: 0 } : { dx, dy }
     }
+    if (kx !== 0 || ky !== 0 || this.aim) this.steered = true
+    if (!this.steered) return
     const mag = Math.hypot(dir.dx, dir.dy)
     const key =
       mag < 0.001 ? '0' : `${Math.round((dir.dx / mag) * 20)},${Math.round((dir.dy / mag) * 20)}`

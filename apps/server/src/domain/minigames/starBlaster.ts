@@ -30,6 +30,8 @@ interface Arena {
   shieldUntil: number
   score: number
   out: boolean
+  // The guns come online with the player's first steer (an idle seat never fires, never scores).
+  armed: boolean
   killedAt: Map<number, number>
   hp: Map<number, number>
   shots: Shot[]
@@ -49,8 +51,8 @@ export interface StarBlasterState {
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 
 // Real-time FFA vertical shmup. Deterministic: one seed (from the round's Random) builds the shared
-// attack script both apps evaluate; per player the server integrates the ship and its auto-fire,
-// resolves hits on enemies and on the ship. Ranked by score.
+// attack script both apps evaluate; per player the server integrates the ship and its auto-fire (from
+// the first steer on), resolves hits on enemies and on the ship. Ranked by score.
 export class StarBlaster implements MiniGame<StarBlasterState, StarBlasterInput> {
   readonly id = 'star-blaster'
   readonly format = 'ffa' as const
@@ -72,6 +74,7 @@ export class StarBlaster implements MiniGame<StarBlasterState, StarBlasterInput>
         shieldUntil: 0,
         score: 0,
         out: false,
+        armed: false,
         killedAt: new Map(),
         hp: new Map(),
         shots: [],
@@ -96,6 +99,10 @@ export class StarBlaster implements MiniGame<StarBlasterState, StarBlasterInput>
     const mag = Math.hypot(input.dx, input.dy)
     a.dx = mag < 0.001 ? 0 : input.dx / mag
     a.dy = mag < 0.001 ? 0 : input.dy / mag
+    if (!a.armed && mag >= 0.001) {
+      a.armed = true
+      a.nextShotAt = now - state.startedAt
+    }
     return state
   }
 
@@ -106,8 +113,8 @@ export class StarBlaster implements MiniGame<StarBlasterState, StarBlasterInput>
       if (a.out) continue
       a.x = Math.max(STAR.shipR, Math.min(STAR.w - STAR.shipR, a.x + a.dx * STAR.shipSpeed * step))
       a.y = Math.max(SHIP_MIN_Y, Math.min(STAR.h - STAR.shipR, a.y + a.dy * STAR.shipSpeed * step))
-      // Auto-fire.
-      while (a.nextShotAt <= t) {
+      // Auto-fire, once armed.
+      while (a.armed && a.nextShotAt <= t) {
         a.shots.push({ x: a.x, y: a.y - 0.03 })
         a.nextShotAt += STAR.shotEveryMs
       }
@@ -170,12 +177,21 @@ export class StarBlaster implements MiniGame<StarBlasterState, StarBlasterInput>
     a.lives -= 1
     a.score = Math.max(0, a.score - STAR.hitPenalty)
     a.shieldUntil = t + STAR.shieldMs
-    if (a.lives <= 0) {
-      a.out = true
-      a.shots = []
-      a.dx = 0
-      a.dy = 0
-    }
+    if (a.lives <= 0) this.knockOut(a)
+  }
+
+  private knockOut(a: Arena): void {
+    a.out = true
+    a.shots = []
+    a.dx = 0
+    a.dy = 0
+  }
+
+  // A player who left is out: their ship leaves the fight, so it can't hold the round open.
+  leave(state: StarBlasterState, playerId: PlayerId): StarBlasterState {
+    const a = state.arenas.find((x) => x.id === playerId)
+    if (a) this.knockOut(a)
+    return state
   }
 
   isFinished(state: StarBlasterState, now: number): boolean {
@@ -210,6 +226,7 @@ export class StarBlaster implements MiniGame<StarBlasterState, StarBlasterInput>
         shielded: t < a.shieldUntil,
         score: a.score,
         out: a.out,
+        armed: a.armed,
         killed: [...a.killedAt].filter(([id]) => (ends.get(id) ?? 0) + KILL_MEMORY_MS > t),
         hp: [...a.hp],
         consumed: [...a.consumed],

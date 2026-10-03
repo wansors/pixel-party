@@ -194,6 +194,8 @@ export interface CourseCar {
   splitMs: number | null
   draft: boolean
   boost: boolean
+  // The driver left the round: the car is a ghost that blocks no one.
+  gone: boolean
 }
 
 export interface CourseRaceSnapshot {

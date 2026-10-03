@@ -60,4 +60,14 @@ describe('Roulette', () => {
     expect(result.ranks?.p).toBe(1)
     expect(nn(result.stats).q).toBe('51')
   })
+
+  test('a leaver counts as spun, so the round ends once everyone else has spun', () => {
+    const game = new Roulette()
+    let s = init(['p', 'gone'], seq(0, 0.5))
+    s = game.onInput(s, 'p', { kind: 'spin' }, 100)
+    expect(game.isFinished(s, 100)).toBe(false)
+    s = game.leave(s, 'gone', 200)
+    expect(game.isFinished(s, 200)).toBe(true)
+    expect(game.snapshot(s, 200).values.gone).toBe(51)
+  })
 })

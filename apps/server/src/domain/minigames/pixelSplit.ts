@@ -11,7 +11,9 @@ import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './Mi
 
 const DEFAULT_DURATION_MS = 40_000
 const LEVELS = 8
-// Points for a cut as balanced as the object allows; each pixel worse than optimal costs one point.
+// Points for a cut as balanced as the object allows. Worse cuts earn partial credit in proportion to how
+// close they are: the points fall off linearly with the extra imbalance (pixels on the wrong side beyond
+// the best cut's), reaching 0 at a 3:1 split — so one column off still scores about half, not nothing.
 const MAX_SCORE_PER = 10
 
 interface Puzzle {
@@ -39,6 +41,11 @@ export function placeObject(src: PixelObject, random: Random): PixelObject {
     .map((c) => ({ x: offset + (mirror ? maxX - c.x : c.x - minX), y: c.y }))
     .sort((a, b) => a.y - b.y || a.x - b.x)
   return { name: src.name, cols: span + slack, rows: src.rows, cells, count: cells.length }
+}
+
+// Points for a cut `excess` pixels of imbalance worse than the best one, on an object of `total` pixels.
+export function splitPoints(excess: number, total: number): number {
+  return Math.floor(MAX_SCORE_PER * Math.max(0, 1 - excess / (total / 2)))
 }
 
 export interface PixelSplitState {
@@ -121,10 +128,16 @@ export class PixelSplit implements MiniGame<PixelSplitState, PixelSplitInput> {
     for (let x = 0; x < cut; x++) left += puzzle.cols[x] ?? 0
     const error = Math.abs(left - (puzzle.total - left))
     // Reward closeness to the best possible split, not to a perfect (often unreachable) even split.
-    const points = Math.max(0, MAX_SCORE_PER - (error - puzzle.minError))
+    const points = splitPoints(error - puzzle.minError, puzzle.total)
     state.score.set(playerId, (state.score.get(playerId) ?? 0) + points)
     state.pointer.set(playerId, ptr + 1)
     state.lastClearMs.set(playerId, now - state.startedAt)
+    return state
+  }
+
+  // A player who left is done: skip them to the end so the round can finish once everyone else is.
+  leave(state: PixelSplitState, playerId: PlayerId, _now: number): PixelSplitState {
+    if (state.pointer.has(playerId)) state.pointer.set(playerId, state.puzzles.length)
     return state
   }
 

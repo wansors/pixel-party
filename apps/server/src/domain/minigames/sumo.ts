@@ -3,13 +3,27 @@ import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './Mi
 
 const DEFAULT_DURATION_MS = 30_000
 const CENTER = 0.5
+// The ring holds its size for the first SHRINK_FROM of the round, then closes in linearly to RING_END —
+// narrower than a wrestler, so even a bout of centre-huggers ends with one left.
 const RING_R = 0.42
+const RING_END = 0.04
+const SHRINK_FROM = 0.4
 const PLAYER_R = 0.05
 const SPAWN_R = 0.22 // players start on a circle this far from the centre
 const ACCEL = 1.4 // normalized units / s²
+// Top speed under your own steam. A shove or a dash can carry you faster (friction bleeds it off), up
+// to HARD_MAX_SPEED.
 const MAX_SPEED = 0.7
-const RESTITUTION = 1.25 // >1 gives shoves an exaggerated, punchy feel
+const HARD_MAX_SPEED = 1.4
+// Collisions swap the bodies' approach speeds (equal masses, elastic): a dash's momentum goes into the
+// one it hits. Above 1 they'd add energy, and two dashers would launch each other out.
+const RESTITUTION = 1.0
 const FRICTION = 2.0 // velocity decay coefficient (per second)
+// Dash: a burst to DASH_SPEED toward where you push, once per DASH_COOLDOWN_MS — the way to knock a
+// centre-holder out (and to fly out yourself if you miss). DASH_MS is how long it shows as a dash.
+const DASH_SPEED = 1.2
+export const DASH_COOLDOWN_MS = 1500
+const DASH_MS = 250
 
 interface Body {
   x: number
@@ -21,6 +35,7 @@ interface Body {
   ay: number
   alive: boolean
   outAt: number // ms when eliminated (0 = still in)
+  dashAt: number // ms of the last dash (0 = never)
 }
 
 export interface SumoState {
@@ -31,7 +46,8 @@ export interface SumoState {
 }
 
 // Real-time FFA sumo arena. Deterministic: initial ring positions use one seeded rotation offset, then
-// all motion is pure physics driven by `dt`/`now` (no RNG in tick). Ranked by survival time.
+// all motion is pure physics driven by `dt`/`now` (no RNG in tick). The ring shrinks over the round and
+// a dash can launch anyone out of it, so holding the centre isn't a lock. Ranked by survival time.
 export class Sumo implements MiniGame<SumoState, SumoInput> {
   readonly id = 'sumo-push'
   readonly format = 'ffa' as const
@@ -53,16 +69,26 @@ export class Sumo implements MiniGame<SumoState, SumoInput> {
         ay: 0,
         alive: true,
         outAt: 0,
+        dashAt: 0,
       })
     })
     return { players: [...ctx.players], bodies, startedAt: ctx.now, endsAt: ctx.now + durationMs }
   }
 
+  // The ring's radius at `now`.
+  ringAt(state: SumoState, now: number): number {
+    const span = state.endsAt - state.startedAt
+    const progress = span > 0 ? (now - state.startedAt) / span : 0
+    const shrink = Math.max(0, Math.min(1, (progress - SHRINK_FROM) / (1 - SHRINK_FROM)))
+    return RING_R + (RING_END - RING_R) * shrink
+  }
+
   onInput(state: SumoState, playerId: PlayerId, input: SumoInput, now: number): SumoState {
-    if (input.kind !== 'move') return state
     if (now < state.startedAt || now >= state.endsAt) return state
     const body = state.bodies.get(playerId)
     if (!body || !body.alive) return state
+    if (input.kind === 'dash') return this.dash(state, body, now)
+    if (input.kind !== 'move') return state
     const { dx, dy } = input
     if (typeof dx !== 'number' || typeof dy !== 'number' || !Number.isFinite(dx + dy)) return state
     const mag = Math.hypot(dx, dy)
@@ -76,18 +102,34 @@ export class Sumo implements MiniGame<SumoState, SumoInput> {
     return state
   }
 
+  // Launch toward where the player is pushing, cooldown permitting (no push direction, no dash).
+  private dash(state: SumoState, body: Body, now: number): SumoState {
+    if (body.dashAt > 0 && now - body.dashAt < DASH_COOLDOWN_MS) return state
+    if (body.ax === 0 && body.ay === 0) return state
+    body.vx = body.ax * DASH_SPEED
+    body.vy = body.ay * DASH_SPEED
+    body.dashAt = now
+    return state
+  }
+
   tick(state: SumoState, dt: number, now: number): SumoState {
     const step = dt / 1000
     const live = state.players.map((p) => state.bodies.get(p)).filter((b): b is Body => !!b?.alive)
-    // Integrate motion.
+    // Integrate motion. Steering can't push you past MAX_SPEED, but momentum from a dash or a shove
+    // isn't clipped to it — friction bleeds it off.
     for (const b of live) {
-      b.vx = (b.vx + b.ax * ACCEL * step) * Math.max(0, 1 - FRICTION * step)
-      b.vy = (b.vy + b.ay * ACCEL * step) * Math.max(0, 1 - FRICTION * step)
+      const before = Math.hypot(b.vx, b.vy)
+      b.vx += b.ax * ACCEL * step
+      b.vy += b.ay * ACCEL * step
       const sp = Math.hypot(b.vx, b.vy)
-      if (sp > MAX_SPEED) {
-        b.vx = (b.vx / sp) * MAX_SPEED
-        b.vy = (b.vy / sp) * MAX_SPEED
+      const cap = Math.min(HARD_MAX_SPEED, Math.max(MAX_SPEED, before))
+      if (sp > cap) {
+        b.vx = (b.vx / sp) * cap
+        b.vy = (b.vy / sp) * cap
       }
+      const drag = Math.max(0, 1 - FRICTION * step)
+      b.vx *= drag
+      b.vy *= drag
       b.x += b.vx * step
       b.y += b.vy * step
     }
@@ -98,8 +140,9 @@ export class Sumo implements MiniGame<SumoState, SumoInput> {
       }
     }
     // Ring eliminations.
+    const ring = this.ringAt(state, now)
     for (const b of live) {
-      if (Math.hypot(b.x - CENTER, b.y - CENTER) > RING_R) {
+      if (Math.hypot(b.x - CENTER, b.y - CENTER) > ring) {
         b.alive = false
         b.outAt = now
       }
@@ -130,6 +173,16 @@ export class Sumo implements MiniGame<SumoState, SumoInput> {
     a.vy += imp * ny
     b.vx -= imp * nx
     b.vy -= imp * ny
+  }
+
+  // A wrestler whose player is gone steps out of the ring: the bout carries on without a statue in it.
+  leave(state: SumoState, playerId: PlayerId, now: number): SumoState {
+    const body = state.bodies.get(playerId)
+    if (body?.alive) {
+      body.alive = false
+      body.outAt = now
+    }
+    return state
   }
 
   isFinished(state: SumoState, now: number): boolean {
@@ -164,8 +217,13 @@ export class Sumo implements MiniGame<SumoState, SumoInput> {
   snapshot(state: SumoState, now: number): SumoSnapshot {
     const bodies = state.players.map((pid) => {
       const b = state.bodies.get(pid) as Body
-      return { id: pid, x: b.x, y: b.y, alive: b.alive }
+      const dashing = b.dashAt > 0 && now - b.dashAt < DASH_MS
+      return { id: pid, x: b.x, y: b.y, alive: b.alive, dashing }
     })
-    return { ring: RING_R, bodies, remainingMs: Math.max(0, state.endsAt - now) }
+    return {
+      ring: this.ringAt(state, now),
+      bodies,
+      remainingMs: Math.max(0, state.endsAt - now),
+    }
   }
 }

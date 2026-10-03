@@ -12,6 +12,7 @@ const LOCKED_COLOR = shade(PALETTE.lime, -0.7)
 const KEY_COLOR = shade(PALETTE.cyan, -0.4)
 const CLEAR_COLOR = shade(PALETTE.red, -0.35)
 const PRESS_PX = 4
+// The strip shows the leaders, always including you (you take the last chip when you're further back).
 const MAX_CHIPS = 6
 
 type CellLook = 'given' | 'open' | 'wrong' | 'locked'
@@ -118,6 +119,7 @@ export class SudokuRaceScene extends MiniGameScene<SudokuSnapshot> {
       stripTop + PlayerStrip.rowH(chipSize) / 2,
       width - 32,
       chipSize,
+      stripRows,
     )
     const ruleY = stripTop - (compact ? 14 : 18)
     this.rule = this.add
@@ -228,16 +230,15 @@ export class SudokuRaceScene extends MiniGameScene<SudokuSnapshot> {
     return this.snap?.boards[this.selfId]
   }
 
-  private editable(snap: SudokuSnapshot, board: SudokuBoard, i: number): boolean {
-    return !board.done && !snap.given[i] && !board.lockedMask[i]
+  private editable(board: SudokuBoard, i: number): boolean {
+    return !board.done && !board.given[i] && !board.lockedMask[i]
   }
 
   private select(index: number, byTap: boolean): void {
-    const snap = this.snap
     const board = this.board()
     const cell = this.cells[index]
-    if (!snap || !board || !cell) return
-    if (!this.editable(snap, board, index)) {
+    if (!board || !cell) return
+    if (!this.editable(board, index)) {
       if (byTap) {
         this.sfx.tick()
         this.wiggle(cell)
@@ -251,13 +252,12 @@ export class SudokuRaceScene extends MiniGameScene<SudokuSnapshot> {
 
   // First editable cell at or after `from` (wrapping), or -1 when none is left.
   private nextEditable(from: number): number {
-    const snap = this.snap
     const board = this.board()
-    if (!snap || !board) return -1
+    if (!board) return -1
     const total = this.cells.length
     for (let k = 0; k < total; k++) {
       const i = (((from + k) % total) + total) % total
-      if (this.editable(snap, board, i)) return i
+      if (this.editable(board, i)) return i
     }
     return -1
   }
@@ -320,7 +320,7 @@ export class SudokuRaceScene extends MiniGameScene<SudokuSnapshot> {
       col += dx
       row += dy
       if (col < 0 || col >= n || row < 0 || row >= n) return
-      if (this.editable(snap, board, row * n + col)) {
+      if (this.editable(board, row * n + col)) {
         this.select(row * n + col, false)
         return
       }
@@ -358,16 +358,27 @@ export class SudokuRaceScene extends MiniGameScene<SudokuSnapshot> {
     const me = this.selfId
     const board = snap.boards[me]
     const blanks = snap.blanksCount
-    const chips = Object.entries(snap.boards)
-      .sort((a, b) => b[1].correctCount - a[1].correctCount)
-      .slice(0, MAX_CHIPS)
-      .map(([id, b]) => {
+    const ranked = Object.entries(snap.boards).sort((a, b) => b[1].correctCount - a[1].correctCount)
+    const shown = ranked.slice(0, MAX_CHIPS)
+    const mine = ranked.find(([id]) => id === me)
+    if (mine && !shown.includes(mine)) shown[shown.length - 1] = mine
+    this.strip?.set(
+      shown.map(([id, b]) => {
         const name = this.label(id).slice(0, 10).toUpperCase()
-        const text = `${name} ${b.correctCount}/${blanks}${b.done ? ' ✓' : ''}`
+        // The ✓ hugs the count, so a clipped name never cuts the stat.
+        const text = `${name} ${b.correctCount}/${blanks}${b.done ? '✓' : ''}`
         return { text, avatar: this.state.avatarOf(id), color: this.state.colorOf(id) }
-      })
-    this.strip?.set(chips)
-    if (!board) return
+      }),
+    )
+    if (!board) {
+      // A spectator (not in this round): an empty board to look at, nothing to fill.
+      if (fresh && this.prompt) {
+        this.prompt.setText(this.t('game.common.waiting'))
+        fitText(this.prompt, this.scale.width - 32, this.promptSize)
+        for (const k of this.keys) for (const o of [k.shadow, k.face, k.label]) o.setAlpha(0.35)
+      }
+      return
+    }
     this.hud?.setScore(`${board.correctCount}/${blanks}`)
 
     // Cooldown: re-anchored to local time on every fresh snapshot so the bar drains smoothly between
@@ -382,12 +393,12 @@ export class SudokuRaceScene extends MiniGameScene<SudokuSnapshot> {
       this.lastCooldownMs = board.cooldownMs
     }
 
-    this.renderCells(snap, board, fresh)
+    this.renderCells(board, fresh)
     if (board.correctCount > this.prevCorrect && !fresh) this.sfx.correct()
     this.prevCorrect = board.correctCount
 
     // Once the selected cell locks (or the board changes under it), hop to the next open cell.
-    if (this.selected >= 0 && !this.editable(snap, board, this.selected)) {
+    if (this.selected >= 0 && !this.editable(board, this.selected)) {
       this.selected = this.nextEditable(this.selected + 1)
     }
 
@@ -396,9 +407,9 @@ export class SudokuRaceScene extends MiniGameScene<SudokuSnapshot> {
     this.renderSelection(snap, time)
   }
 
-  private renderCells(snap: SudokuSnapshot, board: SudokuBoard, fresh: boolean): void {
+  private renderCells(board: SudokuBoard, fresh: boolean): void {
     this.cells.forEach((cell, i) => {
-      const given = snap.given[i] ?? 0
+      const given = board.given[i] ?? 0
       const value = given || board.grid[i] || 0
       const locked = board.lockedMask[i] ?? false
       let look: CellLook = 'open'

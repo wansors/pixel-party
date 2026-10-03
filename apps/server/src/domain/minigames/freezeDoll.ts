@@ -5,6 +5,7 @@ import {
   type FreezeDollMode,
   type FreezeDollSnapshot,
   type FreezeDollStatus,
+  freezeDollSweepAt,
 } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
@@ -33,6 +34,8 @@ interface Segment {
   // GREEN: when the chant (re)started, offset for any fake-out pause. TURN: chant position, frozen.
   songFrom: number
   songFrozen: number
+  // RED: the lane the laser sweep starts at, and its direction.
+  sweepFrom: number
   dir: 1 | -1
 }
 
@@ -71,8 +74,9 @@ const glideMs = (v: number): number =>
     : lerp(WALK_GLIDE_MS, RUN_GLIDE_MS, Math.min(1, (v - WALK) / (RUN - WALK)))
 
 // Real-time FFA "Red Light, Green Light". Deterministic: lanes and the whole doll timeline (chant
-// tempos, fake-outs, sudden spins, RED lengths, sweep directions) are drawn from the seeded Random at
-// init — the light at any instant is a pure function of time; tick integrates movement and judges hits.
+// tempos, fake-outs, sudden spins, RED lengths, where each sweep starts and which way it runs) are
+// drawn from the seeded Random at init — the light at any instant is a pure function of time; tick
+// integrates movement and judges hits.
 export class FreezeDoll implements MiniGame<FreezeDollState, FreezeDollInput> {
   readonly id = 'freeze-doll'
   readonly format = 'ffa' as const
@@ -103,19 +107,23 @@ export class FreezeDoll implements MiniGame<FreezeDollState, FreezeDollInput> {
     const endsAt = ctx.now + durationMs
     return {
       runners,
-      timeline: this.buildTimeline(ctx.now, endsAt, rng),
+      timeline: this.buildTimeline(ctx.now, endsAt, runners.length, rng),
       seg: 0,
       startedAt: ctx.now,
       endsAt,
     }
   }
 
-  private buildTimeline(start: number, endsAt: number, rng: () => number): Segment[] {
+  private buildTimeline(
+    start: number,
+    endsAt: number,
+    lanes: number,
+    rng: () => number,
+  ): Segment[] {
     const out: Segment[] = []
-    const base = { songMs: 0, songFrom: 0, songFrozen: 0, dir: 1 as const }
+    const base = { songMs: 0, songFrom: 0, songFrozen: 0, sweepFrom: 0, dir: 1 as const }
     out.push({ ...base, light: 'ready', from: start, to: start + OPENING_MS })
     let t = start + OPENING_MS
-    let dir: 1 | -1 = rng() < 0.5 ? 1 : -1
     for (let cycle = 0; t < endsAt; cycle++) {
       const p = Math.min(1, (t - start) / Math.max(1, endsAt - start))
       // Chant: shorter as the round goes on, at a seeded tempo.
@@ -127,6 +135,8 @@ export class FreezeDoll implements MiniGame<FreezeDollState, FreezeDollInput> {
       const cutAt = sudden ? Math.round(songMs * (0.45 + rng() * 0.35)) : songMs
       const fakeAt = rng() < lerp(0.15, 0.55, p) ? Math.round(cutAt * (0.25 + rng() * 0.4)) : 0
       const redMs = Math.round(lerp(2600, 1600, p) * (0.8 + rng() * 0.4))
+      const sweepFrom = Math.floor(rng() * lanes)
+      const dir = rng() < 0.5 ? 1 : -1
       if (fakeAt > 0 && fakeAt + 400 < cutAt) {
         out.push({ ...base, light: 'green', from: t, to: t + fakeAt, songMs, songFrom: t })
         out.push({
@@ -145,9 +155,8 @@ export class FreezeDoll implements MiniGame<FreezeDollState, FreezeDollInput> {
       t += cutAt
       out.push({ ...base, light: 'turn', from: t, to: t + TURN_MS, songMs, songFrozen: cutAt })
       t += TURN_MS
-      out.push({ ...base, light: 'red', from: t, to: t + redMs, dir })
+      out.push({ ...base, light: 'red', from: t, to: t + redMs, sweepFrom, dir })
       t += redMs
-      dir = dir === 1 ? -1 : 1
     }
     return out
   }
@@ -215,7 +224,7 @@ export class FreezeDoll implements MiniGame<FreezeDollState, FreezeDollInput> {
 
   // When the sweep reaches `lane` in a RED segment.
   private judgeAt(seg: Segment, lane: number, lanes: number): number {
-    const frac = lanes > 1 ? (seg.dir === 1 ? lane : lanes - 1 - lane) / (lanes - 1) : 0
+    const frac = freezeDollSweepAt(lane, lanes, seg.sweepFrom, seg.dir)
     return seg.from + FREEZE_DOLL_SWEEP.delayMs + frac * FREEZE_DOLL_SWEEP.ms
   }
 
@@ -226,6 +235,17 @@ export class FreezeDoll implements MiniGame<FreezeDollState, FreezeDollInput> {
     while (state.seg > 0 && now < (tl[state.seg] as Segment).from) state.seg--
     while (state.seg < tl.length - 1 && now >= (tl[state.seg] as Segment).to) state.seg++
     return tl[state.seg] as Segment
+  }
+
+  // A runner gone from the room is out of the race, so the field still racing can end the round early.
+  leave(state: FreezeDollState, playerId: PlayerId, now: number): FreezeDollState {
+    const r = state.runners.find((x) => x.id === playerId)
+    if (r && (r.status === 'racing' || r.status === 'stunned')) {
+      r.status = 'out'
+      r.v = 0
+      r.outAt = now
+    }
+    return state
   }
 
   isFinished(state: FreezeDollState, now: number): boolean {
@@ -268,6 +288,7 @@ export class FreezeDoll implements MiniGame<FreezeDollState, FreezeDollInput> {
             ? seg.songFrozen
             : 0,
       redElapsedMs: seg.light === 'red' ? now - seg.from : 0,
+      sweepFrom: seg.sweepFrom,
       sweepDir: seg.dir,
       lanes: state.runners.length,
       runners: state.runners.map((r) => ({

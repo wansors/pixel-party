@@ -172,6 +172,10 @@ export interface MicroRaceCar {
   // Monotonic counters so the client can fire one-shot feedback from snapshot deltas.
   hits: number
   resets: number
+  // In another car's slipstream right now (a little more top speed).
+  draft: boolean
+  // The driver left the round: the car is a ghost that blocks no one.
+  gone: boolean
 }
 
 export interface MicroRaceSnapshot {

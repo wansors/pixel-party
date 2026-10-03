@@ -1,6 +1,6 @@
 // Color Trap (Stroop) wire shapes. A color WORD is drawn in a mismatched INK color; tap the button
-// matching the ink, not the word it spells. The prompt sequence is common to everyone (seeded server
-// side); the authoritative scoring lives in the domain module.
+// matching the ink, not the word it spells: +1, while a wrong color costs a point. The prompt sequence
+// is common to everyone (seeded server side); the authoritative scoring lives in the domain module.
 
 export interface ColorTrapColor {
   name: string
@@ -28,14 +28,16 @@ export interface ColorTrapSnapshot {
   ink: number | null
   // ms left in the current prompt window.
   promptRemainingMs: number
-  // playerId -> correct answers so far.
+  // playerId -> points so far (right answers minus wrong ones; can go negative).
   scores: Record<string, number>
   // players who already locked an answer for the current prompt.
   answeredCurrent: string[]
 }
 
-// Answer for a specific prompt index (server ignores stale/duplicate answers). `color` is the tapped
-// ink-color index; correct when it equals the prompt's ink.
+// Answer for a specific prompt index (server ignores stale/duplicate answers, and takes the previous
+// prompt's answer only for a short grace period after it closed — so the client must stop taking taps
+// once its own clock runs the prompt out). `color` is the tapped ink-color index; correct when it
+// equals the prompt's ink.
 export interface ColorTrapInput {
   kind: 'answer'
   prompt: number

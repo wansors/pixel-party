@@ -9,6 +9,13 @@ const PERFECT_WINDOW_MS = 90
 const GOOD_WINDOW_MS = 220
 const PERFECT_POINTS = 3
 const GOOD_POINTS = 1
+// A tap's own round time, as the client saw it (`at`), is credited only this close to the server's
+// measurement: up to LATENCY_CREDIT_MS behind it (the note reached the screen one downlink late and
+// the tap took one uplink back — a wifi round trip, spikes included) and CLAIM_AHEAD_MS ahead of it
+// (the client's clock estimate and frame timing). So network lag no longer eats the ±90 ms PERFECT
+// window, while a forged `at` can shift a tap by those bounds at most.
+const LATENCY_CREDIT_MS = 250
+const CLAIM_AHEAD_MS = 50
 
 export interface PixelBeatState {
   players: PlayerId[]
@@ -23,8 +30,11 @@ export interface PixelBeatState {
 }
 
 // Real-time FFA rhythm game. One seeded beat timeline (metronome with slight jitter) is shared by
-// everyone; taps are scored against the nearest not-yet-consumed beat within a tolerance window. Pure
-// domain logic: the timeline is drawn from the injected Random port (seeded per round) and time
+// everyone; taps are scored against the nearest not-yet-consumed beat within a tolerance window, at the
+// client's reported tap time clamped to a bounded window of the server's own. Spamming doesn't pay:
+// the first tap in reach of a beat consumes it, so a fast spammer always lands early for a GOOD, and
+// taps near nothing score nothing.
+// Pure domain logic: the timeline is drawn from the injected Random port (seeded per round) and time
 // arrives as `now`.
 export class PixelBeat implements MiniGame<PixelBeatState, PixelBeatInput> {
   readonly id = 'pixel-beat'
@@ -65,7 +75,11 @@ export class PixelBeat implements MiniGame<PixelBeatState, PixelBeatInput> {
     const consumed = state.consumed.get(playerId)
     if (!consumed) return state
 
-    const elapsed = now - state.startedAt
+    const measured = now - state.startedAt
+    const elapsed =
+      typeof input.at === 'number' && Number.isFinite(input.at)
+        ? Math.max(measured - LATENCY_CREDIT_MS, Math.min(measured + CLAIM_AHEAD_MS, input.at))
+        : measured
     let bestIdx = -1
     let bestDiff = Number.POSITIVE_INFINITY
     for (let i = 0; i < state.beatTimes.length; i++) {

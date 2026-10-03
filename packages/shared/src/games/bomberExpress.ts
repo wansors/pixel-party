@@ -3,7 +3,8 @@
 // (long fire, a pocketful of bombs, fast boots) — chaos from the first second — and crates drop more
 // power-ups. Bombs explode after a fuse in a cross that stops at walls (and at the first crate, which it
 // breaks), setting off any bomb in its path. Caught in the flames, you're knocked out. Last one standing
-// wins; the rest rank by knock-outs scored.
+// wins; the rest rank by knock-outs scored, then time survived, then crates broken (also the tiebreak
+// between survivors at the buzzer). Spawn cells (up to 12) are dealt with the round's seed.
 //
 // Movement is tile to tile (held direction); the client interpolates each step.
 
@@ -40,6 +41,8 @@ export interface BomberPlayer {
   bombs: number
   speed: number
   kos: number
+  // Out because they disconnected (not a knock-out).
+  left: boolean
 }
 
 export interface BomberSnapshot {

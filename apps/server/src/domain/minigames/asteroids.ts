@@ -17,10 +17,12 @@ const FIRE_MS = 220
 const MAX_BULLETS = 4
 const ROCK_SPEED = [0, 0.22, 0.15, 0.09] as const
 // The field is topped up with a big rock (seeded edge spot) whenever its "mass" (big 4 · medium 2 ·
-// small 1) drops below this, at most every REFILL_MS.
+// small 1) drops below MIN_MASS, at most every REFILL_MS. Tuned for up to TUNED_SHIPS pilots; a bigger
+// field scales the start rocks, the mass floor and the refill rate with it, so rocks per pilot hold.
 const MIN_MASS = 16
 const REFILL_MS = 1800
 const START_ROCKS = 6
+const TUNED_SHIPS = 4
 const SPAWN_R = 0.28
 
 interface Ship {
@@ -40,6 +42,11 @@ interface Ship {
   nextFireAt: number
   score: number
   kills: number
+  // Parked until its pilot first touches the controls: a ghost that bullets and rocks pass through
+  // (an AFK seat is no free kill, and no obstacle either).
+  piloted: boolean
+  // Left the round: gone from the sky for good.
+  gone: boolean
 }
 
 interface Rock {
@@ -66,6 +73,9 @@ export interface AsteroidsState {
   bullets: Bullet[]
   nextRockId: number
   lastRefillAt: number
+  // Rock supply for this field size (see MIN_MASS).
+  minMass: number
+  refillMs: number
   // mulberry32 state, seeded from the round's Random at init (splits and refills draw from it).
   rng: number
   startedAt: number
@@ -107,6 +117,7 @@ export class Asteroids implements MiniGame<AsteroidsState, AsteroidsInput> {
     const durationMs =
       typeof ctx.config?.durationMs === 'number' ? ctx.config.durationMs : DEFAULT_DURATION_MS
     const n = ctx.players.length
+    const crowd = Math.max(1, n / TUNED_SHIPS)
     const state: AsteroidsState = {
       ships: ctx.players.map((id, idx) => {
         const a = (idx / Math.max(1, n)) * Math.PI * 2
@@ -127,17 +138,21 @@ export class Asteroids implements MiniGame<AsteroidsState, AsteroidsInput> {
           nextFireAt: 0,
           score: 0,
           kills: 0,
+          piloted: false,
+          gone: false,
         }
       }),
       rocks: [],
       bullets: [],
       nextRockId: 0,
       lastRefillAt: ctx.now,
+      minMass: Math.round(MIN_MASS * Math.sqrt(crowd)),
+      refillMs: Math.round(REFILL_MS / crowd),
       rng: Math.floor(ctx.random.next() * 4294967296) | 0,
       startedAt: ctx.now,
       endsAt: ctx.now + durationMs,
     }
-    for (let i = 0; i < START_ROCKS; i++) this.spawnRock(state)
+    for (let i = 0; i < Math.round(START_ROCKS * Math.sqrt(crowd)); i++) this.spawnRock(state)
     return state
   }
 
@@ -149,10 +164,26 @@ export class Asteroids implements MiniGame<AsteroidsState, AsteroidsInput> {
   ): AsteroidsState {
     if (input.kind !== 'controls' || now >= state.endsAt) return state
     const s = state.ships.find((x) => x.id === playerId)
-    if (!s) return state
+    if (!s || s.gone) return state
     if (input.rot === -1 || input.rot === 0 || input.rot === 1) s.rot = input.rot
     s.thrust = input.thrust === true
     s.fire = input.fire === true
+    // Taking the controls for the first time unparks the ship, with a fresh spawn shield.
+    if (!s.piloted && (s.rot !== 0 || s.thrust || s.fire)) {
+      s.piloted = true
+      s.shieldUntil = Math.max(s.shieldUntil, now + ASTEROIDS.shieldMs)
+    }
+    return state
+  }
+
+  // A pilot who left: the ship (and its bullets in flight) leave the sky; its score stands.
+  leave(state: AsteroidsState, playerId: PlayerId, now: number): AsteroidsState {
+    const s = state.ships.find((x) => x.id === playerId)
+    if (!s || s.gone) return state
+    this.explode(s, now)
+    s.gone = true
+    s.respawnAt = Number.POSITIVE_INFINITY
+    state.bullets = state.bullets.filter((b) => b.owner !== s.idx)
     return state
   }
 
@@ -166,7 +197,7 @@ export class Asteroids implements MiniGame<AsteroidsState, AsteroidsInput> {
     this.bullets(state, step, now)
     this.rams(state, now)
     const mass = state.rocks.reduce((m, r) => m + (r.size === 3 ? 4 : r.size === 2 ? 2 : 1), 0)
-    if (mass < MIN_MASS && now - state.lastRefillAt >= REFILL_MS) {
+    if (mass < state.minMass && now - state.lastRefillAt >= state.refillMs) {
       state.lastRefillAt = now
       this.spawnRock(state)
     }
@@ -230,6 +261,7 @@ export class Asteroids implements MiniGame<AsteroidsState, AsteroidsInput> {
         (s) =>
           s.idx !== b.owner &&
           s.alive &&
+          s.piloted &&
           now >= s.shieldUntil &&
           segDist(b.x, b.y, mx, my, s.x, s.y) < ASTEROIDS.shipR,
       )
@@ -251,7 +283,7 @@ export class Asteroids implements MiniGame<AsteroidsState, AsteroidsInput> {
   // A ship flying into a rock blows up (and breaks the rock — no points for anyone).
   private rams(state: AsteroidsState, now: number): void {
     for (const s of state.ships) {
-      if (!s.alive || now < s.shieldUntil) continue
+      if (!s.alive || !s.piloted || now < s.shieldUntil) continue
       const rock = state.rocks.find(
         (r) => dist(s.x, s.y, r.x, r.y) < ASTEROIDS.shipR + (ASTEROIDS.rockR[r.size] ?? 0.03) * 0.9,
       )
@@ -277,7 +309,8 @@ export class Asteroids implements MiniGame<AsteroidsState, AsteroidsInput> {
       let d = Number.POSITIVE_INFINITY
       for (const r of state.rocks)
         d = Math.min(d, dist(x, y, r.x, r.y) - (ASTEROIDS.rockR[r.size] ?? 0))
-      for (const o of state.ships) if (o !== s && o.alive) d = Math.min(d, dist(x, y, o.x, o.y))
+      for (const o of state.ships)
+        if (o !== s && o.alive && o.piloted) d = Math.min(d, dist(x, y, o.x, o.y))
       if (d > best.d) best = { x, y, d }
     }
     s.x = best.x
@@ -313,7 +346,7 @@ export class Asteroids implements MiniGame<AsteroidsState, AsteroidsInput> {
       const x = nextRand(state) * W
       const y = nextRand(state) * H
       let d = Number.POSITIVE_INFINITY
-      for (const s of state.ships) if (s.alive) d = Math.min(d, dist(x, y, s.x, s.y))
+      for (const s of state.ships) if (s.alive && s.piloted) d = Math.min(d, dist(x, y, s.x, s.y))
       if (d > best.d) best = { x, y, d }
     }
     const a = nextRand(state) * Math.PI * 2
@@ -345,8 +378,11 @@ export class Asteroids implements MiniGame<AsteroidsState, AsteroidsInput> {
   }
 
   snapshot(state: AsteroidsState, now: number): AsteroidsSnapshot {
+    // Ships that left drop off the wire; bullets name their owner by index into the sent list.
+    const ships = state.ships.filter((s) => !s.gone)
+    const wireIdx = new Map(ships.map((s, i) => [s.idx, i]))
     return {
-      ships: state.ships.map((s) => ({
+      ships: ships.map((s) => ({
         id: s.id,
         x: round(s.x),
         y: round(s.y),
@@ -356,7 +392,8 @@ export class Asteroids implements MiniGame<AsteroidsState, AsteroidsInput> {
         rot: s.rot,
         thrust: s.thrust && s.alive,
         alive: s.alive,
-        shield: s.alive && now < s.shieldUntil,
+        shield: s.alive && s.piloted && now < s.shieldUntil,
+        idle: !s.piloted,
         score: s.score,
         kills: s.kills,
       })),
@@ -364,7 +401,13 @@ export class Asteroids implements MiniGame<AsteroidsState, AsteroidsInput> {
         (r): AsteroidsRock => [r.id, round(r.x), round(r.y), round(r.vx), round(r.vy), r.size],
       ),
       bullets: state.bullets.map(
-        (b): AsteroidsBullet => [round(b.x), round(b.y), round(b.vx), round(b.vy), b.owner],
+        (b): AsteroidsBullet => [
+          round(b.x),
+          round(b.y),
+          round(b.vx),
+          round(b.vy),
+          wireIdx.get(b.owner) ?? -1,
+        ],
       ),
       remainingMs: Math.max(0, state.endsAt - now),
     }

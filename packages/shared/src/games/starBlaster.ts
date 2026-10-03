@@ -1,7 +1,8 @@
 // Star Blaster wire shapes + the shared, deterministic attack script. A real-time FFA vertical shmup:
 // every player flies their own ship in their own viewport against the SAME seeded waves — drones in
-// formation, gunners that hover and spray bullet patterns, and a boss near the end. The ship fires on
-// its own; you steer to aim and to dodge. A hit costs a life (and a few points); out of lives you're out.
+// formation, gunners that hover and spray bullet patterns, and a boss near the end. From your first
+// steer on, the ship fires on its own; you steer to aim and to dodge. A hit costs a life (and a few
+// points); out of lives you're out.
 // Ranked by score.
 //
 // Enemies and their bullet patterns are a pure function of (seed, time): both apps build the same script
@@ -268,6 +269,8 @@ export interface StarArena {
   shielded: boolean
   score: number
   out: boolean
+  // Guns online: the player has steered at least once (until then the ship doesn't fire).
+  armed: boolean
   // Enemies this player destroyed (only the ones that still matter on screen): [enemyId, atMs].
   killed: [number, number][]
   // Damaged enemies still alive for this player: [enemyId, hpLeft].
@@ -285,7 +288,8 @@ export interface StarBlasterSnapshot {
   remainingMs: number
 }
 
-// Steer with a direction vector (normalized server-side; {0,0} = hold position). The ship fires itself.
+// Steer with a direction vector (normalized server-side; {0,0} = hold position). The first steer arms
+// the guns; from then on the ship fires itself.
 export interface StarBlasterInput {
   kind: 'move'
   dx: number

@@ -58,12 +58,15 @@ interface Chip {
 // equalizer pulse on every beat (with a soft metronome tick), and each credited tap pops PERFECT /
 // GOOD from the server's score delta (MISS when it never gets credited). The round's start is
 // anchored from the snapshot's remainingMs + the catalog duration, so notes line up with the
-// server's clock rather than with whenever the first snapshot happened to land. Scoring stays
-// entirely server-side.
+// server's clock rather than with whenever the first snapshot happened to land; each tap reports its
+// time on that same timeline, so it's judged against the note the player saw (the server bounds how
+// much latency it credits). Scoring stays entirely server-side. A player who isn't in the round
+// (joined mid-round) just watches the highway.
 export class PixelBeatScene extends MiniGameScene<PixelBeatSnapshot> {
   private hitRing?: Phaser.GameObjects.Image
   private lane?: Phaser.GameObjects.Rectangle
   private streakText?: Phaser.GameObjects.Text
+  private hint?: Phaser.GameObjects.Text
   private eq?: Phaser.GameObjects.Graphics
   private notes: Phaser.GameObjects.Image[] = []
   private chips: Chip[] = []
@@ -154,7 +157,7 @@ export class PixelBeatScene extends MiniGameScene<PixelBeatSnapshot> {
       eqTop: laneY + laneH / 2 + (compact ? 90 : 120),
       eqBottom: height - (compact ? 34 : 44),
     }
-    this.add
+    this.hint = this.add
       .text(
         width / 2,
         height - 10,
@@ -168,8 +171,9 @@ export class PixelBeatScene extends MiniGameScene<PixelBeatSnapshot> {
   }
 
   private tap(): void {
-    if (!this.snap || this.snap.remainingMs <= 0) return
-    this.sendInput({ kind: 'tap' })
+    if (!this.snap || this.snap.remainingMs <= 0 || !(this.selfId in this.snap.scores)) return
+    const at = this.time.now - this.startLocal
+    this.sendInput(Number.isFinite(at) ? { kind: 'tap', at: Math.round(at) } : { kind: 'tap' })
     this.pending.push(this.time.now)
     // Instant, unjudged acknowledgement; the verdict pops when the server credits (or doesn't).
     if (this.hitRing) {
@@ -188,8 +192,9 @@ export class PixelBeatScene extends MiniGameScene<PixelBeatSnapshot> {
       this.judge(snap)
     }
     this.expirePending(now)
-    const score = snap.scores[this.selfId] ?? 0
-    this.hud?.setScore(this.t('game.common.pts', { n: score }))
+    const score = snap.scores[this.selfId]
+    this.hud?.setScore(score === undefined ? '' : this.t('game.common.pts', { n: score }))
+    if (score === undefined) this.hint?.setText(this.t('game.pixelBeat.watching'))
     this.renderChips(snap)
 
     const elapsed = now - this.startLocal

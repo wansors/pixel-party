@@ -6,6 +6,9 @@ const SIZE = 9
 const CELLS = SIZE * SIZE
 const EXIT_INDEX = CELLS - 1
 const DEFAULT_DURATION_MS = 45_000
+// Steps faster than this apart are dropped: a held key walks at the same pace on every machine, whatever
+// its OS key-repeat rate (the client paces itself a little slower, so it never loses a step).
+export const MIN_STEP_MS = 90
 
 // Wall bit per side; a cell's mask records which of its 4 sides are still walled.
 const NORTH = 1
@@ -62,17 +65,15 @@ function buildMaze(random: Random): number[] {
   return walls
 }
 
-// Shortest remaining number of steps from `from` to `to` over the shared maze, respecting the same
-// wall-bit adjacency the movement logic uses. Always reachable — the maze is a perfect maze.
-function bfsDistance(walls: number[], from: number, to: number): number {
-  if (from === to) return 0
+// Shortest number of steps from every cell to `to` over the shared maze, respecting the same wall-bit
+// adjacency the movement logic uses. Every cell is reachable — the maze is a perfect maze.
+function distancesTo(walls: number[], to: number): number[] {
   const dist = new Array<number>(CELLS).fill(-1)
-  dist[from] = 0
-  const queue: number[] = [from]
+  dist[to] = 0
+  const queue: number[] = [to]
   let head = 0
   while (head < queue.length) {
     const cur = queue[head++] as number
-    if (cur === to) return dist[cur] as number
     const row = Math.floor(cur / SIZE)
     const col = cur % SIZE
     const mask = walls[cur] as number
@@ -88,7 +89,7 @@ function bfsDistance(walls: number[], from: number, to: number): number {
       }
     }
   }
-  return dist[to] as number
+  return dist
 }
 
 export interface MazeSprintState {
@@ -96,17 +97,23 @@ export interface MazeSprintState {
   size: number
   walls: number[]
   exitIndex: number
+  // Steps from each cell to the exit.
+  exitDist: number[]
   startedAt: number
   endsAt: number
   pos: Map<PlayerId, number>
   steps: Map<PlayerId, number>
+  lastStepAt: Map<PlayerId, number>
   // 0 = not finished; otherwise the server time the player reached the exit.
   doneAt: Map<PlayerId, number>
+  // Players gone mid-round: the race doesn't wait for them to finish.
+  left: Set<PlayerId>
 }
 
 // Self-paced FFA race. One seeded 9x9 maze is shared by everyone; each player moves their own position
-// through it independently, from the entrance (cell 0) to the exit (last cell). Pure domain logic: the
-// maze is drawn from the injected Random port and time arrives as `now`.
+// through it independently, from the entrance (cell 0) to the exit (last cell), at most one step per
+// MIN_STEP_MS. Rivals are shown as their distance to the exit, not their spot (that would give the path
+// away). Pure domain logic: the maze is drawn from the injected Random port and time arrives as `now`.
 export class MazeSprint implements MiniGame<MazeSprintState, MazeSprintInput> {
   readonly id = 'maze-sprint'
   readonly format = 'ffa' as const
@@ -114,16 +121,20 @@ export class MazeSprint implements MiniGame<MazeSprintState, MazeSprintInput> {
   init(ctx: MiniGameInitCtx): MazeSprintState {
     const durationMs =
       typeof ctx.config?.durationMs === 'number' ? ctx.config.durationMs : DEFAULT_DURATION_MS
+    const walls = buildMaze(ctx.random)
     return {
       players: [...ctx.players],
       size: SIZE,
-      walls: buildMaze(ctx.random),
+      walls,
       exitIndex: EXIT_INDEX,
+      exitDist: distancesTo(walls, EXIT_INDEX),
       startedAt: ctx.now,
       endsAt: ctx.now + durationMs,
       pos: new Map(ctx.players.map((pid) => [pid, 0])),
       steps: new Map(ctx.players.map((pid) => [pid, 0])),
+      lastStepAt: new Map(),
       doneAt: new Map(ctx.players.map((pid) => [pid, 0])),
+      left: new Set(),
     }
   }
 
@@ -141,6 +152,8 @@ export class MazeSprint implements MiniGame<MazeSprintState, MazeSprintInput> {
     if (doneAt === undefined || doneAt > 0) return state
     const pos = state.pos.get(playerId)
     if (pos === undefined) return state
+    if (now - (state.lastStepAt.get(playerId) ?? Number.NEGATIVE_INFINITY) < MIN_STEP_MS)
+      return state
     const mask = state.walls[pos] as number
     if (mask & bit) return state // wall blocks this move
     const row = Math.floor(pos / state.size)
@@ -155,6 +168,7 @@ export class MazeSprint implements MiniGame<MazeSprintState, MazeSprintInput> {
     const next = nextRow * state.size + nextCol
     state.pos.set(playerId, next)
     state.steps.set(playerId, (state.steps.get(playerId) ?? 0) + 1)
+    state.lastStepAt.set(playerId, now)
     if (next === state.exitIndex) state.doneAt.set(playerId, now)
     return state
   }
@@ -163,9 +177,18 @@ export class MazeSprint implements MiniGame<MazeSprintState, MazeSprintInput> {
     return state
   }
 
+  leave(state: MazeSprintState, playerId: PlayerId, _now: number): MazeSprintState {
+    state.left.add(playerId)
+    return state
+  }
+
   isFinished(state: MazeSprintState, now: number): boolean {
     if (now >= state.endsAt) return true
-    return state.players.every((pid) => (state.doneAt.get(pid) ?? 0) > 0)
+    return state.players.every((pid) => (state.doneAt.get(pid) ?? 0) > 0 || state.left.has(pid))
+  }
+
+  private distOf(state: MazeSprintState, pid: PlayerId): number {
+    return state.exitDist[state.pos.get(pid) ?? 0] ?? 0
   }
 
   private cmp(state: MazeSprintState, a: PlayerId, b: PlayerId): number {
@@ -175,9 +198,7 @@ export class MazeSprint implements MiniGame<MazeSprintState, MazeSprintInput> {
     const bDone = db > 0
     if (aDone !== bDone) return aDone ? -1 : 1
     if (aDone && bDone) return da - db
-    const distA = bfsDistance(state.walls, state.pos.get(a) ?? 0, state.exitIndex)
-    const distB = bfsDistance(state.walls, state.pos.get(b) ?? 0, state.exitIndex)
-    return distA - distB
+    return this.distOf(state, a) - this.distOf(state, b)
   }
 
   getResult(state: MazeSprintState): NormalizedResult {
@@ -206,6 +227,8 @@ export class MazeSprint implements MiniGame<MazeSprintState, MazeSprintInput> {
       walls: [...state.walls],
       exitIndex: state.exitIndex,
       pos: Object.fromEntries(state.pos),
+      dist: Object.fromEntries(state.players.map((pid) => [pid, this.distOf(state, pid)])),
+      startDist: state.exitDist[0] ?? 0,
       progress: Object.fromEntries(state.steps),
       doneAt: Object.fromEntries(state.doneAt),
       remainingMs: Math.max(0, state.endsAt - now),

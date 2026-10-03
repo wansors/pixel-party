@@ -1,8 +1,8 @@
 import { PALETTE, type StopClockSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
-import { ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, floatText, punch, ring, shake, showBanner } from '../fx'
 import { bodyStyle, ensureBevelPanel, headlineStyle, hexToCss, shade } from '../pixelStyle'
+import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 const PERIOD_MS = 1500
@@ -22,14 +22,6 @@ interface Card {
   text: Phaser.GameObjects.Text
 }
 
-interface Chip {
-  id: string
-  text: Phaser.GameObjects.Text
-  // The player's avatar, just left of the text.
-  icon: Phaser.GameObjects.Image
-  key: string
-}
-
 function grade(err: number): [string, number] | undefined {
   const g = GRADES.find(([limit]) => err < limit)
   return g ? [g[1], g[2]] : undefined
@@ -38,8 +30,8 @@ function grade(err: number): [string, number] | undefined {
 // Stop the Clock (timing) canvas. A needle sweeps a ruler-marked gauge (triangle wave, animated
 // locally); tap STOP (or Space) to lock it on the flagged green target. The reported position goes
 // to the server, which scores the absolute error. Each stop leaves a pin + gap bracket and a graded
-// pop; three result cards track every attempt's error, and the other players' tries/error run along
-// the top.
+// pop; three result cards track every attempt's error, and everyone's tries/error run along the top
+// (a player strip, so a full room never pushes the prompt into the gauge).
 export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
   private status?: Phaser.GameObjects.Text
   private needle?: Phaser.GameObjects.Graphics
@@ -48,7 +40,7 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
   private buttonLabel?: Phaser.GameObjects.Text
   private banner?: Phaser.GameObjects.Text
   private cards: Card[] = []
-  private chips: Chip[] = []
+  private strip?: PlayerStrip
   private keys = { up: '', down: '' }
   private gauge = { left: 0, width: 0, y: 0, h: 0 }
   private trail: number[] = []
@@ -67,7 +59,6 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
   override create(): void {
     super.create()
     this.cards = []
-    this.chips = []
     this.trail = []
     this.lastAttempt = -1
     this.lastError = 0
@@ -80,9 +71,20 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
     const { width, height } = this.scale
     const cx = width / 2
     const compact = Math.min(width, height) < 520
-    const chipRows = this.chipLayout(Math.max(1, Object.keys(this.state.names).length)).rows
+    const stripSize = compact ? 11 : 13
+    const stripRows = width < 600 ? 3 : 2
+    const stripH = PlayerStrip.rowH(stripSize)
+    this.strip = new PlayerStrip(
+      this,
+      cx,
+      this.top + 2 + stripH / 2,
+      width - 24,
+      stripSize,
+      stripRows,
+    )
 
-    const promptY = this.top + chipRows * (compact ? 20 : 26) + (compact ? 14 : 20)
+    const promptY = this.top + 2 + stripRows * stripH + (compact ? 10 : 16)
+    const promptH = compact ? 18 : 24
     this.status = this.add
       .text(
         cx,
@@ -95,7 +97,10 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
     // The gauge: beveled track, ruler ticks, flagged target, sweeping needle.
     const gw = Math.round(Math.min(width * 0.86, 900))
     const gh = Math.round(compact ? 64 : 88)
-    const gy = Math.round(this.top + (height - this.top) * 0.36)
+    // Never above the prompt + the target's pennant (16 px over the track) + the bevel.
+    const gy = Math.round(
+      Math.max(this.top + (height - this.top) * 0.36, promptY + promptH + 22 + gh / 2 + 6),
+    )
     this.gauge = { left: cx - gw / 2, width: gw, y: gy, h: gh }
     this.add.image(cx, gy, ensureBevelPanel(this, gw + 12, gh + 12, PALETTE.frame, 4))
     this.add.rectangle(cx, gy, gw, gh, PALETTE.bg)
@@ -171,7 +176,8 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
 
   private stop(): void {
     const snap = this.snap
-    if (!snap || snap.remainingMs <= 0) return
+    // A spectator (not in this round) has no tries.
+    if (!snap || snap.remainingMs <= 0 || !(this.selfId in snap.attemptsDone)) return
     const attempt = snap.attemptsDone[this.selfId] ?? 0
     // Still waiting for the server to take the previous stop: a second tap would be dropped anyway.
     if (attempt >= snap.attempts || attempt === this.pendingAttempt) return
@@ -234,9 +240,9 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
 
   protected frame(snap: StopClockSnapshot | null): void {
     if (!snap) return
-    if (this.chips.length === 0) this.buildChips(Object.keys(snap.attemptsDone))
+    const spectator = !(this.selfId in snap.attemptsDone)
     const attempt = snap.attemptsDone[this.selfId] ?? 0
-    const done = attempt >= snap.attempts
+    const done = spectator || attempt >= snap.attempts
     const totalError = snap.totalError[this.selfId] ?? 0
     this.hud?.setScore(
       this.t('game.stopClock.try', {
@@ -246,7 +252,7 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
     )
     if (attempt > this.pendingAttempt) this.pendingAttempt = -1
     this.onAttemptChange(snap, attempt, totalError)
-    this.renderCards(attempt, snap.attempts)
+    this.renderCards(done ? snap.attempts : attempt, snap.attempts)
     this.renderChips(snap)
 
     // Needle with a short motion trail; parked (hidden) once every try is used.
@@ -264,10 +270,14 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
       g.fillRect(x - 7, y - h / 2 - 10, 14, 4).fillRect(x - 7, y + h / 2 + 6, 14, 4)
     }
 
-    this.status?.setText(this.t(done ? 'game.stopClock.done' : 'game.stopClock.prompt'))
+    this.status?.setText(
+      this.t(
+        spectator ? 'game.common.waiting' : done ? 'game.stopClock.done' : 'game.stopClock.prompt',
+      ),
+    )
     this.button?.setAlpha(done ? 0.3 : 1)
     this.buttonLabel?.setText(this.t(done ? 'game.stopClock.doneBtn' : 'game.stopClock.stop'))
-    if (done && this.banner) {
+    if (done && !spectator && this.banner) {
       showBanner(this, this.banner, this.t('game.common.finished'), PALETTE.lime)
     }
   }
@@ -314,47 +324,20 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
     })
   }
 
-  private chipLayout(n: number): { perRow: number; chipW: number; rows: number } {
-    const { width, height } = this.scale
-    const compact = Math.min(width, height) < 520
-    const perRow = Math.max(1, Math.min(n, Math.floor((width * 0.94) / (compact ? 140 : 200))))
-    return { perRow, chipW: (width * 0.94) / perRow, rows: Math.ceil(n / perRow) }
-  }
-
-  private buildChips(ids: string[]): void {
-    const { width, height } = this.scale
-    const compact = Math.min(width, height) < 520
-    const { perRow, chipW } = this.chipLayout(ids.length)
-    const rowH = compact ? 20 : 26
-    ids.forEach((id, i) => {
-      const row = Math.floor(i / perRow)
-      const inRow = Math.min(perRow, ids.length - row * perRow)
-      const x = width / 2 - (inRow * chipW) / 2 + (i % perRow) * chipW + chipW / 2
-      const y = this.top + row * rowH + rowH / 2
-      const color = this.state.colorOf(id, PALETTE.dim)
-      const text = this.add.text(x + 9, y, '', bodyStyle(compact ? 12 : 15, color)).setOrigin(0.5)
-      if (id === this.selfId) text.setBackgroundColor(hexToCss(PALETTE.panelAlt))
-      const icon = this.add
-        .image(x, y, ensureAvatarTexture(this, this.state.avatarOf(id), color, 1))
-        .setOrigin(1, 0.5)
-      this.chips.push({ id, text, icon, key: '' })
-    })
-  }
-
-  // Other players: name, tries used (■) / left (□) and their running error.
+  // Everyone: name, tries used (■) / left (□) and the running error. The tries and the error are joined
+  // by a no-break space so the strip treats them as one trailing stat (clipping names, never them).
   private renderChips(snap: StopClockSnapshot): void {
-    const compact = Math.min(this.scale.width, this.scale.height) < 520
-    for (const chip of this.chips) {
-      const used = Math.min(snap.attempts, snap.attemptsDone[chip.id] ?? 0)
-      const err = (snap.totalError[chip.id] ?? 0).toFixed(2)
-      const key = `${used}:${err}`
-      if (key === chip.key) continue
-      const changed = chip.key !== ''
-      chip.key = key
-      const tries = '■'.repeat(used) + '□'.repeat(snap.attempts - used)
-      chip.text.setText(` ${this.label(chip.id).slice(0, compact ? 6 : 10)} ${tries} ${err} `)
-      chip.icon.setX(Math.round(chip.text.x - chip.text.width / 2 - 2))
-      if (changed && chip.id !== this.selfId) punch(this, chip.text, 0.15, 80)
-    }
+    this.strip?.set(
+      Object.keys(snap.attemptsDone).map((id) => {
+        const used = Math.min(snap.attempts, snap.attemptsDone[id] ?? 0)
+        const tries = '■'.repeat(used) + '□'.repeat(snap.attempts - used)
+        const err = (snap.totalError[id] ?? 0).toFixed(2)
+        return {
+          text: `${this.label(id)} ${tries}\u00a0${err}`,
+          avatar: this.state.avatarOf(id),
+          color: this.state.colorOf(id),
+        }
+      }),
+    )
   }
 }

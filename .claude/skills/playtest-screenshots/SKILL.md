@@ -20,10 +20,12 @@ The client dev server live-reloads, so edit → re-shoot without restarting.
 ## 2. One-time driver setup (outside the repo — puppeteer is NOT a project dependency)
 ```bash
 WORK="${TMPDIR:-/tmp}/pp-playtest"; mkdir -p "$WORK"
-cp -r .claude/skills/playtest-screenshots/{shoot.ts,bots} "$WORK/"
+cp .claude/skills/playtest-screenshots/shoot.ts "$WORK/"
+ln -sfn "$PWD/.claude/skills/playtest-screenshots/bots" "$WORK/bots"
 cd "$WORK" && [ -d node_modules/puppeteer-core ] || { echo '{"private":true}' > package.json; bun add puppeteer-core@23; }
 ```
-(Re-copy `shoot.ts` if the skill's copy changed.) Uses the system Chrome/Chromium (`CHROME=` to
+(Re-copy `shoot.ts` if the skill's copy changed. `bots` is a symlink so the bots stay current and the
+racer autopilot can find the repo's course data from its own location.) Uses the system Chrome/Chromium (`CHROME=` to
 override).
 
 ## 3. Shoot

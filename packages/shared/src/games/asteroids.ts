@@ -36,6 +36,8 @@ export interface AsteroidsShip {
   alive: boolean
   // Shielded right after a respawn.
   shield: boolean
+  // Parked: its pilot hasn't touched the controls yet. A ghost that bullets and rocks pass through.
+  idle: boolean
   score: number
   kills: number
 }

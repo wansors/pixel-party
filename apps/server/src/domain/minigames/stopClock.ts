@@ -6,6 +6,13 @@ const DEFAULT_DURATION_MS = 25_000
 // Missing an attempt costs the worst possible error, so skipping never beats a real try.
 const MISS_PENALTY = 1
 
+// Accumulated error with every unused attempt charged the miss penalty, so skipping (running out of
+// time, leaving) ranks below real tries.
+function penalisedError(state: StopClockState, id: PlayerId): number {
+  const missed = ATTEMPTS - (state.attemptsDone.get(id) ?? 0)
+  return (state.totalError.get(id) ?? 0) + missed * MISS_PENALTY
+}
+
 export interface StopClockState {
   players: PlayerId[]
   targets: number[]
@@ -56,17 +63,22 @@ export class StopClock implements MiniGame<StopClockState, StopClockInput> {
     return state
   }
 
+  // A player who left forfeits their remaining tries (charged the miss penalty, as if the clock ran
+  // out), so the round can still end as soon as everyone else is done.
+  leave(state: StopClockState, playerId: PlayerId, _now: number): StopClockState {
+    if (!state.attemptsDone.has(playerId)) return state
+    state.totalError.set(playerId, penalisedError(state, playerId))
+    state.attemptsDone.set(playerId, ATTEMPTS)
+    return state
+  }
+
   isFinished(state: StopClockState, now: number): boolean {
     if (now >= state.endsAt) return true
     return state.players.every((id) => (state.attemptsDone.get(id) ?? 0) >= ATTEMPTS)
   }
 
   getResult(state: StopClockState): NormalizedResult {
-    // Unused attempts (ran out of time) are charged the miss penalty so they rank below real tries.
-    const errorOf = (id: PlayerId): number => {
-      const missed = ATTEMPTS - (state.attemptsDone.get(id) ?? 0)
-      return (state.totalError.get(id) ?? 0) + missed * MISS_PENALTY
-    }
+    const errorOf = (id: PlayerId): number => penalisedError(state, id)
     const sorted = [...state.players].sort((a, b) => errorOf(a) - errorOf(b))
     const ranks: Record<PlayerId, number> = {}
     let rank = 0
@@ -78,16 +90,24 @@ export class StopClock implements MiniGame<StopClockState, StopClockInput> {
       prev = e
     })
     const stats: Record<PlayerId, string> = {}
-    for (const id of state.players) stats[id] = `${(state.totalError.get(id) ?? 0).toFixed(2)} off`
+    // The error the ranking used, penalty included: an idle player shows "3.00 off", not "0.00".
+    for (const id of state.players) stats[id] = `${errorOf(id).toFixed(2)} off`
     return { placements: sorted, ranks, stats }
   }
 
   snapshot(state: StopClockState, now: number): StopClockSnapshot {
+    // Once the clock has run out the totals include the miss penalty, matching the result screen.
+    const ended = now >= state.endsAt
     return {
       targets: state.targets,
       attempts: ATTEMPTS,
       attemptsDone: Object.fromEntries(state.attemptsDone),
-      totalError: Object.fromEntries(state.totalError),
+      totalError: Object.fromEntries(
+        state.players.map((id) => [
+          id,
+          ended ? penalisedError(state, id) : (state.totalError.get(id) ?? 0),
+        ]),
+      ),
       remainingMs: Math.max(0, state.endsAt - now),
     }
   }

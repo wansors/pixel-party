@@ -114,6 +114,19 @@ describe('Pang', () => {
     expect(game.isFinished(s, 3400)).toBe(false) // b still plays
   })
 
+  test('a player gone from the room is out, so the others being out ends the round', () => {
+    const s = init(['a', 'b'])
+    arena(s, 'a').out = true
+    expect(game.isFinished(s, 1000)).toBe(false)
+    game.leave(s, 'b')
+    expect(arena(s, 'b').out).toBe(true)
+    expect(arena(s, 'b').lives).toBe(PANG.lives)
+    expect(game.isFinished(s, 1000)).toBe(true)
+    // An arena that's out stands still: no balloon touches or pops count any more.
+    run(s, 1000, 5000)
+    expect(arena(s, 'b').lives).toBe(PANG.lives)
+  })
+
   test('ranks by pops, then lives; junk input is ignored', () => {
     const s = init(['a', 'b', 'c'])
     Object.assign(arena(s, 'a'), { pops: 10, lives: 1 })

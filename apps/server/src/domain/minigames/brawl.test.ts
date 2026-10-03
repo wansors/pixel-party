@@ -158,4 +158,47 @@ describe('Brawl', () => {
     Object.assign(fighter(s, 'c'), { kos: 0, hp: 60 })
     expect(game.getResult(s).placements).toEqual(['c', 'b', 'a'])
   })
+
+  test('seats are dealt out in a seeded order, not the join order', () => {
+    const players = Array.from({ length: 8 }, (_, i) => `p${i}`)
+    const seated = (seed: number): string[] => init(players, seed).fighters.map((f) => f.id)
+    expect(seated(4)).toEqual(seated(4))
+    expect([...seated(4)].sort()).toEqual(players)
+    const orders = new Set([1, 2, 3, 4, 5].map((seed) => seated(seed).join()))
+    expect(orders.size).toBeGreaterThan(1)
+    expect(orders.has(players.join())).toBe(false)
+  })
+
+  test('a KO is shared: the finisher takes half, the rest is split by damage dealt', () => {
+    const s = init(['a', 'b', 'c'])
+    const [a, b, c] = [fighter(s, 'a'), fighter(s, 'b'), fighter(s, 'c')]
+    Object.assign(c, { x: 1.2, y: 0.2, face: -1 })
+    square(s, 0.12)
+    b.hurtBy.set('c', 60) // c softened b up…
+    b.hp = 10
+    game.onInput(s, 'a', { kind: 'kick' }, 0) // …a lands the last 10
+    expect(b.action).toBe('ko')
+    expect(a.kos).toBeCloseTo(0.5 + 0.5 * (10 / 70))
+    expect(c.kos).toBeCloseTo(0.5 * (60 / 70))
+    const result = game.getResult(s)
+    expect(result.stats?.a).toBe('0.6 KO')
+    expect(result.stats?.c).toBe('0.4 KO')
+    expect(result.placements.slice(0, 2)).toEqual(['a', 'c'])
+    expect(game.snapshot(s, 0).fighters.find((f) => f.id === 'c')?.kos).toBe(0.4)
+  })
+
+  test('a fighter who leaves is out for nobody’s credit; the last one standing still wins', () => {
+    const s = init(['a', 'b', 'c'])
+    const b = fighter(s, 'b')
+    b.weapon = 'pipe'
+    game.leave(s, 'b', 1000)
+    expect(b.action).toBe('ko')
+    expect(s.items.some((i) => i.kind === 'pipe')).toBe(true)
+    expect(s.fighters.reduce((sum, f) => sum + f.kos, 0)).toBe(0)
+    expect(game.snapshot(s, 1000).fighters.map((f) => f.id)).not.toContain('b')
+    expect(game.isFinished(s, 1000)).toBe(false)
+    game.leave(s, 'c', 2000)
+    expect(game.isFinished(s, 2000)).toBe(true)
+    expect(game.getResult(s).placements[0]).toBe('a')
+  })
 })

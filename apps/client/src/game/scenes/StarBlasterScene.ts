@@ -13,16 +13,24 @@ import {
 import type Phaser from 'phaser'
 import { AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, eliminate, flash, floatText, shake, showBanner } from '../fx'
-import { bodyStyle, ensurePixelGrid, ensurePixelOrb, hexToCss, shade } from '../pixelStyle'
+import {
+  bodyStyle,
+  ensurePixelGrid,
+  ensurePixelOrb,
+  fitFontSize,
+  headlineStyle,
+  hexToCss,
+  shade,
+} from '../pixelStyle'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // Star Blaster: a vertical shmup in your own viewport — a scrolling starfield, your ship (in your color,
-// your avatar in the cockpit) firing on its own, and the round's seeded attack script: drone
-// formations, hovering gunners spraying rings and fans, a boss at the end. Enemies and their bullets
-// are evaluated locally from the shared script (the wire only says who you've destroyed and which
-// bullets hit you), so everything moves smoothly. Steer with the arrows/WASD or by holding the pointer
-// where you want the ship. On wide screens everyone else's fight runs as a live thumbnail.
+// your avatar in the cockpit) firing on its own once you first steer, and the round's seeded attack
+// script: drone formations, hovering gunners spraying rings and fans, a boss at the end. Enemies and
+// their bullets are evaluated locally from the shared script (the wire only says who you've destroyed
+// and which bullets hit you), so everything moves smoothly. Steer with the arrows/WASD or by holding
+// the pointer where you want the ship. On wide screens everyone else's fight runs as a live thumbnail.
 
 const SHIP_ROWS = [
   '_____BB_____',
@@ -87,6 +95,9 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
   private strip?: PlayerStrip
   private banner?: Phaser.GameObjects.Text
   private bannerUntil = 0
+  private prompt?: Phaser.GameObjects.Text
+  // Guns online (the server arms them on the first steer; mirrored locally so the stream starts at once).
+  private armed = false
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
   private wasd?: Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>
   private aim?: { x: number; y: number }
@@ -124,8 +135,9 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
     this.aim = undefined
     this.aimPointer = -1
     this.dir = { dx: 0, dy: 0 }
-    this.sentDir = ''
+    this.sentDir = '0'
     this.sentAt = 0
+    this.armed = false
     this.lastTick = -1
     this.snapAt = 0
     this.snapT = 0
@@ -191,6 +203,24 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
     const bulletCells = Math.max(3, Math.round((STAR.bulletR * 2 * scale) / 2))
     this.bulletKey = ensurePixelOrb(this, `sb-bullet-${bulletCells}`, bulletCells, 0xff8adf, 2)
     this.banner = addBanner(this)
+    const promptText = this.t('game.starBlaster.steerToFire')
+    this.prompt = this.add
+      .text(
+        this.view.x + (STAR.w * scale) / 2,
+        this.view.y + STAR.h * scale * 0.62,
+        promptText,
+        headlineStyle(
+          fitFontSize(promptText, STAR.w * scale - 24, this.compact ? 12 : 16),
+          PALETTE.lime,
+          {
+            stroke: '#10121c',
+            strokeThickness: 4,
+          },
+        ),
+      )
+      .setOrigin(0.5)
+      .setDepth(60)
+      .setVisible(false)
 
     this.cursors = this.input.keyboard?.createCursorKeys()
     const kb = this.input.keyboard
@@ -240,6 +270,13 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
     this.paintMinis(snap, t)
     if (this.banner?.visible && time > this.bannerUntil && !this.state.final)
       this.banner.setVisible(false)
+    this.prompt?.setVisible(
+      !this.armed &&
+        !!this.mine &&
+        !this.mine.out &&
+        !this.state.final &&
+        Math.floor(time / 500) % 3 > 0,
+    )
   }
 
   private paintStars(time: number): void {
@@ -279,14 +316,14 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
       mag < 0.001
         ? '0'
         : `${Math.round((this.dir.dx / mag) * 20)},${Math.round((this.dir.dy / mag) * 20)}`
-    if (
-      (key !== this.sentDir || time - this.sentAt > 250) &&
-      !this.state.final &&
-      !this.mine?.out
-    ) {
+    // Only the player's own steering goes out (a change, or a held direction re-sent now and then) —
+    // never an idle heartbeat, so a seat nobody plays stays idle (and unarmed).
+    const resend = key !== '0' && time - this.sentAt > 250
+    if ((key !== this.sentDir || resend) && !this.state.final && this.mine && !this.mine.out) {
       this.sentDir = key
       this.sentAt = time
       this.sendInput({ kind: 'move', dx: this.dir.dx, dy: this.dir.dy })
+      if (key !== '0') this.armed = true
     }
   }
 
@@ -294,6 +331,7 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
     const prev = this.mine
     const mine = snap.arenas.find((a) => a.id === this.selfId)
     this.mine = mine
+    if (mine?.armed) this.armed = true
     if (mine) {
       this.hud?.setScore(this.t('game.starBlaster.score', { n: mine.score }))
       this.hud?.setCenter(
@@ -518,7 +556,7 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
   // stops at the first enemy it meets on this screen.
   private paintShots(t: number, dt: number, ship: { x: number; y: number } | null): void {
     const script = this.script
-    if (ship && !this.state.final) {
+    if (ship && this.armed && !this.state.final) {
       if (this.nextShotAt === 0) this.nextShotAt = t
       while (this.nextShotAt <= t) {
         this.shots.push({ x: ship.x, y: ship.y - 0.03 })
@@ -558,9 +596,9 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
     const { width } = this.scale
     const colX = Math.round(width * 0.62) + 12
     const colW = width - colX - 10
-    const cols = others.length > 3 ? 3 : Math.max(1, others.length)
+    const cols = others.length > 9 ? 4 : others.length > 3 ? 3 : Math.max(1, others.length)
     const rows = Math.max(1, Math.ceil(others.length / cols))
-    const labelH = 20
+    const labelH = 30
     const boxW = Math.floor(
       Math.min(
         (colW - (cols - 1) * 8) / cols,
@@ -622,13 +660,27 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
         ?.setPosition(Math.round(box.x + a.x * s), Math.round(box.y + a.y * s))
         .setVisible(!a.out)
       const label = this.miniLabels[i]
-      const text = `${this.label(a.id).slice(0, 8)} · ${a.score} ${a.out ? '✗' : '♥'.repeat(a.lives)}`
-      if (label && label.text !== text) {
-        label
-          .setText(text)
-          .setColor(hexToCss(this.state.colorOf(a.id)))
-          .setAlpha(a.out ? 0.45 : 1)
+      const tail = `${a.score} ${a.out ? '✗' : '♥'.repeat(a.lives)}`
+      if (label && label.getData('tail') !== tail) {
+        label.setData('tail', tail)
+        this.fitMiniLabel(label, this.label(a.id), tail, box.w)
+        label.setColor(hexToCss(this.state.colorOf(a.id))).setAlpha(a.out ? 0.45 : 1)
       }
     })
+  }
+
+  // A thumbnail's caption: the name (shortened until it fits the box's width) over score and lives.
+  private fitMiniLabel(
+    label: Phaser.GameObjects.Text,
+    name: string,
+    tail: string,
+    maxW: number,
+  ): void {
+    let shown = name
+    label.setText(`${shown}\n${tail}`)
+    while (shown.length > 1 && label.width > maxW) {
+      shown = shown.slice(0, -1)
+      label.setText(`${shown}…\n${tail}`)
+    }
   }
 }

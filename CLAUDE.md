@@ -76,7 +76,7 @@ Documentation lives in `docs/`:
   `JavelinThrow`); `raceCore` the car engine behind `microRace` and `courseRace` (`RallyStage`,
   `SpeedCircuit`); `quizCore` the shared quiz rules and bilingual bank format behind `trivia` and
   `weirdTrivia`, whose banks are `triviaBank` / `weirdTriviaBank`)
-  + `registry`, `services/{scoring,teamAssignment,pairing,sessionAnalysis,handicap,finalRanking}`,
+  + `registry`, `services/{scoring,teamAssignment,pairing,duelRanking,idleDemotion,lineup,sessionAnalysis,handicap,finalRanking}`,
   `ports/Random`), `application/`
   (`session/SessionEngine`+`SessionManager`, `use-cases/`, `ports/`), `infrastructure/`
   (`driving/ws/GameSocket`+`validate`+`simulationLoop`, `driving/http`, `driven/{time,random,id}`,
@@ -104,7 +104,9 @@ Documentation lives in `docs/`:
   / `FieldEventSceneBase` + `athleticsKit` behind the athletics scenes; `microRaceArt` paints the
   racer's tracks and cars; `CourseRaceSceneBase` + `courseArt` (chase camera, minimap, course painter)
   behind the rally and circuit scenes)
-  + `netcode/SnapshotInterpolator` (client-side interpolation for real-time scenes).
+  + `netcode/SnapshotInterpolator` (client-side interpolation for physics-driven real-time scenes) and
+  `netcode/ServerClock` (server-clock extrapolation for items whose position is a pure function of time);
+  `scenes/duelWatch` lets a duel's bye (or a late joiner) watch a live duel.
 
 ### Adding a mini-game
 One domain module (`domain/minigames/<id>.ts` implementing `MiniGame`) + registry entry + shared wire

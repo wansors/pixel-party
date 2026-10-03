@@ -1,16 +1,19 @@
 // Fruit Catch (D2) wire shapes. One seeded stream of falling items (fruit + the odd bomb) is shared by
 // everyone; each player drags their own basket along the bottom to catch fruit and dodge bombs. The
 // server owns the timeline, the item positions and the scoring; the client renders the currently-visible
-// items (smoothed by the snapshot interpolator) and its own basket locally.
+// items on the server's clock (each falls linearly, so it extrapolates from the last snapshot) and its own
+// basket locally.
 
 export type FruitKind = 'fruit' | 'bomb'
 
 export interface FruitItem {
-  // Stable id so the client can interpolate an item's fall between snapshots.
+  // Stable id so the client can track an item across snapshots.
   id: number
   // Normalized position: x in [0,1] across the play area, y in [0,1] top→bottom.
   x: number
   y: number
+  // Time to fall the full height (y 0 → 1): y grows by 1/fallMs per ms until the item is resolved.
+  fallMs: number
   kind: FruitKind
 }
 

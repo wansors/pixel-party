@@ -7,7 +7,7 @@ import type { AthleticsFoot } from '@pp/shared'
 
 const STRIDE_BOOST = 2.2 // m/s added per stride at a standstill
 const TOP_SPEED = 16 // asymptote the boost saturates toward (never reached by humans)
-const DRAG = 1.0 // exponential speed decay per second
+export const DRAG = 1.0 // exponential speed decay per second
 // Strides closer together than this are ignored (20 strides/s cap): no macro out-runs a thumb.
 export const MIN_STRIDE_MS = 50
 
@@ -35,11 +35,11 @@ export function stride(r: Runner, foot: AthleticsFoot, now: number): boolean {
   return true
 }
 
-// Advances the runner by dt ms: speed decays (extra `drag` for a runner easing up past the line),
-// position integrates.
-export function coast(r: Runner, dtMs: number, extraDrag = 0): void {
+// Advances the runner by dt ms: speed decays at `drag` per second (DRAG on the run; none in the air
+// over a hurdle, more for a runner easing up past the line), position integrates.
+export function coast(r: Runner, dtMs: number, drag = DRAG): void {
   const s = dtMs / 1000
-  r.v *= Math.exp(-(DRAG + extraDrag) * s)
+  r.v *= Math.exp(-drag * s)
   if (r.v < 0.01) r.v = 0
   r.x += r.v * s
 }

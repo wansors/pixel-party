@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { Random } from '../ports/Random'
-import { ButtonMasher } from './buttonMasher'
+import { ButtonMasher, MASHER_MAX_PRESSES_PER_SEC } from './buttonMasher'
 
 const noRandom: Random = { next: () => 0 }
 const init = (players: string[], now = 0, durationMs = 1000) =>
@@ -44,5 +44,30 @@ describe('ButtonMasher', () => {
     // b and c tie for 2nd (rank index 1)
     expect(result.ranks?.b).toBe(1)
     expect(result.ranks?.c).toBe(1)
+  })
+
+  test('counts at most MASHER_MAX_PRESSES_PER_SEC presses per rolling second', () => {
+    const game = new ButtonMasher()
+    let s = init(['bot', 'human'], 0, 10_000)
+    // An autoclicker firing every 10 ms for 3 s (300 presses) is capped at the human ceiling.
+    for (let t = 0; t < 3000; t += 10) s = game.onInput(s, 'bot', { kind: 'mash' }, t)
+    expect(s.counts.get('bot')).toBe(3 * MASHER_MAX_PRESSES_PER_SEC)
+    // A fast human (12 presses/s, with network jitter bunching some together) loses nothing.
+    for (let i = 0; i < 36; i++) {
+      const jitter = i % 3 === 0 ? 40 : 0
+      s = game.onInput(s, 'human', { kind: 'mash' }, Math.round(i * (1000 / 12)) + jitter)
+    }
+    expect(s.counts.get('human')).toBe(36)
+  })
+
+  test('a burst over the cap counts again once the window rolls on', () => {
+    const game = new ButtonMasher()
+    let s = init(['a'], 0, 10_000)
+    for (let i = 0; i < 30; i++) s = game.onInput(s, 'a', { kind: 'mash' }, 100)
+    expect(s.counts.get('a')).toBe(MASHER_MAX_PRESSES_PER_SEC)
+    s = game.onInput(s, 'a', { kind: 'mash' }, 1099)
+    expect(s.counts.get('a')).toBe(MASHER_MAX_PRESSES_PER_SEC)
+    s = game.onInput(s, 'a', { kind: 'mash' }, 1100)
+    expect(s.counts.get('a')).toBe(MASHER_MAX_PRESSES_PER_SEC + 1)
   })
 })

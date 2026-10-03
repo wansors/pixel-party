@@ -19,11 +19,16 @@ const END_CARD_DELAY_MS = 1100
 
 const otherTeam = (team: TeamId): TeamId => (team === 'red' ? 'blue' : 'red')
 
-// Fleet Battle (team Battleship) canvas. Two pixel seas: ENEMY WATERS (any teammate taps a cell to fire
-// on the team's turn — the first shot uses the turn) and OUR FLEET (the enemy team's shots at us, both
-// splashes and hits). Players without a team watch both fleets. The snapshot never carries ship
-// positions, only shot results. The turn banner + bar and the glowing board in play show whose shot it
-// is; each board lists its crew in their own identity colors.
+// Who may fire right now, from the local player's seat: their captain's call (`captain` = it's me),
+// someone else's call (`aims`), the whole team (`open`), or the other team's turn (`wait`).
+type TurnMode = 'captain' | 'aims' | 'open' | 'wait'
+
+// Fleet Battle (team Battleship) canvas. Two pixel seas: ENEMY WATERS (tap a cell to fire on your
+// team's turn — the first shot uses the turn) and OUR FLEET (the enemy team's shots at us, both
+// splashes and hits). Each team turn has a rotating captain who fires alone for the first half; then
+// anyone on the team may. Players without a team watch both fleets. The snapshot never carries ship
+// positions, only shot results. The turn banner (whose call it is) + bar and the glowing board in play
+// show whose shot it is; each board lists its crew in their own identity colors, the captain lit.
 export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
   private target?: NavalBoard
   private own?: NavalBoard
@@ -38,6 +43,9 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
   private turnSizes: number[] = []
   private turnMax = 0
   private lastTurn: TeamId | null = null
+  private lastMode = ''
+  // Crew-row names by player, to light up whoever captains the turn.
+  private crewNames = new Map<string, Phaser.GameObjects.Text>()
   private endedAt = -1
   // Which team's fleet each board shows (the target board is the enemy fleet for team members; for
   // spectators it's simply red on one board, blue on the other).
@@ -55,6 +63,8 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
     this.own = undefined
     this.turnMax = 0
     this.lastTurn = null
+    this.lastMode = ''
+    this.crewNames = new Map()
     this.endedAt = -1
     this.team = undefined
     const { width, height } = this.scale
@@ -151,6 +161,7 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
       }
       total += (parts.length > 0 ? gap : 0) + name.width
       parts.push(name)
+      this.crewNames.set(id, name)
     }
     if (ids.length > parts.length) {
       const more = this.add.text(0, board.tag.y, `+${ids.length - parts.length}`, style)
@@ -170,8 +181,8 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
 
   private fire(cell: number): void {
     const snap = this.snap
-    if (!snap || snap.done || !this.team || snap.turn !== this.team) return
-    if (snap.teams[this.team].shots.some((s) => s.cell === cell)) return
+    if (!snap || snap.done || !this.team || this.modeOf(snap) === 'aims') return
+    if (snap.turn !== this.team || snap.teams[this.team].shots.some((s) => s.cell === cell)) return
     this.sfx.click()
     this.sendInput({ kind: 'fire', cell })
     this.target?.setPending(cell)
@@ -203,6 +214,12 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
     own.tick(time)
   }
 
+  private modeOf(snap: FleetBattleSnapshot): TurnMode {
+    if (this.team !== snap.turn) return 'wait'
+    if (snap.openInMs <= 0) return 'open'
+    return snap.captainId === this.selfId ? 'captain' : 'aims'
+  }
+
   private updateTurn(snap: FleetBattleSnapshot): void {
     const target = this.target
     const own = this.own
@@ -212,15 +229,19 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
       own.setFocus('idle')
       target.setAimable(false)
       this.turnText?.setText('')
+      if (this.team) this.subText?.setText('')
       this.turnBar?.clear()
+      for (const name of this.crewNames.values()) name.setAlpha(1)
       return
     }
     const turn = snap.turn
-    const ours = this.team === turn
-    if (turn !== this.lastTurn) {
-      if (this.lastTurn !== null && ours) this.sfx.go()
-      this.turnMax = 0
+    const mode = this.modeOf(snap)
+    if (turn !== this.lastTurn) this.turnMax = 0
+    if (`${turn}:${mode}` !== `${this.lastTurn}:${this.lastMode}`) {
+      // Your call now (captain, or the turn just opened up): go!
+      if (this.lastTurn !== null && (mode === 'captain' || mode === 'open')) this.sfx.go()
       this.lastTurn = turn
+      this.lastMode = mode
       if (this.turnText) punch(this, this.turnText, 0.2, 110)
     }
     // The turn team fires at the other team's fleet: that board is the one in play.
@@ -228,17 +249,40 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
     const color = teamColor(turn)
     target.setFocus(firedAt === this.targetFleet ? 'active' : this.team ? 'dim' : 'idle', color)
     own.setFocus(firedAt === this.ownFleet ? 'active' : this.team ? 'dim' : 'idle', color)
-    target.setAimable(ours)
+    target.setAimable(mode === 'captain' || mode === 'open')
+    // The captain's name stays lit in the crew row while the call is theirs alone.
+    const calling = snap.openInMs > 0 ? snap.captainId : null
+    for (const [id, name] of this.crewNames) {
+      name.setAlpha(calling === null || snap.playerTeams[id] !== turn || id === calling ? 1 : 0.45)
+    }
     if (this.turnText) {
-      const key = ours ? 'game.fleetBattle.yourTurn' : 'game.fleetBattle.waitTurn'
-      const text = this.t(key, { team: this.teamName(turn) })
+      const captain = snap.captainId ?? ''
+      const text =
+        mode === 'captain'
+          ? this.t('game.fleetBattle.yourShot')
+          : mode === 'aims'
+            ? this.t('game.fleetBattle.captainAims', { name: this.state.nameOf(captain) })
+            : mode === 'open'
+              ? this.t('game.fleetBattle.yourTurn', { team: this.teamName(turn) })
+              : this.t('game.fleetBattle.waitTurn', { team: this.teamName(turn) })
       setFittedText(this.turnText, text, this.scale.width - 24, this.turnSizes)
-      setTextColor(this.turnText, color)
+      setTextColor(this.turnText, mode === 'aims' ? this.state.colorOf(captain, color) : color)
+    }
+    // Team members get the countdown to when the whole crew may fire (spectators keep their line).
+    if (this.team && this.subText) {
+      const s = Math.ceil(snap.openInMs / 1000)
+      const sub =
+        mode === 'captain'
+          ? this.t('game.fleetBattle.crewIn', { s })
+          : mode === 'aims'
+            ? this.t('game.fleetBattle.youIn', { s })
+            : ''
+      if (this.subText.text !== sub) this.subText.setText(sub)
     }
 
     this.turnMax = Math.max(this.turnMax, snap.turnRemainingMs)
     const frac = this.turnMax > 0 ? snap.turnRemainingMs / this.turnMax : 0
-    const urgent = ours && snap.turnRemainingMs < 1500
+    const urgent = mode !== 'wait' && snap.turnRemainingMs < 1500
     if (this.turnBar) {
       const { x, y, w, h } = this.bar
       drawSegmentBar(this.turnBar, x, y, w, h, frac, urgent ? PALETTE.amber : color)
@@ -275,13 +319,32 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
     if (time - this.endedAt < END_CARD_DELAY_MS) return
     if (snap.winner === null) {
       this.card?.show(this.t('game.fleetBattle.draw'), PALETTE.amber)
-    } else if (!this.team) {
+      return
+    }
+    // A win on the clock (no fleet sunk) says why: more hits, or as many with fewer shots.
+    const loser = otherTeam(snap.winner)
+    const sunk = snap.teams[loser].damage.length >= snap.teams[loser].fleetCells
+    const hits = (team: TeamId): number => snap.teams[otherTeam(team)].damage.length
+    const why = sunk
+      ? ''
+      : hits(snap.winner) > hits(loser)
+        ? this.t('game.fleetBattle.onHits', { a: hits(snap.winner), b: hits(loser) })
+        : this.t('game.fleetBattle.onShots')
+    if (!this.team) {
       const team = this.teamName(snap.winner)
-      this.card?.show(this.t('game.fleetBattle.teamWins', { team }), teamColor(snap.winner))
+      this.card?.show(this.t('game.fleetBattle.teamWins', { team }), teamColor(snap.winner), why)
     } else if (won) {
-      this.card?.show(this.t('game.fleetBattle.won'), PALETTE.lime)
+      this.card?.show(
+        this.t(sunk ? 'game.fleetBattle.won' : 'game.fleetBattle.wonTime'),
+        PALETTE.lime,
+        why,
+      )
     } else {
-      this.card?.show(this.t('game.fleetBattle.lost'), PALETTE.red)
+      this.card?.show(
+        this.t(sunk ? 'game.fleetBattle.lost' : 'game.fleetBattle.lostTime'),
+        PALETTE.red,
+        why,
+      )
     }
   }
 

@@ -641,8 +641,8 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   - The rules:
     - `min` 2 or more for last-standing, head-to-head, duel and relay games.
     - `min` 1 only for genuine score attacks and time trials.
-    - `max` 12 unless spawns or turn time really break. That leaves Glass Bridge (turns run out)
-      and Bomber Express (10 spawn cells) at 10 until their fixes land.
+    - `max` 12 unless spawns or turn time really break. That left Glass Bridge (turns ran out)
+      and Bomber Express (10 spawn cells) at 10; both went to 12 once they were fixed (D29).
 - **Who counts**: the connected players.
   - **Lobby**:
     - Each card shows the recommended range, green when the room is inside it.
@@ -660,9 +660,105 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   were added (silver and tan). The award table grows to 12 positions — 10/7/5/4/3/2/2/1/1/1/1/0 — so
   only last place in a full room scores 0.
 - **Kept out on purpose**:
-  - Fit is checked when the session starts, not again mid-session.
-  - Team games don't check team balance yet.
-  - The audit's balance and correctness findings were **not** fixed here: they are the prioritised
-    *Next iterations* list in `backlog.md`, cross-cutting fixes first (disconnected seats, the
-    idle-wins tiebreak, duel tiers).
+  - Fit was checked only when the session started, and team balance not at all. Both were changed
+    in D28: fit is rechecked every round, and a team game needs someone on each side.
+  - The audit's balance and correctness findings were not fixed here, but listed as the prioritised
+    *Next iterations* in `backlog.md`. They were then fixed the same day: D28 (cross-cutting) and
+    D29 (per game).
 - **Revertable**: widen every range to 1–12 and the lobby and engine behave as before.
+
+### D28 — Who plays a round: connected seats, idle players last, three duel tiers — DONE
+
+- **Date**: 2026-10-03. **Context**: the player-fit audit (D27, `player-fit-audit.md`) found the same
+  handful of problems in game after game. Each was fixed once, in the engine or a shared service,
+  instead of 55 times.
+- **Connected seats only.** A round's players are the ones connected when it starts; only their
+  inputs reach the game. A seat that dropped earlier in the session no longer:
+  - holds every "all done" finish to the full timer;
+  - hands its duel opponent a free win;
+  - drags its team's average down.
+
+  The players keep their total and simply score nothing for rounds they missed.
+- **Leaving mid-round.** `MiniGame.leave(state, id, now)` is an optional hook. The engine calls it once
+  a round player has been disconnected for 5 s (`leaveGraceMs`), so a page reload isn't punished.
+  Games use it to mark the player out or done, skip their turn, forfeit their duel, or take their car
+  off the track, so the round carries on.
+- **Idle players rank last** (`services/idleDemotion`). Anyone who never sent an input in a round,
+  or who left it, is ranked below everyone who played, sharing last place. This fixed the
+  "idle-wins-tiebreak" pattern in one place: a player with an empty tiebreak (0 attempts, 0 ms) beat
+  people who had played and scored the same. It also covers AFK seats that scored by doing nothing
+  (an idle basket, an auto-firing ship, a runner who never moved).
+  - Duel byes (`result.byes`) and turns that never came (`result.waiting`) are excused.
+  - Team rounds are left alone: the team is ranked as a whole.
+  - Scenes must never send inputs without a human action.
+- **Three duel tiers** (`services/duelRanking`): wins, then draws and byes, then losses, with each
+  game's margin ordering players inside a tier. A bye or a draw used to score exactly like a win.
+  `pairPlayers` now gives the bye to whoever has had the fewest; the engine counts byes from
+  `result.byes` and passes the counts back in `byeCounts`.
+- **Fit is rechecked every round.** A game that no longer fits who's connected (headcount, or a team
+  with nobody on it) is dropped from the line-up when its turn comes; it isn't played short-handed.
+- **Teams.** The seed decides which team gets the odd member (it was always red), and lobby ties are
+  broken randomly too. A team game needs someone connected on each side: the lobby says "Both teams
+  need players" and the server won't start a 4-v-0. The lobby also warns when teams are more than
+  one player apart.
+- **Durations.** Catalog durations went back to what the modules were tuned for: Simon 60 s, Sink the
+  Fleet 60 s, Pixel Pong 45 s. At 30 s most duels ended on the timer.
+- **Pixel Roulette** has no skill axis any more: pure luck says nothing about anyone's skills.
+
+### D29 — Every audit finding fixed, game by game — DONE
+
+- **Date**: 2026-10-03. **Context**: the user asked to fix everything the player-fit audit found
+  (D27, `player-fit-audit.md`).
+  - The cross-cutting fixes landed first, in the engine (D28).
+  - The per-game fixes followed, six groups of games worked in parallel, each with tests.
+  - `minigame-catalog.md` describes the resulting rules.
+- **Choices worth knowing** (the rest follow the audit's suggestion directly):
+  - **Hidden info vs. one room-wide snapshot.** Snapshots are broadcast to the whole room, so a
+    player's private board can't be hidden from devtools. Instead of a per-player transport, each
+    player gets their **own seeded variant of the same content**, so a rival's data says nothing
+    about yours, and peeking at a neighbour's screen stops paying too:
+    - Simon relabels the pads per player;
+    - Match deals the same pairs in a per-player layout;
+    - Sudoku gives the same puzzle under a per-player symmetry;
+    - Higher or Lower deals per-player decks.
+
+    The trade-off is in Higher or Lower: the decks are different seeded draws, so card luck isn't
+    identical for everyone.
+  - **Balloon Chicken**: three balloons per player, each with the same seeded burst point for
+    everyone. Cashing out banks the balloon and brings the next; a balloon still in hand at the
+    buzzer pops. Rivals show banked points and outcomes, never live pumps (still on the wire,
+    hidden on screen).
+  - **Higher or Lower**: a BANK action; a miss ends the run and halves the streak. Ranked by score
+    only, so speed no longer decides.
+  - **Glass Bridge**: scored in ★.
+    - +1 per blind step, +1 for crossing.
+    - A turn cut short by the buzzer is worth +1, the expected value of a turn.
+    - Vest order no longer decides the ranking, and waiting for the glint is no longer dominant.
+    - The jump timer shrinks at 10+ so 12 players all get a turn.
+    - A solved bridge is crossed by the whole queue at once.
+  - **Line Clear Sprint**: a top-out costs 2 lines and restarts the board after 1.5 s, instead of
+    freezing it for the rest of the round.
+  - **Duels**:
+    - Sink the Fleet: "a hit shoots again".
+    - Pixel Pong: a golden point (up to +10 s) when tied at the bell.
+    - Quick Draw: no tap is a loss.
+    - A bye watches a live duel (`scenes/duelWatch`).
+  - **Sumo Push**: the real bug was that the steering speed cap also clipped knockback, so nobody
+    could ever be shoved out. Momentum now has its own cap, and there's a DASH and a ring that
+    shrinks after 40 % of the round. Bouts that ended at the timer went from 98–100 % to 0 %; it
+    now plays from 2 players.
+  - **Timing judged on the server** (Reaction, Pixel Beat): the client reports its own timing, and
+    the server credits it only within a bounded window around its own measurement. Pixel Dash,
+    Fruit Catch and Pixel Rain render from the server clock (`netcode/ServerClock`) instead of
+    100 ms behind.
+  - **Inputs with no human action.** Several scenes sent inputs no human made: movement or steering
+    heartbeats in Sumo Push, Bomber, Asteroids, Brawl, Room Rush, Sumo ICE, the racers and Star
+    Blaster, and Pong's first frame. They now send only on a real action, so the idle demotion
+    (D28) works.
+  - **Ranges**: Glass Bridge and Bomber Express (12 spawn cells, seeded) go to 12; Sumo Push to a
+    2-player minimum; Micro Race (slipstream) and Sumo ICE (bigger core at 10+) are recommended up
+    to 10.
+- **Kept on purpose**:
+  - Team rounds are still worth the team's position points whatever the headcount (by design).
+  - An AFK fighter in Brawl can still be KO'd for credit; the idle demotion only ranks them last.
+

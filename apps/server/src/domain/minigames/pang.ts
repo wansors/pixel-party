@@ -196,13 +196,22 @@ export class Pang implements MiniGame<PangState, PangInput> {
       if (Math.hypot(b.x - cx, b.y - cy) >= r) continue
       a.lives -= 1
       a.shieldUntil = now + SHIELD_MS
-      if (a.lives <= 0) {
-        a.out = true
-        a.harpoon = null
-        a.dir = 0
-      }
+      if (a.lives <= 0) this.knockOut(a)
       return
     }
+  }
+
+  private knockOut(a: Arena): void {
+    a.out = true
+    a.harpoon = null
+    a.dir = 0
+  }
+
+  // A player gone from the room is out (their arena stops), so the "everyone is out" finish holds.
+  leave(state: PangState, playerId: PlayerId): PangState {
+    const a = state.arenas.find((x) => x.id === playerId)
+    if (a) this.knockOut(a)
+    return state
   }
 
   isFinished(state: PangState, now: number): boolean {

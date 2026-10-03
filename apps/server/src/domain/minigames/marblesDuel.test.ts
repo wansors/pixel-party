@@ -25,12 +25,18 @@ const roles = (s: MarblesState, id: string) => {
 }
 
 describe('MarblesDuel', () => {
-  test('pairs players with ten marbles each; an odd player out gets a bye win', () => {
+  test('pairs players with ten marbles each; an odd player out gets a bye, ranked with the draws', () => {
     const s = init(['a', 'b', 'c'])
     const bye = s.duels.find((d) => d.b === null)
     expect(bye?.phase).toBe('done')
     const d = s.duels.find((x) => x.b !== null)
     expect(d?.marbles.get(d.a)).toBe(MARBLES.start)
+    if (!bye || !d?.b) throw new Error('a duel and a bye expected')
+    d.marbles.set(d.a, 13).set(d.b, 7)
+    const result = game.getResult(s)
+    expect(result.placements).toEqual([d.a, bye.a, d.b])
+    expect(result.byes).toEqual([bye.a])
+    expect(game.snapshot(s, 0).players[bye.a]?.won).toBeNull()
   })
 
   test('a right call takes the bet from the hider; a wrong one pays it; roles swap', () => {
@@ -85,5 +91,28 @@ describe('MarblesDuel', () => {
     d.marbles.set('a', 12)
     d.marbles.set('b', 8)
     expect(game.getResult(s).ranks?.b).toBe(1)
+  })
+
+  test('equal marbles at the bell is a draw: below every win, above every loss', () => {
+    const s = init(['a', 'b', 'c', 'd'])
+    const [d1, d2] = s.duels
+    if (!d1?.b || !d2?.b) throw new Error('two duels expected')
+    d1.marbles.set(d1.a, 12).set(d1.b, 8)
+    const result = game.getResult(s)
+    expect(result.placements).toEqual([d1.a, d2.a, d2.b, d1.b])
+    expect(result.ranks?.[d2.a]).toBe(1)
+    expect(result.ranks?.[d2.b]).toBe(1)
+    expect(game.snapshot(s, 50_000).players[d2.a]?.won).toBeNull()
+  })
+
+  test('a player who leaves forfeits the duel', () => {
+    const s = init(['a', 'b'])
+    const d = duelOf(s, 'a')
+    d.marbles.set('a', 4).set('b', 16)
+    game.leave(s, 'b', 1000)
+    expect(d.phase).toBe('done')
+    expect(game.isFinished(s, 1000)).toBe(true)
+    expect(game.snapshot(s, 1000).players.a).toMatchObject({ won: true, oppLeft: true })
+    expect(game.getResult(s).placements).toEqual(['a', 'b'])
   })
 })

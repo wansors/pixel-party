@@ -237,7 +237,7 @@
       },
       "color-trap": {
         "name": "Trampa de Color",
-        "blurb": "Pulsa el color de la TINTA, no lo que pone. Ojo, que engaña."
+        "blurb": "Pulsa el color de la TINTA, no lo que pone. Ojo: cada fallo resta un punto."
       },
       "trivia": {
         "name": "Trivial Exprés",
@@ -245,7 +245,7 @@
       },
       "balloon-chicken": {
         "name": "Globo Gallina",
-        "blurb": "Infla para sumar y plántate antes de que pete… o lo pierdes todo.",
+        "blurb": "Tres globos, los mismos para todos: infla para sumar y plántate antes de que pete cada uno.",
         "tagline": "La avaricia rompe el saco. Y el globo."
       },
       "number-rush": {
@@ -262,7 +262,7 @@
       },
       "higher-lower": {
         "name": "¿Mayor o Menor?",
-        "blurb": "¿La siguiente carta es mayor o menor? Una cagada y se acabó."
+        "blurb": "¿Mayor o menor? Haz racha y plántate cuando te atrevas: si la cagas, pierdes la mitad."
       },
       "bug-smash": {
         "name": "Matabichos",
@@ -299,7 +299,7 @@
       },
       "sink-the-fleet": {
         "name": "Hundir la Flota",
-        "blurb": "El de toda la vida, cara a cara: disparad por turnos y húndele la flota antes que él a ti.",
+        "blurb": "El de toda la vida, cara a cara: si das, repites. Húndele la flota antes que él a ti.",
         "tagline": "¡Tocado y hundido! Y tu orgullo, también."
       },
       "bomb-relay": {
@@ -313,7 +313,7 @@
       },
       "fleet-battle": {
         "name": "Hundid la Flota",
-        "blurb": "Hundir la flota por equipos: poneos de acuerdo para disparar y hundid al rival primero."
+        "blurb": "Batalla naval por equipos: un capi distinto da cada orden de fuego y luego dispara cualquiera. ¡Hundid su flota primero!"
       },
       "maze-sprint": {
         "name": "Laberinto Exprés",
@@ -329,7 +329,7 @@
       },
       "bubble-pop": {
         "name": "Revienta Pompas",
-        "blurb": "Junta tres o más pompas del mismo color para reventarlas. Gana quien limpie antes el tablero."
+        "blurb": "Junta tres o más pompas del mismo color para reventarlas. Gana quien más reviente; limpiar el tablero entero gana a todo."
       },
       "fruit-catch": {
         "name": "Pilla la Fruta",
@@ -346,8 +346,8 @@
       },
       "snake-arena": {
         "name": "La Serpiente",
-        "blurb": "Come, crece y no te la pegues. Gana la serpiente más larga.",
-        "tagline": "Come, crece y estámpate contra un amigo."
+        "blurb": "Cada uno en su tablero y las mismas manzanas para todos: come, crece y no te la pegues. Gana la más larga.",
+        "tagline": "Come, crece y estámpate contra ti mismo."
       },
       "pixel-pong": {
         "name": "Pixel Pong",
@@ -356,7 +356,7 @@
       },
       "sumo-push": {
         "name": "Sumo a Empujones",
-        "blurb": "Saca a todos del círculo a empujones. Gana el último que quede dentro."
+        "blurb": "Empuja y embiste a todos fuera de un círculo que encoge. Gana el último que quede dentro."
       },
       "match-pairs": {
         "name": "Parejas",
@@ -364,7 +364,7 @@
       },
       "quick-draw": {
         "name": "Desenfunda",
-        "blurb": "Espera a que ponga FUEGO y desenfunda el primero. Si te adelantas, palmas.",
+        "blurb": "Espera a que ponga FUEGO y desenfunda el primero. Si te adelantas, o ni te mueves, palmas.",
         "tagline": "El enterrador ya está tomando medidas."
       },
       "pixel-roulette": {
@@ -397,7 +397,7 @@
       },
       "glass-bridge": {
         "name": "Puente de Cristal",
-        "blurb": "Cruzad de uno en uno: ¿cristal IZQUIERDO o DERECHO? Uno aguanta y el otro se rompe. Fíjate en el brillo.",
+        "blurb": "Cruzad de uno en uno: ¿IZQUIERDA o DERECHA? Acertar a ciegas da ★; tirar de chuleta con el brillo es seguro, pero no puntúa.",
         "tagline": "La mitad de los cristales aguanta. La otra mitad es un funeral."
       },
       "freeze-doll": {
@@ -450,7 +450,7 @@
       },
       "honeycomb-cut": {
         "name": "Recorta el Caramelo",
-        "blurb": "Recorta la forma del caramelo con la aguja. ¡Si te sales o vas con prisas, se raja!",
+        "blurb": "Recorta la forma del caramelo con la aguja. Si te sales o vas con prisas, se raja… ¡y roto vale la mitad!",
         "tagline": "Pulso firme. Si rompes el caramelo, el caramelo te rompe a ti."
       },
       "jump-rope": {
@@ -510,7 +510,11 @@
         "¡KAPUT!",
         "¡AL HOYO!",
         "¡FINIQUITADO!"
-      ]
+      ],
+      "duelBye": "DESCANSAS",
+      "duelWatch": "De mirón: {{a}} contra {{b}}",
+      "duelWinner": "¡GANA {{name}}!",
+      "duelOppLeft": "{{name}} se ha pirado: ¡ganas tú!"
     },
     "reaction": {
       "wait": "ESPERA…",
@@ -528,7 +532,7 @@
       "hint": "Aporrea ESPACIO (o la pantalla) como si no hubiera mañana"
     },
     "colorTrap": {
-      "instruction": "Pulsa el color de la TINTA, no lo que pone",
+      "instruction": "Pulsa el color de la TINTA, no lo que pone. Fallo = -1",
       "locked": "Hecho. Espera a la siguiente",
       "words": {
         "red": "ROJO",
@@ -548,8 +552,6 @@
       "pump": "INFLAR",
       "cashOut": "ME PLANTO",
       "pop": "¡PUM!",
-      "cashed": "TE PLANTAS",
-      "bust": "PETADO",
       "bustLines": [
         "La avaricia rompe el saco. Y el globo.",
         "Solo tenías que plantarte.",
@@ -574,7 +576,9 @@
       "lower": "▼ MENOR",
       "streak": "Racha: {{n}}",
       "prompt": "¿Mayor o menor que esta?",
-      "out": "Fuera. A esperar sentadito."
+      "out": "Fuera. A esperar sentadito.",
+      "bank": "ME PLANTO",
+      "banked": "¡TE PLANTAS!"
     },
     "stopClock": {
       "stop": "PARAR",
@@ -622,7 +626,11 @@
         "STAR": "la ESTRELLA",
         "MUSHROOM": "la SETA",
         "HOUSE": "la CASA",
-        "CAT": "el GATO"
+        "CAT": "el GATO",
+        "GHOST": "el FANTASMA",
+        "KEY": "la LLAVE",
+        "APPLE": "la MANZANA",
+        "CROWN": "la CORONA"
       }
     },
     "pixelSplit": {
@@ -636,7 +644,8 @@
       "spectator": "Sin equipo: esta ronda te toca mirar",
       "leads": "¡VA GANANDO {{team}}!",
       "almost": "¡QUE SE ESCAPA!",
-      "teamWins": "¡GANA {{team}}!"
+      "teamWins": "¡GANA {{team}}!",
+      "perHead": "por cabeza"
     },
     "sinkTheFleet": {
       "yourTurn": "TE TOCA — ¡fuego!",
@@ -646,11 +655,13 @@
       "won": "¡TOCADO Y HUNDIDO! HAS GANADO",
       "lost": "Te han hundido la flota…",
       "draw": "Tiempo agotado — empate",
-      "bye": "Sin rival esta ronda: victoria por la cara",
-      "hint": "En tu turno, pulsa una casilla de aguas enemigas para disparar",
+      "bye": "Sin rival esta ronda: te apuntas un empate",
+      "hint": "Pulsa una casilla de aguas enemigas para disparar: si das, repites",
       "hit": "¡TOCADO!",
       "splash": "¡AGUA!",
-      "hitsChip": "IMPACTOS {{n}}/{{total}}"
+      "hitsChip": "IMPACTOS {{n}}/{{total}}",
+      "turnOf": "DISPARA {{name}}",
+      "again": "¡REPITES!"
     },
     "bombRelay": {
       "mash": "¡DALE CAÑA y pásala!",
@@ -658,20 +669,22 @@
       "teammateHolds": "La bomba la tiene un compañero",
       "relays": "pases",
       "booms": "explosiones",
-      "hint": "Solo puedes aporrear cuando la bomba la tienes TÚ",
+      "hint": "Solo aporreas cuando la bomba es TUYA; si te duermes, pasa de ti",
       "spectator": "Sin equipo: esta ronda te toca mirar",
       "pass": "¡PASE!",
       "boom": "¡BUM!",
-      "getReady": "¡PREPARADOS!"
+      "getReady": "¡PREPARADOS!",
+      "tooSlow": "¡PASMAO!"
     },
     "pixelBeat": {
       "tapHint": "Pulsa la pantalla o ESPACIO al compás",
-      "streak": "{{n}} de racha"
+      "streak": "{{n}} de racha",
+      "watching": "Esta la ves desde la grada; en la próxima entras tú"
     },
     "fleetBattle": {
-      "hint": "En el turno de tu equipo, pulsa una casilla de aguas enemigas para disparar",
+      "hint": "Pulsa en aguas enemigas para disparar: primero manda el capi, luego cualquiera",
       "spectator": "Sin equipo: esta ronda te toca mirar",
-      "yourTurn": "TURNO DE {{team}} — ¡fuego!",
+      "yourTurn": "{{team}}: ¡FUEGO A DISCRECIÓN!",
       "waitTurn": "Esperando a {{team}}...",
       "won": "¡TOCADO Y HUNDIDO! GANA TU EQUIPO",
       "lost": "Os han hundido la flota…",
@@ -681,7 +694,15 @@
       "hitsChip": "IMPACTOS {{n}}/{{total}}",
       "enemyWaters": "AGUAS ENEMIGAS",
       "ourFleet": "NUESTRA FLOTA",
-      "teamWins": "¡GANA {{team}}!"
+      "teamWins": "¡GANA {{team}}!",
+      "yourShot": "¡DISPARAS TÚ, CAPI!",
+      "captainAims": "APUNTA {{name}}...",
+      "crewIn": "Tu tripulación dispara en {{s}} s",
+      "youIn": "Manda el capi: tú disparas en {{s}} s",
+      "wonTime": "¡TIEMPO! GANA TU EQUIPO",
+      "lostTime": "¡TIEMPO! PIERDE TU EQUIPO",
+      "onHits": "Más tocados: {{a}} a {{b}}",
+      "onShots": "Mismos tocados, menos tiros"
     },
     "mazeSprint": {
       "steps": "{{n}} pasos",
@@ -689,7 +710,8 @@
     },
     "bubblePop": {
       "score": "{{n}} pts",
-      "hint": "Apunta a una columna y suelta para disparar"
+      "hint": "Apunta a una columna y suelta para disparar",
+      "jammed": "¡ATASCADO!"
     },
     "lineClearSprint": {
       "lines": "{{n}} líneas",
@@ -716,7 +738,8 @@
       "lastStanding": "¡ÚLTIMO EN PIE!"
     },
     "pixelDash": {
-      "hint": "¡Pulsa la pantalla o Espacio para saltar!"
+      "hint": "Pulsa o Espacio para saltar. ¡A tiempo, sin aporrear!",
+      "wasted": "¡UY!"
     },
     "bugSmash": {
       "hint": "¡Espachurra los bichos y no toques las bombas!"
@@ -726,11 +749,14 @@
       "length": "Longitud {{n}}"
     },
     "oddOneOut": {
-      "prompt": "¡Pulsa la casilla que desentona!"
+      "prompt": "¡Pulsa la casilla que desentona!",
+      "cooldown": "¡Esa no! Castigado un momento"
     },
     "pixelPong": {
       "hint": "Arrastra para mover tu pala: ¡gana quien llegue a {{n}}!",
-      "bye": "Sin rival esta ronda: victoria por la cara"
+      "bye": "Sin rival esta ronda: te llevas un empate",
+      "golden": "¡PUNTO DE ORO!",
+      "goldenHint": "Empate al final: el siguiente punto gana"
     },
     "quickDraw": {
       "wait": "ESPERA…",
@@ -745,21 +771,23 @@
       "tooEarly": "Te has adelantado, vaquero",
       "slower": "{{name}} ha sido más rápido ({{ms}} ms)",
       "noDraw": "Nadie ha desenfundado. Menudos pistoleros.",
-      "bye": "Sin rival esta ronda: ¡victoria por la cara!",
+      "bye": "Sin rival esta ronda: te apuntas un empate",
       "undertaker": [
         "El enterrador ya te está tomando medidas.",
         "Caja de pino, talla mediana.",
         "Tus botas, para el caballo.",
         "El muerto al hoyo y el vivo al bollo."
-      ]
+      ],
+      "bothLose": "PIERDEN LOS DOS"
     },
     "matchPairs": {
       "prompt": "¡Encuentra las parejas!",
       "pairs": "{{n}}/{{total}} parejas"
     },
     "sumoPush": {
-      "hint": "Mantén y arrastra (o flechas) para empujar",
-      "alive": "{{n}}/{{total}} dentro"
+      "hint": "Arrastra o flechas: empuja · Espacio o CARGA: ¡embiste!",
+      "alive": "{{n}}/{{total}} dentro",
+      "dash": "¡CARGA!"
     },
     "sudokuRace": {
       "pickCell": "Elige una casilla",
@@ -842,7 +870,9 @@
         "¡MENUDO TORTAZO!",
         "¿QUIÉN ES EL SIGUIENTE?",
         "ESO TIENE QUE DOLER."
-      ]
+      ],
+      "blind": "¡A CIEGAS! +{{n}}★",
+      "peeked": "¡CHULETA! +0★"
     },
     "freezeDoll": {
       "walk": "ANDAR",
@@ -875,7 +905,8 @@
       "callHint": "¡Métete en una sala con {{n}} justos!",
       "lockedHint": "¡A SALVO! Puerta cerrada",
       "safe": "¡A SALVO!",
-      "survived": "¡SUPERVIVIENTE!"
+      "survived": "¡SUPERVIVIENTE!",
+      "wipeout": "¡NI UNO! ¡SE REPITE!"
     },
     "sumoIce": {
       "splash": "¡CHOF!",
@@ -892,7 +923,8 @@
     "starBlaster": {
       "score": "{{n}} PTS",
       "warning": "¡OJO! JEFAZO",
-      "final": "{{n}} PUNTOS"
+      "final": "{{n}} PUNTOS",
+      "steerToFire": "¡MUÉVETE Y A DISPARAR!"
     },
     "asteroids": {
       "thrust": "MOTOR",
@@ -935,7 +967,8 @@
       "cracks": "GRIETAS {{n}}/{{max}}",
       "done": "¡RECORTADA EN {{s}}s!",
       "slow": "¡SIN PRISAS! RELAJA LA MANO",
-      "hint": "Mantén pulsado y repasa la línea con la aguja"
+      "hint": "Mantén pulsado y repasa la línea con la aguja",
+      "watching": "Esta la ves desde la grada"
     },
     "jumpRope": {
       "jump": "¡SALTA!",
@@ -964,7 +997,8 @@
       "reveal": "{{n}} · ¡{{parity}}!",
       "youTake": "¡Te llevas {{n}}!",
       "theyTake": "Se lleva {{n}}. Ay.",
-      "bye": "Sin rival esta ronda: ¡victoria por la cara!"
+      "bye": "Sin rival esta ronda: te apuntas un empate",
+      "takes": "{{name}} se lleva {{n}}"
     },
     "weirdTrivia": {
       "hint": "Raro, pero de verdad: pulsa la buena",

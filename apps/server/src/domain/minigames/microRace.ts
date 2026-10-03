@@ -10,13 +10,16 @@ import {
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 import {
   type CarPhysics,
+  type GridSlot,
   type RaceCar,
   clamp1,
   collideCars,
   followRoad,
   formatRaceTime,
+  gridSlots,
+  inSlipstream,
   integrateCar,
-  pointAt,
+  retireCar,
   worldWalls,
 } from './raceCore'
 
@@ -52,6 +55,11 @@ const PHYSICS: CarPhysics = {
   highSpeedUndersteer: 0.3,
 }
 const RESTITUTION = 1.1 // >1 gives bumps a punchy, Micro Machines feel
+// Slipstream: tucked in right behind another car (in range, in its wake, heading the same way) a car
+// gets a little more top speed and pull — the way back up from the back of the grid.
+const DRAFT_RANGE = 110
+const DRAFT_CONE = 0.3
+const DRAFT = { maxSpeedScale: 1.1, accelScale: 1.15 }
 const HIT_MIN_SPEED = 60 // approach speed that counts as a bump for feedback
 const WALL_BOUNCE = 0.4
 // Progress tracking (see raceCore.followRoad): a car that strays lostFactor × halfWidth from its own
@@ -61,7 +69,9 @@ const GRID_FIRST_BACK = 20
 const GRID_ROW_GAP = 36
 const GRID_LATERAL = 0.42
 
-type Car = RaceCar
+interface Car extends RaceCar {
+  draft: boolean
+}
 
 export interface MicroRaceState {
   players: PlayerId[]
@@ -92,7 +102,6 @@ export class MicroRace implements MiniGame<MicroRaceState, MicroRaceInput> {
     )
     const def = MICRO_RACE_TRACKS[track] as MicroRaceTrackDef
     const samples = sampleMicroRaceTrack(def, SAMPLE_SPACING)
-    const n = samples.length
     // Seeded grid order (Fisher–Yates), two cars per row, staggered behind the start line.
     const order = [...ctx.players]
     for (let i = order.length - 1; i > 0; i--) {
@@ -101,28 +110,33 @@ export class MicroRace implements MiniGame<MicroRaceState, MicroRaceInput> {
       order[i] = order[j] as PlayerId
       order[j] = tmp
     }
+    const grid = gridSlots(samples, order.length, {
+      spacing: SAMPLE_SPACING,
+      firstBack: GRID_FIRST_BACK,
+      rowGap: GRID_ROW_GAP,
+      lateral: def.halfWidth * GRID_LATERAL,
+      carR: CAR_R,
+    })
     const cars = new Map<PlayerId, Car>()
     order.forEach((pid, slot) => {
-      const back = GRID_FIRST_BACK + Math.floor(slot / 2) * GRID_ROW_GAP
-      const off = Math.round(back / SAMPLE_SPACING)
-      const idx = (((n - off) % n) + n) % n
-      const { x, y, tx, ty } = pointAt(samples, idx)
-      const lat = (slot % 2 === 0 ? -1 : 1) * def.halfWidth * GRID_LATERAL
+      const { x, y, a, idx, back } = grid[slot] as GridSlot
       cars.set(pid, {
-        x: x - ty * lat,
-        y: y + tx * lat,
-        a: Math.atan2(ty, tx),
+        x,
+        y,
+        a,
         vx: 0,
         vy: 0,
         steer: 0,
         throttle: 0,
         idx,
-        prog: -off,
+        prog: -back,
         off: false,
         lostSince: null,
         finishMs: null,
         hits: 0,
         resets: 0,
+        gone: false,
+        draft: false,
       })
     })
     return {
@@ -159,8 +173,14 @@ export class MicroRace implements MiniGame<MicroRaceState, MicroRaceInput> {
     if (now < state.goAt) return state
     const h = dt / 1000 / SUB_STEPS
     const cars = state.players.map((p) => state.cars.get(p)).filter((c): c is Car => !!c)
+    for (const car of cars) {
+      car.draft =
+        car.finishMs === null &&
+        !car.gone &&
+        inSlipstream(car, cars, CAR_R, DRAFT_RANGE, DRAFT_CONE)
+    }
     for (let s = 0; s < SUB_STEPS; s++) {
-      for (const car of cars) integrateCar(car, h, PHYSICS)
+      for (const car of cars) integrateCar(car, h, PHYSICS, car.draft ? DRAFT : {})
       for (let i = 0; i < cars.length; i++) {
         for (let j = i + 1; j < cars.length; j++) {
           collideCars(cars[i] as Car, cars[j] as Car, CAR_R, RESTITUTION, HIT_MIN_SPEED)
@@ -186,9 +206,19 @@ export class MicroRace implements MiniGame<MicroRaceState, MicroRaceInput> {
     return state
   }
 
+  // A driver who left becomes a ghost (no contact, no slipstream) that no longer holds the race open.
+  leave(state: MicroRaceState, playerId: PlayerId): MicroRaceState {
+    const car = state.cars.get(playerId)
+    if (car) retireCar(car)
+    return state
+  }
+
   isFinished(state: MicroRaceState, now: number): boolean {
     if (now >= state.endsAt) return true
-    return state.players.every((p) => state.cars.get(p)?.finishMs !== null)
+    return state.players.every((p) => {
+      const car = state.cars.get(p)
+      return !car || car.finishMs !== null || car.gone
+    })
   }
 
   // Race order: finishers by time, then everyone else by distance covered.
@@ -243,6 +273,8 @@ export class MicroRace implements MiniGame<MicroRaceState, MicroRaceInput> {
         off: c.off,
         hits: c.hits,
         resets: c.resets,
+        draft: c.draft,
+        gone: c.gone,
       }
     })
     return {

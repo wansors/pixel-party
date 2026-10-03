@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { Random } from '../ports/Random'
-import { Sumo, type SumoState } from './sumo'
+import { DASH_COOLDOWN_MS, Sumo, type SumoState } from './sumo'
 
 const zero: Random = { next: () => 0 }
 const nn = <T>(x: T | undefined): T => {
@@ -77,6 +77,86 @@ describe('Sumo', () => {
     expect(result.ranks?.c).toBe(0)
     expect(result.ranks?.b).toBe(1)
     expect(result.ranks?.a).toBe(2)
+  })
+
+  test('the ring holds its size, then closes in to narrower than a wrestler', () => {
+    const game = new Sumo()
+    const s = init(['a', 'b', 'c'])
+    expect(game.ringAt(s, 0)).toBeCloseTo(0.42)
+    expect(game.ringAt(s, 12_000)).toBeCloseTo(0.42)
+    expect(game.ringAt(s, 21_000)).toBeLessThan(0.42)
+    expect(game.ringAt(s, 30_000)).toBeLessThan(0.05)
+    expect(game.snapshot(s, 21_000).ring).toBeCloseTo(game.ringAt(s, 21_000))
+  })
+
+  test('a dash knocks a bracing centre-holder out once the ring has closed in', () => {
+    const game = new Sumo()
+    let s = init(['holder', 'rammer', 'c'])
+    const now = 19_500
+    const holder = nn(s.bodies.get('holder'))
+    const rammer = nn(s.bodies.get('rammer'))
+    Object.assign(holder, { x: 0.5, y: 0.5, vx: 0, vy: 0 })
+    Object.assign(rammer, { x: 0.38, y: 0.5, vx: 0, vy: 0 })
+    nn(s.bodies.get('c')).alive = false
+    // The holder leans into the rammer; the rammer dashes at it.
+    s = game.onInput(s, 'holder', { kind: 'move', dx: -1, dy: 0 }, now)
+    s = game.onInput(s, 'rammer', { kind: 'move', dx: 1, dy: 0 }, now)
+    s = game.onInput(s, 'rammer', { kind: 'dash' }, now)
+    for (let t = now; t < now + 1500 && holder.alive; t += 50) s = game.tick(s, 50, t)
+    expect(holder.alive).toBe(false)
+    expect(rammer.alive).toBe(true)
+  })
+
+  test('the dash recharges, and needs a direction', () => {
+    const game = new Sumo()
+    let s = init(['a', 'b', 'c'])
+    const a = nn(s.bodies.get('a'))
+    // Not steering: nowhere to dash.
+    s = game.onInput(s, 'a', { kind: 'dash' }, 100)
+    expect(a.dashAt).toBe(0)
+    s = game.onInput(s, 'a', { kind: 'move', dx: 0, dy: 1 }, 100)
+    s = game.onInput(s, 'a', { kind: 'dash' }, 100)
+    expect(a.dashAt).toBe(100)
+    expect(a.vy).toBeGreaterThan(1)
+    expect(game.snapshot(s, 150).bodies.find((b) => b.id === 'a')?.dashing).toBe(true)
+    s = game.onInput(s, 'a', { kind: 'dash' }, 100 + DASH_COOLDOWN_MS - 1)
+    expect(a.dashAt).toBe(100)
+    s = game.onInput(s, 'a', { kind: 'dash' }, 100 + DASH_COOLDOWN_MS)
+    expect(a.dashAt).toBe(100 + DASH_COOLDOWN_MS)
+  })
+
+  test('three centre-huggers cannot all sit it out to the bell', () => {
+    for (let seed = 1; seed <= 6; seed++) {
+      const game = new Sumo()
+      let s = new Sumo().init({
+        players: ['a', 'b', 'c'],
+        seed,
+        random: { next: () => seed / 7 },
+        now: 0,
+        config: { durationMs: 30_000 },
+      })
+      let now = 0
+      for (; now <= 30_000 && !game.isFinished(s, now); now += 50) {
+        for (const pid of s.players) {
+          const b = nn(s.bodies.get(pid))
+          s = game.onInput(s, pid, { kind: 'move', dx: 0.5 - b.x, dy: 0.5 - b.y }, now)
+        }
+        s = game.tick(s, 50, now)
+      }
+      expect(s.players.filter((p) => s.bodies.get(p)?.alive).length).toBeLessThanOrEqual(1)
+    }
+  })
+
+  test('a player who leaves steps out of the ring', () => {
+    const game = new Sumo()
+    let s = init(['a', 'b', 'c'])
+    s = game.leave(s, 'a', 4000)
+    expect(nn(s.bodies.get('a')).alive).toBe(false)
+    expect(nn(s.bodies.get('a')).outAt).toBe(4000)
+    expect(game.isFinished(s, 4000)).toBe(false)
+    s = game.leave(s, 'b', 5000)
+    expect(game.isFinished(s, 5000)).toBe(true)
+    expect(game.getResult(s).placements[0]).toBe('c')
   })
 
   test('snapshot reports every body + the ring radius', () => {

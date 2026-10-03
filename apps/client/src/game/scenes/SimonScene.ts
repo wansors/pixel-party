@@ -121,7 +121,8 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
       .text(this.cx, promptY, '', headlineStyle(promptSize, PALETTE.amber, { align: 'center' }))
       .setOrigin(0.5)
 
-    // Bottom strip: everybody else's level, then the replay pips above it, then the device.
+    // Bottom strip: the leaders' levels (yours always among them), the replay pips above it, then the
+    // device.
     const rivalY = height - (compact ? 20 : 28)
     this.pipsY = rivalY - (compact ? 36 : 46)
     const areaTop = promptY + promptSize / 2 + (compact ? 20 : 28)
@@ -312,7 +313,11 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
     const score = snap.scores[this.selfId] ?? 0
     this.hud?.setScore(this.t('game.common.level', { n: score }))
     this.renderRivals(snap)
-    if (!me) return
+    if (!me) {
+      // A spectator (not in this round): the device stays dark.
+      this.waitText?.setText(this.t('game.common.waiting'))
+      return
+    }
     const now = this.time.now
 
     // A longer sequence means the player advanced a level → celebrate, then play the new sequence.
@@ -466,15 +471,20 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
     }
   }
 
-  // Everyone else's level along the bottom, in their colours (✕ = out).
+  // The leaders' levels along the bottom, in their colours (✕ = out) — always including yours: when you
+  // aren't among the top N, you take the last slot.
   private renderRivals(snap: SimonSnapshot): void {
-    const others = Object.keys(snap.players)
-      .filter((id) => id !== this.selfId)
-      .sort((a, b) => (snap.scores[b] ?? 0) - (snap.scores[a] ?? 0))
-      .slice(0, Math.min(MAX_RIVALS, this.scale.width < 520 ? 4 : MAX_RIVALS))
-    const slot = (this.scale.width - 32) / Math.max(1, others.length)
+    const ranked = Object.keys(snap.players).sort(
+      (a, b) =>
+        (snap.scores[b] ?? 0) - (snap.scores[a] ?? 0) ||
+        (snap.players[b]?.pos ?? 0) - (snap.players[a]?.pos ?? 0),
+    )
+    const shown = ranked.slice(0, this.scale.width < 520 ? 4 : MAX_RIVALS)
+    if (this.selfId in snap.players && !shown.includes(this.selfId))
+      shown[shown.length - 1] = this.selfId
+    const slot = (this.scale.width - 32) / Math.max(1, shown.length)
     this.rivals.forEach((text, i) => {
-      const id = others[i]
+      const id = shown[i]
       const icon = this.rivalIcons[i]
       text.setVisible(id !== undefined)
       icon?.setVisible(id !== undefined)

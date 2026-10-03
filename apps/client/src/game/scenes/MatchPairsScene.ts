@@ -7,6 +7,7 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 const CARD_ASPECT = 0.78 // width / height
 const FLIP_MS = 70
+// The strip shows the leaders, always including you (you take the last chip when you're further back).
 const MAX_CHIPS = 6
 
 // One pixel icon + color per pairId: shapes differ, not just colors, so pairs stay tellable apart
@@ -116,7 +117,7 @@ interface Card {
 // to flip it (a real flip — the card squashes to its edge and opens on its pixel icon). A match pops
 // both cards and locks them with a lime frame; a mismatch shakes both with a red frame until the next
 // flip clears them (server rule). Only cards the server reveals ever show a face. A chip strip shows
-// everyone's pair count.
+// the leaders' pair counts (yours always among them).
 export class MatchPairsScene extends MiniGameScene<MatchSnapshot> {
   private cards: Card[] = []
   private prompt?: Phaser.GameObjects.Text
@@ -167,6 +168,7 @@ export class MatchPairsScene extends MiniGameScene<MatchSnapshot> {
       stripTop + PlayerStrip.rowH(chipSize) / 2,
       width - 32,
       chipSize,
+      stripRows,
     )
     this.areaBottom = stripTop - 12
     this.iconKeys = ICONS.map((icon, i) =>
@@ -250,17 +252,28 @@ export class MatchPairsScene extends MiniGameScene<MatchSnapshot> {
     const me = this.selfId
     const board = snap.boards[me]
     const total = (snap.cols * snap.rows) / 2
-    const chips = Object.entries(snap.boards)
+    const ranked = Object.entries(snap.boards)
       .map(([id, b]) => ({ id, pairs: b.matched.length / 2, done: b.done }))
       .sort((a, b) => b.pairs - a.pairs)
-      .slice(0, MAX_CHIPS)
-      .map(({ id, pairs, done }) => ({
-        text: `${this.label(id).slice(0, 10).toUpperCase()} ${pairs}/${total}${done ? ' ✓' : ''}`,
+    const shown = ranked.slice(0, MAX_CHIPS)
+    const mine = ranked.find((c) => c.id === me)
+    if (mine && !shown.includes(mine)) shown[shown.length - 1] = mine
+    this.strip?.set(
+      shown.map(({ id, pairs, done }) => ({
+        // The ✓ hugs the count, so a clipped name never cuts the stat.
+        text: `${this.label(id).slice(0, 10).toUpperCase()} ${pairs}/${total}${done ? '✓' : ''}`,
         avatar: this.state.avatarOf(id),
         color: this.state.colorOf(id),
-      }))
-    this.strip?.set(chips)
-    if (!board) return
+      })),
+    )
+    if (!board) {
+      // A spectator (not in this round): the cards stay face down.
+      if (fresh && this.prompt) {
+        this.prompt.setText(this.t('game.common.waiting'))
+        fitText(this.prompt, this.scale.width - 32, this.promptSize)
+      }
+      return
+    }
 
     const pairs = board.matched.length / 2
     this.hud?.setScore(this.t('game.matchPairs.pairs', { n: pairs, total }))

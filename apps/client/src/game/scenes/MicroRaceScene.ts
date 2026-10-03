@@ -70,7 +70,8 @@ const lerpAngle = (a: number, b: number, t: number): number => a + wrapAngle(b -
 // shared spline), every car interpolated from the snapshot and drawn as a pixel racer in its player's
 // colour. Steer by holding where you want to go (touch/mouse) or with the arrow keys / WASD. A minimap
 // and a standings column show the whole race; start lights, laps, bumps, rescues, the flag and the
-// finish window are all derived from snapshot deltas.
+// finish window are all derived from snapshot deltas. Wind lines trail a car in a slipstream; a driver
+// who left fades to a ghost.
 export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
   private readonly interp = new SnapshotInterpolator<MicroRaceSnapshot>(100)
   private readonly cars = new Map<string, CarView>()
@@ -86,6 +87,8 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
   private trackImage?: Phaser.GameObjects.Image
   private tableShadow?: Phaser.GameObjects.Rectangle
   private minimap?: { track: Phaser.GameObjects.Graphics; dots: Phaser.GameObjects.Graphics }
+  // Slipstream wind lines behind towed cars (screen space, under the cars).
+  private trails?: Phaser.GameObjects.Graphics
   private mm = { x: 0, y: 0, w: 0, h: 0 }
   private standings: Phaser.GameObjects.Text[] = []
   private standingsKey = ''
@@ -102,6 +105,8 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
   private wasd?: Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>
   private aim?: { x: number; y: number }
   private drive = { steer: 0, throttle: 0 }
+  // The last drive sent (the server starts every car parked).
+  private sent = { steer: 0, throttle: 0 }
   private lastSentAt = 0
   private lastLap = 1
   private finished = false
@@ -141,6 +146,7 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     this.bannerUntil = 0
     this.aim = undefined
     this.drive = { steer: 0, throttle: 0 }
+    this.sent = { steer: 0, throttle: 0 }
     this.lastSentAt = 0
     this.lastLap = 1
     this.finished = false
@@ -228,6 +234,7 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
       )
     }
 
+    this.trails = this.add.graphics().setDepth(18)
     this.marker = new YouMarker(this, this.compact ? 12 : 16, 40)
     // Banners go on whichever half of the view the player's car isn't in (see placeBanner).
     const bannerY = this.top + this.view.h * 0.3
@@ -421,7 +428,8 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
   }
 
   private steer(now: number): void {
-    if (this.finished || !this.snap) return
+    // Spectators (not in this round) and finishers have nothing to drive.
+    if (this.finished || !this.snap?.cars.some((c) => c.id === this.selfId)) return
     const left = this.cursors?.left.isDown || this.wasd?.A.isDown
     const right = this.cursors?.right.isDown || this.wasd?.D.isDown
     const up = this.cursors?.up.isDown || this.wasd?.W.isDown
@@ -444,9 +452,13 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     } else {
       this.drive = { steer: 0, throttle: 0 }
     }
-    if (now - this.lastSentAt > SEND_EVERY_MS) {
+    // The server holds the last drive: send changes only (rate-limited), never an idle heartbeat.
+    const d = this.drive
+    const changed = d.steer !== this.sent.steer || d.throttle !== this.sent.throttle
+    if (changed && now - this.lastSentAt > SEND_EVERY_MS) {
+      this.sent = d
       this.lastSentAt = now
-      this.sendInput({ kind: 'drive', steer: this.drive.steer, throttle: this.drive.throttle })
+      this.sendInput({ kind: 'drive', ...d })
     }
   }
 
@@ -691,6 +703,8 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     const lift = this.zoom * 2
     const dots = this.minimap?.dots
     dots?.clear()
+    const trails = this.trails
+    trails?.clear()
     const s = this.mm.w / MICRO_RACE_WORLD.w
     for (const c of sample.to.cars) {
       const v = this.cars.get(c.id)
@@ -701,6 +715,28 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
       v.pilot.setPosition(p.x, p.y).setRotation(heading)
       v.shadow.setPosition(p.x + lift, p.y + lift * 1.5).setRotation(heading)
       v.label.setPosition(p.x, p.y - CAR_COLS * TEXEL * this.zoom * 0.5 - 2)
+      // A driver who left races on as a faded ghost that blocks no one.
+      const alpha = c.gone ? 0.35 : 1
+      v.sprite.setAlpha(alpha)
+      v.pilot.setAlpha(alpha)
+      v.label.setAlpha(alpha)
+      v.shadow.setAlpha(c.gone ? 0.1 : 0.35)
+      if (c.draft && trails) {
+        const back = CAR_COLS * TEXEL * this.zoom * 0.55
+        const bx = p.x - Math.cos(heading) * back
+        const by = p.y - Math.sin(heading) * back
+        trails.lineStyle(2, 0xffffff, 0.5)
+        for (const off of [-0.25, 0.25]) {
+          const ox = -Math.sin(heading) * off * back
+          const oy = Math.cos(heading) * off * back
+          trails.lineBetween(
+            bx + ox,
+            by + oy,
+            bx + ox - Math.cos(heading) * back * 1.2,
+            by + oy - Math.sin(heading) * back * 1.2,
+          )
+        }
+      }
       const mine = c.id === this.selfId
       if (dots) {
         const r = mine ? 4 : 3

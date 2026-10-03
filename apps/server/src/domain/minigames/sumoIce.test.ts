@@ -76,7 +76,7 @@ describe('SumoIce', () => {
     game.tick(s, 50, melt)
     expect(a.alive).toBe(true)
     expect(a.lives).toBe(1)
-    expect(Math.hypot(a.x - 0.5, a.y - 0.5)).toBeLessThan(0.05) // fished out onto the core
+    expect(Math.hypot(a.x - 0.5, a.y - 0.5)).toBeLessThan(0.1) // fished out onto the core
     expect(game.snapshot(s, melt + 100).bodies.find((b) => b.id === 'a')?.ghost).toBe(true)
     expect(game.snapshot(s, melt + SUMO_ICE.ghostMs).bodies.find((b) => b.id === 'a')?.ghost).toBe(
       false,
@@ -91,6 +91,51 @@ describe('SumoIce', () => {
     game.tick(s, 50, melt + 2000)
     expect(a.alive).toBe(false)
     expect(game.isFinished(s, melt + 2000)).toBe(true) // one left
+  })
+
+  test('rescues spread out over the core instead of stacking on one spot', () => {
+    const players = ['a', 'b', 'c', 'd', 'e', 'f']
+    const s = init(players)
+    const i = s.meltAt.findIndex((t) => t > 0 && Number.isFinite(t))
+    const melt = s.meltAt[i] ?? 0
+    const [x, y] = centreOf(i)
+    // Everyone (ghosts, so nobody bumps anyone clear) goes through the same hole at once: each lands
+    // on its own spot of the core.
+    for (const id of players)
+      Object.assign(body(s, id), { x, y, vx: 0, vy: 0, ghostUntil: melt + 1 })
+    game.tick(s, 50, melt)
+    const spots = players.map((id) => body(s, id))
+    for (const b of spots) {
+      expect(b.lives).toBe(1)
+      expect(game.snapshot(s, melt).tiles[Math.floor(b.y * N) * N + Math.floor(b.x * N)]).toBe('#')
+    }
+    const keys = new Set(spots.map((b) => `${b.x.toFixed(4)},${b.y.toFixed(4)}`))
+    expect(keys.size).toBe(players.length)
+    // Two bodies left exactly on top of each other still get pushed apart once solid.
+    const [p, q] = [body(s, 'a'), body(s, 'b')]
+    Object.assign(q, { x: p.x, y: p.y })
+    game.tick(s, 50, melt + SUMO_ICE.ghostMs + 50)
+    expect(Math.hypot(p.x - q.x, p.y - q.y)).toBeGreaterThan(SUMO_ICE.playerR)
+  })
+
+  test('a big field gets a wider core that never melts', () => {
+    const big = init(Array.from({ length: 10 }, (_, k) => `p${k}`))
+    expect(big.meltAt.filter((t) => t === Number.POSITIVE_INFINITY)).toHaveLength(13)
+    expect(
+      init(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']).meltAt.filter(
+        (t) => t === Number.POSITIVE_INFINITY,
+      ),
+    ).toHaveLength(9)
+  })
+
+  test('a player gone for good sinks; the last one dry wins at once', () => {
+    const s = init(['a', 'b', 'c'])
+    game.leave(s, 'b', 5000)
+    expect(body(s, 'b').alive).toBe(false)
+    expect(game.isFinished(s, 5000)).toBe(false)
+    game.leave(s, 'c', 6000)
+    expect(game.isFinished(s, 6000)).toBe(true)
+    expect(game.getResult(s).placements).toEqual(['a', 'c', 'b'])
   })
 
   test('ice is slippery: a released body keeps sliding much longer than on the dohyo', () => {
@@ -118,6 +163,12 @@ describe('SumoIce', () => {
     const result = game.getResult(s)
     expect(result.placements).toEqual(['c', 'b', 'a'])
     expect(result.stats?.b).toBe('20s')
+    // Still in at the buzzer: an unused lifebuoy ranks first.
+    const t = init(['a', 'b', 'c'])
+    body(t, 'a').lives = 1
+    const tied = game.getResult(t)
+    expect(tied.placements).toEqual(['b', 'c', 'a'])
+    expect(tied.ranks).toEqual({ b: 0, c: 0, a: 2 })
     game.onInput(s, 'c', { kind: 'move', dx: Number.NaN, dy: 1 }, 100)
     expect(body(s, 'c').ay).toBe(0)
     game.onInput(s, 'c', { kind: 'move', dx: 3, dy: 4 }, 100)

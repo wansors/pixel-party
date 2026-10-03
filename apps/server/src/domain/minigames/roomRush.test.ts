@@ -94,11 +94,12 @@ describe('RoomRush', () => {
   })
 
   test('capacity always stays below the survivors; the final two get one room for one', () => {
-    for (let alive = 2; alive <= 10; alive++) {
+    for (let alive = 2; alive <= 12; alive++) {
       for (let seed = 1; seed <= 12; seed++) {
         const s = init(alive, seed)
         toCall(s)
-        expect(s.n).toBeGreaterThanOrEqual(1)
+        // A big field never gets single rooms (ten of them would let almost everyone through).
+        expect(s.n).toBeGreaterThanOrEqual(alive >= 10 ? 2 : 1)
         expect(s.n).toBeLessThanOrEqual(Math.min(4, alive - 1))
         expect(s.rooms.length * s.n).toBeLessThanOrEqual(alive - 1)
         expect(new Set(s.rooms.map((r) => r.slot)).size).toBe(s.rooms.length)
@@ -132,7 +133,7 @@ describe('RoomRush', () => {
     expect(inRoom('p1', shut)).toBe(false)
   })
 
-  test('a room holding exactly N locks; the buzzer eliminates everyone else', () => {
+  test('a room locks the moment it holds N; the buzzer eliminates everyone else', () => {
     const s = init(6, 4)
     let t = toCall(s)
     const n = s.n
@@ -142,7 +143,7 @@ describe('RoomRush', () => {
     spots(room.slot)
       .slice(0, n)
       .forEach(([x, y], i) => park(s, `p${i}`, x, y))
-    t = run(s, t, t + ROOM_RUSH.lockMs + 100)
+    t = run(s, t, t + 50)
     expect(room.locked).toBe(true)
     for (let i = 0; i < n; i++) expect(body(s, `p${i}`).safe).toBe(true)
     // Everyone else idles on the floor until the buzzer.
@@ -152,7 +153,7 @@ describe('RoomRush', () => {
     expect(s.outThisCall.length).toBe(6 - n)
   })
 
-  test('a room with the wrong count at the buzzer takes everyone inside down with it', () => {
+  test('a room overshooting N in one tick keeps the deepest N; the late one is bounced out', () => {
     // A seed whose call is N ≤ 3, so N + 1 players still fit the room's four spots.
     let seed = 1
     while (true) {
@@ -165,13 +166,96 @@ describe('RoomRush', () => {
     let t = toCall(s)
     const room = s.rooms[0]
     if (!room) throw new Error('no room')
-    const crowd = s.n + 1
-    spots(room.slot)
-      .slice(0, crowd)
-      .forEach(([x, y], i) => park(s, `p${i}`, x, y))
+    // N players deep in the room side by side and one more just inside the door, all in one tick.
+    const [cx, cy] = roomCenter(room.slot)
+    const a = roomRushSlotAngle(room.slot)
+    const late = `p${s.n}`
+    for (let i = 0; i < s.n; i++) {
+      const lv = (i - (s.n - 1) / 2) * 0.062
+      park(
+        s,
+        `p${i}`,
+        cx + Math.cos(a) * 0.035 - Math.sin(a) * lv,
+        cy + Math.sin(a) * 0.035 + Math.cos(a) * lv,
+      )
+    }
+    park(s, late, cx - Math.cos(a) * 0.04, cy - Math.sin(a) * 0.04)
+    t = run(s, t, t + 50)
+    expect(room.locked).toBe(true)
+    expect(room.count).toBe(s.n)
+    for (let i = 0; i < s.n; i++) expect(body(s, `p${i}`).safe).toBe(true)
+    const bounced = body(s, late)
+    expect(bounced.safe).toBe(false)
+    expect(Math.hypot(bounced.x - cx, bounced.y - cy)).toBeGreaterThan(ROOM_RUSH.half)
+    // The slammed door keeps it out until the buzzer.
     while (s.phase === 'call') t = run(s, t, t + 50)
-    expect(room.locked).toBe(false)
-    for (let i = 0; i < crowd; i++) expect(body(s, `p${i}`).alive).toBe(false)
+    expect(bounced.alive).toBe(false)
+    expect(s.bodies.filter((b) => b.alive)).toHaveLength(s.n)
+  })
+
+  test('the final two: the first one in locks the room, the follower cannot spoil it', () => {
+    const s = init(2, 5)
+    let t = toCall(s)
+    const room = s.rooms[0]
+    if (!room) throw new Error('no room')
+    const [cx, cy] = roomCenter(room.slot)
+    park(s, 'p0', cx, cy)
+    t = run(s, t, t + 50)
+    expect(room.locked).toBe(true)
+    // The follower charges the door: it's shut.
+    const a = roomRushSlotAngle(room.slot)
+    park(s, 'p1', 0.5 + Math.cos(a) * 0.27, 0.5 + Math.sin(a) * 0.27)
+    game.onInput(s, 'p1', { kind: 'move', dx: cx - 0.5, dy: cy - 0.5 }, t)
+    while (!s.done) t = run(s, t, t + 50)
+    const result = game.getResult(s)
+    expect(result.placements).toEqual(['p0', 'p1'])
+    expect(result.ranks?.p1).toBe(1)
+  })
+
+  test('a wipeout (nobody made it) replays the call instead of ending in one big tie', () => {
+    const s = init(4, 2)
+    let t = toCall(s)
+    const call = s.call
+    while (s.phase === 'call') t = run(s, t, t + 50)
+    expect(s.phase).toBe('reveal')
+    expect(s.outThisCall).toEqual([])
+    expect(s.bodies.every((b) => b.alive)).toBe(true)
+    toCall(s, t)
+    expect(s.call).toBe(call + 1)
+  })
+
+  test('respawns spread a full room around the hub without overlaps', () => {
+    const s = init(12, 9)
+    for (let i = 0; i < s.bodies.length; i++) {
+      for (let j = i + 1; j < s.bodies.length; j++) {
+        const a = s.bodies[i] as (typeof s.bodies)[number]
+        const b = s.bodies[j] as (typeof s.bodies)[number]
+        expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual(ROOM_RUSH.playerR * 2)
+      }
+      const b = s.bodies[i] as (typeof s.bodies)[number]
+      expect(fromCenter(b.x, b.y)).toBeLessThan(ROOM_RUSH.carouselR - ROOM_RUSH.playerR)
+    }
+  })
+
+  test('bodies stacked on the exact same spot are pushed apart', () => {
+    const s = init(2)
+    park(s, 'p0', 0.5, 0.5)
+    park(s, 'p1', 0.5, 0.5)
+    run(s, 0, 100)
+    const [a, b] = [body(s, 'p0'), body(s, 'p1')]
+    expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(ROOM_RUSH.playerR)
+  })
+
+  test('a player gone for good is out at once; the last one left wins', () => {
+    const s = init(3, 6)
+    game.leave(s, 'p1', 1000)
+    expect(body(s, 'p1').alive).toBe(false)
+    expect(s.done).toBe(false)
+    game.leave(s, 'p2', 1500)
+    expect(game.isFinished(s, 1500)).toBe(true)
+    const result = game.getResult(s)
+    expect(result.placements[0]).toBe('p0')
+    expect(result.ranks?.p2).toBe(1)
   })
 
   test('ends once one survivor is left; ranks by the call each player fell in', () => {

@@ -1,6 +1,6 @@
 import type { TrackRaceInput, TrackRaceSnapshot, TrackRunner } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
-import { type Runner, coast, createRunner, isFoot, rankSorted, stride } from './athleticsCore'
+import { DRAG, type Runner, coast, createRunner, isFoot, rankSorted, stride } from './athleticsCore'
 
 const DEFAULT_DURATION_MS = 30_000
 // The starting gun fires at a seeded, unannounced moment after "SET": anticipating is a gamble.
@@ -8,10 +8,11 @@ const GUN_MIN_MS = 1600
 const GUN_SPREAD_MS = 1400
 // A stride before the gun is a false start: the runner stays in the blocks this long after it.
 export const FALSE_START_PENALTY_MS = 1000
-// Hurdle jump: airborne this long (≈4.5 m at a good sprint). Strides don't count in the air.
+// Hurdle jump: airborne this long (≈4.5 m at a good sprint). Strides don't count in the air, but the
+// runner carries their speed through it (no drag), so a clean jump costs little.
 export const AIR_MS = 480
-const HIT_KEEP = 0.4 // share of speed kept after clattering into a hurdle
-const RUN_OUT_DRAG = 2.5 // a finisher eases up past the line
+const HIT_KEEP = 0.15 // share of speed kept after clattering into a hurdle
+const RUN_OUT_DRAG = 2.5 // a finisher eases up past the line (on top of the usual drag)
 // Once the first runner is home, the rest get this long to finish before the round closes.
 const FINISH_WINDOW_MS = 10_000
 
@@ -24,6 +25,8 @@ interface Lane {
   airUntil: number
   nextHurdle: number
   knocked: number[]
+  // The player left the round: their lane no longer holds the race open.
+  gone: boolean
 }
 
 export interface TrackRaceState {
@@ -64,6 +67,7 @@ abstract class TrackRace implements MiniGame<TrackRaceState, TrackRaceInput> {
         airUntil: 0,
         nextHurdle: 0,
         knocked: [],
+        gone: false,
       })
     }
     return {
@@ -111,7 +115,7 @@ abstract class TrackRace implements MiniGame<TrackRaceState, TrackRaceInput> {
       const lane = state.lanes.get(pid)
       if (!lane || now < lane.heldUntil) continue
       const r = lane.runner
-      coast(r, dt, lane.finishAt ? RUN_OUT_DRAG : 0)
+      coast(r, dt, lane.finishAt ? DRAG + RUN_OUT_DRAG : now < lane.airUntil ? 0 : DRAG)
       if (lane.finishAt) continue
       this.crossHurdles(state, lane, now)
       if (r.x >= state.distance) {
@@ -142,9 +146,19 @@ abstract class TrackRace implements MiniGame<TrackRaceState, TrackRaceInput> {
     }
   }
 
+  leave(state: TrackRaceState, playerId: PlayerId): TrackRaceState {
+    const lane = state.lanes.get(playerId)
+    if (lane) lane.gone = true
+    return state
+  }
+
+  // Over at the clock, or once everyone still in the race is home.
   isFinished(state: TrackRaceState, now: number): boolean {
     if (now >= state.endsAt) return true
-    return state.players.every((p) => (state.lanes.get(p)?.finishAt ?? 0) > 0)
+    return state.players.every((p) => {
+      const lane = state.lanes.get(p)
+      return !lane || lane.finishAt > 0 || lane.gone
+    })
   }
 
   private raceMs(state: TrackRaceState, pid: PlayerId): number | null {

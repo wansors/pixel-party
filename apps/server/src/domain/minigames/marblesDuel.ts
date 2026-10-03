@@ -5,6 +5,7 @@ import {
   type MarblesReveal,
   type MarblesSnapshot,
 } from '@pp/shared'
+import { type DuelOutcome, rankDuels } from '../services/duelRanking'
 import { pairPlayers } from '../services/pairing'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
@@ -22,7 +23,8 @@ interface Duel {
   bet: number | null
   odd: boolean | null
   last: MarblesReveal | null
-  winner: PlayerId | null // decided once done (null = draw)
+  winner: PlayerId | null // decided once done (null = a draw, or a bye)
+  forfeit: boolean // decided by a player leaving
   forcedHide: number[]
   forcedOdd: boolean[]
 }
@@ -38,7 +40,9 @@ const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInt
 
 // Duel format: odd or even with marbles. Deterministic: pairing and the fallback picks for a timed-out
 // turn are drawn from the seeded Random at init; the rest follows the two players' choices. The number
-// hidden this turn stays off the wire until it's revealed.
+// hidden this turn stays off the wire until it's revealed. Duels rank across the room in tiers
+// (rankDuels): wins, then draws (equal marbles at the bell) and the bye, then losses — each by the
+// marbles held at the end.
 export class MarblesDuel implements MiniGame<MarblesState, MarblesInput> {
   readonly id = 'marbles-duel'
   readonly format = 'duel' as const
@@ -48,7 +52,7 @@ export class MarblesDuel implements MiniGame<MarblesState, MarblesInput> {
       typeof ctx.config?.durationMs === 'number' ? ctx.config.durationMs : DEFAULT_DURATION_MS
     const duels: Duel[] = []
     const playerDuel = new Map<PlayerId, number>()
-    for (const { a, b } of pairPlayers(ctx.players, ctx.random)) {
+    for (const { a, b } of pairPlayers(ctx.players, ctx.random, ctx.byeCounts)) {
       playerDuel.set(a, duels.length)
       if (b) playerDuel.set(b, duels.length)
       const marbles = new Map<PlayerId, number>([[a, MARBLES.start]])
@@ -64,7 +68,8 @@ export class MarblesDuel implements MiniGame<MarblesState, MarblesInput> {
         bet: null,
         odd: null,
         last: null,
-        winner: b ? null : a,
+        winner: null,
+        forfeit: false,
         forcedHide: Array.from(
           { length: FORCED_TURNS },
           () => 1 + Math.floor(ctx.random.next() * 3),
@@ -151,6 +156,16 @@ export class MarblesDuel implements MiniGame<MarblesState, MarblesInput> {
     return state
   }
 
+  // A player who leaves forfeits: their opponent wins on the spot (unless the duel is already decided).
+  leave(state: MarblesState, playerId: PlayerId, _now: number): MarblesState {
+    const d = state.duels[state.playerDuel.get(playerId) ?? -1]
+    if (!d?.b || d.phase === 'done' || d.winner !== null) return state
+    d.winner = playerId === d.a ? d.b : d.a
+    d.forfeit = true
+    d.phase = 'done'
+    return state
+  }
+
   isFinished(state: MarblesState, now: number): boolean {
     return now >= state.endsAt || state.duels.every((d) => d.phase === 'done')
   }
@@ -164,20 +179,22 @@ export class MarblesDuel implements MiniGame<MarblesState, MarblesInput> {
   }
 
   getResult(state: MarblesState): NormalizedResult {
-    const placements: PlayerId[] = []
-    const ranks: Record<PlayerId, number> = {}
+    const outcomes: DuelOutcome[] = []
     const stats: Record<PlayerId, string> = {}
     for (const d of state.duels) {
+      if (!d.b) {
+        outcomes.push({ id: d.a, tier: 'bye', margin: MARBLES.start })
+        stats[d.a] = '—'
+        continue
+      }
       const winner = this.winnerOf(d)
       for (const pid of [d.a, d.b]) {
-        if (!pid) continue
-        placements.push(pid)
-        ranks[pid] = winner === null || winner === pid ? 0 : 1
+        const tier = winner === null ? 'draw' : winner === pid ? 'win' : 'loss'
+        outcomes.push({ id: pid, tier, margin: d.marbles.get(pid) ?? 0 })
         stats[pid] = `${d.marbles.get(pid) ?? 0}`
       }
     }
-    placements.sort((x, y) => (ranks[x] ?? 0) - (ranks[y] ?? 0))
-    return { placements, ranks, stats }
+    return rankDuels(outcomes, stats)
   }
 
   snapshot(state: MarblesState, now: number): MarblesSnapshot {
@@ -201,6 +218,7 @@ export class MarblesDuel implements MiniGame<MarblesState, MarblesInput> {
           theyChose: hiding ? d.bet !== null : d.hidden !== null,
           last: d.phase === 'reveal' || d.phase === 'done' ? d.last : null,
           won: d.phase === 'done' || ended ? (winner === null ? null : winner === pid) : null,
+          oppLeft: d.forfeit && winner === pid,
         }
       }
     }

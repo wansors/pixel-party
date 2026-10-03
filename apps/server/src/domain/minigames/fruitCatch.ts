@@ -29,6 +29,9 @@ export interface FruitCatchState {
   endsAt: number
   scores: Map<PlayerId, number>
   combos: Map<PlayerId, number>
+  // Tiebreaks for equal scores: fewer bombs caught, then the longer best combo.
+  bombs: Map<PlayerId, number>
+  bestCombos: Map<PlayerId, number>
   baskets: Map<PlayerId, number>
   // playerId → item ids already resolved (caught or missed) so each item scores at most once per player.
   resolved: Map<PlayerId, Set<number>>
@@ -36,7 +39,8 @@ export interface FruitCatchState {
 
 // Real-time FFA fruit catcher. One seeded stream of falling items is shared by everyone; each player
 // catches on their own device. Pure domain logic: the timeline comes from the injected Random port and
-// time arrives as `now`. Item y is a deterministic function of time, so the client can render smoothly.
+// time arrives as `now`. Item y is a linear function of time (each item ships its fall speed), so the
+// client renders it on the server's clock — what you see reaching the basket is what gets judged.
 export class FruitCatch implements MiniGame<FruitCatchState, FruitCatchInput> {
   readonly id = 'fruit-catch'
   readonly format = 'ffa' as const
@@ -65,6 +69,8 @@ export class FruitCatch implements MiniGame<FruitCatchState, FruitCatchInput> {
       endsAt: ctx.now + durationMs,
       scores: new Map(ctx.players.map((pid) => [pid, 0])),
       combos: new Map(ctx.players.map((pid) => [pid, 0])),
+      bombs: new Map(ctx.players.map((pid) => [pid, 0])),
+      bestCombos: new Map(ctx.players.map((pid) => [pid, 0])),
       baskets: new Map(ctx.players.map((pid) => [pid, 0.5])),
       resolved: new Map(ctx.players.map((pid) => [pid, new Set<number>()])),
     }
@@ -101,8 +107,10 @@ export class FruitCatch implements MiniGame<FruitCatchState, FruitCatchInput> {
         const score = state.scores.get(pid) ?? 0
         if (item.kind === 'fruit') {
           if (caught) {
+            const combo = (state.combos.get(pid) ?? 0) + 1
             state.scores.set(pid, score + 1)
-            state.combos.set(pid, (state.combos.get(pid) ?? 0) + 1)
+            state.combos.set(pid, combo)
+            state.bestCombos.set(pid, Math.max(state.bestCombos.get(pid) ?? 0, combo))
           } else {
             state.combos.set(pid, 0)
           }
@@ -110,6 +118,7 @@ export class FruitCatch implements MiniGame<FruitCatchState, FruitCatchInput> {
           // Caught a bomb: lose a point and break the combo.
           state.scores.set(pid, Math.max(0, score - 1))
           state.combos.set(pid, 0)
+          state.bombs.set(pid, (state.bombs.get(pid) ?? 0) + 1)
         }
       }
     }
@@ -120,18 +129,23 @@ export class FruitCatch implements MiniGame<FruitCatchState, FruitCatchInput> {
     return now >= state.endsAt
   }
 
-  getResult(state: FruitCatchState): NormalizedResult {
-    const sorted = [...state.players].sort(
-      (a, b) => (state.scores.get(b) ?? 0) - (state.scores.get(a) ?? 0),
+  // Most points; equal scores go to the cleaner catcher (fewer bombs), then the longer best combo.
+  private cmp(state: FruitCatchState, a: PlayerId, b: PlayerId): number {
+    const get = (m: Map<PlayerId, number>, id: PlayerId): number => m.get(id) ?? 0
+    return (
+      get(state.scores, b) - get(state.scores, a) ||
+      get(state.bombs, a) - get(state.bombs, b) ||
+      get(state.bestCombos, b) - get(state.bestCombos, a)
     )
+  }
+
+  getResult(state: FruitCatchState): NormalizedResult {
+    const sorted = [...state.players].sort((a, b) => this.cmp(state, a, b))
     const ranks: Record<PlayerId, number> = {}
     let rank = 0
-    let prev: number | undefined
     sorted.forEach((id, idx) => {
-      const v = state.scores.get(id) ?? 0
-      if (idx > 0 && v !== prev) rank = idx
+      if (idx > 0 && this.cmp(state, sorted[idx - 1] as PlayerId, id) !== 0) rank = idx
       ranks[id] = rank
-      prev = v
     })
     const stats: Record<PlayerId, string> = {}
     for (const id of state.players) stats[id] = `${state.scores.get(id) ?? 0} pts`
@@ -144,7 +158,9 @@ export class FruitCatch implements MiniGame<FruitCatchState, FruitCatchInput> {
     // as fruit that was never collected.
     const items = state.items.flatMap((item) => {
       const y = this.yOf(state, item, now)
-      return y >= 0 && y < CATCH_Y ? [{ id: item.id, x: item.x, y, kind: item.kind }] : []
+      return y >= 0 && y < CATCH_Y
+        ? [{ id: item.id, x: item.x, y, fallMs: item.fallMs, kind: item.kind }]
+        : []
     })
     return {
       items,

@@ -1,4 +1,5 @@
 import type { QuickDrawInput, QuickDrawSnapshot } from '@pp/shared'
+import { type DuelOutcome, rankDuels } from '../services/duelRanking'
 import { pairPlayers } from '../services/pairing'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
@@ -11,9 +12,10 @@ interface Duel {
   b: PlayerId | null // null = bye
   fireAt: number
   done: boolean
-  winner: PlayerId | null // set once done (null = draw)
+  winner: PlayerId | null // set once done (null = nobody drew in time: both lose)
   drawnBy: Map<PlayerId, number> // valid tap time (>= fireAt), per player
   falseStart: Set<PlayerId> // players who tapped before the signal
+  forfeit: boolean // decided by the opponent leaving
 }
 
 export interface QuickDrawState {
@@ -25,8 +27,10 @@ export interface QuickDrawState {
 
 // Duel format: a western reaction shootout. Players are seeded-paired 1v1; each duel waits a seeded
 // delay before the signal fires. The first valid tap after the signal wins; a tap before it is a false
-// start that loses instantly. Wins/losses aggregate into the round ranking. Pure — time arrives as
-// `now`, randomness via the injected port; the raw fire time never reaches the wire.
+// start that loses instantly, and a duel nobody draws in time is lost by both. Duels rank across the
+// room in tiers (rankDuels): winners by reaction time, the bye in the middle, losers below — beaten by
+// a quicker draw first, then the no-shows, then the false starts. Pure — time arrives as `now`,
+// randomness via the injected port; the raw fire time never reaches the wire.
 export class QuickDraw implements MiniGame<QuickDrawState, QuickDrawInput> {
   readonly id = 'quick-draw'
   readonly format = 'duel' as const
@@ -34,7 +38,7 @@ export class QuickDraw implements MiniGame<QuickDrawState, QuickDrawInput> {
   init(ctx: MiniGameInitCtx): QuickDrawState {
     const durationMs =
       typeof ctx.config?.durationMs === 'number' ? ctx.config.durationMs : DEFAULT_DURATION_MS
-    const pairs = pairPlayers(ctx.players, ctx.random)
+    const pairs = pairPlayers(ctx.players, ctx.random, ctx.byeCounts)
     const duels: Duel[] = []
     const playerDuel = new Map<PlayerId, number>()
     for (const { a, b } of pairs) {
@@ -47,9 +51,10 @@ export class QuickDraw implements MiniGame<QuickDrawState, QuickDrawInput> {
         b,
         fireAt: ctx.now + delay,
         done: b === null, // a bye is resolved immediately
-        winner: b === null ? a : null,
+        winner: null,
         drawnBy: new Map(),
         falseStart: new Set(),
+        forfeit: false,
       })
     }
     return { duels, playerDuel, startedAt: ctx.now, endsAt: ctx.now + durationMs }
@@ -85,7 +90,7 @@ export class QuickDraw implements MiniGame<QuickDrawState, QuickDrawInput> {
   }
 
   tick(state: QuickDrawState, _dt: number, now: number): QuickDrawState {
-    // No per-tick physics; a duel where nobody reacted resolves as a draw at the timer (see getResult).
+    // No per-tick physics; a duel where nobody reacted is lost by both at the timer (see getResult).
     if (now >= state.endsAt) {
       for (const duel of state.duels) {
         if (!duel.done) duel.done = true
@@ -94,33 +99,66 @@ export class QuickDraw implements MiniGame<QuickDrawState, QuickDrawInput> {
     return state
   }
 
+  // The opponent of a player who left wins the standoff by forfeit.
+  leave(state: QuickDrawState, playerId: PlayerId, _now: number): QuickDrawState {
+    const duel = state.duels[state.playerDuel.get(playerId) ?? -1]
+    if (!duel?.b || duel.done) return state
+    duel.done = true
+    duel.winner = playerId === duel.a ? duel.b : duel.a
+    duel.forfeit = true
+    return state
+  }
+
   isFinished(state: QuickDrawState, now: number): boolean {
     return now >= state.endsAt || state.duels.every((d) => d.done)
   }
 
   getResult(state: QuickDrawState): NormalizedResult {
-    const placements: PlayerId[] = []
-    const ranks: Record<PlayerId, number> = {}
+    // Margins: winners by reaction time (a win without drawing — the rival jumped or left — ranks below
+    // every timed one); losers beaten by a draw (the quicker that draw, the higher), then the
+    // no-shows, then the false starts.
+    const span = state.endsAt - state.startedAt
+    const outcomes: DuelOutcome[] = []
     const stats: Record<PlayerId, string> = {}
+    // Whoever won because the rival jumped the gun never got the chance to draw: not idle.
+    const waiting: PlayerId[] = []
     for (const duel of state.duels) {
-      const winner = resolveWinner(duel)
+      if (!duel.b) {
+        outcomes.push({ id: duel.a, tier: 'bye' })
+        stats[duel.a] = '—'
+        continue
+      }
+      const winnerMs = duel.winner !== null ? duel.drawnBy.get(duel.winner) : undefined
+      const opponentJumped = duel.falseStart.size > 0
       for (const pid of [duel.a, duel.b]) {
-        if (!pid) continue
-        placements.push(pid)
-        // Winner (or a drawn player) shares the top rank; the loser drops to rank 1.
-        ranks[pid] = winner === null || winner === pid ? 0 : 1
-        const ms = duel.drawnBy.get(pid)
+        const drew = duel.drawnBy.get(pid)
+        if (pid === duel.winner) {
+          outcomes.push({
+            id: pid,
+            tier: 'win',
+            margin: drew !== undefined ? duel.fireAt - drew : -span,
+          })
+          if (opponentJumped) waiting.push(pid)
+        } else {
+          const margin = duel.falseStart.has(pid)
+            ? -3 * span
+            : winnerMs !== undefined
+              ? duel.fireAt - winnerMs
+              : -2 * span
+          outcomes.push({ id: pid, tier: 'loss', margin })
+        }
         stats[pid] =
-          ms !== undefined
-            ? `${ms - duel.fireAt} ms`
+          drew !== undefined
+            ? `${drew - duel.fireAt} ms`
             : duel.falseStart.has(pid)
               ? 'false start'
-              : '—'
+              : duel.winner === null
+                ? 'no tap'
+                : '—'
       }
     }
-    // Order placements winners-first so the round-result list reads top-down.
-    placements.sort((x, y) => (ranks[x] ?? 0) - (ranks[y] ?? 0))
-    return { placements, ranks, stats }
+    const result = rankDuels(outcomes, stats)
+    return waiting.length > 0 ? { ...result, waiting } : result
   }
 
   snapshot(state: QuickDrawState, now: number): QuickDrawSnapshot {
@@ -131,25 +169,19 @@ export class QuickDraw implements MiniGame<QuickDrawState, QuickDrawInput> {
         if (!pid) continue
         const opp = pid === duel.a ? duel.b : duel.a
         const done = duel.done || ended
-        const winner = resolveWinner(duel)
         const ms = duel.drawnBy.get(pid)
         players[pid] = {
           opponentId: opp,
           fired: now >= duel.fireAt,
           youDrew: duel.drawnBy.has(pid) || duel.falseStart.has(pid),
           done,
-          won: done ? (winner === null ? null : winner === pid) : null,
+          // No draws: a duel nobody won by the timer is lost by both. A bye neither wins nor loses.
+          won: done && opp !== null ? duel.winner === pid : null,
           reactionMs: ms !== undefined ? ms - duel.fireAt : null,
+          oppLeft: duel.forfeit && duel.winner === pid,
         }
       }
     }
     return { roundRemainingMs: Math.max(0, state.endsAt - now), players }
   }
-}
-
-// Winner of a duel: the bye's `a`, or the stored winner once decided. An undecided duel (nobody ever
-// reacted) is a draw (null). Returns null for a still-ongoing duel too; callers gate on `done` first.
-function resolveWinner(duel: Duel): PlayerId | null {
-  if (duel.b === null) return duel.a
-  return duel.winner
 }

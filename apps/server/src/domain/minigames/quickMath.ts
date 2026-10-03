@@ -1,9 +1,12 @@
 import type { QuickMathInput, QuickMathPrompt, QuickMathSnapshot } from '@pp/shared'
+import type { Random } from '../ports/Random'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 30_000
 // Generous pool so even the fastest player never runs dry in the time window.
 const POOL_SIZE = 60
+// Decoys are near misses: within this distance of the answer.
+const DECOY_SPREAD = 5
 // A wrong answer locks that player's answers for this long. Without it, mashing one button (a 1-in-4
 // guess per sum, one sum per snapshot) out-scores actually doing the arithmetic.
 export const QUICK_MATH_WRONG_COOLDOWN_MS = 1200
@@ -27,6 +30,55 @@ export interface QuickMathState {
   cooldownUntil: Map<PlayerId, number>
 }
 
+// `count` distinct values from 1..max (a partial Fisher–Yates on the seeded port).
+function pickDistinct(count: number, max: number, r: Random): number[] {
+  const pool = Array.from({ length: max }, (_, i) => i + 1)
+  for (let i = 0; i < count; i++) {
+    const j = i + Math.floor(r.next() * (max - i))
+    ;[pool[i], pool[j]] = [pool[j] as number, pool[i] as number]
+  }
+  return pool.slice(0, count)
+}
+
+// One seeded sum: +, − (never below 0) or ×.
+function makeSum(r: Random): { text: string; answer: number } {
+  const op = Math.floor(r.next() * 3) // 0 +, 1 -, 2 ×
+  if (op === 2) {
+    const a = 2 + Math.floor(r.next() * 8)
+    const b = 2 + Math.floor(r.next() * 8)
+    return { text: `${a} × ${b}`, answer: a * b }
+  }
+  if (op === 1) {
+    const a = 5 + Math.floor(r.next() * 15)
+    const b = 1 + Math.floor(r.next() * a) // keep the result non-negative
+    return { text: `${a} − ${b}`, answer: a - b }
+  }
+  const a = 1 + Math.floor(r.next() * 20)
+  const b = 1 + Math.floor(r.next() * 20)
+  return { text: `${a} + ${b}`, answer: a + b }
+}
+
+// A sum with its answer among three near-miss decoys. How many decoys sit below the answer is drawn
+// first, uniformly, so the answer's rank among the sorted choices gives nothing away ("pick a middle
+// one" is a plain 1-in-4 guess); a sum too small to fit that many non-negative values under its answer
+// is redrawn. Then the four are shuffled, so the correct slot varies too.
+function makeQuestion(r: Random): Question {
+  const below = Math.floor(r.next() * 4)
+  let sum = makeSum(r)
+  while (sum.answer < below) sum = makeSum(r)
+  const { text, answer } = sum
+  const choices = [
+    answer,
+    ...pickDistinct(below, Math.min(DECOY_SPREAD, answer), r).map((d) => answer - d),
+    ...pickDistinct(3 - below, DECOY_SPREAD, r).map((d) => answer + d),
+  ]
+  for (let k = choices.length - 1; k > 0; k--) {
+    const j = Math.floor(r.next() * (k + 1))
+    ;[choices[k], choices[j]] = [choices[j] as number, choices[k] as number]
+  }
+  return { text, choices, correct: choices.indexOf(answer) }
+}
+
 // Real-time FFA arithmetic sprint. A seeded pool of questions is shared by everyone; each player
 // answers as many as possible before the timer, advancing at their own pace; a wrong answer costs a
 // short answer cooldown. Pure domain logic: questions come from the injected Random port (seeded per
@@ -38,43 +90,7 @@ export class QuickMath implements MiniGame<QuickMathState, QuickMathInput> {
   init(ctx: MiniGameInitCtx): QuickMathState {
     const durationMs =
       typeof ctx.config?.durationMs === 'number' ? ctx.config.durationMs : DEFAULT_DURATION_MS
-    const r = ctx.random
-    const pool: Question[] = []
-    for (let i = 0; i < POOL_SIZE; i++) {
-      const op = Math.floor(r.next() * 3) // 0 +, 1 -, 2 ×
-      let a: number
-      let b: number
-      let answer: number
-      if (op === 2) {
-        a = 2 + Math.floor(r.next() * 8)
-        b = 2 + Math.floor(r.next() * 8)
-        answer = a * b
-      } else if (op === 1) {
-        a = 5 + Math.floor(r.next() * 15)
-        b = 1 + Math.floor(r.next() * a) // keep the result non-negative
-        answer = a - b
-      } else {
-        a = 1 + Math.floor(r.next() * 20)
-        b = 1 + Math.floor(r.next() * 20)
-        answer = a + b
-      }
-      const sym = op === 2 ? '×' : op === 1 ? '−' : '+'
-      // Three distinct near-miss distractors, then shuffle so the correct slot varies.
-      const opts = new Set<number>([answer])
-      let spread = 1
-      while (opts.size < 4) {
-        const delta = (Math.floor(r.next() * spread) + 1) * (r.next() < 0.5 ? -1 : 1)
-        const cand = answer + delta
-        if (cand >= 0) opts.add(cand)
-        spread++
-      }
-      const choices = [...opts]
-      for (let k = choices.length - 1; k > 0; k--) {
-        const j = Math.floor(r.next() * (k + 1))
-        ;[choices[k], choices[j]] = [choices[j] as number, choices[k] as number]
-      }
-      pool.push({ text: `${a} ${sym} ${b}`, choices, correct: choices.indexOf(answer) })
-    }
+    const pool = Array.from({ length: POOL_SIZE }, () => makeQuestion(ctx.random))
     return {
       players: [...ctx.players],
       pool,

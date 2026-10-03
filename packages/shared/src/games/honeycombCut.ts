@@ -2,8 +2,8 @@
 // shape pressed into a honeycomb candy and carves it out by tracing its outline with a needle (hold the
 // mouse button / finger down and follow the line). Each stretch of the outline you trace while on the
 // line is cut. Stray off the line — or rush the needle — and the candy cracks; the third crack breaks it
-// (ELIMINATED). Cut the whole outline to pop the shape out. Ranked by finishing time, then by how much
-// was cut (a broken candy ranks below the ones still in one piece).
+// (ELIMINATED). Cut the whole outline to pop the shape out. Ranked by finishing time, then everyone
+// else by how much was cut — a broken candy counts half of its cut, fewer cracks break a tie.
 //
 // Coordinates are normalized to the candy's square, [0, 1] × [0, 1], centre (0.5, 0.5).
 
@@ -15,6 +15,8 @@ export const HONEYCOMB = {
   // Needle speed (candy widths / s) above which the stress builds toward a crack.
   maxSpeed: 0.5,
   cracks: 3,
+  // Share of its cut a broken candy still counts for in the ranking.
+  brokenShare: 0.5,
   candyR: 0.46,
 } as const
 
@@ -109,6 +111,8 @@ export interface HoneycombPlayer {
   progress: number
   cracks: number
   broken: boolean
+  // Left the round (disconnected): out of the running, like a broken candy.
+  left: boolean
   doneMs: number | null
 }
 

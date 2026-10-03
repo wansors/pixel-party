@@ -14,7 +14,9 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 // Honeycomb Cut (the dalgona candy): a round tin with a honey-coloured candy, the round's shape pressed
 // into it. Hold the mouse button (or a finger) and trace the outline with the needle: your own trail
 // shows at once, the server's cut stretches become dark grooves. A gauge under the candy shows how hard
-// you're pushing (rush it and it cracks); cracks stay drawn on the candy, the third breaks it.
+// you're pushing (rush it and it cracks); cracks stay drawn on the candy, the third breaks it. The
+// strip tracks everyone: finish time, cut share, or ✗ and the half a broken candy still counts for.
+// A player who isn't in the round (joined mid-round) watches the strip.
 
 const SEND_EVERY_MS = 30
 const CANDY = 0xd9963a
@@ -60,9 +62,12 @@ export class HoneycombCutScene extends MiniGameScene<HoneycombSnapshot> {
     this.prev = undefined
     this.shapeKey = ''
 
+    // A portrait phone has height to spare (the candy is width-bound): a third strip row keeps a full
+    // room's names readable there.
     const stripSize = this.compact ? 11 : 13
-    this.strip = new PlayerStrip(this, width / 2, this.top + 8, width - 24, stripSize, 2)
-    const areaTop = this.top + 8 + PlayerStrip.rowH(stripSize) * 2
+    const stripRows = height > width ? 3 : 2
+    this.strip = new PlayerStrip(this, width / 2, this.top + 8, width - 24, stripSize, stripRows)
+    const areaTop = this.top + 8 + PlayerStrip.rowH(stripSize) * stripRows
     const promptSize = this.compact ? 12 : 16
     this.prompt = this.add
       .text(
@@ -111,7 +116,8 @@ export class HoneycombCutScene extends MiniGameScene<HoneycombSnapshot> {
     this.banner = addBanner(this)
 
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (this.pointerId !== -1) return
+      // Watching from the stands: no needle to hold.
+      if (this.pointerId !== -1 || !this.snap?.players.some((q) => q.id === this.selfId)) return
       this.pointerId = p.id
       this.down = true
       this.trailPts = []
@@ -350,14 +356,14 @@ export class HoneycombCutScene extends MiniGameScene<HoneycombSnapshot> {
     }
     this.strip?.set(
       snap.players.map((p) => ({
-        text: `${this.label(p.id)} ${p.doneMs !== null ? '✓' : p.broken ? '✗' : `${Math.floor(p.progress * 100)}%`}`,
+        text: `${this.label(p.id)} ${standing(p)}`,
         avatar: this.state.avatarOf(p.id),
         color: this.state.colorOf(p.id),
-        dim: p.broken,
+        dim: p.broken || p.left,
       })),
     )
     const text = !me
-      ? ''
+      ? this.t('game.honeycomb.watching')
       : me.broken
         ? this.quip('game.common.spectating', this.selfId)
         : me.doneMs !== null
@@ -385,4 +391,12 @@ export class HoneycombCutScene extends MiniGameScene<HoneycombSnapshot> {
       )
     }
   }
+}
+
+// A strip chip's stat, as the ranking sees it: the finish time, else the cut share (a broken candy
+// counts half). Always one token with a digit, so a clipped name keeps it.
+function standing(p: HoneycombPlayer): string {
+  if (p.doneMs !== null) return `✓${(p.doneMs / 1000).toFixed(1)}s`
+  if (p.broken) return `✗${Math.floor(p.progress * HONEYCOMB.brokenShare * 100)}%`
+  return `${Math.floor(p.progress * 100)}%`
 }

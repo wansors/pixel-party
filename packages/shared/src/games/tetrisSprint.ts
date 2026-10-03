@@ -21,6 +21,9 @@ export interface TetrisSprintSnapshot {
   remainingMs: number
   // Present only for quick-tetris.
   targetLines?: number
+  // Present only for line-clear-sprint: a topped-out board costs this many lines and restarts empty a
+  // moment later (in quick-tetris a top-out is final).
+  topOutPenalty?: number
 }
 
 export type TetrisSprintInput =

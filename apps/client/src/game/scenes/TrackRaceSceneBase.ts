@@ -23,6 +23,8 @@ const HURDLE_M = 1.07 // hurdle height, metres
 const JUMP_M = 1.1 // peak of the drawn jump arc, metres
 const SPRITE_M = 2.2 // world metres the athlete's box spans (head room included)
 const STUMBLE_MS = 260
+// Lanes keep at least this many px while the stands can give up room for them.
+const LANE_MIN = 20
 
 // Each athlete is the player's lobby avatar in side view: two-frame strides tied to the distance run,
 // crouched in the blocks, tucked over a hurdle, wincing on a stumble, happy past the line.
@@ -145,42 +147,53 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     const { width } = this.scale
     const n = Math.max(1, snap.runners.length)
     const markH = this.compact ? 14 : 18
-    const areaTop = this.standsTop + (this.compact ? 28 : 44)
     const areaBottom = (this.pad?.top ?? this.scale.height) - markH - 2
-    const laneFit = Math.max(16, (areaBottom - areaTop) / n)
-    // Metres visible across the screen: enough to see the next hurdle coming, tighter on phones.
+    // Lanes share the room under a strip of stands. A big field squeezes the stands first, down to
+    // nothing (the track then starts right under the progress strip), so lanes keep LANE_MIN px
+    // wherever the screen has them; past that they just split what's left (fractional heights).
+    let laneFit = (areaBottom - this.standsTop - (this.compact ? 28 : 44)) / n
+    if (laneFit < LANE_MIN) {
+      laneFit = Math.min(LANE_MIN, (areaBottom - this.progressY - (this.compact ? 10 : 12)) / n)
+    }
+    // Metres visible across the screen: enough to see the next hurdle coming, tighter on phones. The
+    // scale is fractional (the avatar itself still snaps to a crisp size), floored at a 1× athlete box.
     const viewMin = this.compact ? (this.withHurdles ? 11 : 9) : this.withHurdles ? 16 : 13
     const ppmFit = Math.min(width / viewMin, (laneFit * 1.3) / SPRITE_M, 64)
-    this.spriteScale = Math.max(1, Math.floor((ppmFit * SPRITE_M) / ATHLETE_H))
+    this.spriteScale = Math.max(1, (ppmFit * SPRITE_M) / ATHLETE_H)
     this.ppm = (this.spriteScale * ATHLETE_H) / SPRITE_M
-    this.laneH = Math.floor(Math.min(laneFit, (this.spriteScale * ATHLETE_H) / 1.05))
-    const trackH = this.laneH * n
+    this.laneH = Math.min(laneFit, (this.spriteScale * ATHLETE_H) / 1.05)
+    const trackH = Math.round(this.laneH * n)
     this.trackTop = Math.round(areaBottom - trackH)
 
-    // Stands fill everything between the progress strip and the track, with an ad-board wall.
+    // Stands fill whatever room is left between the progress strip and the track (none for a packed
+    // field), with an ad-board wall.
     const standsH = this.trackTop - this.standsTop - 6
-    this.crowd = this.add
-      .tileSprite(0, this.standsTop, width, standsH, ensureCrowdTile(this, standsH))
-      .setOrigin(0, 0)
-      .setAlpha(0.8)
-    this.add.rectangle(0, this.trackTop - 6, width, 6, PALETTE.frame).setOrigin(0, 0)
+    if (standsH >= 8) {
+      this.crowd = this.add
+        .tileSprite(0, this.standsTop, width, standsH, ensureCrowdTile(this, standsH))
+        .setOrigin(0, 0)
+        .setAlpha(0.8)
+      this.add.rectangle(0, this.trackTop - 6, width, 6, PALETTE.frame).setOrigin(0, 0)
+    } else this.crowd = undefined
     this.track = this.add
       .tileSprite(0, this.trackTop, width, trackH, ensureTrackTile(this, n, this.laneH))
       .setOrigin(0, 0)
     this.add.rectangle(0, this.trackTop + trackH, width, markH + 2, GRASS).setOrigin(0, 0)
 
-    // Stadium clock, centered on the stands.
+    // Stadium clock, centered on the stands (in the HUD's middle chip when the stands are too thin).
     const clockW = this.compact ? 104 : 150
     const clockH = this.compact ? 26 : 36
-    const clockY = this.standsTop + Math.max(clockH / 2 + 2, standsH / 2)
-    this.add.image(
-      width / 2,
-      clockY,
-      ensureBevelPanel(this, clockW, clockH, PALETTE.panel, 3, true),
-    )
-    this.clock = this.add
-      .text(width / 2, clockY, '0.00', headlineStyle(this.compact ? 16 : 24, PALETTE.amber))
-      .setOrigin(0.5)
+    if (standsH >= clockH + 4) {
+      const clockY = this.standsTop + standsH / 2
+      this.add.image(
+        width / 2,
+        clockY,
+        ensureBevelPanel(this, clockW, clockH, PALETTE.panel, 3, true),
+      )
+      this.clock = this.add
+        .text(width / 2, clockY, '0.00', headlineStyle(this.compact ? 16 : 24, PALETTE.amber))
+        .setOrigin(0.5)
+    } else this.clock = undefined
 
     this.startLine = this.add
       .rectangle(0, this.trackTop, Math.max(3, this.ppm * 0.12), trackH, PALETTE.text)
@@ -231,7 +244,7 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
   }
 
   private laneTop(lane: number): number {
-    return this.trackTop + lane * this.laneH
+    return this.trackTop + Math.round(lane * this.laneH)
   }
 
   private footY(lane: number): number {
@@ -354,8 +367,9 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
 
     this.drawProgress(snap, shown)
     const raceMs = snap.phase === 'go' ? snap.raceMs + (freeze ? 0 : now - this.arrivedAt) : 0
-    const mine = me?.finishMs ?? null
-    this.clock?.setText(((mine ?? raceMs) / 1000).toFixed(2))
+    const clock = ((me?.finishMs ?? raceMs) / 1000).toFixed(2)
+    if (this.clock) this.clock.setText(clock)
+    else this.hud?.setCenter(clock, PALETTE.amber)
   }
 
   private renderRunner(
@@ -398,8 +412,12 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
       this.footY(lane) - this.laneH * 0.4,
     )
     if (mine) {
-      if (r.finishMs === null) this.marker?.place(sx, headY, now)
-      else this.marker?.hide()
+      // The ▼ never covers the progress strip: a packed field starts the track right under it, so
+      // there's no marker in a lane without room for one, and a jump can't lift it into the strip.
+      const room = this.progressY + 12 + (this.marker?.text.height ?? 0)
+      if (r.finishMs === null && this.footY(lane) - this.avatarSize() >= room) {
+        this.marker?.place(sx, Math.max(headY, room), now)
+      } else this.marker?.hide()
       if (r.finishMs === null) this.pad?.setSpeed(r.v)
     }
   }
@@ -445,6 +463,8 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
       // Adopt the state silently (a relayout mid-race must not replay the gun or anyone's finish).
       this.prevPhase = snap.phase
       this.prev = new Map(snap.runners.map((r) => [r.id, r]))
+      // Not in this round (joined late): just watch.
+      if (!me) this.pad?.setEnabled(false, false)
       if (me) {
         for (let i = 0; i < snap.hurdles.length; i++) {
           if ((snap.hurdles[i] as number) <= me.x) this.cleared.add(i)

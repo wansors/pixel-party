@@ -64,9 +64,19 @@ position points:
 - **Team games**: the team is ranked (winning team above), and **every member receives the points of
   that team's position**. Optionally, an intra-team contribution bonus can nudge the top contributors
   (off by default, configurable).
-- **Duel / bracket games**: the bracket produces an ordering (winner, finalist, semifinalists…). That
-  ordering maps to position points via the same table. For simultaneous 1v1 pairings, wins/losses are
-  aggregated into a round ranking.
+- **Duel games** (simultaneous seeded 1v1 pairings) are ranked across the whole room in **three
+  tiers** (`domain/services/duelRanking`, D28):
+  1. every win;
+  2. every draw and bye;
+  3. every loss.
+
+  Inside a tier, the game's own margin decides: reaction ms, point difference, hits, marbles. So a bye
+  or a draw never scores like a win, and the whole table is used instead of two flat bands. With an
+  odd headcount the bye goes to whoever has had the fewest byes so far this session.
+- **Players who didn't play** (D28): anyone who never sent an input during a round, or left it (gone
+  for more than 5 s), ranks below everyone who played, sharing last place. A bye, or a turn that never
+  came, doesn't count as idling. Players who were disconnected when the round started aren't in it at
+  all: they score nothing for that round and keep their total.
 
 In all cases the engine ends up with a **position → points** mapping per player, so §2's table applies
 uniformly regardless of format.

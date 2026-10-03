@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { GlassSide } from '@pp/shared'
 import { SeededRandom } from '../../infrastructure/driven/random/SeededRandom'
-import { GlassBridge, type GlassBridgeState } from './glassBridge'
+import { GlassBridge, type GlassBridgeState, decideMsFor } from './glassBridge'
 
 const game = new GlassBridge()
 const init = (players: string[], seed = 7, durationMs = 75_000): GlassBridgeState =>
@@ -125,7 +125,7 @@ describe('GlassBridge', () => {
     expect(game.snapshot(s, at + 400).glint).toBeNull()
   })
 
-  test('crossing ends with everyone left walking the solved bridge; survivors share 1st', () => {
+  test('the solver outranks the vests who walk the solved bridge after them', () => {
     const s = init(['a', 'b', 'c'])
     let t = 0
     const first = s.order[0] as string
@@ -133,41 +133,125 @@ describe('GlassBridge', () => {
       t = toDecide(s, t)
       game.onInput(s, first, { kind: 'jump', side: safeOf(s, row) }, t)
     }
-    // The other two auto-walk the fully solved bridge and cross without a single decision.
-    while (s.phase !== 'done') t = run(s, t, t + 50)
+    // Nothing left to decide: the other two stroll across the solved bridge at once.
+    t = run(s, t, t + 500)
     expect(game.isFinished(s, t)).toBe(true)
-    expect(t).toBeLessThan(s.endsAt)
     const result = game.getResult(s)
-    for (const id of s.order) {
-      expect(s.runners.get(id)?.status).toBe('crossed')
-      expect(result.ranks?.[id]).toBe(0)
-      expect(result.stats?.[id]).toBe(`${s.safe.length}/${s.safe.length}`)
-    }
+    const rows = s.safe.length
+    for (const id of s.order) expect(s.runners.get(id)?.status).toBe('crossed')
+    // Every row was a blind step for #1 (+1 for crossing); the walkers only get the crossing ★, and
+    // having had nothing to decide they're excused from the idle demotion.
+    expect(result.placements[0]).toBe(first)
+    expect(result.stats?.[first]).toBe(`★${rows + 1} · ${rows}/${rows}`)
+    const [v2, v3] = [s.order[1] as string, s.order[2] as string]
+    expect(result.ranks?.[v2]).toBe(1)
+    expect(result.ranks?.[v3]).toBe(1)
+    expect(result.stats?.[v2]).toBe(`★1 · ${rows}/${rows}`)
+    expect(result.waiting).toEqual([v2, v3])
   })
 
-  test('ranks the fallen by rows reached; the clock ends the round for whoever is left', () => {
+  test('a jump on a glint you saw holds but scores no ★; one too quick to react still does', () => {
+    const s = init(['a', 'b', 'c'])
+    let t = toDecide(s, 0)
+    const runner = s.active as string
+    // Row 0: wait for the first flash and jump on it once it has been lit long enough to read.
+    const glint = s.glints[0] as number
+    s.phaseEndsAt = glint + 2000
+    t = run(s, t, glint + 300)
+    game.onInput(s, runner, { kind: 'jump', side: safeOf(s, 0) }, t)
+    t = toDecide(s, t)
+    expect(s.target).toBe(1)
+    expect(s.runners.get(runner)?.blind).toBe(0)
+    expect(game.snapshot(s, t).players.find((p) => p.id === runner)?.score).toBe(0)
+    // Row 1: a flash right as you jump is too late to have helped — still a blind step.
+    const next = s.glints.find((at) => at > t) as number
+    s.phaseEndsAt = next + 2000
+    t = run(s, t, next + 100)
+    game.onInput(s, runner, { kind: 'jump', side: safeOf(s, 1) }, t)
+    toDecide(s, t)
+    expect(s.runners.get(runner)?.blind).toBe(1)
+  })
+
+  test('the buzzer credits an unfinished turn; queued vests are excused, not ranked with the fallen', () => {
     const s = init(['a', 'b', 'c', 'd'], 3, 20_000)
     const [v1, v2] = [s.order[0] as string, s.order[1] as string]
     let t = toDecide(s, 0)
     game.onInput(s, v1, { kind: 'jump', side: other(safeOf(s, 0)) }, t) // #1 falls on row 0
     t = toDecide(s, t)
     expect(s.active).toBe(v2)
-    game.onInput(s, v2, { kind: 'jump', side: safeOf(s, 1) }, t) // #2 walks row 0, lands row 1
+    game.onInput(s, v2, { kind: 'jump', side: safeOf(s, 1) }, t) // #2 walks row 0, lands row 1 blind
     t = toDecide(s, t)
-    game.onInput(s, v2, { kind: 'jump', side: other(safeOf(s, 2)) }, t) // …and falls on row 2
+    game.onInput(s, v2, { kind: 'jump', side: safeOf(s, 2) }, t) // …lands row 2 blind
     t = toDecide(s, t)
-    // #3 walked the three solved rows and is deciding row 3 when the bridge clock runs out.
+    game.onInput(s, v2, { kind: 'jump', side: other(safeOf(s, 3)) }, t) // …and falls on row 3
+    t = toDecide(s, t)
+    // #3 walked the four solved rows and is deciding row 4 when the bridge clock runs out.
+    const [v3, v4] = [s.order[2] as string, s.order[3] as string]
+    expect(s.active).toBe(v3)
     s.endsAt = t + 100
     run(s, t, s.endsAt)
     expect(s.phase).toBe('done')
     expect(game.isFinished(s, s.endsAt)).toBe(true)
     const result = game.getResult(s)
-    expect(result.stats?.[v1]).toBe('0/6')
-    expect(result.stats?.[v2]).toBe('2/6')
-    // #3 stood on row 2 when time ran out (3 rows); #4 never left the platform.
-    const [v3, v4] = [s.order[2] as string, s.order[3] as string]
-    expect(result.placements[0]).toBe(v3)
-    expect(result.ranks?.[v2]).toBeLessThan(result.ranks?.[v1] ?? -1)
-    expect(result.ranks?.[v4]).toBe(result.ranks?.[v1])
+    expect(result.stats?.[v1]).toBe('★0 · 0/6')
+    expect(result.stats?.[v2]).toBe('★2 · 3/6')
+    // #3 (cut short on the bridge) and #4 (never left the platform) get the turn's par ★.
+    expect(result.stats?.[v3]).toBe('★1 · 4/6')
+    expect(result.stats?.[v4]).toBe('★1 · 0/6')
+    expect(result.placements[0]).toBe(v2)
+    expect(result.ranks?.[v3]).toBe(1)
+    expect(result.ranks?.[v4]).toBe(1)
+    expect(result.ranks?.[v1]).toBe(3)
+    // #4 never had a jump timer; #3 did (and must have acted to escape the idle demotion).
+    expect(result.waiting).toEqual([v4])
+  })
+
+  test('a leaver in the queue is skipped; a leaver on the bridge hands it to the next vest', () => {
+    const s = init(['a', 'b', 'c', 'd'])
+    const [v1, v2, v3, v4] = s.order as [string, string, string, string]
+    let t = toDecide(s, 0)
+    game.leave(s, v2, t)
+    game.onInput(s, v2, { kind: 'point', side: 'L' }, t)
+    expect(s.runners.get(v2)?.status).toBe('left')
+    game.onInput(s, v1, { kind: 'jump', side: other(safeOf(s, 0)) }, t) // #1 falls
+    t = toDecide(s, t)
+    expect(s.active).toBe(v3)
+    game.leave(s, v3, t) // gone mid-decision: #4 walks out at once
+    expect(s.runners.get(v3)?.status).toBe('left')
+    expect(s.active).toBe(v4)
+    t = toDecide(s, t)
+    expect(s.target).toBe(1)
+    game.onInput(s, v4, { kind: 'jump', side: other(safeOf(s, 1)) }, t)
+    while (s.phase !== 'done' && t < s.endsAt) t = run(s, t, t + 50)
+    // Nobody left to cross: the round ends early instead of waiting on the gone seats.
+    expect(game.isFinished(s, t)).toBe(true)
+    expect(t).toBeLessThan(s.endsAt)
+    expect(game.snapshot(s, t).players.map((p) => p.status)).toEqual([
+      'fallen',
+      'left',
+      'left',
+      'fallen',
+    ])
+    expect(game.getResult(s).waiting).toEqual([])
+  })
+
+  test('big rooms get a shorter jump timer, so every vest gets a turn even if all stall', () => {
+    expect(decideMsFor(8, 10, 75_000)).toBe(4000)
+    expect(decideMsFor(9, 11, 75_000)).toBe(4000)
+    expect(decideMsFor(10, 12, 75_000)).toBe(3800)
+    expect(decideMsFor(12, 12, 75_000)).toBe(3500)
+    expect(decideMsFor(12, 12, 30_000)).toBe(2000)
+    for (let seed = 1; seed <= 40; seed++) {
+      const players = Array.from({ length: 12 }, (_, i) => `p${i}`)
+      const s = init(players, seed)
+      expect(game.snapshot(s, 0).decideTotalMs).toBe(3500)
+      // Nobody touches anything: every jump is forced at the end of the timer.
+      run(s, 0, s.endsAt)
+      for (const id of players) {
+        const r = s.runners.get(id)
+        expect(r?.decided || r?.status === 'crossed').toBe(true)
+      }
+      expect(s.phase).toBe('done')
+    }
   })
 })

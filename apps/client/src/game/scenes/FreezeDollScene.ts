@@ -5,6 +5,7 @@ import {
   type FreezeDollSnapshot,
   type FreezeDollStatus,
   PALETTE,
+  freezeDollSweepAt,
 } from '@pp/shared'
 import Phaser from 'phaser'
 import { type AvatarExpression, AvatarSprite, avatarPx } from '../avatars'
@@ -35,8 +36,9 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 // player below her, everyone drawn as their lobby avatar. While she faces away a chant plays (a note
 // per step — the spacing is the tempo tell, and the bar under her fills as it goes); a head twitch
 // comes before every turn (sometimes a fake-out); facing the field, her laser sweeps across the lanes
-// and any lane it has reached is watched until she looks away. Hold WALK (↑ / W / SPACE) or RUN (SHIFT)
-// — or the two big buttons — to move; the server judges every hit.
+// (from a different lane each time, wrapping round at the edge) and any lane it has reached is watched
+// until she looks away. Hold WALK (↑ / W / SPACE) or RUN (SHIFT) — or the two big buttons — to move;
+// the server judges every hit.
 
 const CHANT_STEPS = 8
 const HEART_ROWS = ['_RR_RR_', 'RRRRRRR', 'RRRRRRR', '_RRRRR_', '__RRR__', '___R___']
@@ -471,12 +473,8 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     }
     const sweep = Math.min(1, p)
     const n = this.lanes
-    const reached = (lane: number): boolean => {
-      const frac = n > 1 ? (snap.sweepDir === 1 ? lane : n - 1 - lane) / (n - 1) : 0
-      return frac <= sweep + 1e-6
-    }
     for (let lane = 0; lane < n; lane++) {
-      if (!reached(lane)) continue
+      if (freezeDollSweepAt(lane, n, snap.sweepFrom, snap.sweepDir) > sweep + 1e-6) continue
       watch.fillStyle(PALETTE.red, 0.2)
       watch.fillRect(
         this.lanesX0 + lane * this.laneW,
@@ -486,8 +484,10 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
       )
     }
     if (p > 1.4) return
-    // The beam itself while it sweeps (and a beat after): eyes → the lane it has just reached.
-    const lanePos = n > 1 ? (snap.sweepDir === 1 ? sweep : 1 - sweep) * (n - 1) : 0
+    // The beam itself while it sweeps (and a beat after): eyes → the lane it has just reached. Past the
+    // field's edge it wraps round to the other side.
+    let lanePos = (((snap.sweepFrom + snap.sweepDir * sweep * (n - 1)) % n) + n) % n
+    if (lanePos > n - 0.5) lanePos -= n
     const tx = this.lanesX0 + (lanePos + 0.5) * this.laneW
     const ty = this.startY - (this.startY - this.finishY) * 0.35
     const alpha = p > 1 ? 1 - (p - 1) / 0.4 : 1
@@ -597,6 +597,9 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
         }
       }
     }
+    // Gone from the room (out without a hit): they just drop where they stood.
+    if (r.status === 'out' && view.status !== 'out' && r.hearts >= view.hearts0)
+      this.layDown(view, true)
     if (r.status === 'finished' && view.status !== 'finished') {
       burst(this, x, this.finishY, this.state.colorOf(r.id), 18, 200)
       if (self) {
@@ -691,7 +694,8 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     snap: FreezeDollSnapshot,
     me: FreezeDollRunner | undefined,
   ): { text: string; color: number } {
-    if (!me || this.state.final) return { text: '', color: PALETTE.amber }
+    if (this.state.final) return { text: '', color: PALETTE.amber }
+    if (!me) return { text: this.quip('game.common.spectating', this.selfId), color: PALETTE.dim }
     if (me.status === 'finished')
       return { text: this.t('game.freezeDoll.safeHint'), color: PALETTE.lime }
     if (me.status === 'out')

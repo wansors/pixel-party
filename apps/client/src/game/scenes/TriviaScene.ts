@@ -8,31 +8,13 @@ const REVEAL_DELAY_MS = 450
 // Lightning Quiz canvas on the shared quiz-show board (QuizSceneBase), in the player's language (the
 // bank is bilingual). The correct answer never rides the live snapshot, but the server scores an answer
 // the moment it lands — so after a short suspense beat the locked tile reveals right (score went up) or
-// wrong (it didn't).
+// wrong (it didn't). The question's reveal then lights the right answer for everybody.
 export class TriviaScene extends QuizSceneBase<TriviaSnapshot> {
   constructor(...deps: SceneDeps) {
     super('trivia', ...deps)
   }
 
-  protected view(snap: TriviaSnapshot): QuizView {
-    const text = snap.text?.[this.lang()] ?? null
-    return {
-      index: snap.index,
-      total: snap.total,
-      question: text?.q ?? null,
-      choices: text?.choices ?? [],
-      open: text !== null,
-      answered: snap.answeredCurrent,
-      scores: snap.scores,
-    }
-  }
-
-  // The HUD bar drains per question (it refills each time a new one lands).
-  protected override remainingMs(snap: TriviaSnapshot): number | null {
-    return snap.text === null ? 0 : snap.questionRemainingMs
-  }
-
-  protected judge(_snap: TriviaSnapshot, v: QuizView): void {
+  protected override onLocked(v: QuizView): void {
     const pick = this.pick
     if (!pick || pick.judged || pick.index !== v.index || !v.answered.includes(this.selfId)) return
     pick.judged = true

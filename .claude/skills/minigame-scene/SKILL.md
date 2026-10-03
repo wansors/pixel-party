@@ -76,7 +76,10 @@ Shared kit — reuse before writing a private helper (duplicates were hoisted ou
 - `game/playerStrip.ts`: `PlayerStrip` — wrapping row of chips in identity colors (how everyone else is
   doing). Pass `avatar: this.state.avatarOf(id)` so each chip leads with the player's avatar (KO face
   when `dim`).
-- `netcode/SnapshotInterpolator` for real-time motion (see `FruitCatchScene`).
+- Real-time motion: `netcode/ServerClock` when an item's position is a pure function of time (falling
+  fruit/blocks, incoming obstacles — extrapolate each snapshot on the estimated server clock, so what
+  you see is what the server judges; see `FruitCatchScene`, `PixelRainScene`, `PixelDashScene`);
+  `netcode/SnapshotInterpolator` for physics-driven bodies (see `SumoScene`, `PongScene`).
 - `setColor` on a Text is cheap to repeat (a boot-time guard skips unchanged colors), but prefer
   updating texts only when their value changes.
 
@@ -101,7 +104,8 @@ Shared kit — reuse before writing a private helper (duplicates were hoisted ou
 8. Short header comment per scene; Biome style; no dead code / `any`.
 
 References: `ButtonMasherScene.ts` (tap game: arcade button + player-colored race lanes),
-`FruitCatchScene.ts` (real-time: interpolation, procedural sprites, catch/bomb feedback).
+`FruitCatchScene.ts` (real-time: `ServerClock` extrapolation, procedural sprites, catch/bomb
+feedback), `SumoScene.ts` (real-time physics: `SnapshotInterpolator`).
 
 ## Verify
 `verify-all` skill (typecheck, lint, tests, **client build** — the only template/type check for the

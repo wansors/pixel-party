@@ -1,4 +1,5 @@
-import type { HigherLowerInput, HigherLowerSnapshot } from '@pp/shared'
+import type { HigherLowerInput, HigherLowerSnapshot, HigherLowerStatus } from '@pp/shared'
+import type { Random } from '../ports/Random'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 22_000
@@ -6,21 +7,37 @@ const DECK_LEN = 40
 const MIN_CARD = 2
 const MAX_CARD = 14
 
-export interface HigherLowerState {
-  players: PlayerId[]
+interface Run {
+  // This player's own seeded deck (no two consecutive cards equal, so every guess has an answer).
   deck: number[]
-  startedAt: number
-  endsAt: number
-  // playerId -> current index in the shared deck (the streak length equals this index).
-  pointer: Map<PlayerId, number>
-  alive: Set<PlayerId>
-  // playerId -> ms at which the player's run ended (miss or time), for tie-break ranking.
-  streakMs: Map<PlayerId, number>
+  // Index of the face-up card; the streak while playing.
+  index: number
+  status: HigherLowerStatus
+  score: number
 }
 
-// Real-time FFA nerve game. A single seeded deck is shared by everyone; each player guesses whether the
-// next card is higher or lower to extend a streak, and one wrong guess ends their run. The server owns
-// the deck so upcoming cards are never revealed early. Pure domain logic.
+export interface HigherLowerState {
+  players: PlayerId[]
+  startedAt: number
+  endsAt: number
+  runs: Map<PlayerId, Run>
+}
+
+function dealDeck(r: Random): number[] {
+  const draw = (): number => MIN_CARD + Math.floor(r.next() * (MAX_CARD - MIN_CARD + 1))
+  const deck = [draw()]
+  while (deck.length < DECK_LEN) {
+    const next = draw()
+    if (next !== deck[deck.length - 1]) deck.push(next)
+  }
+  return deck
+}
+
+// Real-time FFA nerve game. Every player gets their own seeded deck (a shared one leaked your next card
+// on the wire: a rival one step ahead showed it face up). Each right guess on whether the next card is
+// higher or lower extends the streak; BANK stops and keeps it; a miss ends the run and halves it. Odds
+// swing with the face-up card (a 2 or an ace is a sure thing, a 7 or 8 a coin flip), so when to stop is
+// the game. Still playing at the buzzer keeps the streak. Pure domain logic.
 export class HigherLower implements MiniGame<HigherLowerState, HigherLowerInput> {
   readonly id = 'higher-lower'
   readonly format = 'ffa' as const
@@ -28,22 +45,11 @@ export class HigherLower implements MiniGame<HigherLowerState, HigherLowerInput>
   init(ctx: MiniGameInitCtx): HigherLowerState {
     const durationMs =
       typeof ctx.config?.durationMs === 'number' ? ctx.config.durationMs : DEFAULT_DURATION_MS
-    const r = ctx.random
-    // Build a deck with no two consecutive equal cards so every guess has a definite answer.
-    const deck: number[] = [MIN_CARD + Math.floor(r.next() * (MAX_CARD - MIN_CARD + 1))]
-    while (deck.length < DECK_LEN) {
-      const next = MIN_CARD + Math.floor(r.next() * (MAX_CARD - MIN_CARD + 1))
-      if (next !== deck[deck.length - 1]) deck.push(next)
+    const runs = new Map<PlayerId, Run>()
+    for (const id of ctx.players) {
+      runs.set(id, { deck: dealDeck(ctx.random), index: 0, status: 'playing', score: 0 })
     }
-    return {
-      players: [...ctx.players],
-      deck,
-      startedAt: ctx.now,
-      endsAt: ctx.now + durationMs,
-      pointer: new Map(ctx.players.map((id) => [id, 0])),
-      alive: new Set(ctx.players),
-      streakMs: new Map(),
-    }
+    return { players: [...ctx.players], startedAt: ctx.now, endsAt: ctx.now + durationMs, runs }
   }
 
   onInput(
@@ -52,66 +58,66 @@ export class HigherLower implements MiniGame<HigherLowerState, HigherLowerInput>
     input: HigherLowerInput,
     now: number,
   ): HigherLowerState {
-    if (input.kind !== 'guess' || (input.dir !== 'higher' && input.dir !== 'lower')) return state
-    if (now >= state.endsAt || !state.alive.has(playerId)) return state
-    const ptr = state.pointer.get(playerId)
-    if (ptr === undefined || input.index !== ptr) return state
-    // No next card left → the player has cleared the deck; freeze the streak.
-    if (ptr + 1 >= state.deck.length) {
-      state.alive.delete(playerId)
-      state.streakMs.set(playerId, now - state.startedAt)
+    const run = state.runs.get(playerId)
+    if (!run || run.status !== 'playing' || now >= state.endsAt) return state
+    if (input.kind === 'bank') {
+      run.status = 'banked'
       return state
     }
-    const cur = state.deck[ptr] as number
-    const nxt = state.deck[ptr + 1] as number
-    const correct = input.dir === 'higher' ? nxt > cur : nxt < cur
-    if (correct) {
-      state.pointer.set(playerId, ptr + 1)
+    if (input.kind !== 'guess' || (input.dir !== 'higher' && input.dir !== 'lower')) return state
+    if (input.index !== run.index) return state
+    const cur = run.deck[run.index] as number
+    const nxt = run.deck[run.index + 1] as number
+    if (input.dir === 'higher' ? nxt > cur : nxt < cur) {
+      run.index++
+      run.score = run.index
+      // The deck ran out: nothing left to risk, the streak is banked.
+      if (run.index + 1 >= run.deck.length) run.status = 'banked'
     } else {
-      state.alive.delete(playerId)
-      state.streakMs.set(playerId, now - state.startedAt)
+      run.status = 'bust'
+      run.score = Math.floor(run.score / 2)
     }
     return state
   }
 
-  isFinished(state: HigherLowerState, now: number): boolean {
-    return now >= state.endsAt || state.alive.size === 0
+  // Gone mid-round: their run stops where it is (the engine ranks them last anyway).
+  leave(state: HigherLowerState, playerId: PlayerId): HigherLowerState {
+    const run = state.runs.get(playerId)
+    if (run?.status === 'playing') run.status = 'banked'
+    return state
   }
 
+  isFinished(state: HigherLowerState, now: number): boolean {
+    if (now >= state.endsAt) return true
+    for (const run of state.runs.values()) if (run.status === 'playing') return false
+    return true
+  }
+
+  // Ranks by score alone (equal scores tie): speed doesn't decide, nerve does.
   getResult(state: HigherLowerState): NormalizedResult {
-    const streak = (id: PlayerId): number => state.pointer.get(id) ?? 0
-    const sorted = [...state.players].sort((a, b) => {
-      const sa = streak(a)
-      const sb = streak(b)
-      if (sb !== sa) return sb - sa
-      // Same streak → whoever built it faster ranks higher (still-alive players used the full time).
-      return (
-        (state.streakMs.get(a) ?? Number.POSITIVE_INFINITY) -
-        (state.streakMs.get(b) ?? Number.POSITIVE_INFINITY)
-      )
-    })
+    const score = (id: PlayerId): number => state.runs.get(id)?.score ?? 0
+    const sorted = [...state.players].sort((a, b) => score(b) - score(a))
     const ranks: Record<PlayerId, number> = {}
-    let rank = 0
-    let prev: { s: number; t: number } | undefined
     sorted.forEach((id, idx) => {
-      const s = streak(id)
-      const t = state.streakMs.get(id) ?? Number.POSITIVE_INFINITY
-      if (idx > 0 && prev && (s !== prev.s || t !== prev.t)) rank = idx
-      ranks[id] = rank
-      prev = { s, t }
+      const prev = sorted[idx - 1]
+      ranks[id] = prev !== undefined && score(prev) === score(id) ? (ranks[prev] as number) : idx
     })
     const stats: Record<PlayerId, string> = {}
-    for (const id of state.players) stats[id] = `streak ${streak(id)}`
+    for (const id of state.players) stats[id] = `streak ${score(id)}`
     return { placements: sorted, ranks, stats }
   }
 
   snapshot(state: HigherLowerState, now: number): HigherLowerSnapshot {
     const cards: HigherLowerSnapshot['cards'] = {}
     const scores: Record<PlayerId, number> = {}
-    for (const id of state.players) {
-      const ptr = state.pointer.get(id) ?? 0
-      cards[id] = { current: state.deck[ptr] as number, index: ptr, alive: state.alive.has(id) }
-      scores[id] = ptr
+    for (const [id, run] of state.runs) {
+      cards[id] = {
+        current: run.deck[run.index] as number,
+        index: run.index,
+        status: run.status,
+        next: run.status === 'playing' ? null : (run.deck[run.index + 1] ?? null),
+      }
+      scores[id] = run.score
     }
     return { cards, scores, remainingMs: Math.max(0, state.endsAt - now) }
   }

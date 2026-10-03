@@ -12,6 +12,7 @@ import {
   shade,
 } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
+import { DuelWatch } from './duelWatch'
 
 // Stepped sky bands, top to horizon: a tense dusk while waiting, a blazing sunset once the signal
 // fires.
@@ -46,7 +47,8 @@ const TUMBLEWEED = [
   '__tttt__',
 ]
 
-type Outcome = 'fastest' | 'oppJumped' | 'jumped' | 'slower' | 'draw' | 'bye'
+// The verdict from the viewed duellist's side (you, or the duellist a spectator watches).
+type Outcome = 'fastest' | 'oppJumped' | 'oppLeft' | 'jumped' | 'slower' | 'noDraw'
 
 interface Slinger {
   avatar: AvatarSprite
@@ -86,8 +88,8 @@ function ensureWoodSign(
 // in your identity colors under a dusk sky; a wooden sign says WAIT… until the signal fires — the
 // sky blazes, the sign yells FIRE! — then tap anywhere (or Space) to draw. The sign then carries
 // the verdict and the line under it explains it (who was faster, who jumped the gun). A tap before
-// the signal is a false start. Server-authoritative: the snapshot only ever says whether it has
-// fired.
+// the signal is a false start. The bye (or a player who joined mid-round) watches another standoff
+// from the stands instead. Server-authoritative: the snapshot only ever says whether it has fired.
 export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
   private sky?: Phaser.GameObjects.Graphics
   private sign?: Phaser.GameObjects.Image
@@ -95,6 +97,11 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
   private status?: Phaser.GameObjects.Text
   private me?: Slinger
   private opp?: Slinger
+  private vs?: Phaser.GameObjects.Text
+  private readonly watch = new DuelWatch()
+  // Whose standoff is on screen: yours, or the one a spectator watches (undefined = none yet).
+  private viewId: string | null | undefined = undefined
+  private freshView = false
   private signSize = 40
   private signMaxW = 0
   private horizon = 0
@@ -112,6 +119,9 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
     super.create({ hud: false })
     this.me = undefined
     this.opp = undefined
+    this.vs = undefined
+    this.watch.reset()
+    this.viewId = undefined
     this.skyKey = ''
     this.wasFired = false
     this.outcome = undefined
@@ -215,8 +225,8 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
     })
   }
 
-  // Both duelists, once the snapshot names the opponent (or leaves us alone on a bye).
-  private buildSlingers(me: QuickDrawPlayerView): void {
+  // Both duelists of the standoff on screen: `left` (you, when you play) and their rival on the right.
+  private buildSlingers(left: string, view: QuickDrawPlayerView): void {
     const { width, height } = this.scale
     const size = avatarPx(Math.min(height * 0.26, width * 0.34))
     const feetY = this.horizon + (height - this.horizon) * 0.35
@@ -228,7 +238,7 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
       pixelSize: 1,
     })
     const make = (id: string, x: number, flip: boolean): Slinger => {
-      const color = this.state.colorOf(id, id === this.selfId ? PALETTE.cyan : PALETTE.magenta)
+      const color = this.state.colorOf(id, x < width / 2 ? PALETTE.cyan : PALETTE.magenta)
       const avatar = new AvatarSprite(this, this.state.avatarOf(id), color, size, 'side')
       avatar.face(flip ? -1 : 1)
       avatar.image.setOrigin(0.5, 1).setPosition(x, feetY).setDepth(5)
@@ -255,14 +265,11 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
       const tipX = dir * (size * 0.38 + REVOLVER[0].length * cell)
       return { avatar, gun, name, tipX, tipY: -size * 0.36 - cell * 2 }
     }
-    const opponent = me.opponentId
-    if (opponent === null) {
-      this.me = make(this.selfId, width / 2, false)
-      return
-    }
-    this.me = make(this.selfId, width * 0.22, false)
+    const opponent = view.opponentId
+    if (opponent === null) return
+    this.me = make(left, width * 0.22, false)
     this.opp = make(opponent, width * 0.78, true)
-    this.add
+    this.vs = this.add
       .text(
         width / 2,
         feetY - size * 0.55,
@@ -311,80 +318,137 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
   }
 
   protected frame(snap: QuickDrawSnapshot | null, time: number): void {
-    const me = snap?.players[this.selfId]
-    if (!snap || !me) return
-    if (!this.me) this.buildSlingers(me)
+    if (!snap) return
+    const own = snap.players[this.selfId]
+    const playing = !!own && own.opponentId !== null
+    const viewId = playing ? this.selfId : this.watch.pick(snap.players, time)
+    if (viewId !== this.viewId) this.setView(viewId, snap)
+    const view = viewId === null ? undefined : snap.players[viewId]
+    if (!view?.opponentId) return
     this.me?.avatar.tick(time)
     this.opp?.avatar.tick(time)
 
-    // A bye is known from a round's very first snapshot, so it always gets its celebration.
-    if (me.opponentId === null) {
-      this.drawSky(BLAZE)
-      if (!this.outcome) this.resolve('bye', me, undefined)
-      return
-    }
-    // First snapshot (fresh round or relayout restart): adopt the state without replaying fx.
-    const fx = !this.firstSnapshot
-    if (me.fired && !this.wasFired) {
+    // First snapshot of this standoff (fresh round, relayout restart, a spectator's new duel): adopt
+    // the state without replaying fx.
+    const fx = !this.firstSnapshot && !this.freshView
+    this.freshView = false
+    if (view.fired && !this.wasFired) {
       this.wasFired = true
       this.drawSky(BLAZE)
-      if (!me.done && fx) {
+      if (!view.done && fx) {
         this.sfx.go()
         flash(this, PALETTE.text, 120)
         shake(this, 0.006, 140)
       }
     }
-    const opp = snap.players[me.opponentId]
-    if (me.done && !this.outcome) this.resolve(this.outcomeOf(me), me, opp, fx)
+    const opp = snap.players[view.opponentId]
+    if (view.done && !this.outcome) this.resolve(this.outcomeOf(view, opp), view, opp, fx)
     if (this.outcome) return
     this.setSign(
-      this.t(me.fired ? 'game.quickDraw.fire' : 'game.quickDraw.wait'),
-      me.fired ? PALETTE.amber : PALETTE.text,
+      this.t(view.fired ? 'game.quickDraw.fire' : 'game.quickDraw.wait'),
+      view.fired ? PALETTE.amber : PALETTE.text,
     )
-    this.status?.setText(this.t(me.fired ? 'game.quickDraw.tapNow' : 'game.quickDraw.instruction'))
+    this.status?.setText(
+      playing
+        ? this.t(view.fired ? 'game.quickDraw.tapNow' : 'game.quickDraw.instruction')
+        : this.watchLine(view),
+    )
   }
 
-  private outcomeOf(me: QuickDrawPlayerView): Outcome {
-    if (me.won === true) return me.reactionMs !== null ? 'fastest' : 'oppJumped'
-    if (me.won === false) return me.youDrew && me.reactionMs === null ? 'jumped' : 'slower'
-    return 'draw'
+  // A new standoff on screen (yours on the first snapshot; a spectator's next duel): the old cast
+  // leaves, the sky goes back to dusk and the new pair takes the street.
+  private setView(viewId: string | null, snap: QuickDrawSnapshot): void {
+    this.viewId = viewId
+    this.freshView = true
+    for (const s of [this.me, this.opp]) {
+      if (!s) continue
+      const parts = [s.avatar.image, s.gun, s.name]
+      this.tweens.killTweensOf(parts)
+      for (const o of parts) o.destroy()
+    }
+    this.vs?.destroy()
+    this.me = undefined
+    this.opp = undefined
+    this.vs = undefined
+    this.outcome = undefined
+    this.wasFired = false
+    this.firedLocally = false
+    this.drawSky(DUSK)
+    this.setSign(this.t('game.quickDraw.wait'), PALETTE.text)
+    const view = viewId === null ? undefined : snap.players[viewId]
+    if (viewId !== null && view) this.buildSlingers(viewId, view)
   }
 
-  // One-shot verdict: poses, the bang, the fall, the sign and the line that explains it.
-  // Without `fx` (a relayout after the verdict) only the final poses, sign and line are applied.
+  // A spectator's line under the sign: the bye's consolation, then whose standoff this is.
+  private watchLine(view: QuickDrawPlayerView): string {
+    const watching = this.t('game.common.duelWatch', {
+      a: this.state.nameOf(this.viewId ?? ''),
+      b: this.state.nameOf(view.opponentId ?? ''),
+    })
+    const bye = this.snap?.players[this.selfId]?.opponentId === null
+    return bye ? `${this.t('game.quickDraw.bye')}\n${watching}` : watching
+  }
+
+  private outcomeOf(view: QuickDrawPlayerView, opp: QuickDrawPlayerView | undefined): Outcome {
+    if (view.won === true) {
+      if (view.reactionMs !== null) return 'fastest'
+      return view.oppLeft ? 'oppLeft' : 'oppJumped'
+    }
+    if (view.youDrew && view.reactionMs === null) return 'jumped'
+    return opp?.reactionMs != null ? 'slower' : 'noDraw'
+  }
+
+  // One-shot verdict: poses, the bang, the fall, the sign and the line that explains it — to you, or
+  // to a spectator as who won. Without `fx` (a relayout after the verdict) only the final poses, sign
+  // and line are applied.
   private resolve(
     outcome: Outcome,
-    me: QuickDrawPlayerView,
+    view: QuickDrawPlayerView,
     opp: QuickDrawPlayerView | undefined,
     fx = true,
   ): void {
     this.outcome = outcome
     this.drawSky(BLAZE)
-    const oppName = me.opponentId ? this.state.nameOf(me.opponentId) : ''
-    const win = outcome === 'fastest' || outcome === 'oppJumped' || outcome === 'bye'
-    const lose = outcome === 'jumped' || outcome === 'slower'
-    this.setSign(
-      this.t(win ? 'game.common.youWin' : lose ? 'game.common.youLose' : 'game.common.draw'),
-      win ? PALETTE.lime : lose ? PALETTE.red : PALETTE.amber,
-    )
-    const line: Record<Outcome, string> = {
-      fastest: this.t('game.quickDraw.yourTime', { ms: me.reactionMs ?? 0 }),
-      oppJumped: this.t('game.quickDraw.oppJumped', { name: oppName }),
-      jumped: this.t('game.quickDraw.tooEarly'),
-      slower: this.t('game.quickDraw.slower', { name: oppName, ms: opp?.reactionMs ?? 0 }),
-      draw: this.t('game.quickDraw.noDraw'),
-      bye: this.t('game.quickDraw.bye'),
+    const oppName = view.opponentId ? this.state.nameOf(view.opponentId) : ''
+    const win = outcome === 'fastest' || outcome === 'oppJumped' || outcome === 'oppLeft'
+    const mine = this.viewId === this.selfId
+    if (mine) {
+      this.setSign(
+        this.t(win ? 'game.common.youWin' : 'game.common.youLose'),
+        win ? PALETTE.lime : PALETTE.red,
+      )
+      const line: Record<Outcome, string> = {
+        fastest: this.t('game.quickDraw.yourTime', { ms: view.reactionMs ?? 0 }),
+        oppJumped: this.t('game.quickDraw.oppJumped', { name: oppName }),
+        oppLeft: this.t('game.common.duelOppLeft', { name: oppName }),
+        jumped: this.t('game.quickDraw.tooEarly'),
+        slower: this.t('game.quickDraw.slower', { name: oppName, ms: opp?.reactionMs ?? 0 }),
+        noDraw: this.t('game.quickDraw.noDraw'),
+      }
+      // The loser also hears from the undertaker.
+      const epitaph = win ? '' : `\n${this.quip('game.quickDraw.undertaker', this.selfId)}`
+      this.status?.setText(`${line[outcome]}${epitaph}`)
+    } else {
+      const winner = win ? this.viewId : outcome === 'noDraw' ? null : view.opponentId
+      this.setSign(
+        winner
+          ? this.t('game.common.duelWinner', { name: this.state.nameOf(winner) })
+          : this.t('game.quickDraw.bothLose'),
+        winner ? this.state.colorOf(winner, PALETTE.amber) : PALETTE.red,
+      )
+      this.status?.setText(this.watchLine(view))
     }
-    // The loser also hears from the undertaker.
-    const epitaph = lose ? `\n${this.quip('game.quickDraw.undertaker', this.selfId)}` : ''
-    this.status?.setText(`${line[outcome]}${epitaph}`)
 
     if (outcome === 'fastest' && this.me) this.shoot(this.me, this.opp, fx)
     if (outcome === 'slower' && this.opp) this.shoot(this.opp, this.me, fx)
     if (outcome === 'jumped' && this.me) this.misfire(this.me, fx)
     if (outcome === 'oppJumped' && this.opp) this.misfire(this.opp, fx)
+    // A rival who left the game is just a ghost on the street.
+    if (outcome === 'oppLeft') this.opp?.avatar.image.setAlpha(0.3)
     if (!fx) return
-    if (win) {
+    if (!mine) {
+      this.sfx.tick()
+    } else if (win) {
       this.sfx.correct()
       const sprite = this.me?.avatar.image
       if (sprite) {
@@ -397,11 +461,9 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
           260,
         )
       }
-    } else if (lose) {
+    } else {
       this.sfx.wrong()
       shake(this, 0.012, 240)
-    } else {
-      this.sfx.tick()
     }
   }
 

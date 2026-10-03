@@ -5,6 +5,7 @@ import {
   type MicroRaceTrackDef,
   sampleMicroRaceTrack,
 } from '@pp/shared'
+import { SeededRandom } from '../../infrastructure/driven/random/SeededRandom'
 import type { Random } from '../ports/Random'
 import {
   CAR_R,
@@ -15,6 +16,7 @@ import {
   type MicroRaceState,
   formatRaceTime,
 } from './microRace'
+import { nearestDistance } from './raceCore'
 
 const nn = <T>(x: T | undefined): T => {
   if (x === undefined) throw new Error('unexpected nullish')
@@ -119,6 +121,25 @@ describe('MicroRace', () => {
     expect(snap.goInMs).toBe(GO_DELAY_MS)
     expect(snap.cars.every((c) => c.lap === 1)).toBe(true)
   })
+
+  test.each(MICRO_RACE_TRACKS.map((def, i) => [i, def] as const))(
+    'a full grid of 12 is clear and on the road (track %i)',
+    (i, def: MicroRaceTrackDef) => {
+      const s = init(
+        Array.from({ length: 12 }, (_, k) => `p${k}`),
+        (i + 0.5) / MICRO_RACE_TRACKS.length,
+      )
+      expect(s.track).toBe(i)
+      const cars = [...s.cars.values()]
+      for (const [k, a] of cars.entries()) {
+        expect(a.prog).toBeLessThan(0)
+        expect(nearestDistance(s.samples, a.x, a.y)).toBeLessThan(def.halfWidth - CAR_R)
+        for (const b of cars.slice(k + 1)) {
+          expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual(CAR_R * 2 + 4)
+        }
+      }
+    },
+  )
 
   test('cars stay parked until the lights go green', () => {
     const game = new MicroRace()
@@ -243,6 +264,60 @@ describe('MicroRace', () => {
     expect(b.hits).toBeGreaterThan(0)
     expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual(CAR_R * 2 - 0.01)
     expect(a.vx).toBeLessThan(0)
+  })
+
+  test('a car tucked in behind another gets a tow; the leader does not', () => {
+    const game = new MicroRace()
+    let s = init(['a', 'b'])
+    const a = nn(s.cars.get('a'))
+    const b = nn(s.cars.get('b'))
+    const p = nn(s.samples[40])
+    const q = nn(s.samples[48])
+    const heading = Math.atan2(q.y - p.y, q.x - p.x)
+    Object.assign(a, { x: q.x, y: q.y, a: heading, idx: 48 })
+    Object.assign(b, { x: p.x, y: p.y, a: heading, idx: 40 })
+    s = game.tick(s, 50, GO_DELAY_MS + 50)
+    expect(b.draft).toBe(true)
+    expect(a.draft).toBe(false)
+    expect(game.snapshot(s, GO_DELAY_MS + 50).cars.find((c) => c.id === 'b')?.draft).toBe(true)
+  })
+
+  test('the slipstream keeps the grid slot from deciding the race among equals', () => {
+    // Twelve identical autopilots that never pull out to pass: without a tow the grid order is the
+    // result (front row ~2.5th, back row ~10.5th); tucked in behind, the back row reels the front in.
+    const front: number[] = []
+    const back: number[] = []
+    for (let seed = 1; seed <= 12; seed++) {
+      const game = new MicroRace()
+      const players = Array.from({ length: 12 }, (_, k) => `p${k}`)
+      let s = game.init({ players, seed, random: new SeededRandom(seed), now: 0 })
+      const grid = [...s.cars.keys()]
+      ;({ s } = run(game, s, players, 90_000))
+      const order = game.getResult(s).placements
+      front.push(order.indexOf(grid[0] as string), order.indexOf(grid[1] as string))
+      back.push(order.indexOf(grid[10] as string), order.indexOf(grid[11] as string))
+    }
+    const mean = (xs: number[]): number => xs.reduce((t, x) => t + x, 0) / xs.length
+    expect(mean(back) - mean(front)).toBeLessThan(5)
+  })
+
+  test('a driver who leaves becomes a ghost and stops holding the race open', () => {
+    const game = new MicroRace()
+    let s = init(['a', 'b'])
+    const a = nn(s.cars.get('a'))
+    const b = nn(s.cars.get('b'))
+    s = game.onInput(s, 'b', { kind: 'drive', steer: 0, throttle: 1 }, 0)
+    s = game.leave(s, 'b')
+    expect(b.gone).toBe(true)
+    expect(b.throttle).toBe(0)
+    // Parked right on top of 'a': a ghost neither bumps nor tows.
+    Object.assign(b, { x: a.x + 8, y: a.y, a: a.a })
+    s = game.tick(s, 50, GO_DELAY_MS + 50)
+    expect(a.hits + b.hits).toBe(0)
+    expect(game.snapshot(s, GO_DELAY_MS + 50).cars.find((c) => c.id === 'b')?.gone).toBe(true)
+    expect(game.isFinished(s, GO_DELAY_MS + 50)).toBe(false)
+    a.finishMs = 40_000
+    expect(game.isFinished(s, GO_DELAY_MS + 100)).toBe(true)
   })
 
   test('formats race times as m:ss.t', () => {

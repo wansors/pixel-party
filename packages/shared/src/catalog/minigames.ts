@@ -58,7 +58,8 @@ export interface MiniGameMeta {
   // Nominal round duration in seconds (host-tunable later); 0 = ends on an explicit finish condition.
   readonly durationSec: number
   readonly blurb: string
-  // Skill axes this game exercises (Phase 4 radar). At least one; drives per-axis aggregation only.
+  // Skill axes this game exercises (Phase 4 radar); drives per-axis aggregation only. Empty for a game
+  // of pure luck (Pixel Roulette), which says nothing about anyone's skills.
   readonly axes: readonly SkillAxis[]
 }
 
@@ -94,7 +95,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     realtime: true,
     mobileFriendly: true,
     durationSec: 22,
-    blurb: 'Tap the INK color of the word, not what it spells. Mind the trap.',
+    blurb: 'Tap the INK color of the word, not what it spells. Wrong taps cost a point.',
     axes: ['focus'],
   },
   {
@@ -104,7 +105,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     players: { min: 1, max: 12, best: [3, 12] },
     realtime: true,
     mobileFriendly: true,
-    durationSec: 30,
+    durationSec: 36,
     blurb: 'Answer fast — correct answers score, and speed earns a bonus.',
     axes: ['knowledge'],
   },
@@ -127,7 +128,8 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     realtime: true,
     mobileFriendly: true,
     durationSec: 20,
-    blurb: 'Pump for points, but cash out before it bursts — or lose it all.',
+    blurb:
+      'Three balloons, the same for everyone: pump for points and cash out before each one pops.',
     axes: ['nerve'],
   },
   {
@@ -171,7 +173,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     realtime: true,
     mobileFriendly: true,
     durationSec: 22,
-    blurb: 'Guess if the next card is higher or lower. One miss ends your run.',
+    blurb: 'Higher or lower? Build a streak and bank it when you dare — a miss halves it.',
     axes: ['nerve'],
   },
   {
@@ -270,7 +272,8 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     realtime: true,
     mobileFriendly: true,
     durationSec: 60,
-    blurb: 'Head-to-head Battleship. Take turns firing to sink your rival before they sink you.',
+    blurb:
+      "Head-to-head Battleship — a hit shoots again. Sink your rival's fleet before they sink yours.",
     axes: ['precision'],
   },
   {
@@ -325,7 +328,8 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     realtime: true,
     mobileFriendly: false,
     durationSec: 30,
-    blurb: 'Eat, grow, and do not crash. The longest snake wins.',
+    blurb:
+      "Your own board, the same apples as everyone: eat, grow, don't crash. Longest snake wins.",
     axes: ['reflexes', 'focus'],
   },
   {
@@ -343,11 +347,11 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'sumo-push',
     name: 'Sumo Push',
     format: 'ffa',
-    players: { min: 3, max: 12, best: [4, 8] },
+    players: { min: 2, max: 12, best: [4, 8] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 30,
-    blurb: 'Shove everyone else out of the ring. Last sumo standing wins.',
+    blurb: 'Shove and charge everyone out of a shrinking ring. Last sumo standing wins.',
     axes: ['reflexes'],
   },
   {
@@ -369,7 +373,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     realtime: true,
     mobileFriendly: true,
     durationSec: 20,
-    blurb: 'Wait for FIRE, then draw first. Flinch early and you lose.',
+    blurb: 'Wait for FIRE, then draw first. Flinch early — or not at all — and you lose.',
     axes: ['reflexes'],
   },
   {
@@ -381,7 +385,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     mobileFriendly: true,
     durationSec: 15,
     blurb: 'Spin for a random number. Highest wins — pure luck.',
-    axes: ['nerve'],
+    axes: [],
   },
   {
     id: 'sudoku-race',
@@ -413,7 +417,8 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     realtime: true,
     mobileFriendly: true,
     durationSec: 90,
-    blurb: 'Team Battleship — coordinate shots with your squad to sink the enemy fleet first.',
+    blurb:
+      'Team Battleship — a rotating captain calls each shot, then the whole crew can fire. Sink the enemy fleet first.',
     axes: ['precision'],
   },
   {
@@ -457,14 +462,15 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     realtime: true,
     mobileFriendly: true,
     durationSec: 60,
-    blurb: 'Shoot color-matched bubbles to pop clusters of three or more. Clear the board fastest.',
+    blurb:
+      'Shoot color-matched bubbles to pop groups of three or more. Most bubbles popped wins; a full clear beats them all.',
     axes: ['precision'],
   },
   {
     id: 'micro-race',
     name: 'Micro Race',
     format: 'ffa',
-    players: { min: 1, max: 12, best: [3, 8] },
+    players: { min: 1, max: 12, best: [3, 10] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 90,
@@ -520,11 +526,12 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'glass-bridge',
     name: 'Glass Bridge',
     format: 'ffa',
-    players: { min: 2, max: 10, best: [4, 8] },
+    players: { min: 2, max: 12, best: [4, 8] },
     realtime: true,
     mobileFriendly: true,
     durationSec: 75,
-    blurb: 'Cross one by one: LEFT or RIGHT panel? One holds, one shatters. Watch for the glint.',
+    blurb:
+      'Cross one by one: LEFT or RIGHT? Blind guesses that hold earn ★. Peeking at the glint is safe, but earns nothing.',
     axes: ['nerve', 'focus'],
   },
   {
@@ -553,7 +560,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'sumo-ice',
     name: 'Sumo ICE',
     format: 'ffa',
-    players: { min: 2, max: 12, best: [3, 8] },
+    players: { min: 2, max: 12, best: [3, 10] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 45,
@@ -599,7 +606,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     id: 'bomber-express',
     name: 'Bomber Express',
     format: 'ffa',
-    players: { min: 2, max: 10, best: [3, 8] },
+    players: { min: 2, max: 12, best: [3, 8] },
     realtime: true,
     mobileFriendly: false,
     durationSec: 60,
@@ -652,7 +659,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     mobileFriendly: true,
     durationSec: 45,
     blurb:
-      'Trace the shape in the candy with your needle. Stray off the line or rush and it cracks!',
+      'Trace the shape in the candy with your needle. Stray off the line or rush and it cracks — a broken candy counts half!',
     axes: ['precision', 'nerve'],
   },
   {

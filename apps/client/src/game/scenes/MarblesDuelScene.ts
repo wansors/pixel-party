@@ -12,11 +12,13 @@ import {
   shade,
 } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
+import { type DuelSeat, DuelWatch } from './duelWatch'
 
 // Marbles Duel (odd or even): your rival across the table at the top, you at the bottom, each with your
 // lobby avatar and your pouch of marbles. When you HIDE, pick how many go in your fist (− / +, then
 // HIDE); when you GUESS, pick a bet (− / +) and call ODD or EVEN. Both choose at once; the reveal opens
 // the fist and rolls the marbles to the winner. Keys: ←/→ change the number, SPACE hides, O / E call.
+// The bye (or a player who joined mid-round) watches another duel from the same seat, read-only.
 
 const MARBLE_COLORS = [
   PALETTE.cyan,
@@ -26,6 +28,15 @@ const MARBLE_COLORS = [
   PALETTE.orange,
   0xb06bff,
 ]
+
+// The duels as a spectator picks them (a marbles duel is over once its phase says so).
+function seats(snap: MarblesSnapshot): Record<string, DuelSeat> {
+  const out: Record<string, DuelSeat> = {}
+  for (const [id, v] of Object.entries(snap.players)) {
+    out[id] = { opponentId: v.opponentId, done: v.phase === 'done' }
+  }
+  return out
+}
 
 export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
   private compact = false
@@ -46,6 +57,10 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
   private rivalAvatar?: AvatarSprite
   private rows = { theirs: 0, mine: 0, centre: 0, controls: 0 }
   private revealShown = 0
+  private readonly watch = new DuelWatch()
+  // Whose seat the table is drawn from: yours while you play, else the duellist being watched.
+  private viewId: string | null | undefined = undefined
+  private playing = false
 
   constructor(...deps: SceneDeps) {
     super('marbles-duel', ...deps)
@@ -66,6 +81,9 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
     this.myAvatar = undefined
     this.rivalAvatar = undefined
     this.revealShown = 0
+    this.watch.reset()
+    this.viewId = undefined
+    this.playing = false
     const top = this.top + 10
     const bottom = height - 12
     const h = bottom - top
@@ -110,7 +128,10 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
         width / 2,
         this.rows.centre + (this.compact ? 40 : 52),
         '',
-        bodyStyle(this.compact ? 12 : 14, PALETTE.dim),
+        bodyStyle(this.compact ? 12 : 14, PALETTE.dim, {
+          align: 'center',
+          wordWrap: { width: width * 0.9 },
+        }),
       )
       .setOrigin(0.5)
       .setDepth(10)
@@ -128,7 +149,7 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
 
   private step(d: number): void {
     const v = this.view()
-    if (!v || v.phase !== 'choose' || v.youChose) return
+    if (!v?.opponentId || v.phase !== 'choose' || v.youChose) return
     this.pick = Math.max(1, Math.min(v.mine, this.pick + d))
     this.pickText?.setText(String(this.pick))
     if (this.pickText) punch(this, this.pickText, 0.15, 60)
@@ -137,7 +158,7 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
 
   private commit(what: 'hide' | 'odd' | 'even'): void {
     const v = this.view()
-    if (!v || v.phase !== 'choose' || v.youChose || this.state.final) return
+    if (!v?.opponentId || v.phase !== 'choose' || v.youChose || this.state.final) return
     if (what === 'hide' && v.role === 'hide') this.sendInput({ kind: 'hide', count: this.pick })
     else if (what !== 'hide' && v.role === 'guess')
       this.sendInput({ kind: 'guess', bet: this.pick, odd: what === 'odd' })
@@ -149,7 +170,7 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
   private buildControls(v: MarblesPlayerView): void {
     for (const o of this.ui) o.destroy()
     this.ui = []
-    if (v.phase !== 'choose' || v.youChose) {
+    if (!this.playing || v.phase !== 'choose' || v.youChose) {
       this.pickText = undefined
       return
     }
@@ -207,8 +228,13 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
   }
 
   protected frame(snap: MarblesSnapshot | null, time: number): void {
-    const v = snap?.players[this.selfId]
-    if (!snap || !v) return
+    if (!snap) return
+    const own = snap.players[this.selfId]
+    this.playing = !!own?.opponentId
+    const viewId = this.playing ? this.selfId : this.watch.pick(seats(snap), time)
+    if (viewId !== this.viewId) this.setView(viewId, own?.opponentId === null)
+    const v = viewId === null ? undefined : snap.players[viewId]
+    if (!v) return
     const key = `${v.turn}:${v.phase}:${v.role}:${v.youChose}`
     if (key !== this.layoutKey) {
       this.layoutKey = key
@@ -221,15 +247,31 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
     this.lastView = v
   }
 
+  // A new seat at the table: yours on the first snapshot, or the next duel a spectator watches.
+  private setView(viewId: string | null, bye: boolean): void {
+    this.viewId = viewId
+    this.layoutKey = ''
+    this.lastView = undefined
+    this.revealShown = 0
+    this.myAvatar?.image.destroy()
+    this.rivalAvatar?.image.destroy()
+    this.myAvatar = undefined
+    this.rivalAvatar = undefined
+    this.banner?.setVisible(false)
+    if (!this.playing) this.hud?.setScore(bye ? this.t('game.common.duelBye') : '')
+  }
+
   // The two players at the ends of the table, reacting to every reveal and to the result.
   private paintAvatars(v: MarblesPlayerView, time: number): void {
+    const viewId = this.viewId
+    if (!viewId) return
     const px = avatarPx(this.compact ? 32 : 48)
     const make = (id: string, y: number): AvatarSprite => {
       const a = new AvatarSprite(this, this.state.avatarOf(id), this.state.colorOf(id), px)
       a.image.setPosition(28 + px / 2, y).setDepth(10)
       return a
     }
-    if (!this.myAvatar) this.myAvatar = make(this.selfId, this.rows.mine + 10)
+    if (!this.myAvatar) this.myAvatar = make(viewId, this.rows.mine + 10)
     if (!this.rivalAvatar && v.opponentId)
       this.rivalAvatar = make(v.opponentId, this.rows.theirs + 10)
     let mine: AvatarExpression = 'idle'
@@ -238,7 +280,7 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
       mine = v.won ? 'happy' : 'ko'
       theirs = v.won ? 'ko' : 'happy'
     } else if (v.phase === 'reveal' && v.last) {
-      const iGuessed = v.last.guesserId === this.selfId
+      const iGuessed = v.last.guesserId === viewId
       const iWon = iGuessed === v.last.correct
       mine = iWon ? 'happy' : 'hurt'
       theirs = iWon ? 'hurt' : 'happy'
@@ -263,12 +305,17 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
         g.fillCircle(width / 2 - span / 2 + r * 0.9 + i * r * 2.4, y - r * 0.35, r * 0.3)
       }
     }
+    const viewId = this.viewId ?? this.selfId
     const oppName = v.opponentId ? this.label(v.opponentId) : ''
     this.theirsText?.setText(
       v.opponentId ? this.t('game.marbles.theirs', { name: oppName, n: v.theirs }) : '',
     )
-    this.mineText?.setText(this.t('game.marbles.mine', { n: v.mine }))
-    this.mineText?.setColor(hexToCss(this.state.colorOf(this.selfId, PALETTE.amber)))
+    this.mineText?.setText(
+      this.playing
+        ? this.t('game.marbles.mine', { n: v.mine })
+        : this.t('game.marbles.theirs', { name: this.label(viewId), n: v.mine }),
+    )
+    this.mineText?.setColor(hexToCss(this.state.colorOf(viewId, PALETTE.amber)))
     if (v.opponentId) this.theirsText?.setColor(hexToCss(this.state.colorOf(v.opponentId)))
     row(v.theirs, this.rows.theirs + (this.compact ? 22 : 28))
     row(v.mine, this.rows.mine)
@@ -291,23 +338,35 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
     )
   }
 
-  // Phase changes: the prompt, the reveal (open fist + marbles rolling), the end.
+  // Phase changes: the prompt, the reveal (open fist + marbles rolling), the end. A spectator gets the
+  // same table told in the third person.
   private onChange(v: MarblesPlayerView): void {
     const prompt = this.prompt as Phaser.GameObjects.Text
     const status = this.status as Phaser.GameObjects.Text
-    if (!v.opponentId) {
-      prompt.setText(this.t('game.marbles.bye'))
-      status.setText('')
-      return
-    }
+    const opponentId = v.opponentId
+    const viewId = this.viewId
+    if (!opponentId || !viewId) return
+    const watching = !this.playing
     if (v.phase === 'choose') {
+      if (watching) {
+        prompt.setText(this.t('game.marbles.turn', { n: v.turn })).setColor(hexToCss(PALETTE.text))
+        status.setText(
+          this.watchLine(
+            this.t('game.common.duelWatch', {
+              a: this.state.nameOf(viewId),
+              b: this.state.nameOf(opponentId),
+            }),
+          ),
+        )
+        return
+      }
       prompt.setText(
         this.t(v.role === 'hide' ? 'game.marbles.hidePrompt' : 'game.marbles.guessPrompt'),
       )
       prompt.setColor(hexToCss(v.role === 'hide' ? PALETTE.orange : PALETTE.cyan))
       status.setText(
         v.youChose
-          ? this.t('game.marbles.waiting', { name: this.label(v.opponentId) })
+          ? this.t('game.marbles.waiting', { name: this.label(opponentId) })
           : this.t('game.marbles.turn', { n: v.turn }),
       )
       return
@@ -315,7 +374,7 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
     const last = v.last
     if (last && v.turn !== this.revealShown) {
       this.revealShown = v.turn
-      const guessed = last.guesserId === this.selfId
+      const guessed = last.guesserId === viewId
       const iWon = guessed === last.correct
       prompt.setText(
         this.t('game.marbles.reveal', {
@@ -323,15 +382,34 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
           parity: this.t(last.hidden % 2 === 1 ? 'game.marbles.odd' : 'game.marbles.even'),
         }),
       )
-      prompt.setColor(hexToCss(iWon ? PALETTE.lime : PALETTE.red))
+      prompt.setColor(hexToCss(watching ? PALETTE.amber : iWon ? PALETTE.lime : PALETTE.red))
+      const taker = iWon ? viewId : opponentId
       status.setText(
-        this.t(iWon ? 'game.marbles.youTake' : 'game.marbles.theyTake', { n: last.moved }),
+        watching
+          ? this.watchLine(
+              this.t('game.marbles.takes', { name: this.state.nameOf(taker), n: last.moved }),
+            )
+          : this.t(iWon ? 'game.marbles.youTake' : 'game.marbles.theyTake', { n: last.moved }),
       )
       this.revealFist(last.hidden, iWon)
-      if (iWon) this.sfx.coin()
+      if (watching) this.sfx.pop()
+      else if (iWon) this.sfx.coin()
       else this.sfx.wrong()
     }
     if (v.phase === 'done' && this.banner) {
+      if (watching) {
+        const winner = v.won === null ? null : v.won ? viewId : opponentId
+        showBanner(
+          this,
+          this.banner,
+          winner
+            ? this.t('game.common.duelWinner', { name: this.state.nameOf(winner) })
+            : this.t('game.common.draw'),
+          winner ? this.state.colorOf(winner, PALETTE.amber) : PALETTE.amber,
+        )
+        this.sfx.tick()
+        return
+      }
       const text =
         v.won === null
           ? this.t('game.common.draw')
@@ -344,8 +422,17 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
         text,
         v.won ? PALETTE.lime : v.won === null ? PALETTE.amber : PALETTE.red,
       )
+      if (v.oppLeft) {
+        status.setText(this.t('game.common.duelOppLeft', { name: this.state.nameOf(opponentId) }))
+      }
       if (v.won) this.sfx.win()
     }
+  }
+
+  // A spectator's status line: the bye's consolation first, then what's happening at the table.
+  private watchLine(line: string): string {
+    const bye = this.snap?.players[this.selfId]?.opponentId === null
+    return bye ? `${this.t('game.marbles.bye')}\n${line}` : line
   }
 
   // The fist opens on the table showing the hidden marbles, which then roll to the winner.

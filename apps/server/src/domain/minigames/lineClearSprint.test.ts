@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { Random } from '../ports/Random'
 import { LineClearSprint } from './lineClearSprint'
-import { FALL_INTERVAL_MS } from './tetrisCore'
+import { FALL_INTERVAL_MS, ROWS } from './tetrisCore'
 
 // Always draws the "I" piece (shapeIndex 0, width 4) so the piece sequence is fully predictable.
 const zero: Random = { next: () => 0 }
@@ -69,15 +69,60 @@ describe('LineClearSprint', () => {
     expect(nn(result.stats).b).toBe('1 lines')
   })
 
-  test('a tie in linesCleared is broken in favor of the player who did not top out', () => {
+  test('a tie in linesCleared is broken in favor of the player who topped out less', () => {
     const game = new LineClearSprint()
     const state = init(['a', 'b'])
     nn(state.boards.get('a')).linesCleared = 2
     nn(state.boards.get('b')).linesCleared = 2
-    nn(state.boards.get('b')).toppedOut = true
+    state.topOuts.set('b', 1)
     const result = game.getResult(state)
     expect(result.placements[0]).toBe('a')
     expect(nn(result.ranks).a).toBeLessThan(nn(result.ranks).b)
+  })
+
+  test('topping out costs lines and a short freeze, then the board starts over empty', () => {
+    const game = new LineClearSprint()
+    let state = init(['p'])
+    const p = nn(state.boards.get('p'))
+    p.linesCleared = 5
+    // Hard-dropping I pieces in the middle stacks one row each until the next one can't spawn.
+    for (let i = 0; i < ROWS && !p.toppedOut; i++) {
+      state = game.onInput(state, 'p', { kind: 'drop' }, 1000)
+    }
+    expect(p.toppedOut).toBe(true)
+    expect(p.linesCleared).toBe(3)
+    expect(state.topOuts.get('p')).toBe(1)
+    // Frozen for a moment (inputs are ignored)...
+    state = game.tick(state, 50, 2400)
+    state = game.onInput(state, 'p', { kind: 'move', dir: 'left' }, 2400)
+    expect(p.toppedOut).toBe(true)
+    // ...then back in the game with an empty board, the penalty paid once.
+    state = game.tick(state, 50, 2500)
+    expect(p.toppedOut).toBe(false)
+    expect(p.board.every((c) => c === 0)).toBe(true)
+    expect(p.linesCleared).toBe(3)
+    expect(game.snapshot(state, 2500).boards.p?.toppedOut).toBe(false)
+    expect(game.isFinished(state, 2500)).toBe(false)
+  })
+
+  test('the lines penalty never goes below zero', () => {
+    const game = new LineClearSprint()
+    let state = init(['p'])
+    const p = nn(state.boards.get('p'))
+    p.linesCleared = 1
+    for (let i = 0; i < ROWS && !p.toppedOut; i++) {
+      state = game.onInput(state, 'p', { kind: 'drop' }, 1000)
+    }
+    expect(p.linesCleared).toBe(0)
+  })
+
+  test('the round ends early once every player has left', () => {
+    const game = new LineClearSprint()
+    let state = init(['a', 'b'])
+    state = game.leave(state, 'a', 1000)
+    expect(game.isFinished(state, 1000)).toBe(false)
+    state = game.leave(state, 'b', 2000)
+    expect(game.isFinished(state, 2000)).toBe(true)
   })
 
   test('isFinished is false before endsAt and true at/after it', () => {

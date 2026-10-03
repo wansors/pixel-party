@@ -23,6 +23,10 @@ const HURT_SHOVE = 0.025
 const ITEM_FIRST_MS = 5000
 const ITEM_GAP_MS = [5500, 8500] as const
 const MAX_ITEMS = 4
+// A KO is worth 1: the finisher takes FINISHER_SHARE of it, the rest is split by the damage everyone
+// (finisher included) dealt to that fighter — softening someone up counts, stealing the last hit
+// isn't everything.
+const FINISHER_SHARE = 0.5
 
 interface Fighter {
   id: PlayerId
@@ -39,8 +43,13 @@ interface Fighter {
   weapon: 'pipe' | 'bottle' | null
   uses: number
   guardUntil: number
+  // KO credit (see FINISHER_SHARE).
   kos: number
+  // Damage taken from each attacker this round (splits the KO credit).
+  hurtBy: Map<PlayerId, number>
   outAt: number
+  // Left the round: off the street for good (counts as out, credits nobody).
+  gone: boolean
   dx: number
   dy: number
 }
@@ -74,11 +83,14 @@ function nextRand(state: BrawlState): number {
 const clampX = (x: number): number => Math.max(BRAWL.bodyR, Math.min(BRAWL.w - BRAWL.bodyR, x))
 const clampY = (y: number): number => Math.max(0, Math.min(BRAWL.depth, y))
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+// KO credit in whole tenths, as shown (equal shown credit ranks equal).
+const tenths = (v: number): number => Math.round(v * 10)
 const busy = (f: Fighter, now: number): boolean =>
   f.action !== 'idle' && f.action !== 'walk' && now < f.actionUntil
 
-// Real-time FFA side-view brawler. Deterministic: spawn spots are evenly spaced and the item drops come
-// from a mulberry32 stream seeded by the round's Random; attacks resolve on input, movement in tick.
+// Real-time FFA side-view brawler. Deterministic: spawn spots are evenly spaced and dealt out in a seeded
+// order (nobody owns the safer end seats by joining first), and the item drops come from a mulberry32
+// stream seeded by the round's Random; attacks resolve on input, movement in tick.
 export class Brawl implements MiniGame<BrawlState, BrawlInput> {
   readonly id = 'brawl'
   readonly format = 'ffa' as const
@@ -87,8 +99,13 @@ export class Brawl implements MiniGame<BrawlState, BrawlInput> {
     const durationMs =
       typeof ctx.config?.durationMs === 'number' ? ctx.config.durationMs : DEFAULT_DURATION_MS
     const n = ctx.players.length
+    const seats = [...ctx.players]
+    for (let i = seats.length - 1; i > 0; i--) {
+      const j = Math.floor(ctx.random.next() * (i + 1))
+      ;[seats[i], seats[j]] = [seats[j] as PlayerId, seats[i] as PlayerId]
+    }
     return {
-      fighters: ctx.players.map((id, i) => ({
+      fighters: seats.map((id, i) => ({
         id,
         x: BRAWL.w * ((i + 0.5) / Math.max(1, n)),
         y: BRAWL.depth * (i % 2 === 0 ? 0.35 : 0.65),
@@ -104,7 +121,9 @@ export class Brawl implements MiniGame<BrawlState, BrawlInput> {
         uses: 0,
         guardUntil: 0,
         kos: 0,
+        hurtBy: new Map(),
         outAt: 0,
+        gone: false,
         dx: 0,
         dy: 0,
       })),
@@ -210,16 +229,14 @@ export class Brawl implements MiniGame<BrawlState, BrawlInput> {
   ): void {
     if (t.action === 'down' && now < t.actionUntil) return
     if (now < t.guardUntil) return
-    t.hp = Math.max(0, t.hp - dmg)
+    const dealt = Math.min(t.hp, dmg)
+    t.hp -= dealt
+    t.hurtBy.set(by.id, (t.hurtBy.get(by.id) ?? 0) + dealt)
     t.x = clampX(t.x + by.face * shove)
     t.combo = 0
     if (t.hp <= 0) {
-      t.action = 'ko'
-      t.actionAt = now
-      t.actionUntil = Number.POSITIVE_INFINITY
-      t.outAt = now
-      if (by !== t) by.kos += 1
-      this.dropWeapon(state, t)
+      this.knockOut(state, t, now)
+      this.creditKo(state, t, by)
       return
     }
     if (knockdown) {
@@ -232,6 +249,32 @@ export class Brawl implements MiniGame<BrawlState, BrawlInput> {
       t.actionAt = now
       t.actionUntil = now + HURT_MS
     }
+  }
+
+  private knockOut(state: BrawlState, f: Fighter, now: number): void {
+    f.action = 'ko'
+    f.actionAt = now
+    f.actionUntil = Number.POSITIVE_INFINITY
+    f.outAt = now
+    this.dropWeapon(state, f)
+  }
+
+  private creditKo(state: BrawlState, victim: Fighter, finisher: Fighter): void {
+    finisher.kos += FINISHER_SHARE
+    const total = [...victim.hurtBy.values()].reduce((sum, d) => sum + d, 0)
+    for (const [id, dmg] of victim.hurtBy) {
+      const f = state.fighters.find((x) => x.id === id)
+      if (f && total > 0) f.kos += ((1 - FINISHER_SHARE) * dmg) / total
+    }
+  }
+
+  // A fighter who left the round is out on the spot (no KO credit for anyone; their weapon drops).
+  leave(state: BrawlState, playerId: PlayerId, now: number): BrawlState {
+    const f = state.fighters.find((x) => x.id === playerId)
+    if (!f || f.gone) return state
+    f.gone = true
+    if (f.action !== 'ko') this.knockOut(state, f, now)
+    return state
   }
 
   // A knocked-down fighter lets go of their weapon (it lands next to them; a pipe keeps its swings).
@@ -309,14 +352,14 @@ export class Brawl implements MiniGame<BrawlState, BrawlInput> {
   getResult(state: BrawlState): NormalizedResult {
     const up = (f: Fighter): number => (f.action === 'ko' ? 0 : 1)
     const cmp = (a: Fighter, b: Fighter): number =>
-      up(b) - up(a) || b.kos - a.kos || (up(a) ? b.hp - a.hp : b.outAt - a.outAt)
+      up(b) - up(a) || tenths(b.kos) - tenths(a.kos) || (up(a) ? b.hp - a.hp : b.outAt - a.outAt)
     const sorted = [...state.fighters].sort(cmp)
     const ranks: Record<PlayerId, number> = {}
     const stats: Record<PlayerId, string> = {}
     sorted.forEach((f, i) => {
       const prev = sorted[i - 1]
       ranks[f.id] = prev && cmp(prev, f) === 0 ? (ranks[prev.id] ?? i) : i
-      stats[f.id] = `${f.kos} KO`
+      stats[f.id] = `${tenths(f.kos) / 10} KO`
     })
     return { placements: sorted.map((f) => f.id), ranks, stats }
   }
@@ -324,21 +367,23 @@ export class Brawl implements MiniGame<BrawlState, BrawlInput> {
   snapshot(state: BrawlState, now: number): BrawlSnapshot {
     const round = (v: number): number => Math.round(v * 1000) / 1000
     return {
-      fighters: state.fighters.map((f) => ({
-        id: f.id,
-        x: round(f.x),
-        y: round(f.y),
-        face: f.face,
-        hp: f.hp,
-        action: f.action,
-        actionMs: Math.max(0, now - f.actionAt),
-        weapon: f.weapon,
-        uses: f.uses,
-        guard: now < f.guardUntil,
-        kos: f.kos,
-        dx: round(f.dx),
-        dy: round(f.dy),
-      })),
+      fighters: state.fighters
+        .filter((f) => !f.gone)
+        .map((f) => ({
+          id: f.id,
+          x: round(f.x),
+          y: round(f.y),
+          face: f.face,
+          hp: f.hp,
+          action: f.action,
+          actionMs: Math.max(0, now - f.actionAt),
+          weapon: f.weapon,
+          uses: f.uses,
+          guard: now < f.guardUntil,
+          kos: tenths(f.kos) / 10,
+          dx: round(f.dx),
+          dy: round(f.dy),
+        })),
       items: state.items.map((i) => [i.id, round(i.x), round(i.y), i.kind]),
       remainingMs: Math.max(0, state.endsAt - now),
     }

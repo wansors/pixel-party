@@ -163,6 +163,7 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
     const stripSize = compact ? 11 : 13
+    const stripRows = width < 600 ? 3 : 2
     const stripH = PlayerStrip.rowH(stripSize)
     this.strip = new PlayerStrip(
       this,
@@ -170,9 +171,9 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
       this.top + 2 + stripH / 2,
       width - 24,
       stripSize,
-      1,
+      stripRows,
     )
-    const top = this.top + stripH + 2
+    const top = this.top + stripRows * stripH + 2
     this.cell = compact ? 3 : height > 640 ? 5 : 4
     const legendFire = { o: 0x7a1f10, b: PALETTE.orange, h: PALETTE.amber, s: PALETTE.red }
     this.ballKey = ensurePixelGrid(this, {
@@ -514,7 +515,8 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
     this.lastCombo = combo
 
     if (!shot) {
-      this.showDone()
+      // Out of shots — or a spectator, not in this round at all.
+      this.showDone(!(this.selfId in snap.shots))
       return
     }
     // Keep the hoop on the ball in flight; afterwards (or once charging) it moves to the next shot.
@@ -662,7 +664,7 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
     }
   }
 
-  private showDone(): void {
+  private showDone(spectator: boolean): void {
     this.hand?.setVisible(false)
     this.charging = false
     this.drawMeter(0, false)
@@ -671,8 +673,9 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
     this.hint?.setVisible(false)
     if (this.done) return
     this.done = true
-    if (this.banner) showBanner(this, this.banner, this.t('game.common.finished'), PALETTE.lime)
     this.waitText?.setText(this.t('game.common.waiting'))
+    if (spectator) return
+    if (this.banner) showBanner(this, this.banner, this.t('game.common.finished'), PALETTE.lime)
     if (this.firstSnapshot) return // relayout restart: the end state, without the fanfare
     this.sfx.coin()
     burst(this, this.scale.width / 2, this.scale.height / 2, shade(PALETTE.amber, 0.2), 24, 260)

@@ -147,6 +147,66 @@ describe('BomberExpress', () => {
     expect(cell(s, 2, 1)).toBe('.')
   })
 
+  test('twelve distinct, open spawn cells dealt with the seed (not join order)', () => {
+    const players = Array.from({ length: 12 }, (_, i) => `p${i}`)
+    const firstSeats = new Set<string>()
+    for (let seed = 1; seed <= 20; seed++) {
+      const s = init(players, seed)
+      const spots = s.players.map((p) => `${p.x},${p.y}`)
+      expect(new Set(spots).size).toBe(12)
+      for (const p of s.players) {
+        expect(cell(s, p.x, p.y)).toBe('.')
+        for (const [dx, dy] of [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ] as const) {
+          expect(['.', '#']).toContain(cell(s, p.x + dx, p.y + dy))
+        }
+      }
+      firstSeats.add(spots[0] as string)
+    }
+    // Joining first no longer means the (1, 1) corner.
+    expect(firstSeats.size).toBeGreaterThan(4)
+  })
+
+  test('survivors at the buzzer rank by knock-outs, then by crates broken', () => {
+    const s = init(['a', 'b'])
+    bare(s)
+    place(s, 'a', 1, 1)
+    place(s, 'b', 15, 11)
+    setCell(s, 3, 1, 'c')
+    game.onInput(s, 'a', { kind: 'bomb' }, 0)
+    game.onInput(s, 'a', { kind: 'move', dir: 'down' }, 0)
+    run(s, 0, BOMBER.fuseMs + 50)
+    game.onInput(s, 'a', { kind: 'move', dir: null }, BOMBER.fuseMs + 50)
+    expect(player(s, 'a').alive).toBe(true)
+    expect(player(s, 'a').crates).toBe(1)
+    expect(game.isFinished(s, 60_000)).toBe(true)
+    const result = game.getResult(s)
+    expect(result.placements).toEqual(['a', 'b'])
+    expect(result.ranks).toEqual({ a: 0, b: 1 })
+    // Nothing to tell them apart: they share 1st.
+    player(s, 'b').crates = 1
+    expect(game.getResult(s).ranks).toEqual({ a: 0, b: 0 })
+  })
+
+  test('a leaver is out on the spot, nobody scores it, and last-standing still ends the round', () => {
+    const s = init(['a', 'b', 'c'])
+    bare(s)
+    game.leave(s, 'b', 1000)
+    expect(player(s, 'b').alive).toBe(false)
+    expect(game.snapshot(s, 1000).players.find((p) => p.id === 'b')?.left).toBe(true)
+    expect(s.players.every((p) => p.kos === 0)).toBe(true)
+    expect(game.isFinished(s, 1000)).toBe(false)
+    game.onInput(s, 'b', { kind: 'bomb' }, 1000)
+    expect(s.bombs).toHaveLength(0)
+    game.leave(s, 'c', 2000)
+    expect(game.isFinished(s, 2000)).toBe(true)
+    expect(game.getResult(s).placements[0]).toBe('a')
+  })
+
   test('bombs are capped per player and block the way; junk is ignored', () => {
     const s = init(['a'])
     bare(s)

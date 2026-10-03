@@ -1,6 +1,7 @@
-// Asteroids bot: turns toward the nearest rock (or rival), fires when lined up, thrusts now and then.
+// Asteroids bot: turns toward the nearest rock (or rival — parked ghosts can't be hit), fires when lined
+// up, thrusts now and then.
 type Snap = {
-  ships: { id: string; x: number; y: number; a: number; alive: boolean }[]
+  ships: { id: string; x: number; y: number; a: number; alive: boolean; idle: boolean }[]
   rocks: [number, number, number, number, number, number][]
 }
 const W = 1.6
@@ -12,7 +13,7 @@ export default function play(s: Snap, me: string): unknown {
   if (!ship?.alive) return null
   const targets = [
     ...s.rocks.map(([, x, y]) => ({ x, y })),
-    ...s.ships.filter((o) => o.id !== me && o.alive),
+    ...s.ships.filter((o) => o.id !== me && o.alive && !o.idle),
   ]
   const near = targets
     .map((t) => ({ dx: delta(t.x - ship.x, W), dy: delta(t.y - ship.y, H) }))

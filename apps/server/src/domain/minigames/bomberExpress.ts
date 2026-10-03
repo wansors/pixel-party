@@ -4,7 +4,9 @@ import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './Mi
 const DEFAULT_DURATION_MS = 60_000
 const W = BOMBER.w
 const H = BOMBER.h
-// Ten starting cells with their neighbours kept clear of crates (corners, mid-edges, inner cross).
+// Twelve starting cells with their neighbours kept clear of crates (corners, mid-edges, inner ring),
+// in fill order: a room of N uses the first N, so small rooms stay spread out. The pairs mirror through
+// the centre cell (8, 6).
 const SPAWNS: readonly (readonly [number, number])[] = [
   [1, 1],
   [15, 11],
@@ -16,6 +18,8 @@ const SPAWNS: readonly (readonly [number, number])[] = [
   [15, 7],
   [5, 7],
   [11, 5],
+  [5, 3],
+  [11, 9],
 ]
 const CRATE_DENSITY = 0.6
 const DROP_CHANCE = 0.32
@@ -42,6 +46,9 @@ interface Player {
   speed: number
   kos: number
   outAt: number
+  // Crates this player's blasts broke: the last tiebreak (an all-survivor timeout ranks the busier one up).
+  crates: number
+  left: boolean
 }
 
 interface Bomb {
@@ -66,8 +73,9 @@ export interface BomberState {
 const at = (x: number, y: number): number => y * W + x
 const isPower = (c: string | undefined): boolean => c === 'r' || c === 'b' || c === 's'
 
-// Real-time FFA Bomberman. Deterministic: the crate scatter and the power-up hidden in each crate are
-// drawn from the seeded Random at init; the rest is driven by inputs and time.
+// Real-time FFA Bomberman. Deterministic: who starts on which spawn cell, the crate scatter and the
+// power-up hidden in each crate are drawn from the seeded Random at init; the rest is driven by inputs
+// and time.
 export class BomberExpress implements MiniGame<BomberState, BomberInput> {
   readonly id = 'bomber-express'
   readonly format = 'ffa' as const
@@ -77,6 +85,12 @@ export class BomberExpress implements MiniGame<BomberState, BomberInput> {
       typeof ctx.config?.durationMs === 'number' ? ctx.config.durationMs : DEFAULT_DURATION_MS
     const rng = (): number => ctx.random.next()
     const spawns = SPAWNS.slice(0, Math.max(1, ctx.players.length))
+    // Seeded seats (not join order): player i starts on spawns[seats[i]].
+    const seats = spawns.map((_, i) => i)
+    for (let i = seats.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1))
+      ;[seats[i], seats[j]] = [seats[j] as number, seats[i] as number]
+    }
     const keepClear = new Set<number>()
     for (const [sx, sy] of spawns) {
       keepClear.add(at(sx, sy))
@@ -102,7 +116,7 @@ export class BomberExpress implements MiniGame<BomberState, BomberInput> {
       cells,
       drops,
       players: ctx.players.map((id, idx) => {
-        const [x, y] = SPAWNS[idx % SPAWNS.length] ?? [1, 1]
+        const [x, y] = spawns[seats[idx % seats.length] ?? 0] ?? [1, 1]
         return {
           id,
           idx,
@@ -119,6 +133,8 @@ export class BomberExpress implements MiniGame<BomberState, BomberInput> {
           speed: 1,
           kos: 0,
           outAt: 0,
+          crates: 0,
+          left: false,
         }
       }),
       bombs: [],
@@ -227,6 +243,8 @@ export class BomberExpress implements MiniGame<BomberState, BomberInput> {
             // A crate stops the blast and reveals what it hid.
             state.cells[i] = state.drops.get(i) ?? '.'
             state.drops.delete(i)
+            const owner = state.players[b.owner]
+            if (owner) owner.crates += 1
             break
           }
           if (isPower(c)) state.cells[i] = '.'
@@ -237,15 +255,30 @@ export class BomberExpress implements MiniGame<BomberState, BomberInput> {
     }
   }
 
+  // A gone player is out on the spot (nobody scores the knock-out); bombs already down still go off.
+  leave(state: BomberState, playerId: PlayerId, now: number): BomberState {
+    const p = state.players.find((x) => x.id === playerId)
+    if (!p?.alive) return state
+    p.alive = false
+    p.left = true
+    p.dir = null
+    p.outAt = now
+    return state
+  }
+
   isFinished(state: BomberState, now: number): boolean {
     const alive = state.players.filter((p) => p.alive).length
     return now >= state.endsAt || alive === 0 || (state.players.length > 1 && alive <= 1)
   }
 
   getResult(state: BomberState): NormalizedResult {
-    // Still standing first; then knock-outs scored; then who lasted longer.
+    // Still standing first; then knock-outs scored; then who lasted longer; then crates broken (so two
+    // survivors at the buzzer don't simply share 1st).
     const cmp = (a: Player, b: Player): number =>
-      Number(b.alive) - Number(a.alive) || b.kos - a.kos || (a.alive ? 0 : b.outAt - a.outAt)
+      Number(b.alive) - Number(a.alive) ||
+      b.kos - a.kos ||
+      (a.alive ? 0 : b.outAt - a.outAt) ||
+      b.crates - a.crates
     const sorted = [...state.players].sort(cmp)
     const ranks: Record<PlayerId, number> = {}
     const stats: Record<PlayerId, string> = {}
@@ -283,6 +316,7 @@ export class BomberExpress implements MiniGame<BomberState, BomberInput> {
           bombs: p.maxBombs,
           speed: p.speed,
           kos: p.kos,
+          left: p.left,
         }
       }),
       remainingMs: Math.max(0, state.endsAt - now),

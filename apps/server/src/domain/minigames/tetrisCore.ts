@@ -193,6 +193,16 @@ export function lockAndAdvance(p: PlayerBoardState, queue: number[]): void {
   if (collides(p.board, COLS, ROWS, p.current, 0, 0)) p.toppedOut = true
 }
 
+// A topped-out board starts over: emptied, with the piece that couldn't spawn back at the top (the
+// queue carries on where it was). Line Clear Sprint uses it so one top-out doesn't bench you for the
+// rest of the round.
+export function restartBoard(p: PlayerBoardState, queue: number[]): void {
+  p.board = new Array<Cell>(COLS * ROWS).fill(0)
+  p.current = spawnPiece(queue[p.queueIndex % queue.length] ?? 0, COLS)
+  p.fallAccum = 0
+  p.toppedOut = false
+}
+
 export function stepFall(p: PlayerBoardState, dt: number, queue: number[]): void {
   if (p.toppedOut) return
   p.fallAccum += dt

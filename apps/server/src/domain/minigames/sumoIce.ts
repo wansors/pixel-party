@@ -11,14 +11,22 @@ const MAX_SPEED = 0.6
 const FRICTION = 0.55
 const RESTITUTION = 1.3
 // The melt: nothing goes for the first seconds; the floe is down to its core a little before the end,
-// with the core itself (tiles within CORE_R of the centre) never melting.
+// with the core itself (tiles within CORE_R of the centre: 3×3 tiles) never melting. A big field gets a
+// wider core (BIG_CORE_R: 13 tiles, one more on each side) so its final fight isn't pinball.
 const MELT_START_MS = 6000
 const FINAL_FIGHT_MS = 8000
 const CORE_R = 0.12
+const BIG_CORE_R = 0.16
+const BIG_FIELD = 10
 const JITTER = 0.28 // how far out of edge-first order a tile may melt (fraction of the radius)
+// Lifebuoy drop: the clearest of RESCUE_SPOTS points this far from the centre (inside the 3×3 core).
+const RESCUE_R = 0.06
+const RESCUE_SPOTS = 8
 
 interface Body {
   id: PlayerId
+  // Seat angle (seeded spin + seat order): where this body spawned, and where its lifebuoy aims first.
+  seat: number
   x: number
   y: number
   vx: number
@@ -50,7 +58,8 @@ const tileCentre = (i: number): [number, number] => [
 ]
 
 // Real-time FFA sumo on a melting ice floe. Deterministic: spawn spin and the whole melt schedule are
-// drawn from the seeded Random at init; tick is pure physics plus the floe's time-driven state.
+// drawn from the seeded Random at init; tick is pure physics plus the floe's time-driven state. Ranked
+// by survival time; among those still in at the buzzer, an unused lifebuoy ranks first.
 export class SumoIce implements MiniGame<SumoIceState, SumoIceInput> {
   readonly id = 'sumo-ice'
   readonly format = 'ffa' as const
@@ -68,6 +77,7 @@ export class SumoIce implements MiniGame<SumoIceState, SumoIceInput> {
       const y = CENTER + Math.sin(a) * SPAWN_R
       bodies.set(id, {
         id,
+        seat: a,
         x,
         y,
         vx: 0,
@@ -85,12 +95,13 @@ export class SumoIce implements MiniGame<SumoIceState, SumoIceInput> {
     const crackAt = new Array<number>(N * N).fill(-1)
     const meltAt = new Array<number>(N * N).fill(-1)
     const meltable: { i: number; key: number }[] = []
+    const coreR = n >= BIG_FIELD ? BIG_CORE_R : CORE_R
     for (let i = 0; i < N * N; i++) {
       const [x, y] = tileCentre(i)
       const d = Math.hypot(x - CENTER, y - CENTER)
       const jitter = rng()
       if (d > SUMO_ICE.floeR) continue
-      if (d < CORE_R) {
+      if (d < coreR) {
         crackAt[i] = Number.POSITIVE_INFINITY
         meltAt[i] = Number.POSITIVE_INFINITY
         continue
@@ -149,7 +160,7 @@ export class SumoIce implements MiniGame<SumoIceState, SumoIceInput> {
     for (const b of live) {
       if (this.solidAt(state, b.x, b.y, now)) continue
       b.lives -= 1
-      if (b.lives > 0) this.rescue(b, now)
+      if (b.lives > 0) this.rescue(b, live, now)
       else {
         b.alive = false
         b.outAt = now
@@ -158,13 +169,23 @@ export class SumoIce implements MiniGame<SumoIceState, SumoIceInput> {
     return state
   }
 
-  // The lifebuoy: back onto the never-melting core, at rest, a ghost for a moment. Successive rescues
-  // land on different spots around the centre (deterministic from the rescue count and the body).
-  private rescue(b: Body, now: number): void {
+  // The lifebuoy: back onto the never-melting core, at rest, a ghost for a moment. It drops on the
+  // clearest of a ring of spots around the centre (the ring starts at the body's own seat angle, so
+  // ties break differently per player) — never on top of someone.
+  private rescue(b: Body, live: Body[], now: number): void {
     b.rescues += 1
-    const a = (b.rescues * 2.4 + b.id.length) % (Math.PI * 2)
-    b.x = CENTER + Math.cos(a) * 0.03
-    b.y = CENTER + Math.sin(a) * 0.03
+    let best = { x: CENTER, y: CENTER, gap: -1 }
+    for (let k = 0; k < RESCUE_SPOTS; k++) {
+      const a = b.seat + (k / RESCUE_SPOTS) * Math.PI * 2
+      const x = CENTER + Math.cos(a) * RESCUE_R
+      const y = CENTER + Math.sin(a) * RESCUE_R
+      let gap = Number.POSITIVE_INFINITY
+      for (const o of live)
+        if (o !== b && o.alive) gap = Math.min(gap, Math.hypot(o.x - x, o.y - y))
+      if (gap > best.gap + 1e-9) best = { x, y, gap }
+    }
+    b.x = best.x
+    b.y = best.y
     b.vx = 0
     b.vy = 0
     b.ghostUntil = now + SUMO_ICE.ghostMs
@@ -182,9 +203,10 @@ export class SumoIce implements MiniGame<SumoIceState, SumoIceInput> {
     const dy = b.y - a.y
     const d = Math.hypot(dx, dy)
     const min = R * 2
-    if (d <= 0 || d >= min) return
-    const nx = dx / d
-    const ny = dy / d
+    if (d >= min) return
+    // Exactly on top of each other: split them along x (deterministic) instead of never separating.
+    const nx = d > 1e-9 ? dx / d : 1
+    const ny = d > 1e-9 ? dy / d : 0
     const overlap = (min - d) / 2
     a.x -= nx * overlap
     a.y -= ny * overlap
@@ -200,6 +222,15 @@ export class SumoIce implements MiniGame<SumoIceState, SumoIceInput> {
     b.vy -= imp * ny
   }
 
+  // A player gone for good sinks for good (the engine ranks them last); last one dry still wins.
+  leave(state: SumoIceState, playerId: PlayerId, now: number): SumoIceState {
+    const b = state.bodies.get(playerId)
+    if (!b?.alive) return state
+    b.alive = false
+    b.outAt = now
+    return state
+  }
+
   isFinished(state: SumoIceState, now: number): boolean {
     const alive = state.players.filter((p) => state.bodies.get(p)?.alive).length
     return now >= state.endsAt || alive === 0 || (state.players.length > 1 && alive <= 1)
@@ -212,16 +243,16 @@ export class SumoIce implements MiniGame<SumoIceState, SumoIceInput> {
   }
 
   getResult(state: SumoIceState): NormalizedResult {
-    const sorted = [...state.players].sort(
-      (x, y) => this.survival(state, y) - this.survival(state, x),
-    )
+    const lives = (id: PlayerId): number => state.bodies.get(id)?.lives ?? 0
+    const cmp = (x: PlayerId, y: PlayerId): number =>
+      this.survival(state, y) - this.survival(state, x) || lives(y) - lives(x)
+    const sorted = [...state.players].sort(cmp)
     const ranks: Record<PlayerId, number> = {}
     const stats: Record<PlayerId, string> = {}
     sorted.forEach((id, i) => {
       const prev = sorted[i - 1]
-      const v = this.survival(state, id)
-      ranks[id] = prev !== undefined && this.survival(state, prev) === v ? (ranks[prev] ?? i) : i
-      stats[id] = `${Math.round(v / 1000)}s`
+      ranks[id] = prev !== undefined && cmp(prev, id) === 0 ? (ranks[prev] ?? i) : i
+      stats[id] = `${Math.round(this.survival(state, id) / 1000)}s`
     })
     return { placements: sorted, ranks, stats }
   }

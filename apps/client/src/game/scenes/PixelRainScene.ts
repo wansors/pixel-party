@@ -2,16 +2,20 @@ import { PALETTE, type PixelRainSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import { AvatarSprite } from '../avatars'
 import { addBanner, burst, flash, floatText, ring, shake, showBanner } from '../fx'
-import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
+import { ServerClock } from '../netcode/ServerClock'
 import { bodyStyle, ensurePixelGrid, fitFontSize, headlineStyle, shade } from '../pixelStyle'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // Mirrors the server's pixelRain.ts tuning: a block resolves against the avatar once its centre reaches
 // HIT_Y and hits when that centre is within ±AVATAR_HALF (normalized x) of the avatar's centre. The
-// avatar is drawn exactly so wide that "the block visibly touches it" == "the server counts a hit".
+// avatar is drawn exactly so wide that "the block visibly touches it" == "the server counts a hit". It
+// can't leave [AVATAR_MIN_X, AVATAR_MAX_X] (the kerbs) and slides at most MAX_SPEED widths per second.
 const HIT_Y = 0.9
 const AVATAR_HALF = 0.09
+const AVATAR_MIN_X = 0.12
+const AVATAR_MAX_X = 0.88
+const MAX_SPEED = 1.6
 const NEAR_MISS = 0.05 // a landing this much outside the hit zone earns a "NICE!"
 const KEY_SPEED = 1.3 // normalized widths per second with the arrow keys
 
@@ -40,27 +44,33 @@ interface Drop {
 }
 
 // Pixel Rain canvas (Phase 5). The server owns the falling stream + eliminations; this renders the
-// blocks smoothed through the snapshot interpolator (with a ground "shadow" telegraphing where each one
-// lands) and the player's own avatar locally (drag / ◀ ▶). A strip under the HUD shows who is still in.
+// blocks on the server's clock (each falls linearly: the last snapshot is extrapolated, with a ground
+// "shadow" telegraphing where each one lands) and the player's own avatar locally (drag / ◀ ▶), sliding
+// at the server's speed cap so it stands where the server judges it. A strip under the HUD shows who is
+// still in.
 export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
   // You: your lobby avatar, looking the way you slide, wobbling like jelly.
   private avatar?: AvatarSprite
   private banner?: Phaser.GameObjects.Text
   private subline?: Phaser.GameObjects.Text
   private readonly drops = new Map<number, Drop>()
-  private readonly interp = new SnapshotInterpolator<PixelRainSnapshot>(100)
+  private readonly clock = new ServerClock()
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
   // Who is still in: avatar + name chips under the HUD (KO face once squashed).
   private strip?: PlayerStrip
   private rosterIds: string[] = []
   private blockKeys: string[] = []
   private lastTick = -1
+  // Where you steer (sent to the server) and where the avatar is (sliding there at MAX_SPEED).
   private avatarX = 0.5
+  private posX = 0.5
   private renderedX = 0.5
   private lastSentX = -1
   private lastSentAt = 0
   private movedAt = 0
   private alive = true
+  // Joined after the round started (not in its snapshot): no avatar, just the rain and the strip.
+  private spectating = false
   private started = false
   private lastStanding = false
   private lastAlive: Record<string, boolean> = {}
@@ -80,12 +90,14 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
 
   override create(): void {
     super.create()
-    this.interp.reset()
+    this.clock.reset()
     this.lastTick = -1
     this.avatarX = 0.5
+    this.posX = 0.5
     this.renderedX = 0.5
     this.lastSentX = -1
     this.alive = true
+    this.spectating = false
     this.started = false
     this.lastStanding = false
     this.lastAlive = {}
@@ -140,18 +152,15 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
       .setPosition(width / 2, this.groundY + 2)
       .setDepth(30)
     this.avatarScale = { x: this.avatar.image.scaleX, y: this.avatar.image.scaleY }
+    this.drawKerbs(width, avatarW)
 
-    const rowH = this.compact ? 20 : 26
-    this.rosterY = this.top + rowH / 2
-    this.strip = new PlayerStrip(
-      this,
-      width / 2,
-      this.rosterY,
-      width - 24,
-      this.compact ? 11 : 13,
-      1,
-    )
-    this.y0 = this.top + rowH + 6 + this.blockSize / 2
+    // A full room doesn't fit one row of chips on a phone: reserve two there.
+    const stripFont = this.compact ? 11 : 13
+    const stripRows = this.compact ? 2 : 1
+    const rowH = PlayerStrip.rowH(stripFont)
+    this.rosterY = this.top + 4 + rowH / 2
+    this.strip = new PlayerStrip(this, width / 2, this.rosterY, width - 24, stripFont, stripRows)
+    this.y0 = this.top + 4 + rowH * stripRows + 6 + this.blockSize / 2
     // Blocks resolve where they touch the top of the avatar's head (row 1 of its 16-row grid).
     this.y90 = this.groundY + 2 - avatarW * (15 / 16) - this.blockSize / 2
 
@@ -197,9 +206,26 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
     }
   }
 
+  // Low walls past the reachable street: the avatar stops at them (the blocks still rain over them).
+  private drawKerbs(width: number, avatarW: number): void {
+    const kerbW = Math.max(6, Math.round(AVATAR_MIN_X * width - avatarW / 2))
+    const kerbH = Math.round(avatarW * 0.45)
+    const g = this.add.graphics().setDepth(6)
+    for (const x of [0, width - kerbW]) {
+      g.fillStyle(shade(PALETTE.panelAlt, 0.15), 1)
+      g.fillRect(x, this.groundY - kerbH, kerbW, kerbH)
+      g.fillStyle(PALETTE.frameLit, 1)
+      g.fillRect(x, this.groundY - kerbH, kerbW, 3)
+      g.fillStyle(PALETTE.amber, 0.7)
+      for (let y = this.groundY - kerbH + 8; y < this.groundY - 4; y += 12) {
+        g.fillRect(x, y, kerbW, 4)
+      }
+    }
+  }
+
   private aim(px: number): void {
-    if (!this.alive) return
-    this.avatarX = Phaser.Math.Clamp(px / this.scale.width, 0, 1)
+    if (!this.alive || this.spectating) return
+    this.avatarX = Phaser.Math.Clamp(px / this.scale.width, AVATAR_MIN_X, AVATAR_MAX_X)
   }
 
   private maybeSend(now: number): void {
@@ -218,29 +244,31 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
     const now = this.time.now
     if (snap && this.state.tick !== this.lastTick) {
       this.lastTick = this.state.tick
-      this.interp.push(snap, now)
+      this.clock.sync(snap.remainingMs, now)
       this.onSnapshot(snap)
     }
 
-    if (this.alive) {
+    if (this.alive && !this.spectating) {
       if (this.cursors?.left.isDown) this.avatarX -= (KEY_SPEED * delta) / 1000
       if (this.cursors?.right.isDown) this.avatarX += (KEY_SPEED * delta) / 1000
-      this.avatarX = Phaser.Math.Clamp(this.avatarX, 0, 1)
+      this.avatarX = Phaser.Math.Clamp(this.avatarX, AVATAR_MIN_X, AVATAR_MAX_X)
       this.maybeSend(now)
+      const reach = (MAX_SPEED * delta) / 1000
+      this.posX += Phaser.Math.Clamp(this.avatarX - this.posX, -reach, reach)
     }
     this.renderAvatar(now)
-    this.renderDrops(now)
+    if (snap) this.renderDrops(snap, now)
   }
 
   private renderAvatar(now: number): void {
     const avatar = this.avatar
     if (!avatar) return
-    avatar.image.setX(this.avatarX * this.scale.width)
+    avatar.image.setX(this.posX * this.scale.width)
     avatar.tick(now)
     if (!this.alive) return
     // Sliding turns the avatar sideways (facing the way it goes); standing still faces the rain.
-    const moved = this.avatarX - this.renderedX
-    this.renderedX = this.avatarX
+    const moved = this.posX - this.renderedX
+    this.renderedX = this.posX
     if (Math.abs(moved) > 0.0005) avatar.setPose('side').face(moved)
     else if (now - this.movedAt > 180) avatar.setPose('front').image.setFlipX(false)
     if (Math.abs(moved) > 0.0005) this.movedAt = now
@@ -263,14 +291,16 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
     )
     const survivors = ids.filter((id) => snap.alive[id] !== false).length
     this.hud?.setScore(this.t('game.pixelRain.alive', { n: survivors, total: ids.length }))
-    const meAlive = snap.alive[this.selfId] !== false
+    const meAlive = snap.alive[this.selfId] === true
 
     if (!this.started) {
       // First snapshot of this (possibly restarted) scene: sync silently, no replayed eliminations.
       this.started = true
+      this.spectating = !(this.selfId in snap.alive)
       this.lastAlive = { ...snap.alive }
       for (const id of ids) if (snap.alive[id] === false) this.markOut(id, false)
-      if (meAlive) this.showDodge()
+      if (this.spectating) this.avatar?.image.setVisible(false)
+      else if (meAlive) this.showDodge()
       else this.becomeOut(false)
       return
     }
@@ -288,11 +318,7 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
       const text = this.t('game.pixelRain.lastStanding')
       const half = text.length * 8 + 4
       const width = this.scale.width
-      const x = Phaser.Math.Clamp(
-        this.avatar?.image.x ?? width / 2,
-        half,
-        Math.max(half, width - half),
-      )
+      const x = Phaser.Math.Clamp(this.posX * width, half, Math.max(half, width - half))
       floatText(this, x, this.y90 - 20, text, PALETTE.lime, 16)
     }
   }
@@ -355,19 +381,17 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
     showBanner(this, banner, text, color)
   }
 
-  private renderDrops(now: number): void {
+  // Each block extrapolated from the last snapshot on the server clock (frozen on the final frame).
+  private renderDrops(snap: PixelRainSnapshot, now: number): void {
     const width = this.scale.width
-    const sample = this.interp.sample(now)
+    const elapsed = this.state.final ? 0 : this.clock.since(snap.remainingMs, now)
     const live = new Set<number>()
-    if (sample) {
-      const fromById = new Map(sample.from.obstacles.map((o) => [o.id, o]))
-      for (const o of sample.to.obstacles) {
-        const prev = fromById.get(o.id)
-        const nx = prev ? lerp(prev.x, o.x, sample.t) : o.x
-        const ny = prev ? lerp(prev.y, o.y, sample.t) : o.y
-        live.add(o.id)
-        this.drawDrop(o.id, nx, ny, width)
-      }
+    for (const o of snap.obstacles) {
+      const y = o.y + elapsed / o.fallMs
+      // Past the avatar line the server has judged it: finish the fall locally (below).
+      if (y > 1) continue
+      live.add(o.id)
+      this.drawDrop(o.id, o.x, y, width)
     }
     for (const [id, drop] of this.drops) {
       if (live.has(id)) continue
@@ -425,8 +449,8 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
       return
     }
     const x = drop.x * width
-    if (this.alive) {
-      const dx = Math.abs(drop.x - this.avatarX)
+    if (this.alive && !this.spectating) {
+      const dx = Math.abs(drop.x - this.posX)
       if (dx > AVATAR_HALF && dx <= AVATAR_HALF + NEAR_MISS) {
         floatText(this, x, this.y90 - 10, this.t('game.common.nice'), PALETTE.lime, 16)
         ring(this, x, this.groundY, PALETTE.lime, this.blockSize)

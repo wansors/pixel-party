@@ -20,12 +20,18 @@ describe('Pong', () => {
     expect(d.done).toBe(false)
   })
 
-  test('an odd player out gets a bye = immediate win', () => {
-    const s = init(['solo'])
-    const d = nn(s.duels[0])
-    expect(d.b).toBeNull()
-    expect(d.done).toBe(true)
-    expect(d.winner).toBe('solo')
+  test('an odd player out gets a bye: ranked with the draws, between wins and losses', () => {
+    const game = new Pong()
+    const s = init(['a', 'b', 'c'])
+    const bye = nn(s.duels.find((d) => d.b === null))
+    expect(bye.done).toBe(true)
+    const duel = nn(s.duels.find((d) => d.b !== null))
+    duel.score.set(duel.a, 3)
+    game.tick(s, 50, 45_000) // the bell: the leader wins
+    const result = game.getResult(s)
+    expect(result.placements).toEqual([duel.a, bye.a, duel.b as string])
+    expect(result.byes).toEqual([bye.a])
+    expect(game.snapshot(s, 45_000).players[bye.a]?.won).toBeNull()
   })
 
   test('a paddle covering the ball bounces it back into play', () => {
@@ -75,5 +81,59 @@ describe('Pong', () => {
     expect(snap.players.b?.ballX).toBeCloseTo(0.7) // right player: mirrored
     expect(snap.players.a?.side).toBe('left')
     expect(snap.players.b?.side).toBe('right')
+  })
+
+  test('wins rank by point difference across duels', () => {
+    const game = new Pong()
+    const s = init(['a', 'b', 'c', 'd'])
+    const [d1, d2] = s.duels.map(nn)
+    if (!d1?.b || !d2?.b) throw new Error('two duels expected')
+    d1.score.set(d1.a, 5).set(d1.b, 3)
+    d2.score.set(d2.a, 5).set(d2.b, 1)
+    Object.assign(d1, { done: true, winner: d1.a })
+    Object.assign(d2, { done: true, winner: d2.a })
+    expect(game.getResult(s).placements).toEqual([d2.a, d1.a, d1.b, d2.b])
+  })
+
+  test('a tie at the bell plays a golden point: the next point wins', () => {
+    const game = new Pong()
+    const s = init(['a', 'b'])
+    const d = nn(s.duels[0])
+    d.score.set('a', 2).set('b', 2)
+    game.tick(s, 50, 45_000)
+    expect(d.golden).toBe(true)
+    expect(game.isFinished(s, 45_000)).toBe(false)
+    const snap = game.snapshot(s, 46_000)
+    expect(snap.players.a?.golden).toBe(true)
+    expect(snap.roundRemainingMs).toBe(9000) // the overtime clock
+    // Paddles still move in overtime; b misses and a takes the golden point.
+    game.onInput(s, 'b', { kind: 'move', y: 0.05 }, 46_000)
+    d.ball = { x: 0.95, y: 0.6, vx: 0.55, vy: 0 }
+    game.tick(s, 1000, 47_000)
+    expect(d.done).toBe(true)
+    expect(d.winner).toBe('a')
+    expect(game.isFinished(s, 47_000)).toBe(true)
+    expect(game.getResult(s).ranks).toEqual({ a: 0, b: 1 })
+  })
+
+  test('a golden point that never comes is a draw', () => {
+    const game = new Pong()
+    const s = init(['a', 'b'])
+    nn(s.duels[0]).ball = { x: 0.5, y: 0.5, vx: 0, vy: 0 } // nobody can score
+    game.tick(s, 50, 45_000)
+    game.tick(s, 50, 55_000)
+    expect(game.isFinished(s, 55_000)).toBe(true)
+    expect(game.snapshot(s, 55_000).players.a).toMatchObject({ done: true, won: null })
+    expect(game.getResult(s).ranks).toEqual({ a: 0, b: 0 })
+  })
+
+  test('a player who leaves forfeits the duel', () => {
+    const game = new Pong()
+    const s = init(['a', 'b'])
+    nn(s.duels[0]).score.set('b', 3)
+    game.leave(s, 'b', 5000)
+    expect(game.isFinished(s, 5000)).toBe(true)
+    expect(game.snapshot(s, 5000).players.a).toMatchObject({ won: true, oppLeft: true })
+    expect(game.getResult(s).placements).toEqual(['a', 'b'])
   })
 })

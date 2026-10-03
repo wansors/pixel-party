@@ -34,6 +34,7 @@ const RUSH_MS = 900
 const SPIN_DEG_PER_S = 900
 // Minimum settle time once the value is known; the actual time stretches so the wheel keeps its speed.
 const SETTLE_MS = 2000
+// Standings rows at most: the leaders, always including you (you take the last row when further back).
 const MAX_ROWS = 8
 // Pointer pixel art (drawn at 1.5x the wheel's cell size).
 const POINTER_ART = [
@@ -60,7 +61,7 @@ type Phase = 'idle' | 'spinning' | 'settling' | 'landed'
 // pointer, ringed with blinking bulbs. Tap SPIN (or the wheel / Space) to spin: it free-spins until
 // the server reveals the pre-dealt value, then decelerates to land the pointer on exactly that number
 // (ticking past each wedge), and the number slams in. Purely visual — the server owns the values;
-// highest wins. A side list shows everyone's revealed numbers in their colours.
+// highest wins. A side list shows the best revealed numbers in their colours (yours always included).
 export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
   private wheel?: Phaser.GameObjects.Container
   private pointer?: Phaser.GameObjects.Image
@@ -272,7 +273,10 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
   // --- Spin -----------------------------------------------------------------------------------------
 
   private spin(): void {
-    if (this.phase !== 'idle' || !this.snap || this.snap.values[this.selfId] !== undefined) return
+    const snap = this.snap
+    // A spectator (not in this round) has no number to reveal.
+    if (this.phase !== 'idle' || !snap || !(this.selfId in snap.spun)) return
+    if (snap.values[this.selfId] !== undefined) return
     this.phase = 'spinning'
     this.sfx.go()
     this.sendInput({ kind: 'spin' })
@@ -327,6 +331,11 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
     if (!this.primed) {
       this.primed = true
       if (value !== undefined) this.restoreLanded(value)
+      else if (!(this.selfId in snap.spun)) {
+        this.spinImg?.setVisible(false)
+        this.spinText?.setVisible(false)
+        this.waitText?.setText(this.t('game.common.waiting'))
+      }
     }
 
     // Round ended without a spin: the value is public now, so spin it in anyway.
@@ -423,8 +432,11 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
     const shown = (id: string): number | undefined =>
       id === this.selfId && this.phase !== 'landed' ? undefined : snap.values[id]
     const ranked = [...ids].sort((a, b) => (shown(b) ?? -1) - (shown(a) ?? -1))
+    const listed = ranked.slice(0, this.rows.length)
+    if (listed.length > 0 && ids.includes(this.selfId) && !listed.includes(this.selfId))
+      listed[listed.length - 1] = this.selfId
     this.rows.forEach((row, i) => {
-      const id = ranked[i]
+      const id = listed[i]
       const icon = this.rowIcons[i]
       row.setVisible(id !== undefined)
       icon?.setVisible(id !== undefined)

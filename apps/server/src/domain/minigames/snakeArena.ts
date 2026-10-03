@@ -5,6 +5,8 @@ const GRID = 15
 const DEFAULT_DURATION_MS = 45_000
 const STEP_MS = 160
 const START_LEN = 3
+// Turns buffered ahead of the next step: two quick taps inside one step (a U-turn) both apply.
+const TURN_QUEUE = 2
 
 type Dir = 'up' | 'down' | 'left' | 'right'
 
@@ -19,10 +21,13 @@ const DELTA: Record<Dir, Cell> = {
 interface SnakeState {
   body: Cell[]
   dir: Dir
-  pendingDir: Dir
+  // Turns waiting for the next steps, oldest first.
+  turns: Dir[]
   alive: boolean
   foodIdx: number
   len: number
+  // The step on which the snake reached its current length (ties go to whoever got there first).
+  lenAt: number
 }
 
 export interface SnakeArenaState {
@@ -57,7 +62,7 @@ export class SnakeArena implements MiniGame<SnakeArenaState, SnakeInput> {
         const body: Cell[] = Array.from({ length: START_LEN }, (_, i) => ({ x: mid - i, y: mid }))
         return [
           id,
-          { body, dir: 'right', pendingDir: 'right', alive: true, foodIdx: 0, len: body.length },
+          { body, dir: 'right', turns: [], alive: true, foodIdx: 0, len: body.length, lenAt: 0 },
         ]
       }),
     )
@@ -90,7 +95,7 @@ export class SnakeArena implements MiniGame<SnakeArenaState, SnakeInput> {
 
   private step(state: SnakeArenaState, snake: SnakeState): void {
     if (!snake.alive) return
-    snake.dir = snake.pendingDir
+    snake.dir = snake.turns.shift() ?? snake.dir
     const head = snake.body[0] as Cell
     const d = DELTA[snake.dir]
     const next: Cell = { x: head.x + d.x, y: head.y + d.y }
@@ -106,6 +111,7 @@ export class SnakeArena implements MiniGame<SnakeArenaState, SnakeInput> {
     snake.body.unshift(next)
     if (next.x === food.x && next.y === food.y) {
       snake.foodIdx++
+      snake.lenAt = state.stepsTaken + 1
     } else {
       snake.body.pop()
     }
@@ -120,9 +126,12 @@ export class SnakeArena implements MiniGame<SnakeArenaState, SnakeInput> {
   ): SnakeArenaState {
     if (input.kind !== 'turn') return state
     const snake = state.snakes.get(playerId)
-    if (!snake || !snake.alive) return state
-    if (input.dir === OPPOSITE[snake.dir]) return state
-    snake.pendingDir = input.dir
+    if (!snake || !snake.alive || !Object.hasOwn(DELTA, input.dir)) return state
+    // Judged against the heading the snake will have by then: no reversal into its own neck, and a
+    // repeat of that heading is a no-op rather than a wasted slot.
+    const heading = snake.turns.at(-1) ?? snake.dir
+    if (input.dir === heading || input.dir === OPPOSITE[heading]) return state
+    if (snake.turns.length < TURN_QUEUE) snake.turns.push(input.dir)
     return state
   }
 
@@ -135,28 +144,38 @@ export class SnakeArena implements MiniGame<SnakeArenaState, SnakeInput> {
     return state
   }
 
+  // A player who left is out right away: the all-crashed early end doesn't wait for their snake.
+  leave(state: SnakeArenaState, playerId: PlayerId, _now: number): SnakeArenaState {
+    const snake = state.snakes.get(playerId)
+    if (snake) snake.alive = false
+    return state
+  }
+
   isFinished(state: SnakeArenaState, now: number): boolean {
     if (now >= state.endsAt) return true
     for (const snake of state.snakes.values()) if (snake.alive) return false
     return true
   }
 
+  // Longest snake; equal lengths go to whoever reached it first, then to a snake still alive.
+  private cmp(state: SnakeArenaState, a: PlayerId, b: PlayerId): number {
+    const sa = state.snakes.get(a)
+    const sb = state.snakes.get(b)
+    return (
+      (sb?.len ?? 0) - (sa?.len ?? 0) ||
+      (sa?.lenAt ?? 0) - (sb?.lenAt ?? 0) ||
+      Number(sb?.alive ?? false) - Number(sa?.alive ?? false)
+    )
+  }
+
   getResult(state: SnakeArenaState): NormalizedResult {
     const lenOf = (id: PlayerId): number => state.snakes.get(id)?.len ?? 0
-    const aliveOf = (id: PlayerId): number => (state.snakes.get(id)?.alive ? 1 : 0)
-    const sorted = [...state.players].sort((a, b) => {
-      if (lenOf(b) !== lenOf(a)) return lenOf(b) - lenOf(a)
-      return aliveOf(b) - aliveOf(a)
-    })
+    const sorted = [...state.players].sort((a, b) => this.cmp(state, a, b))
     const ranks: Record<PlayerId, number> = {}
     let rank = 0
-    let prev: { l: number; a: number } | undefined
     sorted.forEach((id, idx) => {
-      const l = lenOf(id)
-      const a = aliveOf(id)
-      if (idx > 0 && prev && (l !== prev.l || a !== prev.a)) rank = idx
+      if (idx > 0 && this.cmp(state, sorted[idx - 1] as PlayerId, id) !== 0) rank = idx
       ranks[id] = rank
-      prev = { l, a }
     })
     const stats: Record<PlayerId, string> = {}
     for (const id of state.players) stats[id] = `${lenOf(id)} long`

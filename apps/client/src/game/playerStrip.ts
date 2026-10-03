@@ -20,9 +20,14 @@ interface ChipView {
 // Wrapping, centered row(s) of "🐱 NAME 12" chips — one per player in their identity color — showing
 // how everyone else is doing at a glance. Rebuilt only when the chip set actually changes. With
 // `maxRows`, the font shrinks (down to 8 px) until the chips fit that many rows of the space the
-// caller reserved (`maxRows * PlayerStrip.rowH(size)`), so long names never spill onto other content.
+// caller reserved (`maxRows * PlayerStrip.rowH(size)`); if a full room still doesn't fit at 8 px, the
+// names are clipped ("PEPITO… 12" — the trailing stat is kept), so the strip never spills onto other
+// content.
 const ICON = 16
 const ICON_GAP = 4
+const MIN_FONT = 8
+// Clipped names keep at least this many characters.
+const MIN_NAME = 3
 
 export class PlayerStrip {
   private chips: ChipView[] = []
@@ -72,12 +77,14 @@ export class PlayerStrip {
     })
     let size = this.size
     const budget = Number.isFinite(this.maxRows) ? this.maxRows * PlayerStrip.rowH(this.size) : 0
-    while (
-      size > 8 &&
-      Number.isFinite(this.maxRows) &&
-      this.rowsAt(size) * PlayerStrip.rowH(size) > budget
-    ) {
-      size -= 1
+    const overflows = (): boolean =>
+      Number.isFinite(this.maxRows) && this.rowsAt(size) * PlayerStrip.rowH(size) > budget
+    while (size > MIN_FONT && overflows()) size -= 1
+    // Still too wide at the smallest font: clip the names, a character at a time.
+    const texts = chips.map((c) => (c.avatar ? c.text : `■ ${c.text}`))
+    const longest = Math.max(0, ...texts.map((t) => splitStat(t).name.length))
+    for (let keep = longest - 1; keep >= MIN_NAME && overflows(); keep--) {
+      this.chips.forEach((c, i) => c.label.setText(clipName(texts[i] as string, keep)))
     }
     this.layout(size)
   }
@@ -136,4 +143,17 @@ export class PlayerStrip {
     }
     if (row.length > 0) flush()
   }
+}
+
+// "NAME 12" → name "NAME", stat " 12": a trailing token with a digit in it is the chip's stat.
+function splitStat(text: string): { name: string; stat: string } {
+  const cut = text.lastIndexOf(' ')
+  return cut > 0 && /\d/.test(text.slice(cut))
+    ? { name: text.slice(0, cut), stat: text.slice(cut) }
+    : { name: text, stat: '' }
+}
+
+function clipName(text: string, keep: number): string {
+  const { name, stat } = splitStat(text)
+  return name.length > keep ? `${name.slice(0, keep)}…${stat}` : text
 }

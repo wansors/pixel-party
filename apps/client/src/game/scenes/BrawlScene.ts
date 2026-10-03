@@ -10,7 +10,8 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 // Street Brawl: a side-view street at night — shop fronts behind, the pavement as the back edge of the
 // fight, the road in front. Every fighter is their lobby avatar (turned to face their way, a shadow at
 // their feet, a little HP bar overhead), drawn back-to-front by depth. Fists, feet and grabs reach out
-// in the fighter's color; pipes and bottles show in hand; items lie on the road. Hits pop "POW!".
+// in the fighter's color; pipes and bottles show in hand; items lie on the road. Hits pop "POW!". The HUD
+// counts your KO credit (half for the finisher, half shared by damage — "1.5 KO").
 // Arrows/WASD move; SPACE/J punch, K kick, L grab — or the d-pad and the three buttons.
 
 const ITEM_ROWS: Record<string, { rows: string[]; legend: Record<string, number> }> = {
@@ -56,6 +57,8 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
   private marker?: YouMarker
   private keysHeld = { up: false, down: false, left: false, right: false }
   private pad = new Map<number, [number, number]>()
+  // Moves go out only once the player has pressed something (an untouched fighter sends nothing).
+  private touched = false
   private sent = ''
   private sentAt = 0
   private lastTick = -1
@@ -74,6 +77,7 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
     this.itemImgs = new Map()
     this.keysHeld = { up: false, down: false, left: false, right: false }
     this.pad = new Map()
+    this.touched = false
     this.sent = ''
     this.sentAt = 0
     this.lastTick = -1
@@ -103,7 +107,10 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
         .text(img.x, img.y, label, headlineStyle(16, PALETTE.text))
         .setOrigin(0.5)
         .setDepth(701)
-      img.on('pointerdown', (p: Phaser.Input.Pointer) => this.pad.set(p.id, [dx, dy]))
+      img.on('pointerdown', (p: Phaser.Input.Pointer) => {
+        this.pad.set(p.id, [dx, dy])
+        this.touched = true
+      })
     }
     const actions = [
       ['punch', PALETTE.orange],
@@ -136,6 +143,7 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
       for (const n of names) {
         kb?.on(`keydown-${n}`, () => {
           this.keysHeld[k] = true
+          this.touched = true
         })
         kb?.on(`keyup-${n}`, () => {
           this.keysHeld[k] = false
@@ -236,7 +244,13 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
   protected frame(snap: BrawlSnapshot | null, time: number): void {
     const d = this.dir()
     const key = `${d.dx},${d.dy}`
-    if ((key !== this.sent || time - this.sentAt > 300) && this.snap && !this.state.final) {
+    const fighting = this.snap?.fighters.some((f) => f.id === this.selfId) ?? false
+    if (
+      this.touched &&
+      fighting &&
+      (key !== this.sent || time - this.sentAt > 300) &&
+      !this.state.final
+    ) {
       this.sent = key
       this.sentAt = time
       this.sendInput({ kind: 'move', dx: d.dx, dy: d.dy })
@@ -275,6 +289,15 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
     const g = this.limbs as Phaser.GameObjects.Graphics
     g.clear()
     const px = this.fighterPx
+    // A fighter who left the round walks off the street.
+    for (const [id, view] of this.views) {
+      if (snap.fighters.some((f) => f.id === id)) continue
+      view.avatar.destroy()
+      view.shadow.destroy()
+      view.hp.destroy()
+      this.views.delete(id)
+      if (id === this.selfId) this.marker?.hide()
+    }
     for (const f of snap.fighters) {
       let view = this.views.get(f.id)
       if (!view) {

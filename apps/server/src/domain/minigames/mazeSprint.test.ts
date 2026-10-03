@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { Random } from '../ports/Random'
-import { MazeSprint } from './mazeSprint'
+import { MIN_STEP_MS, MazeSprint, type MazeSprintState } from './mazeSprint'
 
 const SIZE = 9
 const CELLS = SIZE * SIZE
@@ -85,6 +85,22 @@ function findPath(walls: number[], from: number, to: number): ('up' | 'right' | 
   return path
 }
 
+// Walks `who` along `path`, one step per MIN_STEP_MS from `from`; returns the time after the last step.
+function walk(
+  game: MazeSprint,
+  s: MazeSprintState,
+  who: string,
+  path: ('up' | 'right' | 'down' | 'left')[],
+  from: number,
+): number {
+  let now = from
+  for (const dir of path) {
+    game.onInput(s, who, { kind: 'move', dir }, now)
+    now += MIN_STEP_MS
+  }
+  return now
+}
+
 describe('MazeSprint', () => {
   test('the generated maze is fully connected: the exit is reachable from the entrance', () => {
     const s = init(['p'])
@@ -131,13 +147,9 @@ describe('MazeSprint', () => {
 
   test('reaching the exit sets doneAt and further moves are then no-ops', () => {
     const game = new MazeSprint()
-    let s = init(['p'])
+    const s = init(['p'])
     const path = findPath(s.walls, 0, s.exitIndex)
-    let now = 1
-    for (const dir of path) {
-      s = game.onInput(s, 'p', { kind: 'move', dir }, now)
-      now += 1
-    }
+    const now = walk(game, s, 'p', path, 1)
     expect(s.pos.get('p')).toBe(EXIT_INDEX)
     expect(nn(s.doneAt.get('p'))).toBeGreaterThan(0)
     const stepsAtFinish = nn(s.steps.get('p'))
@@ -148,18 +160,10 @@ describe('MazeSprint', () => {
 
   test('getResult ranks a finisher above a non-finisher, and an earlier finisher above a later one', () => {
     const game = new MazeSprint()
-    let s = init(['a', 'b', 'c'])
+    const s = init(['a', 'b', 'c'])
     const path = findPath(s.walls, 0, s.exitIndex)
-    let now = 1
-    for (const dir of path) {
-      s = game.onInput(s, 'a', { kind: 'move', dir }, now)
-      now += 1
-    }
-    now = 100_000
-    for (const dir of path) {
-      s = game.onInput(s, 'b', { kind: 'move', dir }, now)
-      now += 1
-    }
+    walk(game, s, 'a', path, 1)
+    walk(game, s, 'b', path, 10_000)
     // 'c' never moves.
     const result = game.getResult(s)
     expect(result.placements[0]).toBe('a')
@@ -169,19 +173,12 @@ describe('MazeSprint', () => {
 
   test('isFinished is false before the deadline until everyone finishes', () => {
     const game = new MazeSprint()
-    let s = init(['a', 'b'])
+    const s = init(['a', 'b'])
     expect(game.isFinished(s, 1)).toBe(false)
     const path = findPath(s.walls, 0, s.exitIndex)
-    let now = 1
-    for (const dir of path) {
-      s = game.onInput(s, 'a', { kind: 'move', dir }, now)
-      now += 1
-    }
+    let now = walk(game, s, 'a', path, 1)
     expect(game.isFinished(s, now)).toBe(false)
-    for (const dir of path) {
-      s = game.onInput(s, 'b', { kind: 'move', dir }, now)
-      now += 1
-    }
+    now = walk(game, s, 'b', path, now)
     expect(game.isFinished(s, now)).toBe(true)
   })
 
@@ -203,5 +200,39 @@ describe('MazeSprint', () => {
     expect(snap.progress.p).toBe(0)
     expect(snap.doneAt.p).toBe(0)
     expect(snap.remainingMs).toBe(45_000)
+  })
+
+  test('snapshot gives each player`s distance to the exit, for progress bars that hide the path', () => {
+    const game = new MazeSprint()
+    const s = init(['p', 'q'])
+    const path = findPath(s.walls, 0, s.exitIndex)
+    expect(game.snapshot(s, 0).startDist).toBe(path.length)
+    walk(game, s, 'p', path.slice(0, 3), 1)
+    const snap = game.snapshot(s, 1000)
+    expect(snap.dist.p).toBe(path.length - 3)
+    expect(snap.dist.q).toBe(path.length)
+  })
+
+  test('steps closer together than MIN_STEP_MS are dropped (key-repeat rates don`t matter)', () => {
+    const game = new MazeSprint()
+    const s = init(['p'])
+    const path = findPath(s.walls, 0, s.exitIndex)
+    game.onInput(s, 'p', { kind: 'move', dir: nn(path[0]) }, 1000)
+    // A 30 Hz key repeat: the next step 33 ms later doesn't land...
+    game.onInput(s, 'p', { kind: 'move', dir: nn(path[1]) }, 1033)
+    expect(s.steps.get('p')).toBe(1)
+    // ...one MIN_STEP_MS after the last step does.
+    game.onInput(s, 'p', { kind: 'move', dir: nn(path[1]) }, 1000 + MIN_STEP_MS)
+    expect(s.steps.get('p')).toBe(2)
+  })
+
+  test('a player who leaves no longer holds up the everyone-finished early end', () => {
+    const game = new MazeSprint()
+    const s = init(['a', 'b'])
+    const now = walk(game, s, 'a', findPath(s.walls, 0, s.exitIndex), 1)
+    expect(game.isFinished(s, now)).toBe(false)
+    game.leave(s, 'b', now)
+    expect(game.isFinished(s, now)).toBe(true)
+    expect(game.getResult(s).placements).toEqual(['a', 'b'])
   })
 })

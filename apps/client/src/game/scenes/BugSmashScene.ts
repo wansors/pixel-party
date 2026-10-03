@@ -160,13 +160,15 @@ interface Chip {
   text: Phaser.GameObjects.Text
   // The player's avatar, just left of the text.
   icon: Phaser.GameObjects.Image
-  score: number
+  // Score on the chip (null until first drawn; bombs can take it below zero).
+  score: number | null
 }
 
 // Bug Smash (whack-a-mole) canvas. A 3x3 lawn of dirt holes; the shared seeded timeline pops pixel
 // beetles (and the odd bomb) out of them. Tap a hole to swing the mallet: a bug squashes into goo
-// (+1), a bomb blows up in your face (-1). A bug this player just smashed is hidden optimistically
-// (the server confirms through the score). Other players' scores run along the top in their colors.
+// (+1), a bomb blows up in your face (-1, even below zero). A bug this player just smashed is hidden
+// optimistically (the server confirms through the score). Other players' scores run along the top in
+// their colors.
 export class BugSmashScene extends MiniGameScene<BugSmashSnapshot> {
   private holes: Hole[] = []
   private chips: Chip[] = []
@@ -296,7 +298,7 @@ export class BugSmashScene extends MiniGameScene<BugSmashSnapshot> {
       const icon = this.add
         .image(x, y, ensureAvatarTexture(this, this.state.avatarOf(id), color, 1))
         .setOrigin(1, 0.5)
-      this.chips.push({ id, text, icon, score: -1 })
+      this.chips.push({ id, text, icon, score: null })
     })
     return this.top + Math.ceil(ids.length / perRow) * rowH
   }
@@ -304,7 +306,8 @@ export class BugSmashScene extends MiniGameScene<BugSmashSnapshot> {
   private smash(i: number): void {
     const snap = this.snap
     const hole = this.holes[i]
-    if (!snap || !hole || snap.remainingMs <= 0) return
+    // A spectator (not in this round) has no score to play for.
+    if (!snap || !hole || snap.remainingMs <= 0 || !(this.selfId in snap.scores)) return
     this.swingMallet(hole)
     const bug = snap.live.find((b) => b.hole === i && !this.localHit.has(b.index))
     if (!bug) {
@@ -436,7 +439,7 @@ export class BugSmashScene extends MiniGameScene<BugSmashSnapshot> {
     for (const chip of this.chips) {
       const score = snap.scores[chip.id] ?? 0
       if (score === chip.score) continue
-      const gained = chip.score >= 0 && score > chip.score
+      const gained = chip.score !== null && score > chip.score
       chip.score = score
       chip.text.setText(` ${this.label(chip.id).slice(0, compact ? 6 : 10)} ${score} `)
       chip.icon.setX(Math.round(chip.text.x - chip.text.width / 2 - 2))

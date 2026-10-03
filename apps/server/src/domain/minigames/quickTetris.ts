@@ -23,13 +23,16 @@ export interface QuickTetrisState {
   boards: Map<PlayerId, PlayerBoardState>
   // playerId -> the `now` at which they reached TARGET_LINES (0 = not yet).
   doneAt: Map<PlayerId, number>
+  // Players gone mid-round: the race doesn't wait for them.
+  left: Set<PlayerId>
   startedAt: number
   endsAt: number
 }
 
 // FFA real-time sprint variant of the same mechanic: be the fastest to clear TARGET_LINES lines. A
-// player who reaches the target stops advancing (their board is done); everyone else keeps racing until
-// the timer or until every player has finished.
+// player who reaches the target stops advancing (their board is done), and so does one who tops out
+// (they're out of the race); everyone else keeps racing until the timer or until no board is left
+// racing.
 export class QuickTetris implements MiniGame<QuickTetrisState, TetrisSprintInput> {
   readonly id = 'quick-tetris'
   readonly format = 'ffa' as const
@@ -43,6 +46,7 @@ export class QuickTetris implements MiniGame<QuickTetrisState, TetrisSprintInput
       queue,
       boards: new Map(ctx.players.map((id) => [id, createPlayerBoard(queue)])),
       doneAt: new Map(ctx.players.map((id) => [id, 0])),
+      left: new Set(),
       startedAt: ctx.now,
       endsAt: ctx.now + durationMs,
     }
@@ -84,9 +88,20 @@ export class QuickTetris implements MiniGame<QuickTetrisState, TetrisSprintInput
     return state
   }
 
+  leave(state: QuickTetrisState, playerId: PlayerId, _now: number): QuickTetrisState {
+    state.left.add(playerId)
+    return state
+  }
+
+  // Over at the timer, or once no board is still racing: every player finished, topped out or gone.
   isFinished(state: QuickTetrisState, now: number): boolean {
     if (now >= state.endsAt) return true
-    return state.players.every((pid) => (state.doneAt.get(pid) ?? 0) > 0)
+    return state.players.every(
+      (pid) =>
+        (state.doneAt.get(pid) ?? 0) > 0 ||
+        state.boards.get(pid)?.toppedOut === true ||
+        state.left.has(pid),
+    )
   }
 
   getResult(state: QuickTetrisState): NormalizedResult {

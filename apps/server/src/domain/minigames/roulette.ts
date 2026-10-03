@@ -44,6 +44,13 @@ export class Roulette implements MiniGame<RouletteState, RouletteInput> {
     return state
   }
 
+  // A player who left counts as spun (their dealt value stands), so the round ends once everyone else
+  // has spun.
+  leave(state: RouletteState, playerId: PlayerId, _now: number): RouletteState {
+    if (state.values.has(playerId)) state.spun.add(playerId)
+    return state
+  }
+
   isFinished(state: RouletteState, now: number): boolean {
     return now >= state.endsAt || state.players.every((p) => state.spun.has(p))
   }

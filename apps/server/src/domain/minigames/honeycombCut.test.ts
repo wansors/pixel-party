@@ -96,16 +96,43 @@ describe('HoneycombCut', () => {
     expect(carver(s, 'a').cracks).toBeGreaterThan(0)
   })
 
-  test('ranks finishers by time, then intact candies by progress, broken ones last', () => {
+  test('ranks finishers by time, then everyone else by cut, a broken candy counting half', () => {
     const s = init(['a', 'b', 'c', 'd'])
     trace(s, 'a', 0, s.outline.length, 0)
-    trace(s, 'b', 0, 80, 0)
+    trace(s, 'b', 0, 30, 0)
     trace(s, 'c', 0, 120, 0)
     Object.assign(carver(s, 'c'), { broken: true, cracks: 3 })
     const result = game.getResult(s)
-    expect(result.placements).toEqual(['a', 'b', 'd', 'c'])
-    expect(result.stats?.b).toBe(`${Math.floor((81 / 160) * 100)}%`)
+    // c broke three quarters of the way round, which still counts for more than b's intact fifth.
+    expect(result.placements).toEqual(['a', 'c', 'b', 'd'])
+    const cut = (id: string): number => carver(s, id).cut.filter(Boolean).length / 160
+    expect(result.stats?.c).toBe(`${Math.floor(cut('c') * 50)}%`)
+    expect(result.stats?.b).toBe(`${Math.floor(cut('b') * 100)}%`)
     game.onInput(s, 'd', { kind: 'needle', x: 2, y: 0.5, down: true }, 10)
     expect(carver(s, 'd').cracks).toBe(0)
+  })
+
+  test('equal credit goes to fewer cracks; equal everything is a tie', () => {
+    const s = init(['intact', 'broken', 'idle1', 'idle2'])
+    carver(s, 'intact').cut.fill(true, 0, 40)
+    Object.assign(carver(s, 'broken'), { broken: true, cracks: 3 })
+    carver(s, 'broken').cut.fill(true, 0, 80)
+    const { placements, ranks } = game.getResult(s)
+    expect(placements.slice(0, 2)).toEqual(['intact', 'broken'])
+    expect(ranks?.broken).toBe(1)
+    expect(ranks?.idle1).toBe(2)
+    expect(ranks?.idle2).toBe(2)
+  })
+
+  test('a player who leaves carves no more and no longer holds the round open', () => {
+    const s = init(['a', 'b'])
+    trace(s, 'a', 0, s.outline.length, 0)
+    expect(game.isFinished(s, 10_000)).toBe(false)
+    game.leave(s, 'b')
+    expect(game.isFinished(s, 10_000)).toBe(true)
+    const p = s.outline[0] as { x: number; y: number }
+    game.onInput(s, 'b', { kind: 'needle', x: p.x, y: p.y, down: true }, 10_100)
+    expect(carver(s, 'b').cut.some(Boolean)).toBe(false)
+    expect(game.snapshot(s, 10_100).players.find((q) => q.id === 'b')?.left).toBe(true)
   })
 })

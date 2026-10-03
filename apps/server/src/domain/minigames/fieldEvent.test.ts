@@ -192,6 +192,21 @@ describe('FieldEvent (long jump)', () => {
     expect(snap.markMs).toBe(MARK_MS)
   })
 
+  test('an athlete who leaves is done at once (marks kept), so the round need not wait', () => {
+    const game = new LongJump()
+    const s = init(game, ['a', 'b'])
+    const released = attempt(game, s, 'a', 0, 0.5, 400)
+    run(game, s, released + TICK, released + 3000)
+    game.leave(s, 'b', released + 3000)
+    expect(s.athletes.get('b')?.phase).toBe('done')
+    // 'a' still has attempts to take.
+    expect(game.isFinished(s, released + 3000)).toBe(false)
+    game.leave(s, 'a', released + 3000)
+    expect(s.athletes.get('a')?.marks).toHaveLength(1)
+    expect(game.isFinished(s, released + 3000)).toBe(true)
+    expect(game.getResult(s).placements).toEqual(['a', 'b'])
+  })
+
   test('an athlete without a valid mark ranks last with NM', () => {
     const game = new LongJump()
     const s = init(game, ['a', 'b'])

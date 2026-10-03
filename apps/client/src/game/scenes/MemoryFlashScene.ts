@@ -109,6 +109,7 @@ export class MemoryFlashScene extends MiniGameScene<MemoryFlashSnapshot> {
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
     const stripSize = compact ? 11 : 13
+    const stripRows = width < 600 ? 3 : 2
     const stripH = PlayerStrip.rowH(stripSize)
     this.strip = new PlayerStrip(
       this,
@@ -116,10 +117,10 @@ export class MemoryFlashScene extends MiniGameScene<MemoryFlashSnapshot> {
       this.top + 2 + stripH / 2,
       width - 24,
       stripSize,
-      1,
+      stripRows,
     )
     const cx = width / 2
-    const top = this.top + stripH + 2
+    const top = this.top + stripRows * stripH + 2
     const promptSize = compact ? 16 : 24
     const promptY = top + (compact ? 22 : 30)
     this.prompt = this.add
@@ -364,7 +365,8 @@ export class MemoryFlashScene extends MiniGameScene<MemoryFlashSnapshot> {
     this.lastLevel = lvl
 
     if (!board) {
-      this.showFinished()
+      // Out of boards — or a spectator, not in this round at all.
+      this.showFinished(!(this.selfId in snap.boards))
       return
     }
     if (board.level !== this.drawnLevel) this.drawBoard(board)
@@ -432,7 +434,7 @@ export class MemoryFlashScene extends MiniGameScene<MemoryFlashSnapshot> {
     })
   }
 
-  private showFinished(): void {
+  private showFinished(spectator: boolean): void {
     for (const o of this.pixels) o.setVisible(false)
     this.boardGfx?.setVisible(false)
     for (const b of this.buttons) {
@@ -444,8 +446,9 @@ export class MemoryFlashScene extends MiniGameScene<MemoryFlashSnapshot> {
     this.flashBar?.setVisible(false)
     this.levelText?.setVisible(false)
     this.prompt?.setVisible(false)
-    if (this.banner) showBanner(this, this.banner, this.t('game.common.finished'), PALETTE.lime)
     this.waitText?.setText(this.t('game.common.waiting'))
+    if (spectator) return
+    if (this.banner) showBanner(this, this.banner, this.t('game.common.finished'), PALETTE.lime)
     if (!this.finished) {
       this.finished = true
       if (this.firstSnapshot) return // relayout restart: the end state, without the fanfare

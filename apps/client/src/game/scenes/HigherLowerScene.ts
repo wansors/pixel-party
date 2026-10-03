@@ -1,4 +1,4 @@
-import { type HigherLowerSnapshot, PALETTE } from '@pp/shared'
+import { type HigherLowerCard, type HigherLowerSnapshot, PALETTE } from '@pp/shared'
 import type Phaser from 'phaser'
 import { addBanner, burst, flash, floatText, ring, shake, showBanner } from '../fx'
 import {
@@ -12,13 +12,16 @@ import {
   hexToCss,
   shade,
 } from '../pixelStyle'
-import { PlayerStrip } from '../playerStrip'
+import { type PlayerChip, PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 const PRESS_PX = 4
 const MILESTONE = 5
-const MAX_CHIPS = 6
+// Every player gets a chip; rooms bigger than this get an extra strip row.
+const CHIPS_PER_ROW = 6
 const RANKS: Readonly<Record<number, string>> = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' }
+
+type Action = 'higher' | 'lower' | 'bank'
 
 // 7-cell-wide suit sprites ('s' = ink). Suits are cosmetic only (the server deals bare values 2..14):
 // picked from the deck index, so every player sees the same card as the same card.
@@ -125,15 +128,20 @@ interface Button {
 }
 
 // Higher or Lower canvas. This player's current card is a pixel playing card in front of the face-down
-// deck, with the previous card tilted on the discard pile. HIGHER / LOWER (tap, ▲ ▼ or W/S) guesses the
-// next card: a correct guess flips the next card over and extends the streak (cheers every 5), a miss
-// busts the card, buzzes, and locks the run with an OUT banner. A chip strip shows every streak.
+// deck (their own deck), with the previous card tilted on the discard pile. HIGHER / LOWER (tap, ▲ ▼ or
+// W/S) guesses the next card: a correct guess flips the next card over and extends the streak (cheers
+// every 5); a miss flips over the card that beat it, busts it, halves the streak and ends the run with
+// an OUT banner. BANK (tap, Space or B) stops and keeps the streak — then the card that wasn't risked
+// turns over on the deck. A chip strip shows every player's streak and status (never their cards).
 export class HigherLowerScene extends MiniGameScene<HigherLowerSnapshot> {
   private card?: PlayingCard
   private discard?: PlayingCard
-  private buttons: Record<'higher' | 'lower', Button | undefined> = {
+  // The card that wasn't risked, turned over on the deck after a BANK.
+  private peek?: PlayingCard
+  private buttons: Record<Action, Button | undefined> = {
     higher: undefined,
     lower: undefined,
+    bank: undefined,
   }
   private prompt?: Phaser.GameObjects.Text
   private status?: Phaser.GameObjects.Text
@@ -141,7 +149,7 @@ export class HigherLowerScene extends MiniGameScene<HigherLowerSnapshot> {
   private banner?: Phaser.GameObjects.Text
   private cardY = 0
   private shown: { index: number; value: number } | null = null
-  private wasAlive = true
+  private wasPlaying = true
   private lastStreak = 0
 
   constructor(...deps: SceneDeps) {
@@ -151,7 +159,7 @@ export class HigherLowerScene extends MiniGameScene<HigherLowerSnapshot> {
   override create(): void {
     super.create()
     this.shown = null
-    this.wasAlive = true
+    this.wasPlaying = true
     this.lastStreak = 0
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
@@ -168,9 +176,10 @@ export class HigherLowerScene extends MiniGameScene<HigherLowerSnapshot> {
       .setOrigin(0.5)
     fitText(this.prompt, width - 32, promptSize)
 
-    // Bottom-up: chip strip, buttons, status line; the card gets the rest.
+    // Bottom-up: chip strip, BANK, HIGHER / LOWER, status line; the card gets the rest.
     const chipSize = compact ? 11 : 13
-    const stripRows = width < 600 ? 2 : 1
+    const roster = Object.keys(this.state.names).length
+    const stripRows = (width < 600 ? 2 : 1) + (roster > CHIPS_PER_ROW ? 1 : 0)
     const stripTop = height - (compact ? 12 : 18) - stripRows * PlayerStrip.rowH(chipSize)
     this.strip = new PlayerStrip(
       this,
@@ -184,7 +193,10 @@ export class HigherLowerScene extends MiniGameScene<HigherLowerSnapshot> {
     const gap = compact ? 12 : 18
     const bw = Math.round((contentW - gap) / 2)
     const bh = compact ? 76 : 92
-    const by = stripTop - (compact ? 12 : 18) - bh / 2
+    const bankH = compact ? 48 : 56
+    const bankY = stripTop - gap - bankH / 2
+    this.makeButton('bank', cx, bankY, contentW, bankH, PALETTE.amber, compact)
+    const by = bankY - bankH / 2 - gap - bh / 2
     this.makeButton('higher', cx - bw / 2 - gap / 2, by, bw, bh, PALETTE.lime, compact)
     this.makeButton('lower', cx + bw / 2 + gap / 2, by, bw, bh, PALETTE.red, compact)
     const statusY = by - bh / 2 - (compact ? 18 : 24)
@@ -232,16 +244,28 @@ export class HigherLowerScene extends MiniGameScene<HigherLowerSnapshot> {
     this.discard.root.setAngle(-9).setAlpha(0.55).setVisible(false)
     this.card = new PlayingCard(this, cx, this.cardY, cardW, cardH, suitKeys, crossKey)
     this.card.root.setVisible(false)
+    this.peek = new PlayingCard(
+      this,
+      cx + cardW * 0.62,
+      this.cardY - cardH * 0.06,
+      cardW,
+      cardH,
+      suitKeys,
+      crossKey,
+    )
+    this.peek.root.setAngle(8).setScale(0.8).setAlpha(0.9).setVisible(false)
 
     this.banner = addBanner(this).setFontSize(compact ? 32 : 40)
-    this.onKey('UP', () => this.guess('higher'))
-    this.onKey('W', () => this.guess('higher'))
-    this.onKey('DOWN', () => this.guess('lower'))
-    this.onKey('S', () => this.guess('lower'))
+    this.onKey('UP', () => this.act('higher'))
+    this.onKey('W', () => this.act('higher'))
+    this.onKey('DOWN', () => this.act('lower'))
+    this.onKey('S', () => this.act('lower'))
+    this.onKey('SPACE', () => this.act('bank'))
+    this.onKey('B', () => this.act('bank'))
   }
 
   private makeButton(
-    dir: 'higher' | 'lower',
+    action: Action,
     x: number,
     y: number,
     w: number,
@@ -257,54 +281,41 @@ export class HigherLowerScene extends MiniGameScene<HigherLowerSnapshot> {
     const face = this.add
       .image(x, y, ensureBevelPanel(this, w, h, color, 4, true))
       .setInteractive({ useHandCursor: true })
-    face.on('pointerdown', () => this.guess(dir))
+    face.on('pointerdown', () => this.act(action))
     const label = this.add
       .text(
         x,
         y,
-        this.t(`game.higherLower.${dir}`),
+        this.t(`game.higherLower.${action}`),
         headlineStyle(compact ? 16 : 24, PALETTE.text, { stroke: '#10121c', strokeThickness: 6 }),
       )
       .setOrigin(0.5)
     fitText(label, w - 20, compact ? 16 : 24)
-    this.buttons[dir] = { shadow, face, label, y }
+    this.buttons[action] = { shadow, face, label, y }
   }
 
-  private guess(dir: 'higher' | 'lower'): void {
+  private act(action: Action): void {
     const card = this.snap?.cards[this.selfId]
-    if (!card || !card.alive || this.snap?.remainingMs === 0) return
+    if (!card || card.status !== 'playing' || this.snap?.remainingMs === 0) return
     this.sfx.click()
-    const b = this.buttons[dir]
+    const b = this.buttons[action]
     if (b) {
       for (const o of [b.face, b.label]) o.setY(b.y + PRESS_PX)
       this.time.delayedCall(90, () => {
         for (const o of [b.face, b.label]) o.setY(b.y)
       })
     }
-    this.sendInput({ kind: 'guess', index: card.index, dir })
+    this.sendInput(
+      action === 'bank' ? { kind: 'bank' } : { kind: 'guess', index: card.index, dir: action },
+    )
   }
 
   protected frame(snap: HigherLowerSnapshot | null): void {
     if (!snap) return
-    const me = this.selfId
-    const card = snap.cards[me]
-    const streak = snap.scores[me] ?? 0
+    const card = snap.cards[this.selfId]
+    const streak = snap.scores[this.selfId] ?? 0
     this.hud?.setScore(this.t('game.higherLower.streak', { n: streak }))
-
-    const chips = Object.entries(snap.scores)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, MAX_CHIPS)
-      .map(([id, n]) => {
-        const alive = snap.cards[id]?.alive ?? true
-        const name = this.label(id).slice(0, 10).toUpperCase()
-        return {
-          text: alive ? `${name} ${n}` : `${name} ${n} ✕`,
-          avatar: this.state.avatarOf(id),
-          color: this.state.colorOf(id),
-          dim: !alive,
-        }
-      })
-    this.strip?.set(chips)
+    this.strip?.set(this.chips(snap))
     if (!card || !this.card) return
 
     if (!this.shown) {
@@ -314,16 +325,51 @@ export class HigherLowerScene extends MiniGameScene<HigherLowerSnapshot> {
       this.advance(this.shown, card.current, card.index, streak)
     }
     this.shown = { index: card.index, value: card.current }
-    this.lastStreak = streak
 
-    if (this.wasAlive && !card.alive) this.bust(this.firstSnapshot)
-    this.wasAlive = card.alive
-    const alive = card.alive
+    const playing = card.status === 'playing'
+    if (this.wasPlaying && !playing) this.endRun(card, streak, this.firstSnapshot)
+    this.wasPlaying = playing
+    this.lastStreak = streak
     for (const b of Object.values(this.buttons)) {
       if (!b) continue
-      for (const o of [b.shadow, b.face, b.label]) o.setAlpha(alive ? 1 : 0.3)
+      for (const o of [b.shadow, b.face, b.label]) o.setAlpha(playing ? 1 : 0.3)
     }
-    this.status?.setText(alive ? 'A > K > Q > J > 10 … 2' : this.t('game.higherLower.out'))
+    this.status?.setText(playing ? 'A > K > Q > J > 10 … 2' : this.t('game.higherLower.out'))
+  }
+
+  // Every player's streak and how their run stands (✓ banked, ✕ bust) — never their cards.
+  private chips(snap: HigherLowerSnapshot): PlayerChip[] {
+    return Object.entries(snap.scores)
+      .sort((a, b) => b[1] - a[1])
+      .map(([id, n]) => {
+        const status = snap.cards[id]?.status ?? 'playing'
+        const mark = status === 'banked' ? '✓' : status === 'bust' ? '✕' : ''
+        return {
+          text: `${this.label(id).slice(0, 10).toUpperCase()} ${n}${mark}`,
+          avatar: this.state.avatarOf(id),
+          color: this.state.colorOf(id),
+          dim: status === 'bust',
+        }
+      })
+  }
+
+  // Turns the main card over to a new face (a quick scaleX flip), then runs `then`.
+  private flipTo(value: number, index: number, then?: () => void): void {
+    const main = this.card
+    if (!main) return
+    this.tweens.killTweensOf(main.root)
+    main.root.setScale(1)
+    this.tweens.add({
+      targets: main.root,
+      scaleX: 0,
+      duration: 70,
+      ease: 'Quad.easeIn',
+      onComplete: () => {
+        main.show(value, suitOf(index, value))
+        then?.()
+        this.tweens.add({ targets: main.root, scaleX: 1, duration: 90, ease: 'Quad.easeOut' })
+      },
+    })
   }
 
   // Correct guess: the old card goes to the discard pile, the next one flips over from the deck.
@@ -337,18 +383,7 @@ export class HigherLowerScene extends MiniGameScene<HigherLowerSnapshot> {
     if (!main) return
     this.discard?.show(prev.value, suitOf(prev.index, prev.value))
     this.discard?.root.setVisible(true)
-    this.tweens.killTweensOf(main.root)
-    main.root.setScale(1)
-    this.tweens.add({
-      targets: main.root,
-      scaleX: 0,
-      duration: 70,
-      ease: 'Quad.easeIn',
-      onComplete: () => {
-        main.show(value, suitOf(index, value))
-        this.tweens.add({ targets: main.root, scaleX: 1, duration: 90, ease: 'Quad.easeOut' })
-      },
-    })
+    this.flipTo(value, index)
     if (streak <= this.lastStreak) return
     const { x } = main.root
     this.sfx.correct()
@@ -368,15 +403,47 @@ export class HigherLowerScene extends MiniGameScene<HigherLowerSnapshot> {
     }
   }
 
-  // `quiet`: a relayout restart after the run ended restores the busted card without the buzz.
-  private bust(quiet = false): void {
-    if (!quiet) {
-      this.sfx.wrong()
-      shake(this, 0.014, 260)
-      flash(this, PALETTE.red, 150)
+  // The run is over. A bust turns over the card that beat the guess and halves the streak; a bank
+  // turns over, on the deck, the card that wasn't risked. `quiet`: a relayout restart restores the end
+  // state without the buzz.
+  private endRun(card: HigherLowerCard, streak: number, quiet: boolean): void {
+    const main = this.card
+    if (!main) return
+    if (card.status === 'bust') {
+      if (card.next !== null) {
+        this.discard?.show(card.current, suitOf(card.index, card.current))
+        this.discard?.root.setVisible(true)
+        if (quiet) main.show(card.next, suitOf(card.index + 1, card.next))
+        else this.flipTo(card.next, card.index + 1)
+      }
+      main.setBust(true)
+      if (!quiet) {
+        this.sfx.wrong()
+        shake(this, 0.014, 260)
+        flash(this, PALETTE.red, 150)
+        const lost = this.lastStreak - streak
+        if (lost > 0) floatText(this, main.root.x, this.cardY - 40, `-${lost}`, PALETTE.red, 24)
+      }
+      if (this.banner) showBanner(this, this.banner, this.t('game.common.out'), PALETTE.red)
+      return
     }
-    this.card?.setBust(true)
-    if (this.banner) showBanner(this, this.banner, this.t('game.common.out'), PALETTE.red)
+    this.showPeek(card, quiet)
+    if (!quiet) {
+      this.sfx.coin()
+      burst(this, main.root.x, this.cardY, PALETTE.amber, 24, 300)
+    }
+    if (this.banner) showBanner(this, this.banner, this.t('game.higherLower.banked'), PALETTE.lime)
+  }
+
+  private showPeek(card: HigherLowerCard, quiet: boolean): void {
+    const peek = this.peek
+    if (!peek || card.next === null) return
+    peek.show(card.next, suitOf(card.index + 1, card.next))
+    peek.root.setVisible(true)
+    if (quiet) return
+    const { x, y } = peek.root
+    peek.root.setPosition(x - 30, y + 20).setAlpha(0)
+    this.tweens.add({ targets: peek.root, x, y, alpha: 0.9, duration: 220, ease: 'Back.easeOut' })
   }
 }
 

@@ -326,6 +326,11 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
       col.legStartedAt = time
       col.respawnUntil = time + 450
       this.explode(col, ours, col.holderId === this.selfId)
+    } else if (view.relays === col.relays && view.holderId !== col.holderId && this.primed) {
+      // A new holder without a pass or a boom: the server skipped an idle holder (or one who left —
+      // they're gone from the chain, so no jeer for them). Either way the fuse starts over.
+      col.legStartedAt = time
+      if (view.members.includes(col.holderId)) this.skipped(col, ours, col.holderId === this.selfId)
     }
     if (ours && view.legProgress > col.progress && view.holderId === this.selfId) {
       punch(this, col.bomb, 0.04, 40)
@@ -334,6 +339,23 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
     col.explosions = view.explosions
     col.progress = view.legProgress
     col.holderId = view.holderId
+  }
+
+  private skipped(col: Column, ours: boolean, wasMe: boolean): void {
+    floatText(
+      this,
+      col.cx,
+      col.bombY - col.bombSize * 0.7,
+      this.t('game.bombRelay.tooSlow'),
+      PALETTE.amber,
+    )
+    this.tweens.add({ targets: col.bomb, x: col.cx + col.bombSize * 0.2, duration: 90, yoyo: true })
+    if (wasMe) {
+      this.sfx.wrong()
+      shake(this, 0.01, 200)
+    } else if (ours) {
+      this.sfx.tick()
+    }
   }
 
   private explode(col: Column, ours: boolean, wasMe: boolean): void {

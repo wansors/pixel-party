@@ -234,7 +234,7 @@
       },
       "color-trap": {
         "name": "Color Trap",
-        "blurb": "Tap the INK color of the word, not what it spells. Mind the trap."
+        "blurb": "Tap the INK color of the word, not what it spells. Wrong taps cost a point."
       },
       "trivia": {
         "name": "Lightning Quiz",
@@ -242,7 +242,7 @@
       },
       "balloon-chicken": {
         "name": "Balloon Chicken",
-        "blurb": "Pump for points, but cash out before it bursts — or lose it all.",
+        "blurb": "Three balloons, the same for everyone: pump for points and cash out before each one pops.",
         "tagline": "Greed is good. Until it goes pop."
       },
       "number-rush": {
@@ -259,7 +259,7 @@
       },
       "higher-lower": {
         "name": "Higher or Lower",
-        "blurb": "Guess if the next card is higher or lower. One miss ends your run."
+        "blurb": "Higher or lower? Build a streak and bank it when you dare — a miss halves it."
       },
       "bug-smash": {
         "name": "Bug Smash",
@@ -296,7 +296,7 @@
       },
       "sink-the-fleet": {
         "name": "Sink the Fleet",
-        "blurb": "Head-to-head Battleship. Take turns firing to sink your rival before they sink you.",
+        "blurb": "Head-to-head Battleship — a hit shoots again. Sink your rival's fleet before they sink yours.",
         "tagline": "Somewhere out there, a tiny admiral is crying."
       },
       "bomb-relay": {
@@ -310,7 +310,7 @@
       },
       "fleet-battle": {
         "name": "Fleet Battle",
-        "blurb": "Team Battleship — coordinate shots with your squad to sink the enemy fleet first."
+        "blurb": "Team Battleship — a rotating captain calls each shot, then the whole crew can fire. Sink the enemy fleet first."
       },
       "maze-sprint": {
         "name": "Maze Sprint",
@@ -326,7 +326,7 @@
       },
       "bubble-pop": {
         "name": "Bubble Pop",
-        "blurb": "Shoot color-matched bubbles to pop clusters of three or more. Clear the board fastest."
+        "blurb": "Shoot color-matched bubbles to pop groups of three or more. Most bubbles popped wins; a full clear beats them all."
       },
       "fruit-catch": {
         "name": "Fruit Catch",
@@ -343,8 +343,8 @@
       },
       "snake-arena": {
         "name": "Snake Arena",
-        "blurb": "Eat, grow, and do not crash. The longest snake wins.",
-        "tagline": "Eat, grow, crash into a friend."
+        "blurb": "Your own board, the same apples as everyone: eat, grow, don't crash. Longest snake wins.",
+        "tagline": "Eat, grow, crash into yourself."
       },
       "pixel-pong": {
         "name": "Pixel Pong",
@@ -353,7 +353,7 @@
       },
       "sumo-push": {
         "name": "Sumo Push",
-        "blurb": "Shove everyone else out of the ring. Last sumo standing wins."
+        "blurb": "Shove and charge everyone out of a shrinking ring. Last sumo standing wins."
       },
       "match-pairs": {
         "name": "Match",
@@ -361,7 +361,7 @@
       },
       "quick-draw": {
         "name": "Quick Draw",
-        "blurb": "Wait for FIRE, then draw first. Flinch early and you lose.",
+        "blurb": "Wait for FIRE, then draw first. Flinch early — or not at all — and you lose.",
         "tagline": "The undertaker is already taking measurements."
       },
       "pixel-roulette": {
@@ -394,7 +394,7 @@
       },
       "glass-bridge": {
         "name": "Glass Bridge",
-        "blurb": "Cross one by one: LEFT or RIGHT panel? One holds, one shatters. Watch for the glint.",
+        "blurb": "Cross one by one: LEFT or RIGHT? Blind guesses that hold earn ★. Peeking at the glint is safe, but earns nothing.",
         "tagline": "Half the panels are tempered glass. The other half are a funeral."
       },
       "freeze-doll": {
@@ -447,7 +447,7 @@
       },
       "honeycomb-cut": {
         "name": "Honeycomb Cut",
-        "blurb": "Trace the shape in the candy with your needle. Stray off the line or rush and it cracks!",
+        "blurb": "Trace the shape in the candy with your needle. Stray off the line or rush and it cracks — a broken candy counts half!",
         "tagline": "Steady hands. Crack the candy and the candy cracks you."
       },
       "jump-rope": {
@@ -506,7 +506,11 @@
         "TOAST!",
         "SEE YA!",
         "FLATLINED"
-      ]
+      ],
+      "duelBye": "BYE",
+      "duelWatch": "Watching {{a}} vs {{b}}",
+      "duelWinner": "{{name}} WINS!",
+      "duelOppLeft": "{{name}} left — you win!"
     },
     "reaction": {
       "wait": "WAIT…",
@@ -524,7 +528,7 @@
       "hint": "Tap / press SPACE as fast as you can"
     },
     "colorTrap": {
-      "instruction": "Tap the INK color — not the word",
+      "instruction": "Tap the INK color, not the word. Wrong = -1",
       "locked": "Locked in — wait for the next one",
       "words": {
         "red": "RED",
@@ -544,8 +548,6 @@
       "pump": "PUMP",
       "cashOut": "CASH OUT",
       "pop": "POP!",
-      "cashed": "CASHED",
-      "bust": "BUST",
       "bustLines": [
         "Greed is good. Until it pops.",
         "You had one job: stop.",
@@ -568,7 +570,9 @@
       "lower": "▼ LOWER",
       "streak": "Streak: {{n}}",
       "prompt": "Higher or lower than this?",
-      "out": "Run over — sit tight"
+      "out": "Run over — sit tight",
+      "bank": "BANK IT",
+      "banked": "BANKED!"
     },
     "stopClock": {
       "stop": "STOP",
@@ -616,7 +620,11 @@
         "STAR": "STAR",
         "MUSHROOM": "MUSHROOM",
         "HOUSE": "HOUSE",
-        "CAT": "CAT"
+        "CAT": "CAT",
+        "GHOST": "GHOST",
+        "KEY": "KEY",
+        "APPLE": "APPLE",
+        "CROWN": "CROWN"
       }
     },
     "pixelSplit": {
@@ -630,7 +638,8 @@
       "spectator": "No team — watching this round",
       "leads": "{{team}} LEADS!",
       "almost": "ALMOST!",
-      "teamWins": "{{team}} WINS!"
+      "teamWins": "{{team}} WINS!",
+      "perHead": "per head"
     },
     "sinkTheFleet": {
       "yourTurn": "YOUR TURN — fire!",
@@ -640,11 +649,13 @@
       "won": "FLEET SUNK — YOU WIN!",
       "lost": "Your fleet is gone...",
       "draw": "Time up — draw",
-      "bye": "No rival this round — free win",
-      "hint": "Tap a cell in enemy waters to fire on your turn",
+      "bye": "No rival this round — you bank a draw",
+      "hint": "Tap a cell in enemy waters to fire — a hit shoots again",
       "hit": "HIT!",
       "splash": "SPLASH!",
-      "hitsChip": "HITS {{n}}/{{total}}"
+      "hitsChip": "HITS {{n}}/{{total}}",
+      "turnOf": "{{name}} FIRES",
+      "again": "AGAIN!"
     },
     "bombRelay": {
       "mash": "MASH — pass it on!",
@@ -652,20 +663,22 @@
       "teammateHolds": "A teammate has the bomb",
       "relays": "passes",
       "booms": "booms",
-      "hint": "You can only mash while YOU hold the bomb",
+      "hint": "Mash only while YOU hold the bomb — dawdle and it skips you",
       "spectator": "No team — watching this round",
       "pass": "PASS!",
       "boom": "BOOM!",
-      "getReady": "GET READY!"
+      "getReady": "GET READY!",
+      "tooSlow": "TOO SLOW!"
     },
     "pixelBeat": {
       "tapHint": "Tap or press SPACE on the beat",
-      "streak": "{{n}} streak"
+      "streak": "{{n}} streak",
+      "watching": "Watching this one from the stands — you are in next round"
     },
     "fleetBattle": {
-      "hint": "Tap a cell in enemy waters to fire on your team's turn",
+      "hint": "Tap enemy waters to fire: the captain calls it first, then anyone can",
       "spectator": "No team — watching this round",
-      "yourTurn": "{{team}}'S TURN — fire!",
+      "yourTurn": "{{team}}: OPEN FIRE!",
       "waitTurn": "Waiting on {{team}}...",
       "won": "FLEET SUNK — YOUR TEAM WINS!",
       "lost": "Your team's fleet is gone...",
@@ -675,7 +688,15 @@
       "hitsChip": "HITS {{n}}/{{total}}",
       "enemyWaters": "ENEMY WATERS",
       "ourFleet": "OUR FLEET",
-      "teamWins": "{{team}} WINS!"
+      "teamWins": "{{team}} WINS!",
+      "yourShot": "YOUR SHOT, CAPTAIN!",
+      "captainAims": "{{name}} AIMS...",
+      "crewIn": "Your crew can fire in {{s}}s",
+      "youIn": "Captain's call — you can fire in {{s}}s",
+      "wonTime": "TIME! YOUR TEAM WINS",
+      "lostTime": "TIME! YOUR TEAM LOSES",
+      "onHits": "More hits: {{a}} to {{b}}",
+      "onShots": "Same hits, fewer shots"
     },
     "mazeSprint": {
       "steps": "{{n}} steps",
@@ -683,7 +704,8 @@
     },
     "bubblePop": {
       "score": "{{n}} pts",
-      "hint": "Aim a column, release to fire"
+      "hint": "Aim a column, release to fire",
+      "jammed": "JAMMED!"
     },
     "lineClearSprint": {
       "lines": "{{n}} lines",
@@ -710,7 +732,8 @@
       "lastStanding": "LAST ONE STANDING!"
     },
     "pixelDash": {
-      "hint": "Tap or press Space to jump!"
+      "hint": "Tap or Space to jump. Time it, don't mash!",
+      "wasted": "OOPS!"
     },
     "bugSmash": {
       "hint": "Smash the bugs — dodge the bombs!"
@@ -720,11 +743,14 @@
       "length": "Length {{n}}"
     },
     "oddOneOut": {
-      "prompt": "Tap the odd tile!"
+      "prompt": "Tap the odd tile!",
+      "cooldown": "Wrong tile — wait!"
     },
     "pixelPong": {
       "hint": "Drag to move your paddle — first to {{n}} wins!",
-      "bye": "No rival this round — free win"
+      "bye": "No rival this round — you bank a draw",
+      "golden": "GOLDEN POINT!",
+      "goldenHint": "Tied at the bell — next point wins"
     },
     "quickDraw": {
       "wait": "WAIT…",
@@ -739,21 +765,23 @@
       "tooEarly": "Too early — you jumped the gun!",
       "slower": "{{name}} drew first ({{ms}} ms)",
       "noDraw": "Nobody drew in time",
-      "bye": "No opponent this round — free win!",
+      "bye": "No opponent this round — you bank a draw",
       "undertaker": [
         "The undertaker is measuring you.",
         "Pine box, size medium.",
         "Your horse gets your boots.",
         "Here lies you. Briefly missed."
-      ]
+      ],
+      "bothLose": "BOTH LOSE"
     },
     "matchPairs": {
       "prompt": "Find the pairs!",
       "pairs": "{{n}}/{{total}} pairs"
     },
     "sumoPush": {
-      "hint": "Hold & drag or use the arrows to shove!",
-      "alive": "{{n}}/{{total}} in"
+      "hint": "Drag or arrows to shove · Space / DASH to charge!",
+      "alive": "{{n}}/{{total}} in",
+      "dash": "DASH"
     },
     "sudokuRace": {
       "pickCell": "Pick a cell",
@@ -835,7 +863,9 @@
         "OOOOOH!",
         "WHO'S NEXT?",
         "THAT'S GOTTA HURT."
-      ]
+      ],
+      "blind": "BLIND! +{{n}}★",
+      "peeked": "PEEKED! +0★"
     },
     "freezeDoll": {
       "walk": "WALK",
@@ -867,7 +897,8 @@
       "callHint": "Get in a room with exactly {{n}}!",
       "lockedHint": "SAFE! The door is locked",
       "safe": "SAFE!",
-      "survived": "SURVIVOR!"
+      "survived": "SURVIVOR!",
+      "wipeout": "NOBODY! GO AGAIN!"
     },
     "sumoIce": {
       "splash": "SPLASH!",
@@ -884,7 +915,8 @@
     "starBlaster": {
       "score": "{{n}} PTS",
       "warning": "WARNING! BOSS",
-      "final": "{{n}} POINTS"
+      "final": "{{n}} POINTS",
+      "steerToFire": "MOVE TO OPEN FIRE!"
     },
     "asteroids": {
       "thrust": "THRUST",
@@ -927,7 +959,8 @@
       "cracks": "CRACKS {{n}}/{{max}}",
       "done": "CUT OUT IN {{s}}s!",
       "slow": "TOO FAST! EASE OFF",
-      "hint": "Hold and trace the line with the needle"
+      "hint": "Hold and trace the line with the needle",
+      "watching": "Watching this one from the stands"
     },
     "jumpRope": {
       "jump": "JUMP!",
@@ -955,7 +988,8 @@
       "reveal": "{{n}} · {{parity}}!",
       "youTake": "You take {{n}}!",
       "theyTake": "They take {{n}}",
-      "bye": "No opponent this round — free win!"
+      "bye": "No opponent this round — you bank a draw",
+      "takes": "{{name}} takes {{n}}"
     },
     "weirdTrivia": {
       "hint": "Strange but true — tap the real one",

@@ -1,5 +1,10 @@
-import { PIXEL_OBJECTS, type PixelWeightInput, type PixelWeightSnapshot } from '@pp/shared'
-import type { PixelWeightObject } from '@pp/shared'
+import {
+  PIXEL_OBJECTS,
+  type PixelWeightInput,
+  type PixelWeightObject,
+  type PixelWeightSnapshot,
+  pixelVariant,
+} from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 40_000
@@ -23,8 +28,10 @@ export interface PixelWeightState {
 }
 
 // Real-time FFA estimation. A seeded sequence of pixel-art objects is shared by everyone; each player
-// eyeballs how many pixels an object has and submits a guess, at their own pace. Pure domain logic: the
-// object order comes from the injected Random port (seeded per round) and time arrives as `now`.
+// eyeballs how many pixels an object has and submits a guess, at their own pace. Every puzzle is a
+// seeded variant of its object (stretched, nibbled, mirrored — see pixelVariant), so the count shown
+// after a guess can't be memorised for the next round. Pure domain logic: the objects come from the
+// injected Random port (seeded per round) and time arrives as `now`.
 export class PixelWeight implements MiniGame<PixelWeightState, PixelWeightInput> {
   readonly id = 'pixel-weight'
   readonly format = 'ffa' as const
@@ -40,8 +47,9 @@ export class PixelWeight implements MiniGame<PixelWeightState, PixelWeightInput>
     }
     const puzzles: Puzzle[] = []
     for (let level = 0; level < LEVELS; level++) {
-      const src = PIXEL_OBJECTS[order[level % order.length] as number]
-      if (!src) continue
+      const base = PIXEL_OBJECTS[order[level % order.length] as number]
+      if (!base) continue
+      const src = pixelVariant(base, ctx.random)
       puzzles.push({
         object: {
           index: level,
@@ -88,6 +96,12 @@ export class PixelWeight implements MiniGame<PixelWeightState, PixelWeightInput>
     state.score.set(playerId, (state.score.get(playerId) ?? 0) + points)
     state.pointer.set(playerId, ptr + 1)
     state.lastClearMs.set(playerId, now - state.startedAt)
+    return state
+  }
+
+  // A player who left is done: skip them to the end so the round can finish once everyone else is.
+  leave(state: PixelWeightState, playerId: PlayerId, _now: number): PixelWeightState {
+    if (state.pointer.has(playerId)) state.pointer.set(playerId, state.puzzles.length)
     return state
   }
 

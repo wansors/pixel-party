@@ -15,15 +15,21 @@ export interface OddOneOutBoard {
   oddCell: number
 }
 
+// A wrong tile locks that player's taps for this long, so tapping tiles blindly is slower than looking.
+export const ODD_ONE_OUT_WRONG_COOLDOWN_MS = 1000
+
 export interface OddOneOutSnapshot {
   // playerId -> the board that player is currently on (null once the sequence is exhausted).
   boards: Record<string, OddOneOutBoard | null>
   // playerId -> levels cleared so far.
   scores: Record<string, number>
+  // playerId -> remaining ms of that player's wrong-tile penalty (0 when none).
+  cooldowns: Record<string, number>
   remainingMs: number
 }
 
-// Tap a tile on the board at `level`; a correct tap (the odd tile) advances the player.
+// Tap a tile on the board at `level`; a correct tap (the odd tile) advances the player, a wrong one
+// starts the penalty (taps during it are ignored).
 export interface OddOneOutInput {
   kind: 'tap'
   level: number

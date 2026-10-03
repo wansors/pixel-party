@@ -23,8 +23,9 @@ export interface BugSmashState {
 }
 
 // Real-time FFA whack-a-mole. One seeded spawn timeline is shared by everyone; each player smashes
-// independently. Bugs score, bombs cost a point. Pure domain logic: the timeline is drawn from the
-// injected Random port (seeded per round) and time arrives as `now`.
+// independently. Bugs score, bombs cost a point — even at zero (a score can go negative), so a bomb
+// always hurts. Pure domain logic: the timeline is drawn from the injected Random port (seeded per
+// round) and time arrives as `now`.
 export class BugSmash implements MiniGame<BugSmashState, BugSmashInput> {
   readonly id = 'bug-smash'
   readonly format = 'ffa' as const
@@ -81,7 +82,7 @@ export class BugSmash implements MiniGame<BugSmashState, BugSmashInput> {
     hits.add(idx)
     const spawn = state.spawns[idx] as Spawn
     const cur = state.scores.get(playerId) ?? 0
-    state.scores.set(playerId, spawn.kind === 'bug' ? cur + 1 : Math.max(0, cur - 1))
+    state.scores.set(playerId, spawn.kind === 'bug' ? cur + 1 : cur - 1)
     return state
   }
 

@@ -63,6 +63,18 @@ describe('FruitCatch', () => {
     expect(snap.scores.p).toBe(0)
   })
 
+  test('snapshot items carry their fall speed, so y can be extrapolated on the server clock', () => {
+    const game = new FruitCatch()
+    const s = init(['p'])
+    const first = nn(s.items[0])
+    const at = first.spawnAt + 400
+    const item = nn(game.snapshot(s, at).items.find((i) => i.id === first.id))
+    expect(item.fallMs).toBe(first.fallMs)
+    // 150 ms later the item is exactly where the extrapolation puts it.
+    const later = nn(game.snapshot(s, at + 150).items.find((i) => i.id === first.id))
+    expect(later.y).toBeCloseTo(item.y + 150 / item.fallMs)
+  })
+
   test('ranks by score descending', () => {
     const game = new FruitCatch()
     let s = init(['a', 'b'])
@@ -74,5 +86,36 @@ describe('FruitCatch', () => {
     expect(result.placements[0]).toBe('a')
     expect(result.ranks?.a).toBe(0)
     expect(result.ranks?.b).toBe(1)
+  })
+
+  test('equal scores: fewer bombs caught ranks first, then the longer best combo', () => {
+    const game = new FruitCatch()
+    const s = init(['bomby', 'streaky', 'steady', 'twin'])
+    for (const id of s.players) s.scores.set(id, 10)
+    s.bombs.set('bomby', 2)
+    s.bestCombos.set('streaky', 8)
+    s.bestCombos.set('steady', 4)
+    s.bestCombos.set('twin', 4)
+    const result = game.getResult(s)
+    expect(result.placements).toEqual(['streaky', 'steady', 'twin', 'bomby'])
+    expect(result.ranks).toEqual({ streaky: 0, steady: 1, twin: 1, bomby: 3 })
+  })
+
+  test('catching tracks bombs and the best combo', () => {
+    const game = new FruitCatch()
+    let s = init(['p'])
+    const [a, b] = [nn(s.items[0]), nn(s.items[1])]
+    s = game.onInput(s, 'p', { kind: 'move', x: a.x }, 0)
+    s = game.tick(s, 50, a.spawnAt + a.fallMs)
+    s = game.tick(s, 50, b.spawnAt + b.fallMs)
+    expect(s.bestCombos.get('p')).toBe(2)
+    expect(s.bombs.get('p')).toBe(0)
+    // next()=0 → every item is a bomb: catching one counts it (and breaks the combo).
+    let t = new FruitCatch().init({ players: ['p'], seed: 1, random: { next: () => 0 }, now: 0 })
+    const bomb = nn(t.items[0])
+    t = game.onInput(t, 'p', { kind: 'move', x: bomb.x }, 0)
+    t = game.tick(t, 50, bomb.spawnAt + bomb.fallMs)
+    expect(t.bombs.get('p')).toBe(1)
+    expect(t.combos.get('p')).toBe(0)
   })
 })

@@ -2,7 +2,7 @@ import { type FruitCatchSnapshot, type FruitItem, PALETTE } from '@pp/shared'
 import Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
 import { burst, flash, floatText, ring, shake } from '../fx'
-import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
+import { ServerClock } from '../netcode/ServerClock'
 import { bodyStyle, ensurePixelGrid, shade } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -81,8 +81,9 @@ interface Seen {
   kind: FruitItem['kind']
 }
 
-// Fruit Catch canvas (Phase 5). The server owns the falling stream + scoring; this renders the items
-// smoothed through the snapshot interpolator and the player's own basket locally (drag / ◀ ▶).
+// Fruit Catch canvas (Phase 5). The server owns the falling stream + scoring; this renders the items on
+// the server's clock (each falls linearly, so the last snapshot is extrapolated: an item touches the rim
+// when the server resolves it) and the player's own basket locally (drag / ◀ ▶).
 export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
   private basket?: Phaser.GameObjects.Image
   // You: your lobby avatar standing in the basket, peeking over the rim (facing the way you move;
@@ -94,7 +95,10 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
   private face: 'happy' | 'hurt' = 'happy'
   private readonly sprites = new Map<number, Phaser.GameObjects.Image>()
   private readonly seen = new Map<number, Seen>()
-  private readonly interp = new SnapshotInterpolator<FruitCatchSnapshot>(100)
+  // Items already resolved on screen (they reached the rim), so a snapshot still carrying one doesn't
+  // replay its catch.
+  private readonly resolved = new Set<number>()
+  private readonly clock = new ServerClock()
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
   private fruitKeys: string[] = []
   private bombKeys: string[] = []
@@ -104,6 +108,8 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
   private lastSentAt = 0
   private lastScore = 0
   private lastCombo = 0
+  // Joined after the round started (not in its snapshot): no basket, just the rain of fruit.
+  private spectating = false
   // Screen mapping of the play field: normalized y 0 → skyTop, CATCH_Y → the basket's rim.
   private skyTop = 0
   private rimY = 0
@@ -114,15 +120,17 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
 
   override create(): void {
     super.create()
-    this.interp.reset()
+    this.clock.reset()
     this.lastTick = -1
     this.basketX = 0.5
     this.lastSentX = -1
     this.lastScore = 0
     this.lastCombo = 0
+    this.spectating = false
     for (const s of this.sprites.values()) s.destroy()
     this.sprites.clear()
     this.seen.clear()
+    this.resolved.clear()
 
     const { width, height } = this.scale
     const selfColor = this.state.colorOf(this.selfId, PALETTE.amber)
@@ -217,9 +225,17 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
     const now = this.time.now
     if (snap && this.state.tick !== this.lastTick) {
       this.lastTick = this.state.tick
-      this.interp.push(snap, now)
+      this.clock.sync(snap.remainingMs, now)
+      this.spectating = !(this.selfId in snap.scores)
+      this.basket?.setVisible(!this.spectating)
+      this.catcher?.image.setVisible(!this.spectating)
+      if (!this.spectating) this.trackScore(snap)
     }
 
+    if (this.spectating) {
+      if (snap) this.renderItems(snap, now, this.scale.width)
+      return
+    }
     if (this.cursors?.left.isDown) this.basketX -= (KEY_SPEED * delta) / 1000
     if (this.cursors?.right.isDown) this.basketX += (KEY_SPEED * delta) / 1000
     this.basketX = Phaser.Math.Clamp(this.basketX, 0, 1)
@@ -241,14 +257,12 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
       catcher.image.setX(this.basketX * width)
     }
 
-    const latest = this.interp.latest()
-    if (latest) this.trackScore(latest)
-    this.renderItems(now, width)
+    if (snap) this.renderItems(snap, now, width)
   }
 
-  private trackScore(latest: FruitCatchSnapshot): void {
-    const myScore = latest.scores[this.selfId] ?? 0
-    const combo = latest.combos[this.selfId] ?? 0
+  private trackScore(snap: FruitCatchSnapshot): void {
+    const myScore = snap.scores[this.selfId] ?? 0
+    const combo = snap.combos[this.selfId] ?? 0
     this.hud?.setScore(this.t('game.common.pts', { n: myScore }))
     const bx = this.basket?.x ?? 0
     // First snapshot (fresh round or relayout restart): adopt the score without a "+N" pop.
@@ -276,23 +290,27 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
     this.lastCombo = combo
   }
 
-  private renderItems(now: number, width: number): void {
-    const sample = this.interp.sample(now)
+  // Each item extrapolated from the last snapshot on the server clock (frozen on the final frame). One
+  // reaching the rim resolves right there — the same moment the server judges it against your basket.
+  private renderItems(snap: FruitCatchSnapshot, now: number, width: number): void {
+    const elapsed = this.state.final ? 0 : this.clock.since(snap.remainingMs, now)
+    const size = Math.min(width, this.scale.height) * 0.075
     const current = new Map<number, Seen>()
-    if (sample) {
-      const fromById = new Map(sample.from.items.map((i) => [i.id, i]))
-      const size = Math.min(width, this.scale.height) * 0.075
-      for (const item of sample.to.items) {
-        const prev = fromById.get(item.id)
-        const nx = prev ? lerp(prev.x, item.x, sample.t) : item.x
-        const ny = prev ? lerp(prev.y, item.y, sample.t) : item.y
-        current.set(item.id, { x: nx, y: ny, kind: item.kind })
-        this.drawItem(item, nx * width, this.screenY(ny), size, now)
+    for (const item of snap.items) {
+      if (this.resolved.has(item.id)) continue
+      const y = item.y + elapsed / item.fallMs
+      if (y >= CATCH_Y) {
+        this.resolved.add(item.id)
+        if (!this.firstSnapshot) this.resolveFx(item.id, { x: item.x, y, kind: item.kind }, width)
+        continue
       }
+      current.set(item.id, { x: item.x, y, kind: item.kind })
+      this.drawItem(item, item.x * width, this.screenY(y), size, now)
     }
-    // Items that vanished near the catch line just resolved: play the catch / bomb / splat feedback.
+    // An item the server resolved a hair before our clock got it to the rim: same feedback.
     for (const [id, last] of this.seen) {
-      if (current.has(id) || last.y < CATCH_Y - 0.12) continue
+      if (current.has(id) || this.resolved.has(id) || last.y < CATCH_Y - 0.12) continue
+      this.resolved.add(id)
       this.resolveFx(id, last, width)
     }
     this.seen.clear()
@@ -307,6 +325,7 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
   }
 
   private resolveFx(id: number, item: Seen, width: number): void {
+    if (this.spectating) return
     const x = item.x * width
     const caught = Math.abs(item.x - this.basketX) <= BASKET_HALF
     if (item.kind === 'bomb') {

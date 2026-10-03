@@ -43,6 +43,27 @@ describe('QuickTetris', () => {
     expect(game.isFinished(state, 150)).toBe(true)
   })
 
+  test('a topped-out player counts as finished for the early end', () => {
+    const game = new QuickTetris()
+    const state = init(['a', 'b'])
+    state.doneAt.set('a', 100)
+    expect(game.isFinished(state, 200)).toBe(false)
+    nn(state.boards.get('b')).toppedOut = true
+    expect(game.isFinished(state, 200)).toBe(true)
+    // Both topped out: nobody is left racing either.
+    const both = init(['a', 'b'])
+    for (const id of ['a', 'b']) nn(both.boards.get(id)).toppedOut = true
+    expect(game.isFinished(both, 200)).toBe(true)
+  })
+
+  test('a player who left no longer holds up the early end', () => {
+    const game = new QuickTetris()
+    let state = init(['a', 'b'])
+    state.doneAt.set('a', 100)
+    state = game.leave(state, 'b', 150)
+    expect(game.isFinished(state, 200)).toBe(true)
+  })
+
   test('isFinished is also true once the timer runs out, regardless of doneAt', () => {
     const game = new QuickTetris()
     const state = init(['a', 'b'], 1000)

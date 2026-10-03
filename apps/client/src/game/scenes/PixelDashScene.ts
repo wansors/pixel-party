@@ -2,18 +2,22 @@ import { PALETTE, type PixelDashSnapshot } from '@pp/shared'
 import type Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
 import { burst, floatText, punch, ring, shake } from '../fx'
-import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
+import { ServerClock } from '../netcode/ServerClock'
 import { bodyStyle, ensurePixelGrid, ensurePixelOrb, headlineStyle, shade } from '../pixelStyle'
 import { addShadow } from '../playerMarks'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // Mirrors the server's pixelDash.ts: an obstacle's `t` is its time-to-arrival over LEAD_MS (1 = just
 // entering from the right, 0 = at the runner). Obstacles are drawn so t = 0 lands exactly on the runner.
+// A jump is AIR_MS in the air (it clears an obstacle arriving meanwhile, LATE_MS of grace included);
+// the runner can jump again LAND_MS after landing, WASTED_MS later still after a jump that cleared
+// nothing. The server waits a little less, so a jump this scene allows is never refused.
 const LEAD_MS = 1200
-// The server's jump window (TOL_MS = 220) in `t` units, with a little margin: an obstacle further out
-// than this cannot have been cleared yet.
-const CLEAR_WINDOW_T = 0.19
-const JUMP_UP_MS = 190
+const AIR_MS = 380
+const LATE_MS = 60
+const LAND_MS = 150
+const WASTED_MS = 400
+const JUMP_UP_MS = AIR_MS / 2
 const RUN_FRAME_MS = 90
 const STREAK_EVERY = 5
 
@@ -67,9 +71,11 @@ const OBSTACLES: { rows: string[]; legend: Record<string, number> }[] = [
 ]
 
 // Pixel Dash canvas (Phase 5). The server owns the seeded obstacle track + scoring; this renders the
-// obstacles rushing in from the right (smoothed through the snapshot interpolator) over a parallax
+// obstacles rushing in from the right on the server's clock (each approaches linearly, so the last
+// snapshot is extrapolated: an obstacle reaches the runner when the server judges it) over a parallax
 // scrolling world, and the player's own runner locally. Tap anywhere / Space sends a JUMP and hops the
-// runner; clears and stumbles come back from the snapshot and get their own feedback.
+// runner, unless it's still in the air or landing (the button greys out meanwhile); clears and stumbles
+// come back from the snapshot and get their own feedback.
 export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
   // You: your lobby avatar in side view, running right (bob + lean instead of leg frames).
   private runner?: AvatarSprite
@@ -80,20 +86,19 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
   private buttonDownKey = ''
   private layers: { sprite: Phaser.GameObjects.TileSprite; factor: number }[] = []
   private readonly sprites = new Map<number, Phaser.GameObjects.Image>()
-  private readonly interp = new SnapshotInterpolator<PixelDashSnapshot>(100)
+  private readonly clock = new ServerClock()
   private obstacleKeys: string[] = []
   private lastTick = -1
   private lastScore = -1
+  private lastStumbles = 0
   private streak = 0
   private jumping = false
   private crashing = false
-  private seenIds = new Map<number, number>() // obstacle id → last seen t
-  // Obstacles already in the jump window on the first snapshot: their clear may predate the score
-  // baseline, so their passing is booked silently instead of reading as a stumble.
-  private baselineIds = new Set<number>()
-  private passed = 0
-  private clearedSince = 0
-  private misses = 0
+  // Scene time when the runner may jump again (in the air / landing until then).
+  private readyAt = 0
+  private ready = true
+  // Joined after the round started (not in its snapshot): the track runs, but there's no runner.
+  private spectating = false
   private runnerX = 0
   private groundY = 0
   private runnerH = 0
@@ -106,17 +111,16 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
 
   override create(): void {
     super.create()
-    this.interp.reset()
+    this.clock.reset()
     this.lastTick = -1
     this.lastScore = -1
+    this.lastStumbles = 0
     this.streak = 0
     this.jumping = false
     this.crashing = false
-    this.seenIds = new Map()
-    this.baselineIds = new Set()
-    this.passed = 0
-    this.clearedSince = 0
-    this.misses = 0
+    this.readyAt = 0
+    this.ready = true
+    this.spectating = false
     this.layers = []
     for (const s of this.sprites.values()) s.destroy()
     this.sprites.clear()
@@ -289,15 +293,26 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
   }
 
   private jump(): void {
+    const now = this.time.now
+    if (this.spectating || now < this.readyAt) return
     this.sendInput({ kind: 'jump' })
     this.sfx.click()
+    // Airborne until now + AIR_MS: does an obstacle arrive meanwhile? (The server judges it the same.)
+    const wasted = !this.obstacleTimes(now).some(
+      (t) => t * LEAD_MS >= -LATE_MS && t * LEAD_MS <= AIR_MS,
+    )
+    this.readyAt = now + AIR_MS + LAND_MS + (wasted ? WASTED_MS : 0)
+    this.setReady(false)
     if (this.button) {
       this.button.setTexture(this.buttonDownKey)
       punch(this, this.button, -0.08, 60)
-      this.time.delayedCall(80, () => this.button?.setTexture(this.buttonKey))
     }
     const runner = this.runner?.image
-    if (this.jumping || this.crashing || !runner) return
+    if (!runner) return
+    // Back up from a stumble mid-animation: the jump wins.
+    this.tweens.killTweensOf(runner)
+    runner.setAlpha(1)
+    this.crashing = false
     this.jumping = true
     runner.setAngle(-8)
     this.tweens.add({
@@ -310,17 +325,58 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
         this.jumping = false
         runner.setY(this.groundY).setAngle(0)
         burst(this, runner.x, this.groundY - 2, 0x8a7a6a, 5, 70)
+        if (wasted) this.onWastedLanding()
       },
     })
+  }
+
+  // Landed from a jump over nothing: a clumsy wobble, and the button stays grey a while longer.
+  private onWastedLanding(): void {
+    const runner = this.runner?.image
+    if (!runner || this.crashing) return
+    this.sfx.tick()
+    this.hurtUntil = this.time.now + 400
+    floatText(
+      this,
+      this.runnerX,
+      this.groundY - this.runnerH * 1.4,
+      this.t('game.pixelDash.wasted'),
+      PALETTE.dim,
+      16,
+    )
+    this.tweens.add({
+      targets: runner,
+      angle: { from: 0, to: 14 },
+      duration: 90,
+      yoyo: true,
+      repeat: 1,
+    })
+  }
+
+  // The JUMP button greys out while the runner can't jump, and pops back when it can.
+  private setReady(ready: boolean): void {
+    if (ready === this.ready || !this.button) return
+    this.ready = ready
+    this.button.setTexture(ready ? this.buttonKey : this.buttonDownKey).setAlpha(ready ? 1 : 0.55)
+    if (ready) punch(this, this.button, 0.08, 80)
+  }
+
+  // Every obstacle's time-to-arrival right now (in `t` units), on the server clock.
+  private obstacleTimes(now: number): number[] {
+    const snap = this.snap
+    if (!snap) return []
+    const shift = this.state.final ? 0 : this.clock.since(snap.remainingMs, now) / LEAD_MS
+    return snap.obstacles.map((o) => o.t - shift)
   }
 
   protected frame(snap: PixelDashSnapshot | null, _time: number, delta: number): void {
     const now = this.time.now
     if (snap && this.state.tick !== this.lastTick) {
       this.lastTick = this.state.tick
-      this.interp.push(snap, now)
+      this.clock.sync(snap.remainingMs, now)
       this.onSnapshot(snap)
     }
+    if (!this.ready && now >= this.readyAt) this.setReady(true)
     const moving = snap !== null && snap.remainingMs > 0
     if (moving) {
       for (const layer of this.layers) {
@@ -340,37 +396,31 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
       const lift = (this.groundY - runner.image.y) / (this.runnerH * 1.6)
       this.shadow?.setScale(Math.max(0.4, 1 - lift), 1)
     }
-    this.renderObstacles(now)
+    if (snap) this.renderObstacles(snap, now)
   }
 
-  // Clears come straight from our score; a stumble is an obstacle that left the track while our clear
-  // count did not keep up (the server resolves both before an obstacle drops out of the snapshot).
+  // Clears and stumbles come straight from our own counters in the snapshot.
   private onSnapshot(snap: PixelDashSnapshot): void {
     const score = snap.scores[this.selfId] ?? 0
-    this.hud?.setScore(this.t('game.common.pts', { n: score }))
+    const stumbles = snap.stumbles[this.selfId] ?? 0
     if (this.lastScore < 0) {
+      // First snapshot of this (possibly restarted) scene: adopt the counters without replaying them.
+      this.spectating = !(this.selfId in snap.scores)
+      if (this.spectating) {
+        this.runner?.image.setVisible(false)
+        this.shadow?.setVisible(false)
+        this.button?.setAlpha(0.3)
+      }
       this.lastScore = score
-      for (const o of snap.obstacles) if (o.t <= CLEAR_WINDOW_T) this.baselineIds.add(o.id)
-    } else if (score > this.lastScore) {
-      this.clearedSince += score - this.lastScore
-      this.lastScore = score
-      this.onClear()
+      this.lastStumbles = stumbles
+      if (!this.spectating) this.hud?.setScore(this.t('game.common.pts', { n: score }))
+      return
     }
-
-    const current = new Map(snap.obstacles.map((o) => [o.id, o.t]))
-    let quiet = false
-    for (const [id, t] of this.seenIds) {
-      if (current.has(id) || t >= 0.3) continue
-      this.passed++
-      if (this.baselineIds.delete(id)) quiet = true
-    }
-    this.seenIds = current
-    const misses = this.passed - this.clearedSince
-    if (quiet) this.misses = Math.max(this.misses, misses)
-    else if (misses > this.misses) {
-      this.misses = misses
-      this.onCrash()
-    }
+    this.hud?.setScore(this.t('game.common.pts', { n: score }))
+    if (score > this.lastScore) this.onClear()
+    if (stumbles > this.lastStumbles) this.onCrash()
+    this.lastScore = score
+    this.lastStumbles = stumbles
   }
 
   private onClear(): void {
@@ -414,12 +464,12 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
       10,
       180,
     )
-    if (!runner || this.crashing) return
+    // Already back in the air for the next one (the stumble report trails the obstacle): no trip.
+    if (!runner || this.crashing || this.jumping) return
     // Stumble: the runner trips forward, blinks and gets back up.
     this.crashing = true
     this.hurtUntil = this.time.now + 900
     this.tweens.killTweensOf(runner)
-    this.jumping = false
     runner.setY(this.groundY)
     this.tweens.add({
       targets: runner,
@@ -442,17 +492,15 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
     })
   }
 
-  private renderObstacles(now: number): void {
-    const sample = this.interp.sample(now)
+  // Each obstacle extrapolated from the last snapshot on the server clock (frozen on the final frame).
+  private renderObstacles(snap: PixelDashSnapshot, now: number): void {
+    const shift = this.state.final ? 0 : this.clock.since(snap.remainingMs, now) / LEAD_MS
     const live = new Set<number>()
-    if (sample) {
-      const fromById = new Map(sample.from.obstacles.map((o) => [o.id, o]))
-      for (const o of sample.to.obstacles) {
-        const prev = fromById.get(o.id)
-        const tv = prev ? lerp(prev.t, o.t, sample.t) : o.t
-        this.drawObstacle(o.id, this.runnerX + tv * this.speed * LEAD_MS)
-        live.add(o.id)
-      }
+    for (const o of snap.obstacles) {
+      const x = this.runnerX + (o.t - shift) * this.speed * LEAD_MS
+      if (x < -this.obstacleH) continue
+      this.drawObstacle(o.id, x)
+      live.add(o.id)
     }
     // Retire sprites for obstacles that have passed off-screen.
     for (const [id, sprite] of this.sprites) {

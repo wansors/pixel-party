@@ -119,4 +119,28 @@ describe('QuickMath', () => {
     expect(JSON.stringify(snap)).not.toContain('correct')
     expect(snap.cooldowns).toEqual({ p: 0, q: 0 })
   })
+
+  test("the answer's rank among the sorted choices is uniform (no 'pick a middle one')", () => {
+    const counts = [0, 0, 0, 0]
+    let total = 0
+    for (let seed = 1; seed <= 100; seed++) {
+      for (const q of init(['p'], seed).pool) {
+        const answer = q.choices[q.correct] as number
+        counts[[...q.choices].sort((a, b) => a - b).indexOf(answer)]++
+        total++
+        // Near misses, never negative.
+        for (const c of q.choices) {
+          expect(c).toBeGreaterThanOrEqual(0)
+          expect(Math.abs(c - answer)).toBeLessThanOrEqual(5)
+        }
+      }
+    }
+    // 6000 sums: every rank within a few points of 25 % (it was the 2nd or 3rd 86 % of the time).
+    for (const n of counts) {
+      expect(n / total).toBeGreaterThan(0.21)
+      expect(n / total).toBeLessThan(0.29)
+    }
+    // The middle two together, the old blind-guess edge: about half, as for any two slots.
+    expect(((counts[1] as number) + (counts[2] as number)) / total).toBeLessThan(0.55)
+  })
 })

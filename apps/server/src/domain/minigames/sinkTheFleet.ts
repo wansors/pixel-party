@@ -1,5 +1,6 @@
 import type { SinkTheFleetInput, SinkTheFleetSnapshot } from '@pp/shared'
 import type { Random } from '../ports/Random'
+import { type DuelOutcome, rankDuels } from '../services/duelRanking'
 import { pairPlayers } from '../services/pairing'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
@@ -18,7 +19,8 @@ interface Duel {
   turn: PlayerId
   turnEndsAt: number
   done: boolean
-  winner: PlayerId | null // set once done (null = draw)
+  winner: PlayerId | null // set once done (null = a bye)
+  forfeit: boolean // decided by a player leaving
 }
 
 export interface SinkTheFleetState {
@@ -29,9 +31,10 @@ export interface SinkTheFleetState {
 }
 
 // Duel format: simultaneous 1v1 Battleship. Players are seeded-paired; each auto-placed fleet is hidden
-// (never on the wire — only shot results are), and players fire in turns. A duel ends when one fleet is
-// sunk; unresolved duels at the timer are decided on hits (tie = draw). Wins/losses aggregate into the
-// round ranking. Pure — time arrives as `now`, randomness via the injected port.
+// (never on the wire — only shot results are), and players fire in turns — a hit shoots again. A duel
+// ends when one fleet is sunk; unresolved duels at the timer go to more hits, then fewer shots fired
+// (equal on both = draw). Duels rank across the room in tiers (rankDuels): wins, then draws and the
+// bye, then losses — each by hits landed minus taken. Pure — time arrives as `now`, randomness via the injected port.
 export class SinkTheFleet implements MiniGame<SinkTheFleetState, SinkTheFleetInput> {
   readonly id = 'sink-the-fleet'
   readonly format = 'duel' as const
@@ -39,7 +42,7 @@ export class SinkTheFleet implements MiniGame<SinkTheFleetState, SinkTheFleetInp
   init(ctx: MiniGameInitCtx): SinkTheFleetState {
     const durationMs =
       typeof ctx.config?.durationMs === 'number' ? ctx.config.durationMs : DEFAULT_DURATION_MS
-    const pairs = pairPlayers(ctx.players, ctx.random)
+    const pairs = pairPlayers(ctx.players, ctx.random, ctx.byeCounts)
     const duels: Duel[] = []
     const playerDuel = new Map<PlayerId, number>()
     for (const { a, b } of pairs) {
@@ -66,7 +69,8 @@ export class SinkTheFleet implements MiniGame<SinkTheFleetState, SinkTheFleetInp
         turn: a,
         turnEndsAt: ctx.now + TURN_MS,
         done: b === null, // a bye is resolved immediately
-        winner: b === null ? a : null,
+        winner: null,
+        forfeit: false,
       })
     }
     return { duels, playerDuel, startedAt: ctx.now, endsAt: ctx.now + durationMs }
@@ -97,10 +101,11 @@ export class SinkTheFleet implements MiniGame<SinkTheFleetState, SinkTheFleetInp
     if (hit && (duel.hitsTaken.get(opponent) as Set<number>).size === FLEET_CELLS) {
       duel.done = true
       duel.winner = playerId
-    } else {
-      duel.turn = opponent
-      duel.turnEndsAt = now + TURN_MS
+      return state
     }
+    // A hit shoots again (more duels sink a fleet before the bell); a miss hands the turn over.
+    if (!hit) duel.turn = opponent
+    duel.turnEndsAt = now + TURN_MS
     return state
   }
 
@@ -116,29 +121,41 @@ export class SinkTheFleet implements MiniGame<SinkTheFleetState, SinkTheFleetInp
     return state
   }
 
+  // A player who leaves forfeits: their opponent wins on the spot.
+  leave(state: SinkTheFleetState, playerId: PlayerId, _now: number): SinkTheFleetState {
+    const duel = state.duels[state.playerDuel.get(playerId) ?? -1]
+    if (!duel?.b || duel.done) return state
+    duel.done = true
+    duel.winner = playerId === duel.a ? duel.b : duel.a
+    duel.forfeit = true
+    return state
+  }
+
   isFinished(state: SinkTheFleetState, now: number): boolean {
     return now >= state.endsAt || state.duels.every((d) => d.done)
   }
 
   getResult(state: SinkTheFleetState): NormalizedResult {
-    const placements: PlayerId[] = []
-    const ranks: Record<PlayerId, number> = {}
+    const outcomes: DuelOutcome[] = []
     const stats: Record<PlayerId, string> = {}
     for (const duel of state.duels) {
+      if (!duel.b) {
+        outcomes.push({ id: duel.a, tier: 'bye' })
+        stats[duel.a] = '—'
+        continue
+      }
       const winner = resolveWinner(duel, true)
       for (const pid of [duel.a, duel.b]) {
-        if (!pid) continue
-        placements.push(pid)
-        // Winner (or a drawn player) shares the top rank; the loser drops to rank 1.
-        ranks[pid] = winner === null || winner === pid ? 0 : 1
         const opp = pid === duel.a ? duel.b : duel.a
-        const sunk = opp ? (duel.hitsTaken.get(opp) as Set<number>).size : FLEET_CELLS
-        stats[pid] = `${sunk}/${FLEET_CELLS} sunk`
+        const landed = hitsOn(duel, opp)
+        const tier = winner === null ? 'draw' : winner === pid ? 'win' : 'loss'
+        // Hits landed minus taken; more hits landed breaks an equal difference.
+        const margin = (landed - hitsOn(duel, pid)) * (FLEET_CELLS + 1) + landed
+        outcomes.push({ id: pid, tier, margin })
+        stats[pid] = `${landed}/${FLEET_CELLS} sunk`
       }
     }
-    // Order placements winners-first so the round-result list reads top-down.
-    placements.sort((x, y) => (ranks[x] ?? 0) - (ranks[y] ?? 0))
-    return { placements, ranks, stats }
+    return rankDuels(outcomes, stats)
   }
 
   snapshot(state: SinkTheFleetState, now: number): SinkTheFleetSnapshot {
@@ -156,11 +173,12 @@ export class SinkTheFleet implements MiniGame<SinkTheFleetState, SinkTheFleetInp
           turnRemainingMs: done ? 0 : Math.max(0, duel.turnEndsAt - now),
           shots: duel.shots.get(pid) as { cell: number; hit: boolean }[],
           damage: [...(duel.hitsTaken.get(pid) as Set<number>)],
-          hitsOnOpponent: opp ? (duel.hitsTaken.get(opp) as Set<number>).size : FLEET_CELLS,
-          hitsOnYou: (duel.hitsTaken.get(pid) as Set<number>).size,
+          hitsOnOpponent: opp ? hitsOn(duel, opp) : 0,
+          hitsOnYou: hitsOn(duel, pid),
           fleetCells: FLEET_CELLS,
           done,
-          won: done ? (winner === null ? null : winner === pid) : null,
+          won: done && opp !== null && winner !== null ? winner === pid : null,
+          oppLeft: duel.forfeit && winner === pid,
         }
       }
     }
@@ -168,16 +186,22 @@ export class SinkTheFleet implements MiniGame<SinkTheFleetState, SinkTheFleetInp
   }
 }
 
-// Winner of a duel: the bye's `a`, the stored winner once decided, otherwise (only when the round has
-// ended) the player with more hits — equal hits is a draw (null). Returns null for an ongoing duel too;
-// callers gate on `done`/`ended` before reading it as final.
+// Hits taken by a player's own fleet.
+function hitsOn(duel: Duel, pid: PlayerId): number {
+  return (duel.hitsTaken.get(pid) as Set<number>).size
+}
+
+// Winner of a duel: the stored winner once decided; otherwise (only when the round has ended) the player
+// with more hits, then the one who needed fewer shots — equal on both is a draw (null), as is a bye.
+// Returns null for an ongoing duel too; callers gate on `done`/`ended` before reading it as final.
 function resolveWinner(duel: Duel, ended: boolean): PlayerId | null {
-  if (duel.b === null) return duel.a
+  if (duel.b === null) return null
   if (duel.done) return duel.winner
   if (!ended) return null
-  const aHits = (duel.hitsTaken.get(duel.b) as Set<number>).size
-  const bHits = (duel.hitsTaken.get(duel.a) as Set<number>).size
-  return aHits > bHits ? duel.a : bHits > aHits ? duel.b : null
+  const { a, b } = duel
+  const shotsBy = (pid: PlayerId): number => (duel.shots.get(pid) as unknown[]).length
+  const edge = hitsOn(duel, b) - hitsOn(duel, a) || shotsBy(b) - shotsBy(a)
+  return edge > 0 ? a : edge < 0 ? b : null
 }
 
 // Seeded fleet placement: drop each ship horizontally/vertically without overlap. The guard bounds the

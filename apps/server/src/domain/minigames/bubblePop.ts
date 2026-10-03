@@ -74,15 +74,20 @@ function nextValidShot(
   return { index: fromIndex, color: queue[fromIndex % queue.length] as number }
 }
 
-// Finds the landing row for a shot in `col`: the topmost empty cell whose slot below is either the
-// ceiling (row 0) or already backed by a filled cell above it. Returns -1 if the column is full.
+// Finds the landing row for a shot in `col`. The shot travels up from below the board and sticks under
+// the first bubble in its way — the lowest filled cell — or at the ceiling in an empty column. Returns -1
+// when the column's bottom cell is filled: nothing gets in.
 function landingRow(board: number[], col: number): number {
   for (let row = ROWS - 1; row >= 0; row--) {
-    const index = at(row, col)
-    if (board[index] !== 0) continue
-    if (row === 0 || board[at(row - 1, col)] !== 0) return row
+    if (board[at(row, col)] !== 0) return row === ROWS - 1 ? -1 : row + 1
   }
-  return -1
+  return 0
+}
+
+// Every column is blocked at the bottom: no shot can land anywhere, the board can't change any more.
+function isJammed(board: number[]): boolean {
+  for (let col = 0; col < COLS; col++) if (landingRow(board, col) !== -1) return false
+  return true
 }
 
 // Pops the connected same-color group at `placed` (size >= 3), then removes any bubble left floating
@@ -123,11 +128,17 @@ export interface BubblePopState {
   score: Map<PlayerId, number>
   // 0 = not finished; otherwise the server time the player fully cleared their board.
   doneAt: Map<PlayerId, number>
+  // Players whose board jammed (every column blocked at the bottom): out of shots, done for the round.
+  jammed: Set<PlayerId>
+  // Players gone mid-round: the race doesn't wait for them.
+  left: Set<PlayerId>
 }
 
 // Self-paced FFA puzzle race, structurally like Sudoku Race: one seeded starting cluster and shot queue
 // shared by everyone, each player mutates their own copy. A simplified rectangular grid + "choose a
 // column" aim stand in for a true hex-grid bubble-shooter, but the pop/clear rules are the real thing.
+// Most bubbles popped wins; a full clear beats any score (the faster, the better). Let the stack reach
+// the bottom of every column and the board jams: you're out of shots for the round.
 export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
   readonly id = 'bubble-pop'
   readonly format = 'ffa' as const
@@ -147,6 +158,8 @@ export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
       shotIndex: new Map(ctx.players.map((pid) => [pid, 0])),
       score: new Map(ctx.players.map((pid) => [pid, 0])),
       doneAt: new Map(ctx.players.map((pid) => [pid, 0])),
+      jammed: new Set(),
+      left: new Set(),
     }
   }
 
@@ -160,7 +173,7 @@ export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
     const { col } = input
     if (!Number.isInteger(col) || col < 0 || col >= COLS) return state
     const doneAt = state.doneAt.get(playerId)
-    if (doneAt === undefined || doneAt > 0) return state
+    if (doneAt === undefined || doneAt > 0 || state.jammed.has(playerId)) return state
     if (now >= state.endsAt) return state
     const board = state.boards.get(playerId)
     const shotIndex = state.shotIndex.get(playerId)
@@ -176,6 +189,7 @@ export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
       state.score.set(playerId, (state.score.get(playerId) ?? 0) + removed)
     }
     if (board.every((c) => c === 0)) state.doneAt.set(playerId, now)
+    else if (isJammed(board)) state.jammed.add(playerId)
     return state
   }
 
@@ -183,11 +197,20 @@ export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
     return state
   }
 
-  isFinished(state: BubblePopState, now: number): boolean {
-    if (now >= state.endsAt) return true
-    return state.players.every((pid) => (state.doneAt.get(pid) ?? 0) > 0)
+  leave(state: BubblePopState, playerId: PlayerId, _now: number): BubblePopState {
+    state.left.add(playerId)
+    return state
   }
 
+  // Over at the timer, or once no board can still change: every player cleared, jammed or gone.
+  isFinished(state: BubblePopState, now: number): boolean {
+    if (now >= state.endsAt) return true
+    return state.players.every(
+      (pid) => (state.doneAt.get(pid) ?? 0) > 0 || state.jammed.has(pid) || state.left.has(pid),
+    )
+  }
+
+  // Full clears first (fastest first); then most points, a jammed board below a live one on equal points.
   private cmp(state: BubblePopState, a: PlayerId, b: PlayerId): number {
     const da = state.doneAt.get(a) ?? 0
     const db = state.doneAt.get(b) ?? 0
@@ -195,7 +218,10 @@ export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
     const bDone = db > 0
     if (aDone !== bDone) return aDone ? -1 : 1
     if (aDone && bDone) return da - db
-    return (state.score.get(b) ?? 0) - (state.score.get(a) ?? 0)
+    return (
+      (state.score.get(b) ?? 0) - (state.score.get(a) ?? 0) ||
+      Number(state.jammed.has(a)) - Number(state.jammed.has(b))
+    )
   }
 
   getResult(state: BubblePopState): NormalizedResult {
@@ -226,6 +252,7 @@ export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
         score,
         nextColor: nextValidShot(board, state.shotQueue, shotIndex).color,
         done: (state.doneAt.get(pid) ?? 0) > 0,
+        jammed: state.jammed.has(pid),
       }
       scores[pid] = score
     }

@@ -13,6 +13,8 @@ export interface NumberRushState {
   progress: Map<PlayerId, number>
   // playerId -> ms taken to clear the whole grid (finishers only), for tie-break ranking.
   finishedMs: Map<PlayerId, number>
+  // Players gone mid-round: the "everybody finished" early out stops waiting for them.
+  gone: Set<PlayerId>
 }
 
 // Real-time FFA Schulte grid. A single seeded number layout is shared by everyone; each player taps
@@ -38,6 +40,7 @@ export class NumberRush implements MiniGame<NumberRushState, NumberRushInput> {
       endsAt: ctx.now + durationMs,
       progress: new Map(ctx.players.map((id) => [id, 1])),
       finishedMs: new Map(),
+      gone: new Set(),
     }
   }
 
@@ -58,9 +61,16 @@ export class NumberRush implements MiniGame<NumberRushState, NumberRushInput> {
     return state
   }
 
+  leave(state: NumberRushState, playerId: PlayerId): NumberRushState {
+    state.gone.add(playerId)
+    return state
+  }
+
   isFinished(state: NumberRushState, now: number): boolean {
     if (now >= state.endsAt) return true
-    return state.players.every((id) => (state.progress.get(id) ?? 1) > state.grid.length)
+    return state.players.every(
+      (id) => state.gone.has(id) || (state.progress.get(id) ?? 1) > state.grid.length,
+    )
   }
 
   getResult(state: NumberRushState): NormalizedResult {

@@ -1,12 +1,19 @@
 import { describe, expect, test } from 'bun:test'
 import { type CourseDef, RALLY_STAGES, SPEED_CIRCUITS, inStretch, sampleCourse } from '@pp/shared'
 import { SeededRandom } from '../../infrastructure/driven/random/SeededRandom'
+import type { Random } from '../ports/Random'
 import { type CourseRaceState, GO_DELAY_MS, RallyStage, SpeedCircuit } from './courseRace'
-import { wrapAngle } from './raceCore'
+import { nearestDistance, wrapAngle } from './raceCore'
 
 type Game = RallyStage | SpeedCircuit
 const init = (game: Game, players: string[], seed = 3): CourseRaceState =>
   game.init({ players, seed, random: new SeededRandom(seed), now: 0, config: {} })
+// The first roll picks course `i` of `count`; the rest shuffle the grid.
+const pick = (i: number, count: number): Random => {
+  let calls = 0
+  return { next: () => (calls++ === 0 ? (i + 0.5) / count : 0.3) }
+}
+const TWELVE = Array.from({ length: 12 }, (_, i) => `p${i}`)
 const car = (s: CourseRaceState, id: string) => {
   const c = s.cars.get(id)
   if (!c) throw new Error(`no car ${id}`)
@@ -95,6 +102,21 @@ describe('RallyStage', () => {
   test('ghosts start side by side on the line and wait for the lights', () => {
     const s = init(game, ['a', 'b', 'c'])
     for (const id of ['a', 'b', 'c']) expect(car(s, id).prog).toBe(0)
+    // Spread across the road: no two ghosts share a spot, all on the tarmac.
+    for (const [i, def] of RALLY_STAGES.entries()) {
+      const full = game.init({
+        players: TWELVE,
+        seed: 1,
+        random: pick(i, RALLY_STAGES.length),
+        now: 0,
+      })
+      const cars = [...full.cars.values()]
+      for (const [k, a] of cars.entries()) {
+        expect(nearestDistance(full.samples, a.x, a.y)).toBeLessThan(def.halfWidth)
+        for (const b of cars.slice(k + 1))
+          expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(4)
+      }
+    }
     game.onInput(s, 'a', { kind: 'drive', steer: 0, throttle: 1 }, 0)
     game.tick(s, 50, GO_DELAY_MS - 50)
     expect(car(s, 'a').vx).toBe(0)
@@ -151,6 +173,44 @@ describe('SpeedCircuit', () => {
     const result = game.getResult(s)
     expect(result.placements).toHaveLength(4)
     expect([...s.cars.values()].some((c) => c.finishMs !== null)).toBe(true)
+  })
+
+  test('12 grid slots are clear of each other and on the road on every circuit', () => {
+    for (const [i, def] of SPEED_CIRCUITS.entries()) {
+      const s = game.init({
+        players: TWELVE,
+        seed: 1,
+        random: pick(i, SPEED_CIRCUITS.length),
+        now: 0,
+      })
+      expect(s.course).toBe(i)
+      const cars = [...s.cars.values()]
+      for (const [k, a] of cars.entries()) {
+        expect(a.prog).toBeLessThan(0)
+        expect(nearestDistance(s.samples, a.x, a.y)).toBeLessThan(def.halfWidth - 13)
+        for (const b of cars.slice(k + 1)) {
+          expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual(13 * 2 + 4)
+        }
+      }
+    }
+  })
+
+  test('a driver who leaves becomes a ghost and stops holding the race open', () => {
+    const s = init(game, ['a', 'b'])
+    const [a, b] = [car(s, 'a'), car(s, 'b')]
+    game.onInput(s, 'b', { kind: 'drive', steer: 0.4, throttle: 1 }, 0)
+    game.leave(s, 'b')
+    expect(b.gone).toBe(true)
+    expect(b.throttle).toBe(0)
+    // Parked on top of each other: a ghost neither bumps nor tows.
+    Object.assign(b, { x: a.x + 10, y: a.y, a: a.a })
+    game.tick(s, 50, GO_DELAY_MS + 50)
+    expect(a.hits + b.hits).toBe(0)
+    expect(a.draft).toBe(false)
+    expect(game.snapshot(s, GO_DELAY_MS + 50).cars.find((c) => c.id === 'b')?.gone).toBe(true)
+    // Only 'a' still races: its finish ends the round.
+    a.finishMs = 30_000
+    expect(game.isFinished(s, GO_DELAY_MS + 100)).toBe(true)
   })
 
   test('boost pads and the slipstream raise the top speed', () => {

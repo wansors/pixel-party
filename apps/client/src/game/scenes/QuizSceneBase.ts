@@ -1,5 +1,6 @@
-import { PALETTE, type QuizLang } from '@pp/shared'
+import { PALETTE, type QuizLang, type QuizReveal, type TriviaSnapshot } from '@pp/shared'
 import type Phaser from 'phaser'
+import { ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, floatText, punch, ring, shake, showBanner } from '../fx'
 import {
   bodyStyle,
@@ -20,12 +21,19 @@ const LETTERS = ['A', 'B', 'C', 'D']
 const RIGHT_COLOR = PALETTE.lime
 const WRONG_COLOR = shade(PALETTE.red, -0.25)
 const PRESS_PX = 4
-const MAX_CHIPS = 6
+// Picker heads perched on the answer tiles at the reveal (32 px = a crisp 2x avatar).
+const PICK_PX = 32
+const PICK_PIXEL = PICK_PX / 16
+// Rooms bigger than this get an extra row of contestant lights.
+const LIGHTS_PER_ROW = 6
 
 const CHECK_ROWS = ['______oo', '_____oo_', 'oo__oo__', '_oooo___', '__oo____']
 const CROSS_ROWS = ['oo___oo', '_oo_oo_', '__ooo__', '_oo_oo_', 'oo___oo']
 
-// What a quiz scene reads from its game's snapshot, whatever the wire shape.
+// The wire shape every quiz game shares (a game may extend its reveal, e.g. Weird Trivia's fun fact).
+export type QuizSnapshot = Omit<TriviaSnapshot, 'reveal'> & { reveal: QuizReveal | null }
+
+// What the board shows of a snapshot, in the player's language.
 export interface QuizView {
   index: number
   total: number
@@ -37,6 +45,10 @@ export interface QuizView {
   // Players who locked an answer for the question on screen.
   answered: readonly string[]
   scores: Record<string, number>
+  // Round players still in play.
+  players: readonly string[]
+  // The verdict on the question on screen, once it closes.
+  reveal: QuizReveal | null
 }
 
 export interface QuizTile {
@@ -65,10 +77,12 @@ export interface QuizPick {
 }
 
 // The quiz-show board shared by the quiz games (Lightning Quiz, Weird Trivia): a marquee-lit question
-// board, four chunky lettered answer tiles (tap or keys 1-4) and a row of contestant lights showing who
-// has locked in. Answers are tagged with the question index so the server drops stale taps. Subclasses
-// map their snapshot to a QuizView and decide when a locked pick is judged (`judge`).
-export abstract class QuizSceneBase<S> extends MiniGameScene<S> {
+// board, four chunky lettered answer tiles (tap or keys 1-4) and contestant lights for every player
+// showing who has locked in. Answers are tagged with the question index so the server drops stale
+// taps. Each question ends with a reveal: the right tile lights up, this player's pick gets its
+// verdict (unless the game gave it at lock-in, `onLocked`), every player's avatar pops onto the tile
+// they picked and the lights turn into who scored.
+export abstract class QuizSceneBase<S extends QuizSnapshot> extends MiniGameScene<S> {
   protected tiles: QuizTile[] = []
   protected question?: Phaser.GameObjects.Text
   protected progress?: Phaser.GameObjects.Text
@@ -82,20 +96,38 @@ export abstract class QuizSceneBase<S> extends MiniGameScene<S> {
   protected pick: QuizPick | null = null
   // The pick on screen has been revealed (right/wrong).
   protected revealed = false
-  // Float "TIME UP!" when the next question lands and this player never locked one in. A game with its
-  // own reveal phase says it there instead.
-  protected timeUpOnAdvance = true
+  // The status line while a question is open and this player hasn't answered.
+  protected hintKey = 'game.trivia.hint'
+  private revealedIndex = -1
+  private pickIcons: Phaser.GameObjects.Image[] = []
   private marquee?: Phaser.GameObjects.Graphics
   private rightKey = ''
   private wrongKey = ''
   private checkKey = ''
   private crossKey = ''
   private questionFont = 0
-  // Whether this player locked an answer for the question on screen (from the pick or the snapshot).
-  private lockedShown = false
   private lightPhase = -1
 
-  protected abstract view(snap: S): QuizView
+  protected view(snap: S): QuizView {
+    const text = snap.text?.[this.lang()] ?? null
+    return {
+      index: snap.index,
+      total: snap.total,
+      question: text?.q ?? null,
+      choices: text?.choices ?? [],
+      open: snap.phase === 'question',
+      answered: snap.answeredCurrent,
+      scores: snap.scores,
+      players: snap.players,
+      reveal: snap.reveal,
+    }
+  }
+
+  // The clock is the answer window (it refills with each question); the reveal has none.
+  protected override remainingMs(snap: S): number | null {
+    if (snap.phase === 'done') return 0
+    return snap.phase === 'question' ? snap.phaseRemainingMs : null
+  }
 
   // The question banks ship every language; this is the player's (each translation bundle names its
   // own code — Phaser scenes only see the translate function).
@@ -103,16 +135,18 @@ export abstract class QuizSceneBase<S> extends MiniGameScene<S> {
     return this.t('lang.code') === 'es' ? 'es' : 'en'
   }
 
-  // Called every frame after the board is up to date: judge a locked pick, play a reveal.
-  protected abstract judge(snap: S, view: QuizView): void
+  // Called every frame once the board is up to date: a game that scores an answer the moment it lands
+  // can give this player's verdict here, before the reveal.
+  protected onLocked(_v: QuizView): void {}
 
   override create(): void {
     super.create()
     this.tiles = []
     this.shownIndex = -1
     this.pick = null
-    this.lockedShown = false
     this.revealed = false
+    this.revealedIndex = -1
+    this.pickIcons = []
     this.lightPhase = -1
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
@@ -152,9 +186,11 @@ export abstract class QuizSceneBase<S> extends MiniGameScene<S> {
       .setDepth(3)
     y += panelH + (compact ? 14 : 18)
 
-    // Contestant lights: who has locked an answer for this question.
+    // Contestant lights: every player, lit once they have locked an answer for this question. The
+    // roster sizes the rows (the round's players arrive with the first snapshot).
     const chipSize = compact ? 11 : 13
-    const stripRows = twoCols ? 1 : 2
+    const roster = Object.keys(this.state.names).length
+    const stripRows = (twoCols ? 1 : 2) + (roster > LIGHTS_PER_ROW ? 1 : 0)
     this.strip = new PlayerStrip(this, cx, y, contentW, chipSize, stripRows)
     y += stripRows * PlayerStrip.rowH(chipSize)
 
@@ -252,6 +288,7 @@ export abstract class QuizSceneBase<S> extends MiniGameScene<S> {
     if (!snap) return
     const v = this.view(snap)
     if (!v.open || v.question === null || choice >= v.choices.length) return
+    if (!(this.selfId in v.scores)) return
     if (v.answered.includes(this.selfId) || this.pick?.index === v.index) return
     this.pick = {
       index: v.index,
@@ -279,51 +316,111 @@ export abstract class QuizSceneBase<S> extends MiniGameScene<S> {
     const v = this.view(snap)
     this.hud?.setScore(this.t('game.common.pts', { n: v.scores[this.selfId] ?? 0 }))
     if (v.index !== this.shownIndex) this.showQuestion(v)
-    this.judge(snap, v)
+    this.onLocked(v)
+    if (snap.reveal && this.revealedIndex !== v.index) {
+      this.revealedIndex = v.index
+      this.showReveal(snap.reveal as NonNullable<S['reveal']>, v)
+    }
 
     const locked =
       v.question !== null && (this.pick?.index === v.index || v.answered.includes(this.selfId))
-    this.lockedShown = locked
     this.paintTiles(v, locked, time)
-    this.strip?.set(v.question === null ? [] : this.chips(v).slice(0, MAX_CHIPS))
+    this.strip?.set(v.question === null ? [] : this.chips(v))
     this.status?.setText(this.statusText(v, locked))
     this.drawLights(Math.floor(time / 180))
   }
 
-  // Locked: the other tiles fade and the picked one's outline blinks until it is revealed.
-  protected paintTiles(_v: QuizView, locked: boolean, time: number): void {
+  // The question closed: the right tile lights up, this player's pick gets its verdict (if the game
+  // hasn't given it yet), a "TIME UP!" if they never answered, and everybody's picks pop onto the tiles.
+  protected showReveal(reveal: NonNullable<S['reveal']>, v: QuizView): void {
+    const mine = reveal.picks[this.selfId]
+    // A restart mid-reveal (relayout) redraws it without replaying the cheers.
+    const quiet = this.firstSnapshot
+    if (mine === undefined) {
+      if (!quiet && this.selfId in v.scores) this.timeUp()
+    } else if (!quiet && !this.revealed) {
+      this.revealPick(v.index, mine, reveal.gained[this.selfId] ?? 0)
+    } else {
+      this.markTile(mine, mine === reveal.correct)
+    }
+    if (mine !== reveal.correct) this.markTile(reveal.correct, true)
+    this.revealed = true
+    this.perchPickers(reveal, Object.keys(v.scores))
+  }
+
+  // Each player's avatar pops onto the top edge of the tile they picked, right to left.
+  private perchPickers(reveal: QuizReveal, players: string[]): void {
+    this.tiles.forEach((tile, slot) => {
+      const pickers = players.filter((id) => reveal.picks[id] === slot)
+      if (pickers.length === 0) return
+      const room = tile.w - 24
+      const step = Math.min(PICK_PX + 4, (room - PICK_PX) / Math.max(1, pickers.length - 1))
+      const right = slot === reveal.correct
+      pickers.forEach((id, i) => {
+        const key = ensureAvatarTexture(
+          this,
+          this.state.avatarOf(id),
+          this.state.colorOf(id),
+          PICK_PIXEL,
+          'front',
+          right ? 'happy' : 'hurt',
+        )
+        const x = Math.round(tile.x + tile.w / 2 - 12 - PICK_PX / 2 - i * step)
+        // Perched on the top edge, clear of the label and (mostly) of the tile above.
+        const y = Math.round(tile.y - tile.h / 2 + (this.compact ? 8 : 2))
+        const icon = this.add.image(x, y, key).setDepth(5).setScale(0)
+        this.tweens.add({
+          targets: icon,
+          scale: 1,
+          duration: 160,
+          delay: 120 + i * 70,
+          ease: 'Back.easeOut',
+        })
+        this.pickIcons.push(icon)
+      })
+    })
+  }
+
+  // Locked: the other tiles fade and the picked one's outline blinks until it is revealed. At the
+  // reveal, the right tile and this player's pick stay lit.
+  protected paintTiles(v: QuizView, locked: boolean, time: number): void {
+    const reveal = v.reveal
     this.tiles.forEach((tile, i) => {
       const mine = locked && this.pick?.choice === i
-      const alpha = locked && !mine ? 0.3 : 1
-      for (const o of [tile.shadow, tile.face, tile.badge, tile.label]) o.setAlpha(alpha)
+      const lit = reveal ? i === reveal.correct || i === reveal.picks[this.selfId] : !locked || mine
+      for (const o of [tile.shadow, tile.face, tile.badge, tile.label]) o.setAlpha(lit ? 1 : 0.3)
       if (mine && !this.revealed) tile.outline.setAlpha(Math.floor(time / 160) % 2 ? 1 : 0.25)
     })
   }
 
-  // Contestant lights: everybody's avatar, lit once they have locked in.
+  // Contestant lights: everybody's avatar, lit once they have locked in — and at the reveal, lit (with
+  // the points) when they scored on this question.
   protected chips(v: QuizView): PlayerChip[] {
+    const reveal = v.reveal
     return Object.keys(v.scores).map((id) => {
-      const done = v.answered.includes(id)
       const name = this.label(id).slice(0, 10).toUpperCase()
+      const gained = reveal?.gained[id] ?? 0
+      const lit = reveal ? gained > 0 : v.answered.includes(id)
+      const tag = reveal ? (lit ? ` +${gained}` : '') : lit ? ' ✓' : ''
       return {
-        text: done ? `${name} ✓` : name,
+        text: `${name}${tag}`,
         avatar: this.state.avatarOf(id),
         color: this.state.colorOf(id),
-        dim: !done,
+        dim: !lit,
       }
     })
   }
 
   protected statusText(v: QuizView, locked: boolean): string {
     if (v.question === null) return this.t('game.common.waiting')
-    return this.t(locked ? 'game.trivia.locked' : 'game.trivia.hint')
+    if (v.reveal) return v.index + 1 < v.total ? this.t('game.trivia.getReady') : ''
+    return this.t(locked ? 'game.trivia.locked' : this.hintKey)
   }
 
   private showQuestion(v: QuizView): void {
-    // Moving on without ever locking an answer: the clock beat us.
-    if (this.timeUpOnAdvance && this.shownIndex >= 0 && !this.lockedShown) this.timeUp()
+    for (const icon of this.pickIcons) icon.destroy()
+    this.pickIcons = []
     this.shownIndex = v.index
-    this.lockedShown = false
     this.revealed = false
     this.progress
       ?.setText(
@@ -334,7 +431,6 @@ export abstract class QuizSceneBase<S> extends MiniGameScene<S> {
       )
       .setColor(hexToCss(PALETTE.amber))
     this.question?.setColor(hexToCss(PALETTE.text))
-    this.onQuestionShown(v)
 
     if (v.question === null) {
       for (const tile of this.tiles) this.setTileVisible(tile, false)
@@ -384,9 +480,6 @@ export abstract class QuizSceneBase<S> extends MiniGameScene<S> {
     if (Number.isFinite(size)) for (const tile of tiles) tile.label.setFontSize(size)
   }
 
-  // Hook: a new question (or the end of the round) just landed on the board.
-  protected onQuestionShown(_v: QuizView): void {}
-
   protected timeUp(): void {
     this.sfx.wrong()
     const { x, y, w, h } = this.panelBox
@@ -402,7 +495,7 @@ export abstract class QuizSceneBase<S> extends MiniGameScene<S> {
   }
 
   // Paints a tile right (lime + check) or wrong (red + cross).
-  protected markTile(choice: number, right: boolean): void {
+  private markTile(choice: number, right: boolean): void {
     const tile = this.tiles[choice]
     if (!tile) return
     tile.face.setTexture(right ? this.rightKey : this.wrongKey)
@@ -411,10 +504,10 @@ export abstract class QuizSceneBase<S> extends MiniGameScene<S> {
     tile.icon.setTexture(right ? this.checkKey : this.crossKey).setVisible(true)
   }
 
-  // Reveals this player's pick: the tile verdict plus a cheer (and the points) or a buzz.
+  // Reveals this player's pick (once): the tile verdict plus a cheer (and the points) or a buzz.
   protected revealPick(index: number, choice: number, gained: number): void {
     const tile = this.tiles[choice]
-    if (index !== this.shownIndex || !tile) return
+    if (index !== this.shownIndex || !tile || this.revealed) return
     this.revealed = true
     const right = gained > 0
     this.markTile(choice, right)

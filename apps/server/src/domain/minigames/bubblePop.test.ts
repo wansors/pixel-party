@@ -102,6 +102,76 @@ describe('BubblePop', () => {
     expect(nn(next.doneAt.get('p'))).toBe(0) // (0,6) still stands, board isn't clear
   })
 
+  test('a shot sticks under the lowest bubble in its column — it never passes through one', () => {
+    const game = new BubblePop()
+    const s = init(['p'])
+    const board = emptyBoard()
+    // Column 0 holds (0,0) and, lower down, (3,0) hanging off a sideways chain along row 3.
+    board[idx(0, 0)] = 2
+    board[idx(0, 1)] = 3
+    board[idx(1, 1)] = 4
+    board[idx(2, 1)] = 2
+    board[idx(3, 1)] = 3
+    board[idx(3, 0)] = 4
+    s.boards.set('p', board)
+    const next = game.onInput(s, 'p', { kind: 'shoot', col: 0 }, 1)
+    const grid = nn(next.boards.get('p'))
+    expect(grid[idx(4, 0)]).toBe(1) // under (3,0), the first bubble the shot meets
+    expect(grid[idx(1, 0)]).toBe(0) // not in the gap above it
+  })
+
+  test('a column filled to the bottom row takes no shot, even with gaps higher up', () => {
+    const game = new BubblePop()
+    const s = init(['p'])
+    const board = emptyBoard()
+    board[idx(0, 0)] = 2
+    for (let row = 0; row < ROWS; row++) board[idx(row, 1)] = 3
+    board[idx(ROWS - 1, 0)] = 4 // hangs off column 1's bottom bubble; rows 1..6 of column 0 are empty
+    s.boards.set('p', board)
+    const before = [...board]
+    const next = game.onInput(s, 'p', { kind: 'shoot', col: 0 }, 1)
+    expect(nn(next.boards.get('p'))).toEqual(before)
+  })
+
+  test('a board blocked at the bottom of every column is jammed: out of shots, done for the round', () => {
+    const game = new BubblePop()
+    const s = init(['a', 'b'])
+    // Alternating colours, no group of 3 anywhere, every column full except one cell left at the bottom.
+    const board = emptyBoard().map((_, i) => ((Math.floor(i / COLS) + (i % COLS)) % 2) + 2)
+    board[idx(ROWS - 1, 6)] = 0
+    s.boards.set('a', board)
+    // The last open slot gets filled with a colour that doesn't pop: jammed.
+    let next = game.onInput(s, 'a', { kind: 'shoot', col: 6 }, 5)
+    expect(next.jammed.has('a')).toBe(true)
+    expect(game.snapshot(next, 5).boards.a?.jammed).toBe(true)
+    const shots = next.shotIndex.get('a')
+    next = game.onInput(next, 'a', { kind: 'shoot', col: 3 }, 6)
+    expect(next.shotIndex.get('a')).toBe(shots) // no more shots
+    expect(game.isFinished(next, 6)).toBe(false) // b is still playing
+    next.doneAt.set('b', 7)
+    expect(game.isFinished(next, 7)).toBe(true)
+  })
+
+  test('on equal points a jammed board ranks below a live one', () => {
+    const game = new BubblePop()
+    const s = init(['jam', 'live'])
+    s.score.set('jam', 12)
+    s.score.set('live', 12)
+    s.jammed.add('jam')
+    const result = game.getResult(s)
+    expect(result.placements).toEqual(['live', 'jam'])
+    expect(nn(result.ranks).jam).toBe(1)
+  })
+
+  test('a player who left no longer holds up the early end', () => {
+    const game = new BubblePop()
+    let s = init(['a', 'b'])
+    s.doneAt.set('a', 5)
+    expect(game.isFinished(s, 6)).toBe(false)
+    s = game.leave(s, 'b', 6)
+    expect(game.isFinished(s, 6)).toBe(true)
+  })
+
   test('isFinished: false before endsAt with nobody done, true once everyone is done', () => {
     const game = new BubblePop()
     let s = init(['a', 'b'])

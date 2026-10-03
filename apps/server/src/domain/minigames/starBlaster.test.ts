@@ -67,6 +67,7 @@ describe('Star Blaster', () => {
     const a = arena(s, 'a')
     // Park under the drone a moment after it appears, then let the shots climb.
     const t0 = drone.spawnAt + 400
+    a.armed = true
     a.nextShotAt = t0
     let hit = false
     for (let t = t0; t < t0 + 1500 && !hit; t += 50) {
@@ -82,6 +83,35 @@ describe('Star Blaster', () => {
     expect(a.score).toBe(STAR_ENEMY.drone.pts)
     // Per player: b's copy of that drone is still alive.
     expect(arena(s, 'b').killedAt.has(drone.id)).toBe(false)
+  })
+
+  test('an idle ship never fires: the guns arm on the first steer', () => {
+    const s = init(['idle', 'pilot'])
+    game.onInput(s, 'pilot', { kind: 'move', dx: 0, dy: 0 }, 500)
+    expect(arena(s, 'pilot').armed).toBe(false)
+    for (let t = 50; t <= 1000; t += 50) game.tick(s, 50, t)
+    expect(arena(s, 'idle').shots).toHaveLength(0)
+    expect(arena(s, 'pilot').shots).toHaveLength(0)
+    game.onInput(s, 'pilot', { kind: 'move', dx: 1, dy: 0 }, 1000)
+    expect(arena(s, 'pilot').armed).toBe(true)
+    game.tick(s, 50, 1050)
+    expect(arena(s, 'pilot').shots.length).toBeGreaterThan(0)
+    expect(arena(s, 'idle').shots).toHaveLength(0)
+    expect(game.snapshot(s, 1050).arenas.map((a) => a.armed)).toEqual([false, true])
+    // Over the whole round an idle seat scores nothing.
+    for (let t = 1100; t <= 50_000; t += 50) game.tick(s, 50, t)
+    expect(arena(s, 'idle').score).toBe(0)
+  })
+
+  test('a player who leaves is out, so the rest being out ends the round', () => {
+    const s = init(['a', 'b'])
+    arena(s, 'a').armed = true
+    Object.assign(arena(s, 'b'), { lives: 0, out: true })
+    expect(game.isFinished(s, 1000)).toBe(false)
+    game.leave(s, 'a')
+    expect(arena(s, 'a').out).toBe(true)
+    expect(arena(s, 'a').shots).toHaveLength(0)
+    expect(game.isFinished(s, 1000)).toBe(true)
   })
 
   test('a bullet hit costs a life and points, then a shield; a rammed drone dies too', () => {

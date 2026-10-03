@@ -23,6 +23,10 @@ const OBJECT_COLORS: Record<string, number> = {
   MUSHROOM: PALETTE.magenta,
   HOUSE: PALETTE.orange,
   CAT: 0xb06bff,
+  GHOST: PALETTE.text,
+  KEY: PALETTE.amber,
+  APPLE: PALETTE.red,
+  CROWN: PALETTE.amber,
 }
 // Mirrors pixelWeight.ts scoring: a perfect guess is worth this much, minus one per pixel off.
 const MAX_POINTS = 10
@@ -111,6 +115,7 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
     const stripSize = compact ? 11 : 13
+    const stripRows = width < 600 ? 3 : 2
     const stripH = PlayerStrip.rowH(stripSize)
     this.strip = new PlayerStrip(
       this,
@@ -118,10 +123,10 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
       this.top + 2 + stripH / 2,
       width - 24,
       stripSize,
-      1,
+      stripRows,
     )
     const cx = width / 2
-    const top = this.top + stripH + 2
+    const top = this.top + stripRows * stripH + 2
     const promptY = top + (compact ? 22 : 30)
     this.prompt = this.add
       .text(cx, promptY, '', headlineStyle(compact ? 16 : 24, PALETTE.text, { align: 'center' }))
@@ -471,7 +476,8 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
     this.lastScore = myScore
 
     if (!obj) {
-      this.showFinished()
+      // Out of objects — or a spectator, not in this round at all.
+      this.showFinished(!(this.selfId in snap.objects))
       return
     }
     if (obj.index !== this.drawnIndex) this.drawObject(obj)
@@ -521,7 +527,7 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
     }
   }
 
-  private showFinished(): void {
+  private showFinished(spectator: boolean): void {
     for (const p of this.pixels) p.setVisible(false)
     this.question?.setVisible(false)
     this.flashBar?.setVisible(false)
@@ -530,7 +536,8 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
     if (this.time.now >= this.revealUntil) this.led?.setText('--')
     if (this.finished) return
     this.finished = true
-    if (this.banner) showBanner(this, this.banner, this.t('game.common.finished'), PALETTE.lime)
+    if (this.banner && !spectator)
+      showBanner(this, this.banner, this.t('game.common.finished'), PALETTE.lime)
     this.waitText?.setText(this.t('game.common.waiting'))
   }
 }

@@ -1,4 +1,5 @@
 import {
+  COURSE_SPACING,
   type CourseDef,
   type CourseKind,
   type CourseRaceInput,
@@ -13,13 +14,17 @@ import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './Mi
 import {
   type CarPhysics,
   type CarTuning,
+  type GridSlot,
   type RaceCar,
   clamp1,
   collideCars,
   followRoad,
   formatRaceTime,
+  gridSlots,
+  inSlipstream,
   integrateCar,
   pointAt,
+  retireCar,
   worldWalls,
 } from './raceCore'
 
@@ -112,6 +117,8 @@ const BOOST = { maxSpeedScale: 1.25, accelScale: 1.6 }
 const GRID_FIRST_BACK = 24
 const GRID_ROW_GAP = 40
 const GRID_LATERAL = 0.42
+// Stage ghosts line up side by side across this share of the road's half-width.
+const STAGE_SPREAD = 0.75
 
 interface Car extends RaceCar {
   checkpoint: number
@@ -156,38 +163,41 @@ class CourseRace implements MiniGame<CourseRaceState, CourseRaceInput> {
     const course = Math.min(courses.length - 1, Math.floor(ctx.random.next() * courses.length))
     const def = courses[course] as CourseDef
     const samples = sampleCourse(def)
-    const n = samples.length
     const order = [...ctx.players]
     for (let i = order.length - 1; i > 0; i--) {
       const j = Math.floor(ctx.random.next() * (i + 1))
       ;[order[i], order[j]] = [order[j] as PlayerId, order[i] as PlayerId]
     }
+    // Circuit: a staggered two-wide grid behind the line. Stage: ghosts side by side on the line,
+    // spread evenly across the road.
+    const grid = this.closed
+      ? gridSlots(samples, order.length, {
+          spacing: COURSE_SPACING,
+          firstBack: GRID_FIRST_BACK,
+          rowGap: GRID_ROW_GAP,
+          lateral: def.halfWidth * GRID_LATERAL,
+          carR: this.cfg.carR,
+        })
+      : order.map((_, slot) => this.stageSlot(samples, def, slot, order.length))
     const cars = new Map<PlayerId, Car>()
     order.forEach((pid, slot) => {
-      // Circuit: a staggered two-wide grid behind the line. Stage: ghosts side by side on the line.
-      const off = this.closed
-        ? Math.round((GRID_FIRST_BACK + Math.floor(slot / 2) * GRID_ROW_GAP) / 8)
-        : 0
-      const idx = this.closed ? (((n - off) % n) + n) % n : 0
-      const { x, y, tx, ty } = pointAt(samples, idx, this.closed)
-      const lat = this.closed
-        ? (slot % 2 === 0 ? -1 : 1) * def.halfWidth * GRID_LATERAL
-        : (((slot % 5) - 2) / 2.5) * def.halfWidth * 0.6
+      const { x, y, a, idx, back } = grid[slot] as GridSlot
       cars.set(pid, {
-        x: x - ty * lat,
-        y: y + tx * lat,
-        a: Math.atan2(ty, tx),
+        x,
+        y,
+        a,
         vx: 0,
         vy: 0,
         steer: 0,
         throttle: 0,
         idx,
-        prog: off > 0 ? -off : 0,
+        prog: back > 0 ? -back : 0,
         off: false,
         lostSince: null,
         finishMs: null,
         hits: 0,
         resets: 0,
+        gone: false,
         checkpoint: 0,
         splitMs: null,
         draft: false,
@@ -205,6 +215,18 @@ class CourseRace implements MiniGame<CourseRaceState, CourseRaceInput> {
       endsAt: ctx.now + durationMs,
       closing: false,
     }
+  }
+
+  // Start slot `slot` of `count` on the stage's start line.
+  private stageSlot(
+    samples: MicroRacePoint[],
+    def: CourseDef,
+    slot: number,
+    count: number,
+  ): GridSlot {
+    const { x, y, tx, ty } = pointAt(samples, 0, false)
+    const lat = count > 1 ? (slot / (count - 1) - 0.5) * 2 * def.halfWidth * STAGE_SPREAD : 0
+    return { x: x - ty * lat, y: y + tx * lat, a: Math.atan2(ty, tx), idx: 0, back: 0 }
   }
 
   onInput(
@@ -237,7 +259,11 @@ class CourseRace implements MiniGame<CourseRaceState, CourseRaceInput> {
     const h = dt / 1000 / SUB_STEPS
     const cars = state.players.map((p) => state.cars.get(p)).filter((c): c is Car => !!c)
     for (const car of cars) {
-      car.draft = this.closed && car.finishMs === null && this.drafting(car, cars)
+      car.draft =
+        this.closed &&
+        car.finishMs === null &&
+        !car.gone &&
+        inSlipstream(car, cars, this.cfg.carR, DRAFT_RANGE, DRAFT_CONE)
       if (this.closed && inStretch(def.boosts, car.idx, n) && !car.off)
         car.boostUntil = now + BOOST_MS
     }
@@ -289,26 +315,19 @@ class CourseRace implements MiniGame<CourseRaceState, CourseRaceInput> {
     return { maxSpeedScale, accelScale }
   }
 
-  // In another car's wake: close behind it, inside a narrow cone ahead, heading the same way.
-  private drafting(car: Car, cars: Car[]): boolean {
-    return cars.some((o) => {
-      if (o === car) return false
-      const dx = o.x - car.x
-      const dy = o.y - car.y
-      const d = Math.hypot(dx, dy)
-      if (d < this.cfg.carR * 2 || d > DRAFT_RANGE) return false
-      const bearing = Math.atan2(dy, dx) - car.a
-      const facing = o.a - car.a
-      return (
-        Math.abs(Math.atan2(Math.sin(bearing), Math.cos(bearing))) < DRAFT_CONE &&
-        Math.abs(Math.atan2(Math.sin(facing), Math.cos(facing))) < DRAFT_CONE
-      )
-    })
+  // A driver who left becomes a ghost (no contact, no slipstream) that no longer holds the race open.
+  leave(state: CourseRaceState, playerId: PlayerId): CourseRaceState {
+    const car = state.cars.get(playerId)
+    if (car) retireCar(car)
+    return state
   }
 
   isFinished(state: CourseRaceState, now: number): boolean {
     if (now >= state.endsAt) return true
-    return state.players.every((p) => state.cars.get(p)?.finishMs !== null)
+    return state.players.every((p) => {
+      const car = state.cars.get(p)
+      return !car || car.finishMs !== null || car.gone
+    })
   }
 
   // Race order: finishers by time, then everyone else by distance covered.
@@ -378,6 +397,7 @@ class CourseRace implements MiniGame<CourseRaceState, CourseRaceInput> {
           splitMs: c.splitMs,
           draft: c.draft,
           boost: now < c.boostUntil,
+          gone: c.gone,
         }
       }),
       remainingMs: Math.max(0, state.endsAt - now),

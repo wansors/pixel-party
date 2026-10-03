@@ -120,6 +120,17 @@ describe('TrackRace (100 m dash)', () => {
     expect(game.isFinished(solo, 16_000)).toBe(true)
   })
 
+  test('a runner who leaves stops holding the round: the rest finishing ends it', () => {
+    const game = new Dash100m()
+    let s = initDash(['a', 'b'])
+    s = run(game, s, GUN, 16_000, alternate(game, s, 'a', 100))
+    expect(s.lanes.get('a')?.finishAt).toBeGreaterThan(0)
+    expect(game.isFinished(s, 16_000)).toBe(false)
+    s = game.leave(s, 'b')
+    expect(game.isFinished(s, 16_000)).toBe(true)
+    expect(game.getResult(s).placements).toEqual(['a', 'b'])
+  })
+
   test('snapshot reports places for finishers', () => {
     const game = new Dash100m()
     let s = initDash(['a', 'b'])
@@ -187,6 +198,41 @@ describe('TrackRace (110 m hurdles)', () => {
     expect(jumped).toBe(true)
     expect(s.lanes.get('a')?.knocked.includes(0)).toBe(false)
     expect(game.snapshot(s, 6000).runners[0]?.air).toBe(false)
+  })
+
+  // Taps `rate` alternating strides a second from the gun on a 5 ms clock (ticking every 50 ms); with
+  // `jump`, takes off 1.5 m before every hurdle. Returns the race time in seconds.
+  const hurdleRun = (rate: number, jump: boolean): { secs: number; knocked: number } => {
+    const game = new Hurdles110m()
+    const s = initHurdles(['a'])
+    const lane = s.lanes.get('a')
+    if (!lane) throw new Error('no lane')
+    let nextStep = GUN
+    let foot: 'L' | 'R' = 'L'
+    let jumpedFor = -1
+    for (let now = GUN; now < 35_000 && !lane.finishAt; now += 5) {
+      const h = HURDLES_110M[lane.nextHurdle]
+      if (jump && h !== undefined && jumpedFor !== lane.nextHurdle && h - lane.runner.x <= 1.5) {
+        jumpedFor = lane.nextHurdle
+        game.onInput(s, 'a', { kind: 'jump' }, now)
+      }
+      if (now >= nextStep) {
+        game.onInput(s, 'a', { kind: 'step', foot }, now)
+        foot = foot === 'L' ? 'R' : 'L'
+        nextStep += 1000 / rate
+      }
+      if ((now - GUN) % TICK === 0) game.tick(s, TICK, now)
+    }
+    return { secs: (lane.finishAt - GUN) / 1000, knocked: lane.knocked.length }
+  }
+
+  test.each([10, 15])('a clean run beats knocking every hurdle at %i taps/s', (rate) => {
+    const clean = hurdleRun(rate, true)
+    const blind = hurdleRun(rate, false)
+    expect(clean.knocked).toBe(0)
+    expect(blind.knocked).toBe(HURDLES_110M.length)
+    // Jumping is worth a clear margin, not a photo finish.
+    expect(blind.secs - clean.secs).toBeGreaterThan(1.5)
   })
 
   test('a jump is airborne for AIR_MS and cannot be re-triggered mid-air', () => {

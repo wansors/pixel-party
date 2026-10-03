@@ -23,9 +23,12 @@ interface Chip {
 }
 
 // Color Trap (Stroop) canvas. A translated color WORD is printed in a mismatched INK on a pixel
-// card; tap the colored tile matching the INK. One answer per prompt, tagged with the prompt index
-// so the server can drop stale taps. A pip row tracks every prompt (right / wrong / missed), a fuse
-// drains under the word, and the other players' chips light up as they lock in.
+// card; tap the colored tile matching the INK (+1; a wrong color costs a point). One answer per
+// prompt, tagged with the prompt index so the server can drop stale taps. The prompt's end is
+// extrapolated on the local clock: the fuse drains smoothly and taps stop the moment it runs out, so
+// every local verdict is one the server scores (it still takes the previous prompt's answer for a
+// short grace period while the tap is in flight). A pip row tracks every prompt (right / wrong /
+// missed) and the other players' chips light up as they lock in.
 export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
   private word?: Phaser.GameObjects.Text
   private card?: Phaser.GameObjects.Image
@@ -45,6 +48,10 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
   private lastFuseLit = -1
   private pipsKey = ''
   private streak = 0
+  // The live prompt's end on the local clock (the earliest estimate any of its snapshots gave).
+  private endsIndex = -1
+  private endsAt = 0
+  private lastTick = -1
 
   constructor(...deps: SceneDeps) {
     super('color-trap', ...deps)
@@ -60,6 +67,9 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
     this.lastFuseLit = -1
     this.pipsKey = ''
     this.streak = 0
+    this.endsIndex = -1
+    this.endsAt = 0
+    this.lastTick = -1
     const { width, height } = this.scale
     const cx = width / 2
     const compact = Math.min(width, height) < 520
@@ -142,9 +152,14 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
     return (snap.total - snap.index - 1) * PROMPT_MS + snap.promptRemainingMs
   }
 
+  // Whether the live prompt still takes a tap on this client's clock.
+  private open(snap: ColorTrapSnapshot): boolean {
+    return snap.index === this.endsIndex && this.time.now < this.endsAt
+  }
+
   private answer(color: number): void {
     const snap = this.snap
-    if (!snap || snap.ink === null) return
+    if (!snap || snap.ink === null || !(this.selfId in snap.scores) || !this.open(snap)) return
     if (snap.answeredCurrent.includes(this.selfId) || this.answeredLocally(snap.index)) return
     const btn = this.buttons[color]
     // The ink index is already in the snapshot, so right/wrong feedback can be instant and local.
@@ -179,7 +194,7 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
         this,
         btn.x,
         btn.y - btn.displayHeight / 2,
-        this.t('game.common.wrong'),
+        `${this.t('game.common.wrong')} -1`,
         PALETTE.red,
       )
     }
@@ -196,7 +211,8 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
     // The server already has this player's answer for the live prompt, but no local verdict for it.
     if (snap.answeredCurrent.includes(this.selfId) && this.pips[snap.index] === 'upcoming')
       this.pips[snap.index] = 'unknown'
-    this.hud?.setScore(this.t('game.common.correct', { n: snap.scores[this.selfId] ?? 0 }))
+    this.hud?.setScore(this.t('game.common.pts', { n: snap.scores[this.selfId] ?? 0 }))
+    this.trackPromptEnd(snap)
     this.onPromptChange(snap)
     this.renderChips(snap)
     this.renderPips(snap, time)
@@ -220,11 +236,23 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
       fitText(this.word, this.wordMaxW, this.wordSize)
       punch(this, this.word, 0.22, 90)
     }
-    this.renderFuse(snap.promptRemainingMs)
+    this.renderFuse(this.open(snap) ? this.endsAt - this.time.now : 0)
 
     const locked = snap.answeredCurrent.includes(this.selfId) || this.answeredLocally(snap.index)
     this.status?.setText(this.t(locked ? 'game.colorTrap.locked' : 'game.colorTrap.instruction'))
-    for (const b of this.buttons) b.setAlpha(locked ? 0.35 : 1)
+    for (const b of this.buttons) b.setAlpha(locked || !this.open(snap) ? 0.35 : 1)
+  }
+
+  // Anchors the live prompt's end to the local clock on each fresh snapshot, keeping the earliest
+  // estimate: a late snapshot only ever carries extra delay, and ending early is the safe side.
+  private trackPromptEnd(snap: ColorTrapSnapshot): void {
+    if (this.state.tick === this.lastTick) return
+    this.lastTick = this.state.tick
+    const endsAt = this.time.now + snap.promptRemainingMs
+    if (snap.index !== this.endsIndex) {
+      this.endsIndex = snap.index
+      this.endsAt = endsAt
+    } else this.endsAt = Math.min(this.endsAt, endsAt)
   }
 
   private answeredLocally(index: number): boolean {

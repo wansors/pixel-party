@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { FREEZE_DOLL_SWEEP } from '@pp/shared'
+import { FREEZE_DOLL_SWEEP, freezeDollSweepAt } from '@pp/shared'
 import { SeededRandom } from '../../infrastructure/driven/random/SeededRandom'
 import { FreezeDoll, type FreezeDollState } from './freezeDoll'
 
@@ -80,9 +80,9 @@ describe('FreezeDoll', () => {
   test('the laser hits whoever still moves once the sweep reaches their lane', () => {
     const s = init(['a', 'b'], 5)
     const red = seg(s, 'red')
-    // Two lanes: lane 0 is judged at +delay, lane 1 at +delay+ms (or the other way round).
+    // Two lanes: the sweep's starting lane is judged at +delay, the other one at +delay+ms.
     const [first, last] =
-      red.dir === 1 ? [s.runners[0], s.runners[1]] : [s.runners[1], s.runners[0]]
+      red.sweepFrom === 0 ? [s.runners[0], s.runners[1]] : [s.runners[1], s.runners[0]]
     if (!first || !last) throw new Error('two runners expected')
     for (const r of s.runners) game.onInput(s, r.id, { kind: 'move', mode: 'walk' }, 0)
     run(s, 0, red.from + FREEZE_DOLL_SWEEP.delayMs + 50)
@@ -95,6 +95,33 @@ describe('FreezeDoll', () => {
     expect(last.hearts).toBe(2)
     // One hit per RED: the stunned runner, still holding WALK after the stun, is not hit again.
     expect(first.hearts).toBe(1)
+  })
+
+  test('every lane is as likely to be judged early as late (the sweep starts at a seeded lane)', () => {
+    const lanes = 12
+    const s = init(
+      Array.from({ length: lanes }, (_, i) => `p${i}`),
+      21,
+      600_000,
+    )
+    const reds = s.timeline.filter((x) => x.light === 'red')
+    expect(reds.length).toBeGreaterThan(80)
+    const firsts = new Set(reds.map((r) => r.sweepFrom))
+    expect(firsts.size).toBe(lanes)
+    for (let lane = 0; lane < lanes; lane++) {
+      const at = reds.map((r) => freezeDollSweepAt(lane, lanes, r.sweepFrom, r.dir))
+      const mean = at.reduce((a, b) => a + b, 0) / at.length
+      // Edge lanes too: on average mid-sweep, and often neither first nor last.
+      expect(mean).toBeGreaterThan(0.35)
+      expect(mean).toBeLessThan(0.65)
+      expect(at.filter((f) => f > 0 && f < 1).length).toBeGreaterThan(at.length / 2)
+    }
+    // The sweep visits each lane once, wrapping round at the edge of the field.
+    const red = reds[0] as (typeof reds)[number]
+    const order = Array.from({ length: lanes }, (_, l) =>
+      freezeDollSweepAt(l, lanes, red.sweepFrom, red.dir),
+    ).sort((a, b) => a - b)
+    expect(order).toEqual(Array.from({ length: lanes }, (_, i) => i / (lanes - 1)))
   })
 
   test('a hit knocks the runner back; a second hit in a later RED eliminates them', () => {
@@ -141,6 +168,22 @@ describe('FreezeDoll', () => {
     expect(result.stats?.b).toBe('25.0s')
     expect(result.stats?.c).toBe('60%')
     expect(game.isFinished(s, 31_000)).toBe(true) // c is the only one still racing
+  })
+
+  test('a runner gone from the room is out, so the ones still racing can end the round early', () => {
+    const s = init(['a', 'b', 'c', 'd'])
+    Object.assign(runner(s, 'a'), { status: 'finished', x: 1, finishAt: 20_000 })
+    expect(game.isFinished(s, 21_000)).toBe(false) // b, c and d still racing
+    game.leave(s, 'c', 21_000)
+    expect(runner(s, 'c').status).toBe('out')
+    expect(runner(s, 'c').outAt).toBe(21_000)
+    expect(game.isFinished(s, 21_000)).toBe(false) // b and d
+    game.leave(s, 'd', 22_000)
+    expect(game.isFinished(s, 22_000)).toBe(true) // only b is left in the race
+    // A finisher who leaves keeps their finish.
+    game.leave(s, 'a', 23_000)
+    expect(runner(s, 'a').status).toBe('finished')
+    expect(game.snapshot(s, 23_000).runners.find((r) => r.id === 'c')?.status).toBe('out')
   })
 
   test('ignores junk input and inputs after the bell', () => {

@@ -25,7 +25,13 @@ const FIRST_MUSIC_MS = 4000
 const MUSIC_MS = [3800, 5600] as const
 const CALL_MS = 6500
 const REVEAL_MS = 1600
+// Survivors respawn on a ring around the hub, widened for a big field so nobody starts overlapping.
 const SPAWN_R = 0.1
+const SPAWN_GAP = R * 2.4
+// A late arrival bounced off a room that just locked leaves through the door at this speed.
+const EJECT_SPEED = 0.25
+// A big field gets bigger numbers (fewer, fuller rooms) so a round can thin it down to one winner.
+const BIG_FIELD = 10
 
 type Seg = readonly [number, number, number, number]
 
@@ -80,7 +86,6 @@ interface Body {
 interface Room {
   slot: number
   count: number
-  holdMs: number
   locked: boolean
 }
 
@@ -114,7 +119,9 @@ const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFin
 
 // Real-time FFA elimination ("Mingle"). Deterministic: a mulberry32 stream seeded from the round's
 // Random draws every call (music length, the number, which rooms open, spawn spin); physics is pure
-// integration of `dt`. Ranked by elimination order — survivors share 1st, a call's victims tie.
+// integration of `dt`. A room's door slams the moment it holds N, so a late arrival can't spoil a full
+// room (it is bounced back out). Ranked by elimination order — survivors share 1st, a call's victims
+// tie.
 export class RoomRush implements MiniGame<RoomRushState, RoomRushInput> {
   readonly id = 'room-rush'
   readonly format = 'ffa' as const
@@ -194,10 +201,23 @@ export class RoomRush implements MiniGame<RoomRushState, RoomRushInput> {
       return state
     }
     this.physics(state, dt / 1000, now)
-    if (state.phase === 'call') this.updateRooms(state, dt)
+    if (state.phase === 'call') this.updateRooms(state)
     if (now >= state.phaseEndsAt || (state.phase === 'call' && this.allLocked(state))) {
       this.advance(state, now)
     }
+    return state
+  }
+
+  // A player gone for good leaves the floor as if eliminated this call; the last one left wins at once.
+  leave(state: RoomRushState, playerId: PlayerId, now: number): RoomRushState {
+    const b = state.bodies.find((x) => x.id === playerId)
+    if (state.done || !b?.alive) return state
+    b.alive = false
+    b.safe = false
+    b.outAt = now
+    b.outCall = state.call
+    const alive = state.bodies.filter((x) => x.alive).length
+    if (alive === 0 || (alive === 1 && state.bodies.length > 1)) this.finish(state, now)
     return state
   }
 
@@ -276,11 +296,13 @@ export class RoomRush implements MiniGame<RoomRushState, RoomRushInput> {
     state.endedAt = at
   }
 
-  // The number and the rooms: capacity rooms × N always stays below the survivor count.
+  // The number and the rooms: capacity rooms × N always stays below the survivor count. A big field
+  // never gets a 1 (ten single rooms would let almost everyone through).
   private openCall(state: RoomRushState): void {
     const alive = state.bodies.filter((b) => b.alive).length
     const maxN = Math.max(1, Math.min(4, alive - 1))
-    const n = 1 + Math.floor(nextRand(state) * maxN)
+    const minN = alive >= BIG_FIELD ? 2 : 1
+    const n = minN + Math.floor(nextRand(state) * (maxN - minN + 1))
     const count = Math.max(1, Math.min(ROOM_RUSH.slots, Math.floor((alive - 1) / n)))
     const offset = Math.floor(nextRand(state) * ROOM_RUSH.slots)
     const slots = new Set<number>()
@@ -290,18 +312,17 @@ export class RoomRush implements MiniGame<RoomRushState, RoomRushInput> {
     state.n = n
     state.rooms = [...slots]
       .sort((a, b) => a - b)
-      .map((slot) => ({ slot, count: 0, holdMs: 0, locked: false }))
+      .map((slot) => ({ slot, count: 0, locked: false }))
   }
 
+  // Everyone not locked in a room is out — unless nobody made it: a wipeout would end the round in one
+  // big tie, so the call is simply replayed.
   private buzzer(state: RoomRushState, now: number): void {
     state.outThisCall = []
-    for (const b of state.bodies) {
-      if (!b.alive) continue
-      const room = state.rooms.find((r) => this.inside(b, r.slot))
-      if (room && (room.locked || room.count === state.n)) {
-        b.safe = true
-        continue
-      }
+    const live = state.bodies.filter((b) => b.alive)
+    if (live.every((b) => !b.safe)) return
+    for (const b of live) {
+      if (b.safe) continue
       b.alive = false
       b.outAt = now
       b.outCall = state.call
@@ -309,31 +330,49 @@ export class RoomRush implements MiniGame<RoomRushState, RoomRushInput> {
     }
   }
 
-  // Survivors back onto the carousel, evenly around a small ring at a seeded spin.
+  // Survivors back onto the carousel, evenly around a small ring at a seeded spin (wide enough that
+  // neighbours never overlap).
   private spawn(state: RoomRushState): void {
     const live = state.bodies.filter((b) => b.alive)
     const spin = nextRand(state) * Math.PI * 2
+    const r = Math.max(SPAWN_R, (live.length * SPAWN_GAP) / (Math.PI * 2))
     live.forEach((b, i) => {
       const a = spin + (i * Math.PI * 2) / Math.max(1, live.length)
-      b.x = CENTER + Math.cos(a) * SPAWN_R
-      b.y = CENTER + Math.sin(a) * SPAWN_R
+      b.x = CENTER + Math.cos(a) * r
+      b.y = CENTER + Math.sin(a) * r
       b.vx = 0
       b.vy = 0
       b.safe = false
     })
   }
 
-  private updateRooms(state: RoomRushState, dt: number): void {
+  // The door slams the moment a room holds N: those inside are safe. Two arriving in the same tick
+  // can overshoot N — the deepest N stay (they got in first), the rest are bounced back out the door.
+  private updateRooms(state: RoomRushState): void {
     for (const room of state.rooms) {
       if (room.locked) continue
-      room.count = state.bodies.filter((b) => b.alive && this.inside(b, room.slot)).length
-      room.holdMs = room.count === state.n ? room.holdMs + dt : 0
-      if (room.holdMs >= ROOM_RUSH.lockMs) {
-        room.holdMs = ROOM_RUSH.lockMs
-        room.locked = true
-        for (const b of state.bodies) if (b.alive && this.inside(b, room.slot)) b.safe = true
-      }
+      const inside = state.bodies.filter((b) => b.alive && this.inside(b, room.slot))
+      room.count = inside.length
+      if (room.count < state.n) continue
+      const depth = (b: Body): number => this.local(b, room.slot)[0]
+      inside.sort((a, b) => depth(b) - depth(a))
+      for (const b of inside.slice(0, state.n)) b.safe = true
+      for (const b of inside.slice(state.n)) this.eject(b, room.slot)
+      room.count = state.n
+      room.locked = true
     }
+  }
+
+  // Just outside the door, heading back toward the carousel.
+  private eject(b: Body, slot: number): void {
+    const room = ROOMS[slot]
+    if (!room) return
+    const lu = -ROOM_RUSH.half - R - 0.005
+    const lv = Math.max(-ROOM_RUSH.half, Math.min(ROOM_RUSH.half, this.local(b, slot)[1]))
+    b.x = room.c[0] + lu * room.u[0] + lv * room.v[0]
+    b.y = room.c[1] + lu * room.u[1] + lv * room.v[1]
+    b.vx = -room.u[0] * EJECT_SPEED
+    b.vy = -room.u[1] * EJECT_SPEED
   }
 
   private allLocked(state: RoomRushState): boolean {
@@ -341,13 +380,17 @@ export class RoomRush implements MiniGame<RoomRushState, RoomRushInput> {
   }
 
   private inside(b: Body, slot: number): boolean {
+    const [lu, lv] = this.local(b, slot)
+    return Math.abs(lu) < ROOM_RUSH.half && Math.abs(lv) < ROOM_RUSH.half
+  }
+
+  // A body's position in a room's frame: lu outward (the door is at −half), lv sideways.
+  private local(b: Body, slot: number): [number, number] {
     const room = ROOMS[slot]
-    if (!room) return false
+    if (!room) return [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY]
     const px = b.x - room.c[0]
     const py = b.y - room.c[1]
-    const lu = px * room.u[0] + py * room.u[1]
-    const lv = px * room.v[0] + py * room.v[1]
-    return Math.abs(lu) < ROOM_RUSH.half && Math.abs(lv) < ROOM_RUSH.half
+    return [px * room.u[0] + py * room.u[1], px * room.v[0] + py * room.v[1]]
   }
 
   // --- physics --------------------------------------------------------------------------------------
@@ -420,9 +463,10 @@ export class RoomRush implements MiniGame<RoomRushState, RoomRushInput> {
     const dy = b.y - a.y
     const d = Math.hypot(dx, dy)
     const min = R * 2
-    if (d <= 0 || d >= min) return
-    const nx = dx / d
-    const ny = dy / d
+    if (d >= min) return
+    // Exactly on top of each other: split them along x (deterministic) instead of never separating.
+    const nx = d > 1e-9 ? dx / d : 1
+    const ny = d > 1e-9 ? dy / d : 0
     const overlap = (min - d) / 2
     a.x -= nx * overlap
     a.y -= ny * overlap

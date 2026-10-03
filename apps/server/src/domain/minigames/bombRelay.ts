@@ -6,6 +6,10 @@ const DEFAULT_DURATION_MS = 25_000
 const LEG_TAPS = 12 // mashes to fill a leg and pass the bomb on
 const FUSE_MIN_MS = 2500 // hidden fuse window per leg (never sent on the wire)
 const FUSE_MAX_MS = 5000
+// A holder who hasn't mashed for this long since the bomb reached them (or since their last mash) is
+// skipped: the bomb moves on with a fresh fuse and no relay credit, so an AFK-but-connected teammate
+// costs the team this much time per lap instead of a whole fuse.
+const IDLE_PASS_MS = 1800
 
 interface TeamBomb {
   members: PlayerId[]
@@ -14,6 +18,7 @@ interface TeamBomb {
   relays: number
   explosions: number
   fuseEndsAt: number // hidden
+  lastActionAt: number // when the holder got the bomb or last mashed
 }
 
 export interface BombRelayState {
@@ -26,8 +31,11 @@ export interface BombRelayState {
 
 // Team hot-potato relay: each team shares one bomb held by one member at a time. The holder mashes to
 // fill their leg (LEG_TAPS) and pass it on (+1 relay), racing a hidden seeded fuse; if the fuse blows
-// first the team takes an explosion and the bomb rotates on. Most relays wins (fewer explosions breaks
-// ties). Pure — time arrives as `now`, randomness via the injected port (kept on state for tick()).
+// first the team takes an explosion and the bomb rotates on. An idle holder is skipped (IDLE_PASS_MS)
+// and a member who leaves drops out of the chain, so the bomb never parks on someone who can't mash.
+// One bomb per team, one holder at a time: a team's pace is its members' mashing speed, whatever its
+// size. Most relays wins (fewer explosions breaks ties). Pure — time arrives as `now`, randomness via
+// the injected port (kept on state for tick()).
 export class BombRelay implements MiniGame<BombRelayState, BombRelayInput> {
   readonly id = 'bomb-relay'
   readonly format = 'team' as const
@@ -54,6 +62,7 @@ export class BombRelay implements MiniGame<BombRelayState, BombRelayInput> {
         relays: 0,
         explosions: 0,
         fuseEndsAt: ctx.now + fuse(ctx.random),
+        lastActionAt: ctx.now,
       })
     }
     return {
@@ -78,12 +87,11 @@ export class BombRelay implements MiniGame<BombRelayState, BombRelayInput> {
     if (!bomb) return state
     if (bomb.members[bomb.holderIdx] !== playerId) return state // only the current holder mashes
     bomb.legProgress++
+    bomb.lastActionAt = now
     if (bomb.legProgress >= LEG_TAPS) {
-      // Passed safely before the fuse: score the relay, rotate the holder, arm a fresh hidden fuse.
+      // Passed safely before the fuse: score the relay and hand it on.
       bomb.relays++
-      bomb.legProgress = 0
-      bomb.holderIdx = (bomb.holderIdx + 1) % bomb.members.length
-      bomb.fuseEndsAt = now + fuse(state.random)
+      handOff(bomb, (bomb.holderIdx + 1) % bomb.members.length, state.random, now)
     }
     return state
   }
@@ -91,13 +99,32 @@ export class BombRelay implements MiniGame<BombRelayState, BombRelayInput> {
   tick(state: BombRelayState, _dt: number, now: number): BombRelayState {
     if (now >= state.endsAt) return state
     for (const bomb of state.teams.values()) {
+      if (bomb.members.length === 0) continue // the whole team left: nobody to blow up
+      const next = (bomb.holderIdx + 1) % bomb.members.length
       if (now >= bomb.fuseEndsAt) {
         // Caught holding it: explosion, drop the leg, rotate on, re-arm.
         bomb.explosions++
-        bomb.legProgress = 0
-        bomb.holderIdx = (bomb.holderIdx + 1) % bomb.members.length
-        bomb.fuseEndsAt = now + fuse(state.random)
+        handOff(bomb, next, state.random, now)
+      } else if (now - bomb.lastActionAt >= IDLE_PASS_MS) {
+        // Asleep on the bomb: skip them. The next holder gets a fresh fuse, as on any hand-off —
+        // inheriting a half-burnt one would blow up on a teammate who did nothing wrong.
+        handOff(bomb, next, state.random, now)
       }
+    }
+    return state
+  }
+
+  // A member who left drops out of the relay chain. If they held the bomb, it moves on to the next
+  // member as a fresh hand-off; otherwise the current holder keeps it.
+  leave(state: BombRelayState, playerId: PlayerId, now: number): BombRelayState {
+    const team = state.playerTeam.get(playerId)
+    const bomb = team ? state.teams.get(team) : undefined
+    const idx = bomb ? bomb.members.indexOf(playerId) : -1
+    if (!bomb || idx < 0) return state
+    bomb.members.splice(idx, 1)
+    if (idx < bomb.holderIdx) bomb.holderIdx--
+    else if (idx === bomb.holderIdx) {
+      handOff(bomb, idx < bomb.members.length ? idx : 0, state.random, now)
     }
     return state
   }
@@ -124,8 +151,9 @@ export class BombRelay implements MiniGame<BombRelayState, BombRelayInput> {
       prev = bomb
     })
     const stats: Record<PlayerId, string> = {}
-    for (const bomb of state.teams.values()) {
-      for (const id of bomb.members) stats[id] = `${bomb.relays} passes`
+    // Every round member, leavers included, shares their team's line.
+    for (const [id, team] of state.playerTeam) {
+      stats[id] = `${state.teams.get(team)?.relays ?? 0} passes`
     }
     return { placements, ranks, stats }
   }
@@ -148,6 +176,15 @@ export class BombRelay implements MiniGame<BombRelayState, BombRelayInput> {
       roundRemainingMs: Math.max(0, state.endsAt - now),
     }
   }
+}
+
+// The bomb goes to member `holderIdx` for a new leg: progress reset, a fresh hidden fuse, idle clock
+// restarted.
+function handOff(bomb: TeamBomb, holderIdx: number, random: Random, now: number): void {
+  bomb.holderIdx = holderIdx
+  bomb.legProgress = 0
+  bomb.fuseEndsAt = now + fuse(random)
+  bomb.lastActionAt = now
 }
 
 // Hidden per-leg fuse duration, seeded via the Random port.

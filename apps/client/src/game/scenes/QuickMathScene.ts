@@ -10,7 +10,8 @@ const CHOICE_COLORS = [PALETTE.magenta, PALETTE.cyan, PALETTE.amber, 0x5b8cff]
 const LCD_COLOR = shade(PALETTE.lime, -0.86)
 const PRESS_PX = 4
 const COMBO_EVERY = 3
-const MAX_CHIPS = 6
+// Every player gets a chip; rooms bigger than this get an extra strip row.
+const CHIPS_PER_ROW = 6
 // An answer the server never took (it should always take a live one) unlocks the sum after this long.
 const ANSWER_RETRY_MS = 1500
 
@@ -28,7 +29,7 @@ interface Button {
 // the live snapshot, so the verdict is inferred when the question advances: a score bump = right
 // (+1, ring, combo pops every 3 in a row), no bump = wrong (buzz + shake). A wrong answer also costs a
 // short server-side cooldown: the buttons grey out behind a draining red bar until it runs out. One
-// answer per sum — further taps wait for the next one. A chip strip ranks everyone.
+// answer per sum — further taps wait for the next one. A chip strip ranks every player.
 export class QuickMathScene extends MiniGameScene<QuickMathSnapshot> {
   private buttons: Button[] = []
   private board?: Phaser.GameObjects.Image
@@ -108,7 +109,8 @@ export class QuickMathScene extends MiniGameScene<QuickMathSnapshot> {
     this.cooldownBar = this.add.graphics().setDepth(6)
 
     const chipSize = compact ? 11 : 13
-    const stripRows = width < 600 ? 2 : 1
+    const roster = Object.keys(this.state.names).length
+    const stripRows = (width < 600 ? 2 : 1) + (roster > CHIPS_PER_ROW ? 1 : 0)
     const stripTop = height - (compact ? 12 : 18) - stripRows * PlayerStrip.rowH(chipSize)
     this.strip = new PlayerStrip(
       this,
@@ -204,7 +206,6 @@ export class QuickMathScene extends MiniGameScene<QuickMathSnapshot> {
 
     const chips = Object.entries(snap.scores)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, MAX_CHIPS)
       .map(([id, n]) => ({
         text: `${this.label(id).slice(0, 10).toUpperCase()} ${n}`,
         avatar: this.state.avatarOf(id),

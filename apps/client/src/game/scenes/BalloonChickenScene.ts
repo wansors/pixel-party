@@ -1,11 +1,11 @@
 import {
+  BALLOON_CHICKEN,
   type BalloonChickenSnapshot,
   type BalloonPlayer,
-  type BalloonStatus,
   PALETTE,
 } from '@pp/shared'
 import type Phaser from 'phaser'
-import { AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
+import { type AvatarExpression, AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, flash, floatText, punch, shake, showBanner } from '../fx'
 import {
   bodyStyle,
@@ -24,6 +24,8 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 const GROWTH_PUMPS = 9
 const MIN_FRAC = 0.32
 const COIN_COUNT = 16
+const PPP = BALLOON_CHICKEN.pointsPerPump
+const BALLOONS = BALLOON_CHICKEN.balloons
 
 // 14x17 balloon: outlined ellipse with a highlight, knot at the bottom.
 function balloonRows(): string[] {
@@ -96,18 +98,20 @@ function scrapKey(scene: Phaser.Scene, color: number): string {
   })
 }
 
-const pointsOf = (p: BalloonPlayer, ppp: number): number =>
-  p.status === 'burst' ? 0 : p.status === 'cashed' ? p.banked : p.pumps * ppp
+const isDone = (p: BalloonPlayer): boolean => p.outcomes.length >= BALLOONS
 
 interface Token {
   id: string
-  // The rival's avatar beside their name (KO face once burst, happy once cashed).
+  // The rival's avatar beside their name (hurt after a burst, happy after a cash-out).
   icon: Phaser.GameObjects.Image
+  // A fixed-size balloon while they still have one in hand: how far they've pumped it stays hidden.
   balloon: Phaser.GameObjects.Image
-  scrap: Phaser.GameObjects.Image
-  coin: Phaser.GameObjects.Image
   value: Phaser.GameObjects.Text
-  size: number
+  // One pip per balloon: lime = cashed, red = burst, dim = still to come.
+  pips: Phaser.GameObjects.Rectangle[]
+  // Offsets the token's sway, so a row of balloons doesn't swing in lockstep.
+  phase: number
+  outcomes: number
   key: string
 }
 
@@ -118,12 +122,14 @@ interface Button {
   down: string
 }
 
-// Balloon Chicken ("nerve") canvas. Your balloon, in your color, is tied to a hand pump: PUMP (tap
-// or Space) inflates it for points, CASH OUT banks them before it bursts. It visibly swells and
-// wobbles harder the more it has been pumped — purely from the pump count, since the burst
-// threshold is hidden server-side. A pop explodes into rubber shreds; a cash-out floats the balloon
-// away under a coin shower. Every other player's balloon rides along the top in their color with
-// their name.
+// Balloon Chicken ("nerve") canvas. Everybody gets the same three balloons in a row, each with its own
+// hidden burst point. Yours, in your color, is tied to a hand pump: PUMP (tap or Space) inflates it for
+// points, CASH OUT banks them; either way the next balloon comes up, and one still in hand at the
+// buzzer pops. It visibly swells and wobbles harder the more it has been pumped — purely from the pump
+// count, since the threshold is hidden server-side. A pop explodes into rubber shreds; a cash-out floats
+// the balloon away under a coin shower. A row of pips under the rivals tracks your three balloons.
+// Rivals ride along the top (two rows in a crowd) showing status only — balloon in hand, banked
+// points, each balloon's fate — never how far they've pumped.
 export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
   private balloon?: Phaser.GameObjects.Image
   private scrap?: Phaser.GameObjects.Image
@@ -135,12 +141,20 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
   // You: your avatar working the pump (sweating as it grows, KO on a burst, happy on a cash-out).
   private pumper?: AvatarSprite
   private cash?: Button
+  // Your three balloons: the one in hand, the ones to come, and how the finished ones ended.
+  private ownPips: Phaser.GameObjects.Image[] = []
+  private pipH = 0
   private tokens: Token[] = []
+  private tokenRows = 1
+  private tokenH = 0
   private knot = { x: 0, y: 0 }
   private size = { min: 0, max: 0 }
   private handleY = 0
   private lastPumps = 0
-  private lastStatus: BalloonPlayer['status'] = 'pumping'
+  private lastOutcomes = 0
+  private lastBanked = 0
+  // Out of balloons, or out of time: the total is up.
+  private over = false
 
   constructor(...deps: SceneDeps) {
     super('balloon-chicken', ...deps)
@@ -149,8 +163,11 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
   override create(): void {
     super.create()
     this.tokens = []
+    this.ownPips = []
     this.lastPumps = 0
-    this.lastStatus = 'pumping'
+    this.lastOutcomes = 0
+    this.lastBanked = 0
+    this.over = false
     const { width, height } = this.scale
     const cx = width / 2
     const compact = Math.min(width, height) < 520
@@ -210,8 +227,21 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
       .setOrigin(0.5, 1)
       .setDisplaySize(pumpW, pumpH * 0.5)
       .setDepth(2)
-    const tokenH = compact ? 74 : 96
-    const areaTop = this.top + tokenH + (compact ? 8 : 12)
+
+    // Rival tokens along the top (built on the first snapshot; the roster sizes the rows), then your
+    // own balloon pips, then the play area.
+    const rivals = Math.max(1, Object.keys(this.state.names).length - 1)
+    this.tokenRows = rivals * (compact ? 64 : 96) > width * 0.94 ? 2 : 1
+    this.tokenH = compact ? 70 : 88
+    const pipY = this.top + this.tokenRows * this.tokenH + (compact ? 14 : 18)
+    this.pipH = compact ? 22 : 28
+    for (let i = 0; i < BALLOONS; i++) {
+      const pip = this.add
+        .image(cx + (i - (BALLOONS - 1) / 2) * this.pipH * 1.3, pipY, balloonKey(this, color))
+        .setDisplaySize(this.pipH * (14 / 17), this.pipH)
+      this.ownPips.push(pip)
+    }
+    const areaTop = pipY + this.pipH / 2 + 8
     const stringLen = compact ? 36 : 50
     this.knot = { x: cx, y: this.handleY - pumpH * 0.5 - stringLen }
     const string = this.add.graphics().setDepth(1)
@@ -239,7 +269,7 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
       )
       .setOrigin(0.5)
       .setDepth(6)
-    this.setBalloonSize(0, 0)
+    this.setBalloonSize(0)
 
     this.banner = addBanner(this)
     this.banner
@@ -286,8 +316,9 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
   }
 
   private act(kind: 'pump' | 'cashout'): void {
-    const self = this.snap?.players[this.selfId]
-    if (!self || self.status !== 'pumping') return
+    const snap = this.snap
+    const self = snap?.players[this.selfId]
+    if (!snap || !self || isDone(self) || snap.remainingMs <= 0) return
     this.sfx.click()
     this.sendInput({ kind })
     const btn = kind === 'pump' ? this.pump : this.cash
@@ -299,7 +330,7 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
 
   // Resizes the balloon for `pumps` and re-fits its points label (only on change: re-sizing text
   // re-renders it, so this never runs per frame).
-  private setBalloonSize(pumps: number, ppp: number): void {
+  private setBalloonSize(pumps: number): void {
     if (!this.balloon) return
     const frac = MIN_FRAC + (1 - MIN_FRAC) * (1 - Math.exp(-pumps / GROWTH_PUMPS))
     const d = this.size.max * frac
@@ -310,7 +341,7 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
       .setData('pp-base-sx', this.balloon.scaleX)
       .setData('pp-base-sy', this.balloon.scaleY)
     if (!this.value) return
-    this.value.setText(String(pumps * ppp))
+    this.value.setText(String(pumps * PPP))
     const size = Math.max(16, Math.min(48, Math.floor((d * 0.28) / 8) * 8))
     fitText(this.value, d * (14 / 17) * 0.8, size)
   }
@@ -319,45 +350,55 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
     if (!snap) return
     if (this.tokens.length === 0)
       this.buildTokens(Object.keys(snap.players).filter((id) => id !== this.selfId))
+    this.renderTokens(snap, time)
     const self = snap.players[this.selfId]
-    this.renderTokens(snap)
     if (!self) return
-    this.hud?.setScore(this.t('game.common.pts', { n: pointsOf(self, snap.pointsPerPump) }))
+    this.hud?.setScore(this.t('game.common.pts', { n: self.banked }))
 
     // A relayout restart mid-round restores the balloon as it is — no pump pop, burst or coin shower.
     const quiet = this.firstSnapshot
-    if (self.pumps !== this.lastPumps && self.status !== 'burst') {
-      if (quiet) this.setBalloonSize(self.pumps, snap.pointsPerPump)
-      else this.onPumped(self.pumps, snap.pointsPerPump)
+    if (self.outcomes.length !== this.lastOutcomes) {
+      this.onOutcome(self, quiet)
+      this.lastOutcomes = self.outcomes.length
+      this.lastPumps = 0
     }
-    if (self.status !== this.lastStatus) {
-      if (self.status === 'burst') this.onBurst(quiet)
-      if (self.status === 'cashed') this.onCashed(self.banked, quiet)
-      this.lastStatus = self.status
+    if (self.pumps !== this.lastPumps) {
+      if (quiet) this.setBalloonSize(self.pumps)
+      else this.onPumped(self.pumps)
     }
     this.lastPumps = self.pumps
+    this.lastBanked = self.banked
+    this.renderOwnPips(self, time)
 
-    const alive = self.status === 'pumping'
-    this.pumper
-      ?.setExpression(
-        self.status === 'burst'
-          ? 'ko'
-          : self.status === 'cashed'
-            ? 'happy'
-            : self.pumps >= 10
-              ? 'hurt'
-              : 'idle',
-      )
-      .tick(time)
+    const alive = !isDone(self) && snap.remainingMs > 0
+    if (!alive && !this.over) this.showOver(self)
+    this.pumper?.setExpression(this.pumperFace(self, alive)).tick(time)
     for (const b of [this.pump, this.cash]) b?.img.setAlpha(alive ? 1 : 0.3)
     if (alive) this.wobble(self.pumps, time)
-    else this.status?.setText(this.doneLine(self.status))
   }
 
-  // Burst or cashed out: a jab at the choice, then the wait.
-  private doneLine(status: BalloonStatus): string {
-    const key = status === 'burst' ? 'game.balloon.bustLines' : 'game.balloon.cashLines'
-    return `${this.quip(key, this.selfId)}\n${this.t('game.common.waiting')}`
+  // Sweating over a big balloon, wincing at a pop, grinning at a cash-out (until the next pump).
+  private pumperFace(self: BalloonPlayer, alive: boolean): AvatarExpression {
+    if (!alive) return self.banked > 0 ? 'happy' : 'ko'
+    if (self.pumps >= 10) return 'hurt'
+    if (self.pumps > 0) return 'idle'
+    const last = self.outcomes[self.outcomes.length - 1]
+    return last === 'burst' ? 'hurt' : last === 'cashed' ? 'happy' : 'idle'
+  }
+
+  // Out of balloons (or time): the total, a jab at how the last one went, then the wait.
+  private showOver(self: BalloonPlayer): void {
+    this.over = true
+    const banked = self.banked
+    const last = self.outcomes[self.outcomes.length - 1]
+    this.balloon?.setVisible(false)
+    this.value?.setVisible(false)
+    if (this.banner) {
+      const color = banked > 0 ? PALETTE.lime : PALETTE.red
+      showBanner(this, this.banner, this.t('game.common.pts', { n: banked }), color)
+    }
+    const key = last === 'cashed' ? 'game.balloon.cashLines' : 'game.balloon.bustLines'
+    this.status?.setText(`${this.quip(key, this.selfId)}\n${this.t('game.common.waiting')}`)
   }
 
   // Wobble grows with the pump count (never with the hidden threshold): a lazy sway at first, a
@@ -374,9 +415,10 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
     this.value.setPosition(this.knot.x + Math.sin(rad) * r, this.knot.y - Math.cos(rad) * r)
   }
 
-  private onPumped(pumps: number, ppp: number): void {
-    this.setBalloonSize(pumps, ppp)
-    if (!this.balloon || pumps < this.lastPumps) return
+  private onPumped(pumps: number): void {
+    const grew = pumps > this.lastPumps
+    this.setBalloonSize(pumps)
+    if (!this.balloon || !grew) return
     punch(this, this.balloon, 0.08, 80)
     // The pumper leans into the stroke.
     const pumper = this.pumper?.image
@@ -400,57 +442,69 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
       this,
       this.knot.x + this.balloon.displayWidth * 0.45,
       this.knot.y - this.balloon.displayHeight * 0.8,
-      `+${ppp}`,
+      `+${PPP}`,
       PALETTE.lime,
       16,
     )
   }
 
-  // `quiet`: restoring the end state after a relayout restart — the same look, no bang.
-  private onBurst(quiet = false): void {
-    const color = this.state.colorOf(this.selfId, PALETTE.red)
+  // A balloon just ended: it pops into shreds or floats away under a coin shower, and the next one is
+  // tied on at once (the server already handed it over). `quiet`: restoring the state after a relayout
+  // restart — the same look, no bang.
+  private onOutcome(self: BalloonPlayer, quiet: boolean): void {
     const b = this.balloon
-    const cy = b ? b.y - b.displayHeight / 2 : this.knot.y
+    const outcome = self.outcomes[self.outcomes.length - 1]
+    if (!b || !outcome) return
+    const gained = self.banked - this.lastBanked
     if (!quiet) {
-      this.sfx.pop()
-      burst(this, this.knot.x, cy, color, 40, 420)
-      burst(this, this.knot.x, cy, PALETTE.text, 12, 260)
-      shake(this, 0.02, 320)
-      flash(this, color, 140)
-    }
-    b?.setVisible(false)
-    this.value?.setVisible(false)
-    this.scrap?.setVisible(true)
-    if (this.banner) showBanner(this, this.banner, this.t('game.balloon.pop'), PALETTE.red)
-    this.status?.setText(this.doneLine('burst'))
-  }
-
-  // `quiet`: restoring the end state after a relayout restart — the balloon is long gone, just the
-  // banner (no coin shower).
-  private onCashed(banked: number, quiet = false): void {
-    // The banner carries the banked points; the balloon itself floats away.
-    this.value?.setVisible(false)
-    if (quiet) this.balloon?.setVisible(false)
-    else {
-      this.sfx.coin()
-      this.coinShower()
-      if (this.balloon) {
+      const cy = b.y - b.displayHeight / 2
+      if (outcome === 'burst') {
+        const color = this.state.colorOf(this.selfId, PALETTE.red)
+        this.sfx.pop()
+        burst(this, this.knot.x, cy, color, 40, 420)
+        burst(this, this.knot.x, cy, PALETTE.text, 12, 260)
+        shake(this, 0.02, 320)
+        flash(this, color, 140)
+        floatText(this, this.knot.x, cy, this.t('game.balloon.pop'), PALETTE.red, 32)
+        this.flashScrap()
+      } else {
+        this.sfx.coin()
+        this.coinShower()
+        floatText(this, this.knot.x, cy, `+${gained}`, PALETTE.lime, 32)
+        // A copy floats away; the real one is already the next balloon.
+        const ghost = this.add
+          .image(b.x, b.y, b.texture.key)
+          .setOrigin(0.5, 1)
+          .setDisplaySize(b.displayWidth, b.displayHeight)
+          .setAngle(b.angle)
+          .setDepth(4)
         this.tweens.add({
-          targets: this.balloon,
+          targets: ghost,
           y: `-=${this.scale.height * 0.25}`,
           alpha: 0,
           duration: 1200,
           ease: 'Sine.easeIn',
+          onComplete: () => ghost.destroy(),
         })
       }
     }
-    if (this.banner)
-      showBanner(
-        this,
-        this.banner,
-        `${this.t('game.balloon.cashed')}\n${this.t('game.common.pts', { n: banked })}`,
-        PALETTE.lime,
-      )
+    if (isDone(self)) {
+      if (outcome === 'burst') this.scrap?.setAlpha(1).setVisible(true)
+      return
+    }
+    // The next balloon: back to its smallest, popping in on the knot.
+    this.setBalloonSize(0)
+    b.setAngle(0)
+    if (!quiet) punch(this, b, 0.3, 120)
+  }
+
+  // Rubber shreds left on the knot for a moment after a pop.
+  private flashScrap(): void {
+    const scrap = this.scrap
+    if (!scrap) return
+    this.tweens.killTweensOf(scrap)
+    scrap.setVisible(true).setAlpha(1)
+    this.tweens.add({ targets: scrap, alpha: 0, delay: 350, duration: 400 })
   }
 
   private coinShower(): void {
@@ -475,34 +529,59 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
     }
   }
 
-  // Everyone else's balloon along the top: grows with their pumps, pops into shreds, or turns into
-  // a coin with the banked points.
+  // Your balloons: a coin for each cashed, shreds for each burst, the one in hand bobbing, the rest
+  // waiting faded.
+  private renderOwnPips(self: BalloonPlayer, time: number): void {
+    const color = this.state.colorOf(this.selfId, PALETTE.red)
+    this.ownPips.forEach((pip, i) => {
+      const outcome = self.outcomes[i]
+      const key =
+        outcome === 'cashed'
+          ? ensurePixelOrb(this, 'pp-balloon-coin', 8, PALETTE.amber)
+          : outcome === 'burst'
+            ? scrapKey(this, color)
+            : balloonKey(this, color)
+      if (pip.texture.key !== key) {
+        const h = this.pipH
+        pip.setTexture(key)
+        if (outcome === 'cashed') pip.setDisplaySize(h * 0.8, h * 0.8)
+        else if (outcome === 'burst') pip.setDisplaySize(h, h / 2)
+        else pip.setDisplaySize(h * (14 / 17), h)
+        if (!this.firstSnapshot && outcome) punch(this, pip, 0.4, 110)
+      }
+      const inHand = i === self.outcomes.length
+      pip.setAlpha(outcome || inHand ? 1 : 0.3).setAngle(inHand ? Math.sin(time / 200) * 8 : 0)
+    })
+  }
+
+  // Everyone else along the top — one row, or two in a crowd. Each token: a fixed-size balloon while
+  // they still have one in hand, their avatar and name, banked points and a pip per balloon.
   private buildTokens(ids: string[]): void {
     if (ids.length === 0) return
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
-    const tokenW = Math.min(compact ? 100 : 140, (width * 0.94) / ids.length)
-    const size = compact ? 40 : 52
-    const baseY = this.top + size + 4
+    const perRow = Math.ceil(ids.length / this.tokenRows)
+    const tokenW = Math.min(compact ? 100 : 140, (width * 0.94) / perRow)
+    const bSize = compact ? 26 : 34
+    const nameSize = compact ? 11 : 13
+    // Names are cut to what fits beside the avatar, so neighbors never overlap.
+    const maxChars = Math.max(3, Math.floor((tokenW - 24) / (nameSize * 0.62)))
     ids.forEach((id, i) => {
-      const x = width / 2 + (i - (ids.length - 1) / 2) * tokenW
+      const row = Math.floor(i / perRow)
+      const inRow = row < this.tokenRows - 1 ? perRow : ids.length - row * perRow
+      const x = width / 2 + ((i % perRow) - (inRow - 1) / 2) * tokenW
+      const top = this.top + 4 + row * this.tokenH
       const color = this.state.colorOf(id, PALETTE.dim)
-      const balloon = this.add.image(x, baseY, balloonKey(this, color)).setOrigin(0.5, 1)
-      const scrap = this.add
-        .image(x, baseY, scrapKey(this, color))
+      const balloon = this.add
+        .image(x, top + bSize, balloonKey(this, color))
         .setOrigin(0.5, 1)
-        .setDisplaySize(size * 0.7, size * 0.35)
-        .setVisible(false)
-      const coin = this.add
-        .image(x, baseY - size * 0.35, ensurePixelOrb(this, 'pp-balloon-coin', 8, PALETTE.amber))
-        .setDisplaySize(size * 0.5, size * 0.5)
-        .setVisible(false)
+        .setDisplaySize(bSize * (14 / 17), bSize)
       const name = this.add
         .text(
           x + 9,
-          baseY + 4,
-          this.state.nameOf(id).slice(0, compact ? 7 : 10),
-          bodyStyle(compact ? 11 : 13, color),
+          top + bSize + 3,
+          this.state.nameOf(id).slice(0, maxChars),
+          bodyStyle(nameSize, color),
         )
         .setOrigin(0.5, 0)
       const icon = this.add
@@ -512,60 +591,58 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
           ensureAvatarTexture(this, this.state.avatarOf(id), color, 1),
         )
         .setOrigin(1, 0.5)
+      const valueY = name.y + name.height + 2
       const value = this.add
-        .text(x, baseY + (compact ? 18 : 22), '', headlineStyle(compact ? 8 : 16, PALETTE.text))
+        .text(x, valueY, '', headlineStyle(compact ? 8 : 13, PALETTE.text))
         .setOrigin(0.5, 0)
-      this.tokens.push({ id, icon, balloon, scrap, coin, value, size, key: '' })
+      const pipY = valueY + (compact ? 13 : 18)
+      const pips = Array.from({ length: BALLOONS }, (_, k) =>
+        this.add.rectangle(x + (k - (BALLOONS - 1) / 2) * 9, pipY, 6, 6, PALETTE.panelAlt),
+      )
+      this.tokens.push({ id, icon, balloon, value, pips, phase: i * 1.7, outcomes: 0, key: '' })
     })
   }
 
-  private renderTokens(snap: BalloonChickenSnapshot): void {
+  private renderTokens(snap: BalloonChickenSnapshot, time: number): void {
     for (const tok of this.tokens) {
       const p = snap.players[tok.id]
       if (!p) continue
-      const key = `${p.pumps}:${p.status}`
+      const done = isDone(p)
+      if (!done) tok.balloon.setAngle(Math.sin(time / 300 + tok.phase) * 6)
+      const key = `${p.outcomes.join(',')}:${p.banked}`
       if (key === tok.key) continue
-      const popped = tok.key !== '' && p.status === 'burst'
       tok.key = key
-      const frac = MIN_FRAC + (1 - MIN_FRAC) * (1 - Math.exp(-p.pumps / GROWTH_PUMPS))
-      tok.balloon
-        .setVisible(p.status === 'pumping')
-        .setDisplaySize(tok.size * frac * (14 / 17), tok.size * frac)
-      tok.scrap.setVisible(p.status === 'burst')
-      tok.coin.setVisible(p.status === 'cashed')
-      const face = p.status === 'burst' ? 'ko' : p.status === 'cashed' ? 'happy' : 'idle'
+      const color = this.state.colorOf(tok.id, PALETTE.dim)
+      const last = p.outcomes[p.outcomes.length - 1]
+      // A balloon just ended: shreds in their color, or a coin pop on the points.
+      if (p.outcomes.length > tok.outcomes && !this.firstSnapshot) {
+        const { x, y } = tok.balloon
+        if (last === 'burst') burst(this, x, y - tok.balloon.displayHeight / 2, color, 14, 160)
+        else {
+          burst(this, tok.value.x, tok.value.y, PALETTE.amber, 10, 140)
+          punch(this, tok.value, 0.4, 110)
+        }
+      }
+      tok.outcomes = p.outcomes.length
+      tok.balloon.setVisible(!done)
+      const face =
+        done && p.banked === 0 ? 'ko' : last === 'burst' ? 'hurt' : last ? 'happy' : 'idle'
       tok.icon.setTexture(
-        ensureAvatarTexture(
-          this,
-          this.state.avatarOf(tok.id),
-          this.state.colorOf(tok.id, PALETTE.dim),
-          1,
-          'front',
-          face,
-        ),
+        ensureAvatarTexture(this, this.state.avatarOf(tok.id), color, 1, 'front', face),
       )
-      const v = pointsOf(p, snap.pointsPerPump)
       tok.value
-        .setText(p.status === 'burst' ? this.t('game.balloon.bust') : String(v))
-        .setColor(
-          hexToCss(
-            p.status === 'burst'
+        .setText(String(p.banked))
+        .setColor(hexToCss(p.banked > 0 ? PALETTE.lime : PALETTE.dim))
+      tok.pips.forEach((pip, k) => {
+        const outcome = p.outcomes[k]
+        pip.setFillStyle(
+          outcome === 'cashed'
+            ? PALETTE.lime
+            : outcome === 'burst'
               ? PALETTE.red
-              : p.status === 'cashed'
-                ? PALETTE.lime
-                : PALETTE.text,
-          ),
+              : PALETTE.panelAlt,
         )
-      if (popped)
-        burst(
-          this,
-          tok.balloon.x,
-          tok.balloon.y - tok.size / 2,
-          this.state.colorOf(tok.id, PALETTE.dim),
-          14,
-          160,
-        )
-      if (p.status === 'cashed') punch(this, tok.coin, 0.3, 100)
+      })
     }
   }
 }

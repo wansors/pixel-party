@@ -126,4 +126,29 @@ describe('WeirdTrivia', () => {
     expect(r.ranks).toEqual({ b: 0, c: 0, a: 2 })
     expect(r.stats?.b).toBe('1/3 · 2000 pts')
   })
+
+  test('a player gone mid-round neither blocks the early reveal nor counts as a contestant', () => {
+    let s = init(['a', 'b', 'c'])
+    s = answer(s, 'a', right(s), 100)
+    s = answer(s, 'b', right(s), 200)
+    expect(s.phase).toBe('question')
+    s = game.leave(s, 'c', 300)
+    expect(s.phase).toBe('reveal')
+    const snap = game.snapshot(s, 300)
+    // Everybody still here got it right: the scene's "too easy" quip counts `players`, not `scores`.
+    expect(snap.players).toEqual(['a', 'b'])
+    expect(Object.keys(snap.reveal?.gained ?? {})).toEqual(['a', 'b'])
+    expect(Object.keys(snap.scores)).toEqual(['a', 'b', 'c'])
+  })
+
+  test('a leave during the reveal carries over to the next questions', () => {
+    let s = init(['a', 'b'])
+    s = answer(s, 'a', right(s), 100)
+    game.tick(s, 50, Q)
+    s = game.leave(s, 'b', Q + 10)
+    game.tick(s, 50, Q + R)
+    expect(s.phase).toBe('question')
+    s = answer(s, 'a', wrong(s), Q + R + 10)
+    expect(s.phase).toBe('reveal')
+  })
 })

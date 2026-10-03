@@ -2,8 +2,9 @@ import type { MicroRacePoint } from '@pp/shared'
 
 // Shared top-down car racing engine behind Micro Race, Rally Stage and Speed Circuit: arcade car physics
 // (throttle/brake/reverse, drift that grip eats, understeer at speed, a slowed-down surface off the road),
-// car-to-car bumps and the road follower that turns a position into progress along a sampled centreline
-// (windowed, so the race line can't jump to another stretch of road), with the stray-car rescue.
+// car-to-car bumps, the slipstream and the road follower that turns a position into progress along a
+// sampled centreline (windowed, so the race line can't jump to another stretch of road), with the
+// stray-car rescue.
 
 export interface CarPhysics {
   maxSpeed: number
@@ -43,6 +44,8 @@ export interface RaceCar {
   finishMs: number | null
   hits: number
   resets: number
+  // The driver left the round: a ghost that rolls to a stop, races no one and blocks no one.
+  gone: boolean
 }
 
 // Per-step tweaks a game layers on top of the base physics (a surface's grip, a slipstream, a boost).
@@ -101,7 +104,8 @@ export function integrateCar(car: RaceCar, h: number, p: CarPhysics, tune: CarTu
   car.y += car.vy * h
 }
 
-// Bouncy car-to-car contact; counts a bump on both cars above `hitMinSpeed`.
+// Bouncy car-to-car contact (ghosts of gone drivers pass through); counts a bump on both cars above
+// `hitMinSpeed`.
 export function collideCars(
   a: RaceCar,
   b: RaceCar,
@@ -113,7 +117,7 @@ export function collideCars(
   const dy = b.y - a.y
   const d = Math.hypot(dx, dy)
   const min = carR * 2
-  if (d <= 0 || d >= min) return
+  if (a.gone || b.gone || d <= 0 || d >= min) return
   const nx = dx / d
   const ny = dy / d
   const overlap = (min - d) / 2
@@ -134,6 +138,28 @@ export function collideCars(
     a.hits++
     b.hits++
   }
+}
+
+// Slipstream: right behind another (racing) car — between touching and `range` away, inside a narrow
+// `cone` (radians) dead ahead, both heading the same way.
+export function inSlipstream(
+  car: RaceCar,
+  others: readonly RaceCar[],
+  carR: number,
+  range: number,
+  cone: number,
+): boolean {
+  return others.some((o) => {
+    if (o === car || o.gone) return false
+    const dx = o.x - car.x
+    const dy = o.y - car.y
+    const d = Math.hypot(dx, dy)
+    if (d < carR * 2 || d > range) return false
+    return (
+      Math.abs(wrapAngle(Math.atan2(dy, dx) - car.a)) < cone &&
+      Math.abs(wrapAngle(o.a - car.a)) < cone
+    )
+  })
 }
 
 // The world edge is a hard wall.
@@ -175,6 +201,55 @@ export function nearestDistance(samples: readonly MicroRacePoint[], x: number, y
     if (d < best) best = d
   }
   return Math.sqrt(best)
+}
+
+const GRID_AIR = 4 // world units of air between grid neighbours
+
+export interface GridSpec {
+  // World units between centreline samples, and from the line back to the first row.
+  spacing: number
+  firstBack: number
+  rowGap: number
+  // Each car's offset from the centreline (world units), alternately left and right.
+  lateral: number
+  carR: number
+}
+
+export interface GridSlot {
+  x: number
+  y: number
+  a: number
+  idx: number
+  // Samples behind the start line.
+  back: number
+}
+
+// A staggered two-wide grid behind the start line (sample 0 of a closed course), pointing down the road.
+// Rows on a bend squeeze together on the inside, so a slot that would touch a car already placed slides
+// back a sample at a time until it's clear.
+export function gridSlots(
+  samples: readonly MicroRacePoint[],
+  count: number,
+  g: GridSpec,
+): GridSlot[] {
+  const n = samples.length
+  const slots: GridSlot[] = []
+  for (let slot = 0; slot < count; slot++) {
+    const lat = (slot % 2 === 0 ? -1 : 1) * g.lateral
+    let back = Math.round((g.firstBack + Math.floor(slot / 2) * g.rowGap) / g.spacing)
+    for (;;) {
+      const idx = (((n - back) % n) + n) % n
+      const { x, y, tx, ty } = pointAt(samples, idx)
+      const at = { x: x - ty * lat, y: y + tx * lat, a: Math.atan2(ty, tx), idx, back }
+      const clear = slots.every((o) => Math.hypot(o.x - at.x, o.y - at.y) >= g.carR * 2 + GRID_AIR)
+      if (clear || back >= n / 2) {
+        slots.push(at)
+        break
+      }
+      back++
+    }
+  }
+  return slots
 }
 
 export interface RoadFollow {
@@ -236,6 +311,13 @@ export function rescueCar(car: RaceCar, samples: readonly MicroRacePoint[], clos
   car.off = false
   car.lostSince = null
   car.resets++
+}
+
+// The driver left mid-race: lift off and let go of the wheel; from now on the car is a ghost.
+export function retireCar(car: RaceCar): void {
+  car.gone = true
+  car.steer = 0
+  car.throttle = 0
 }
 
 export function formatRaceTime(ms: number): string {

@@ -55,6 +55,48 @@ describe('PixelBeat', () => {
     expect(snap.scores.a).toBe(3)
   })
 
+  test('a tap is judged at its reported time, so an honest round trip still scores PERFECT', () => {
+    const game = new PixelBeat()
+    // Tapped right on the 1200 ms beat, reaching the server 150 ms later.
+    let lagged = game.init(baseCtx())
+    lagged = game.onInput(lagged, 'a', { kind: 'tap', at: 1200 }, 1350)
+    expect(game.snapshot(lagged, 1350).scores.a).toBe(3)
+    // The same arrival without a reported time only rates GOOD.
+    let bare = game.init(baseCtx())
+    bare = game.onInput(bare, 'a', { kind: 'tap' }, 1350)
+    expect(game.snapshot(bare, 1350).scores.a).toBe(1)
+  })
+
+  test('a reported time is only credited within a bounded window of the server measurement', () => {
+    const game = new PixelBeat()
+    const scoreOf = (at: number, now: number): number => {
+      const s = game.onInput(game.init(baseCtx()), 'a', { kind: 'tap', at }, now)
+      return game.snapshot(s, now).scores.a ?? 0
+    }
+    // 400 ms behind is more than a round trip: only 250 ms is credited, 150 ms off the beat = GOOD.
+    expect(scoreOf(1200, 1600)).toBe(1)
+    // Further behind, the credited time is out of the beat's reach.
+    expect(scoreOf(1200, 1700)).toBe(0)
+    // A claim ahead of the server's clock is credited 50 ms ahead at most.
+    expect(scoreOf(1200, 1000)).toBe(1)
+    // A non-finite claim falls back to the server's own measurement.
+    expect(scoreOf(Number.NaN, 1200)).toBe(3)
+  })
+
+  test('spamming scores a third of tapping on the beat at most', () => {
+    const game = new PixelBeat()
+    const ctx = baseCtx({ config: { durationMs: 40_000 } })
+    let spam = game.init(ctx)
+    let onBeat = game.init(ctx)
+    for (let t = 0; t < 40_000; t += 50) spam = game.onInput(spam, 'a', { kind: 'tap', at: t }, t)
+    for (const t of onBeat.beatTimes) {
+      onBeat = game.onInput(onBeat, 'a', { kind: 'tap', at: t }, t + 120)
+    }
+    const accurate = game.snapshot(onBeat, 40_000).scores.a ?? 0
+    expect(accurate).toBe(3 * onBeat.beatTimes.length)
+    expect(game.snapshot(spam, 40_000).scores.a ?? 0).toBeLessThanOrEqual(accurate / 3)
+  })
+
   test('getResult ranks the higher-scoring player first', () => {
     const game = new PixelBeat()
     let state = game.init(baseCtx())

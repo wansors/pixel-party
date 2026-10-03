@@ -34,7 +34,8 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 // as their lobby avatar (queue on the start platform, the active runner on the glass, survivors at the
 // goal), animates jumps, shattering falls and auto-walks, lights the lightning glint and shows everyone's
 // heckle arrows. LEFT/RIGHT (keys, the two big buttons or a tap on a panel) jumps when it's your turn
-// and points the way when it isn't.
+// and points the way when it isn't. ★ is the score: a blind step pops "+1★", a jump on a glint you saw
+// is called out as peeking (no ★).
 
 const JUMP_ANIM_MS = 420
 const FALL_ANIM_MS = 950
@@ -125,6 +126,7 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
   private buttonMode = ''
   // Event trackers (snapshot deltas → sounds and effects).
   private prevStatus = new Map<string, GlassBridgePlayer['status']>()
+  private prevScore = new Map<string, number>()
   private lastGlint = 0
   private jumpAnim?: { id: string; from: Spot; to: Spot; at: number }
   private lastPhaseKey = ''
@@ -148,6 +150,7 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     this.buttons = []
     this.buttonMode = ''
     this.prevStatus = new Map()
+    this.prevScore = new Map()
     this.lastGlint = 0
     this.jumpAnim = undefined
     this.lastPhaseKey = ''
@@ -306,7 +309,7 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
 
   // Where a player stands: queue/goal spots are spread along the platforms in vest order.
   private spotOf(p: GlassBridgePlayer, snap: GlassBridgeSnapshot): Spot | null {
-    if (p.status === 'fallen') return null
+    if (p.status === 'fallen' || p.status === 'left') return null
     if (p.pos >= 0 && p.pos < this.rows) {
       const side = snap.rows[p.pos]?.safe ?? 'L'
       return { x: this.panelX(side), y: this.slotY(p.pos + 1) - this.avatarSize * 0.18 }
@@ -315,7 +318,7 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     const group = snap.players.filter((q) =>
       onGoal
         ? q.status === 'crossed'
-        : q.status !== 'crossed' && q.status !== 'fallen' && q.pos < 0,
+        : (q.status === 'queue' || q.status === 'active') && q.pos < 0,
     )
     const i = group.findIndex((q) => q.id === p.id)
     const step = Math.min(this.avatarSize * 1.25, (this.platW - 16) / Math.max(1, group.length))
@@ -323,14 +326,15 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     return { x, y: this.slotY(onGoal ? this.rows + 1 : 0) + this.avatarSize * 0.38 }
   }
 
+  // You, while you're still in the round (spectators and leavers get undefined).
   private me(snap: GlassBridgeSnapshot): GlassBridgePlayer | undefined {
-    return snap.players.find((p) => p.id === this.selfId)
+    return snap.players.find((p) => p.id === this.selfId && p.status !== 'left')
   }
 
   // LEFT/RIGHT: jump when it's your turn to decide, otherwise raise/lower your heckle arrow.
   private act(side: GlassSide): void {
     const snap = this.snap
-    if (!snap || snap.phase === 'done' || this.state.final) return
+    if (!snap || snap.phase === 'done' || this.state.final || !this.me(snap)) return
     const btn = this.buttons.find((b) => b.side === side)
     if (btn) {
       btn.img.setTexture(this.buttonKeys.down)
@@ -356,7 +360,8 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     if (this.firstSnapshot) {
       for (const p of snap.players) {
         this.prevStatus.set(p.id, p.status)
-        if (p.status === 'fallen') this.hiddenFor.add(p.id)
+        this.prevScore.set(p.id, p.score)
+        if (p.status === 'fallen' || p.status === 'left') this.hiddenFor.add(p.id)
       }
       this.lastGlint = snap.glint?.id ?? 0
     }
@@ -487,27 +492,52 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
         this.sfx.tick()
       this.lastTickSecond = s
     }
-    // Status changes: a safe landing, a fall, a crossing.
+    // ★ won this snapshot: a blind step, a crossing, or the buzzer's par for a turn it cut short.
+    const gained = new Map<string, number>()
+    for (const p of snap.players) {
+      const prev = this.prevScore.get(p.id) ?? p.score
+      this.prevScore.set(p.id, p.score)
+      if (!this.firstSnapshot && p.score > prev) gained.set(p.id, p.score - prev)
+    }
+    // Status changes: a safe landing, a fall, a crossing, a leaver.
     for (const p of snap.players) {
       const prev = this.prevStatus.get(p.id)
       this.prevStatus.set(p.id, p.status)
       if (this.firstSnapshot || prev === p.status) continue
       if (p.status === 'fallen') this.onFall(p)
       else if (p.status === 'crossed') this.onCross(p)
+      else if (p.status === 'left') this.onLeft(p)
     }
-    // A runner landed on a new row (pos advanced while active): ping it.
+    // A runner landed on a new row (pos advanced while active): ping it — a blind step scores, a jump
+    // on a glint they saw doesn't.
+    let landedBy = ''
     if (snap.phase === 'decide' && snap.active && snap.target !== null && snap.target > 0) {
       const landed = snap.target - 1
       const key = `land:${snap.active}:${landed}`
       if (this.lastLanding !== key && !this.firstSnapshot) {
         const side = snap.rows[landed]?.safe
         if (side && this.jumpAnim?.id === snap.active) {
-          ring(this, this.panelX(side), this.slotY(landed + 1), PALETTE.lime, this.panelW * 0.7)
+          const x = this.panelX(side)
+          const y = this.slotY(landed + 1)
+          ring(this, x, y, PALETTE.lime, this.panelW * 0.7)
           if (snap.active === this.selfId) this.sfx.correct()
           else this.sfx.click()
+          const size = this.compact ? 12 : 16
+          const n = gained.get(snap.active)
+          const text = n
+            ? this.t('game.glassBridge.blind', { n })
+            : this.t('game.glassBridge.peeked')
+          floatText(this, x, y - this.panelH, text, n ? PALETTE.lime : PALETTE.dim, size)
+          landedBy = snap.active
         }
       }
       this.lastLanding = key
+    }
+    for (const [id, n] of gained) {
+      if (id === landedBy) continue
+      const p = snap.players.find((q) => q.id === id)
+      const spot = p ? this.spotOf(p, snap) : null
+      if (spot) floatText(this, spot.x, spot.y - this.avatarSize, `+${n}★`, PALETTE.amber, 12)
     }
   }
 
@@ -609,6 +639,20 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     }
   }
 
+  // Gone mid-round: their avatar fades off the bridge or the platform.
+  private onLeft(p: GlassBridgePlayer): void {
+    const r = this.runners.get(p.id)
+    this.hiddenFor.add(p.id)
+    if (!r) return
+    r.vest.setVisible(false)
+    this.tweens.add({
+      targets: r.avatar.image,
+      alpha: 0,
+      duration: 400,
+      onComplete: () => r.avatar.image.setVisible(false),
+    })
+  }
+
   // Avatars glide toward their spot (the snapshot only arrives a few times a second); the active
   // runner hops when jumping.
   private placeRunners(snap: GlassBridgeSnapshot, time: number, delta: number): void {
@@ -636,7 +680,7 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
           .setDepth(61)
         r = { avatar, vest, x: start.x, y: start.y }
         this.runners.set(p.id, r)
-        if (p.status === 'fallen') {
+        if (p.status === 'fallen' || p.status === 'left') {
           avatar.image.setVisible(false)
           vest.setVisible(false)
         }
@@ -714,18 +758,21 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
 
   private paintChrome(snap: GlassBridgeSnapshot): void {
     const me = this.me(snap)
-    const alive = snap.players.filter((p) => p.status !== 'fallen').length
-    this.hud?.setScore(me ? this.t('game.glassBridge.vest', { n: me.vest }) : '')
+    const out = (p: GlassBridgePlayer): boolean => p.status === 'fallen' || p.status === 'left'
+    const alive = snap.players.filter((p) => !out(p)).length
+    this.hud?.setScore(me ? `${this.t('game.glassBridge.vest', { n: me.vest })} ★${me.score}` : '')
     this.hud?.setCenter(
       this.t('game.common.left', { n: alive, total: snap.players.length }),
       alive <= 1 ? PALETTE.red : PALETTE.text,
     )
+    // The ★ score + status mark is the chip's trailing stat (kept when the strip clips names).
+    const mark = { crossed: '✓', fallen: '✗', active: '▶', queue: '', left: '' }
     this.strip?.set(
       snap.players.map((p) => ({
-        text: `#${p.vest} ${this.label(p.id)}${p.status === 'crossed' ? ' ✓' : p.status === 'fallen' ? ' ✗' : p.status === 'active' ? ' ▶' : ''}`,
+        text: `#${p.vest} ${this.label(p.id)} ★${p.score}${mark[p.status]}`,
         avatar: this.state.avatarOf(p.id),
         color: this.state.colorOf(p.id),
-        dim: p.status === 'fallen',
+        dim: out(p),
       })),
     )
     this.paintButtons(snap, false)
@@ -735,7 +782,7 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
       this.prompt.setText(prompt)
       this.prompt.setFontSize(fitFontSize(prompt, this.scale.width - 24, this.compact ? 12 : 16))
     }
-    if (snap.phase === 'done' && this.banner) {
+    if (snap.phase === 'done' && this.banner && me) {
       const text =
         me?.status === 'crossed'
           ? this.t('game.glassBridge.safe')
@@ -747,7 +794,8 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
   }
 
   private promptFor(snap: GlassBridgeSnapshot, me: GlassBridgePlayer | undefined): string {
-    if (!me || snap.phase === 'done') return ''
+    if (snap.phase === 'done') return ''
+    if (!me) return this.quip('game.common.spectating', this.selfId)
     if (snap.active === me.id) {
       return snap.phase === 'decide'
         ? this.t('game.glassBridge.yourJump')
@@ -770,7 +818,7 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
   private paintButtons(snap: GlassBridgeSnapshot, force: boolean): void {
     const jumping = snap.active === this.selfId
     const mine = snap.pointers.find((p) => p.id === this.selfId)?.side ?? null
-    const live = snap.phase !== 'done' && !this.state.final
+    const live = snap.phase !== 'done' && !this.state.final && this.me(snap) !== undefined
     const mode = `${jumping}:${snap.phase === 'decide'}:${mine}:${live}`
     if (mode === this.buttonMode && !force) return
     this.buttonMode = mode

@@ -15,7 +15,9 @@ export interface TugOfWarState {
 
 // Team real-time: members of two teams mash to pull the rope. Each team's progress is its average
 // pulls-per-member; the rope offset is the normalized difference. A team wins by opening a per-capita
-// lead of WIN_THRESHOLD (instant) or by leading when time runs out. Pure — time arrives as `now`.
+// lead of WIN_THRESHOLD (instant) or by leading when time runs out. A member who leaves stops counting
+// (their pulls and their seat), so a dropped teammate doesn't drag the average down. Pure — time
+// arrives as `now`.
 export class TugOfWar implements MiniGame<TugOfWarState, TugOfWarInput> {
   readonly id = 'tug-of-war'
   readonly format = 'team' as const
@@ -49,6 +51,13 @@ export class TugOfWar implements MiniGame<TugOfWarState, TugOfWarInput> {
     return state
   }
 
+  // Leaving drops the seat: totals only count members still on a team, so the leaver's pulls stop
+  // counting (but keep their stat line on the results).
+  leave(state: TugOfWarState, playerId: PlayerId): TugOfWarState {
+    state.team.delete(playerId)
+    return state
+  }
+
   isFinished(state: TugOfWarState, now: number): boolean {
     if (now >= state.endsAt) return true
     const [red, blue] = perCapita(state)
@@ -70,13 +79,11 @@ export class TugOfWar implements MiniGame<TugOfWarState, TugOfWarInput> {
   }
 
   snapshot(state: TugOfWarState, now: number): TugOfWarSnapshot {
-    const [red, blue] = totals(state)
     const [redPc, bluePc] = perCapita(state)
     const offset = clamp((bluePc - redPc) / WIN_THRESHOLD, -1, 1)
     return {
       offset,
-      red,
-      blue,
+      avg: { red: round1(redPc), blue: round1(bluePc) },
       teams: Object.fromEntries(state.team),
       remainingMs: Math.max(0, state.endsAt - now),
       done: this.isFinished(state, now),
@@ -85,6 +92,7 @@ export class TugOfWar implements MiniGame<TugOfWarState, TugOfWarInput> {
 }
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v))
+const round1 = (v: number): number => Math.round(v * 10) / 10
 
 function totals(state: TugOfWarState): [number, number] {
   let red = 0

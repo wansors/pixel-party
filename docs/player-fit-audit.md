@@ -7,8 +7,13 @@
   a disconnected player.
 - **Outcome**: every game declares the headcounts it supports in `MINIGAMES[].players`. The lobby only
   offers the ones that fit the room, and the engine skips the rest. Nothing crashed at any headcount.
-  The balance and correctness findings below are tracked as TODOs in
-  [`backlog.md`](backlog.md) → *Next iterations*.
+- **Status — all findings fixed (same day)**. The cross-cutting ones were fixed once, in the engine and
+  shared services (D28); the per-game ones are listed in D29. `minigame-catalog.md` describes the
+  current rules.
+
+  The tables below are the audit **as found**, kept as the record of why each fix was made. The
+  ranges are the current ones: Glass Bridge, Bomber Express and Sumo Push now take 2–12 players, and
+  Micro Race and Sumo ICE are recommended up to 10.
 
 ## How to read the ranges
 
@@ -73,19 +78,19 @@
 | `pixel-rain` | 1–12 | 3–10 | **real** | Blocks never spawn at the edges, so camping a wall survives about 3× longer. Pointer drag teleports. No difficulty ramp. |
 | `pixel-dash` | 1–12 | 2–8 | **real** | Mashing jump clears everything (stumbles only break ties). |
 | `snake-arena` | 1–12 | 2–10 | minor | **Bug**: two quick turns in one step drop one. Boards are independent (the blurb says "arena"). |
-| `sumo-push` | 3–12 | 4–8 | **real** | Equal masses, so a centre-holder can't be pushed out and 2-player rounds always draw. Solo ends instantly. |
+| `sumo-push` | 2–12 | 4–8 | **real** | Equal masses, so a centre-holder can't be pushed out and 2-player rounds always draw. Solo ends instantly. |
 | `maze-sprint` | 1–12 | 2–8 | minor | Rival tokens reveal the path. Speed follows the OS key-repeat rate. Rivals stack in 4 corner slots. |
 | `line-clear-sprint` | 1–12 | 2–10 | OK | **Bug**: the round never ends when every board has topped out. Rival list caps at 9. |
 | `quick-tetris` | 1–12 | 2–8 | OK | **Bug**: a topped-out player never "finishes", so the round always runs the full 45 s. Rival list caps at 9. |
 | `bubble-pop` | 1–12 | 2–10 | minor | **Bugs**: a jammed board softlocks (35 of 200 boards), and shots pass through bubbles. Full clears are rare. |
-| `glass-bridge` | 2–10 | 4–8 | **real** | Vest order decides the ranking, and waiting for the glint is dominant. **Bug**: players still queued at timeout rank with the fallen. At 11–12, someone may never get a turn, hence max 10. |
+| `glass-bridge` | 2–12 | 4–8 | **real** | Vest order decides the ranking, and waiting for the glint is dominant. **Bug**: players still queued at timeout rank with the fallen. At 11–12, someone may never get a turn (it was capped at 10 until fixed). |
 | `freeze-doll` | 1–12 | 3–12 | minor | A runner who never moves ranks above eliminated ones. |
 | `room-rush` | 3–12 | 5–12 | minor | With 2 left, the follower ties the leader (the room never locks). At 12, several survivors share 1st. |
-| `sumo-ice` | 2–12 | 3–8 | minor | **Bug**: every rescue lands on the same point (`b.id.length` is always 36). Crowded endgame at 10+. |
+| `sumo-ice` | 2–12 | 3–10 | minor | **Bug**: every rescue lands on the same point (`b.id.length` is always 36). Crowded endgame at 10+. |
 | `pang` | 1–12 | 2–12 | OK | Rival thumbnail labels overlap at 9+. |
 | `star-blaster` | 1–12 | 2–10 | minor | Ships auto-fire, so an AFK seat scores 200–600 points. Thumbnail labels overlap at 10+. |
 | `asteroids` | 1–12 | 3–8 | minor | Rock supply doesn't scale with N. AFK ships are free kills. |
-| `bomber-express` | 2–10 | 3–8 | **real** at 11–12 | **Bug**: 10 spawn cells, so the 11th and 12th players stack on seats 0 and 1, hence max 10. Spawns follow join order. |
+| `bomber-express` | 2–12 | 3–8 | **real** at 11–12 | **Bug**: 10 spawn cells, so the 11th and 12th players stack on seats 0 and 1 (it was capped at 10 until fixed). Spawns follow join order. |
 | `brawl` | 2–12 | 3–8 | minor | The last hitter takes the KO. AFK seats are free KOs. Spawns follow join order. |
 | `jump-rope` | 1–12 | 2–12 | OK | Phone avatars overlap at 9+ (fixed 32 px). |
 
@@ -93,7 +98,7 @@
 
 | Game | min–max | best | Balance | Key findings |
 |---|---|---|---|---|
-| `micro-race` | 1–12 | 3–8 | minor | Grid slot decides among equals (pole ≈ 2.7th vs back row ≈ 10.9th at 12). No slipstream. |
+| `micro-race` | 1–12 | 3–10 | minor | Grid slot decides among equals (pole ≈ 2.7th vs back row ≈ 10.9th at 12). No slipstream. |
 | `rally-stage` | 1–12 | 2–12 | OK | Starting ghosts stack (`slot % 5`). The playtest bot needs `PP_REPO`. |
 | `speed-circuit` | 1–12 | 4–10 | OK | Slipstream and boost pads flatten the grid. |
 | `dash-100m` | 1–12 | 2–8 | OK | **Bug**: the track overflows the HUD on landscape phones from 6–10 runners (it is mobile-friendly). |
@@ -101,17 +106,15 @@
 | `long-jump` | 1–12 | 2–10 | OK | Flag labels overlap. |
 | `javelin-throw` | 1–12 | 2–10 | OK | Flag labels overlap. |
 
-**What fits each headcount**:
+**What fits each headcount** (current ranges):
 
 | Players | 1 | 2 | 3 | 4–8 | 9–10 | 11–12 |
 |---|---|---|---|---|---|---|
-| Playable | 39 | 51 | 53 | 55 | 55 | 53 |
-| Recommended ("best") | 0 | 35 | 47 | 54–55 | 26 | 10 |
+| Playable | 39 | 52 | 53 | 55 | 55 | 55 |
+| Recommended ("best") | 0 | 35 | 47 | 54–55 | 28 | 10 |
 
-- Bomb Relay and Fleet Battle need 4 players.
-- Glass Bridge and Bomber Express max out at 10 until their fixes land.
-- The recommended set thins out above 8 on purpose: most games are at their best in the usual 4–8
-  party.
+Bomb Relay and Fleet Battle need 4 players. The recommended set thins out above 8 on purpose: most
+games are at their best in the usual 4–8 party.
 
 ## Cross-cutting findings
 

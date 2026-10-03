@@ -3,7 +3,8 @@
 // reaches further and shoves, GRAB throws whoever is right next to you. Items drop onto the street on a
 // seeded schedule: a pipe (harder, longer punches for a few swings), a bottle (one smashing hit) and roast
 // chicken (heals). Drop to 0 HP and you're knocked out for good. Last one standing wins; the rest rank by
-// knock-outs dealt, then how long they lasted.
+// KO credit (the finisher takes half of each KO, the other half is split by the damage everyone dealt
+// that fighter), then how long they lasted. A fighter who leaves the round drops off the wire.
 //
 // World units: the street is BRAWL.w long and BRAWL.depth deep (y = 0 is the back, against the wall).
 
@@ -38,6 +39,7 @@ export interface BrawlFighter {
   uses: number
   // Briefly untouchable after getting up.
   guard: boolean
+  // KO credit, to one decimal (a solo KO is 1; shared ones split, see above).
   kos: number
   // Held direction (for the client's prediction).
   dx: number

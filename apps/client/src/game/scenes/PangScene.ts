@@ -63,6 +63,7 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
   private minis?: Phaser.GameObjects.Graphics
   private miniBoxes: { x: number; y: number; w: number; h: number }[] = []
   private miniLabels: Phaser.GameObjects.Text[] = []
+  private miniLabelW = 0
   private miniAvatars: Phaser.GameObjects.Image[] = []
   private balloonImgs: Phaser.GameObjects.Image[] = []
   private balloonKeys: string[] = []
@@ -101,6 +102,7 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
     this.balloonKeys = []
     this.miniBoxes = []
     this.miniLabels = []
+    this.miniLabelW = 0
     this.miniAvatars = []
     this.avatar = undefined
     this.cheerUntil = 0
@@ -316,13 +318,14 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
       this.hud?.setScore(this.t('game.pang.pops', { n: mine.pops }))
       this.hud?.setCenter(this.t('game.pang.wave', { n: mine.wave + 1 }))
       if (prev && !this.firstSnapshot) this.react(prev, mine)
-      const prompt = mine.out
+    }
+    const prompt =
+      !mine || mine.out
         ? this.quip('game.common.spectating', this.selfId)
         : this.t('game.pang.hint')
-      if (this.prompt && this.prompt.text !== prompt) {
-        this.prompt.setText(prompt)
-        this.prompt.setFontSize(fitFontSize(prompt, this.scale.width - 24, this.compact ? 12 : 16))
-      }
+    if (this.prompt && this.prompt.text !== prompt) {
+      this.prompt.setText(prompt)
+      this.prompt.setFontSize(fitFontSize(prompt, this.scale.width - 24, this.compact ? 12 : 16))
     }
     this.strip?.set(
       snap.arenas.map((a) => ({
@@ -464,18 +467,23 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
     if (!g || !this.wide) return
     const others = snap.arenas.filter((a) => a.id !== this.selfId)
     const { width } = this.scale
-    const colX = Math.round(width * 0.7) + 12
-    const colW = width - colX - 10
-    const cols = others.length > 4 ? 2 : 1
-    const rows = Math.max(1, Math.ceil(others.length / cols))
-    const labelH = 22
-    // As big as the column allows, but every row (thumbnail + its label) must fit the arena's height.
-    const availH = PANG.h * this.arena.scale
-    const boxH = Math.floor(
-      Math.min(((colW - (cols - 1) * 8) / cols) * PANG.h, availH / rows - labelH),
-    )
-    const boxW = Math.round(boxH / PANG.h)
     if (this.miniBoxes.length !== others.length) {
+      const colX = Math.round(width * 0.7) + 12
+      const colW = width - colX - 10
+      const labelH = 22
+      // As big as the column allows, but every row (thumbnail + its label) must fit the arena's height:
+      // the column count (1–3) that gives the biggest thumbnails.
+      const availH = PANG.h * this.arena.scale
+      const fit = (cols: number): number =>
+        Math.floor(
+          Math.min(
+            ((colW - (cols - 1) * 8) / cols) * PANG.h,
+            availH / Math.max(1, Math.ceil(others.length / cols)) - labelH,
+          ),
+        )
+      const cols = [1, 2, 3].reduce((best, c) => (fit(c) > fit(best) ? c : best), 1)
+      const boxH = fit(cols)
+      const boxW = Math.round(boxH / PANG.h)
       this.miniBoxes = others.map((_, i) => ({
         x: colX + (i % cols) * (boxW + 8),
         y: this.arena.y + Math.floor(i / cols) * (boxH + labelH),
@@ -489,6 +497,7 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
           .text(b.x, b.y + b.h + 2, '', bodyStyle(11, PALETTE.text, { fontStyle: 'bold' }))
           .setDepth(6),
       )
+      this.miniLabelW = boxW + 6
       this.miniAvatars = others.map((a) =>
         this.add
           .image(
@@ -539,13 +548,24 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
         )
       }
       const label = this.miniLabels[i]
-      const text = `${this.label(a.id)} · ${a.pops} ${a.out ? '✗' : '♥'.repeat(a.lives)}`
-      if (label && label.text !== text) {
+      const name = this.label(a.id)
+      const stat = ` ${a.pops} ${a.out ? '✗' : '♥'.repeat(a.lives)}`
+      if (label && label.getData('key') !== name + stat) {
         label
-          .setText(text)
+          .setData('key', name + stat)
           .setColor(hexToCss(this.state.colorOf(a.id)))
           .setAlpha(a.out ? 0.45 : 1)
+        this.fitLabel(label, name, stat)
       }
     })
+  }
+
+  // A thumbnail's label never runs into the next column: the name is clipped ("PEPITO…"), the pops and
+  // lives always show.
+  private fitLabel(label: Phaser.GameObjects.Text, name: string, stat: string): void {
+    label.setText(name + stat)
+    for (let keep = name.length - 1; keep >= 1 && label.width > this.miniLabelW; keep--) {
+      label.setText(`${name.slice(0, keep)}…${stat}`)
+    }
   }
 }

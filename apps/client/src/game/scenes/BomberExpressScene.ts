@@ -97,7 +97,7 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
   private marker?: YouMarker
   private held: BomberDir[] = []
   private padHeld = new Map<number, BomberDir>()
-  private sentDir: BomberDir | null | '' = ''
+  private sentDir: BomberDir | null = null
   private sentAt = 0
   private lastTick = -1
   private snapAt = 0
@@ -117,7 +117,7 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
     this.views = new Map()
     this.held = []
     this.padHeld = new Map()
-    this.sentDir = ''
+    this.sentDir = null
     this.sentAt = 0
     this.lastTick = -1
     this.snapAt = 0
@@ -270,18 +270,17 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
     this.sfx.click()
   }
 
+  // Sends the held direction when it changes (and again while held, in case one got lost). Nothing goes
+  // out before a key or the d-pad is pressed: an untouched seat must stay idle for the engine.
   private syncDir(time: number): void {
     const pad = [...this.padHeld.values()].at(-1)
     const dir: BomberDir | null = this.held.at(-1) ?? pad ?? null
-    if (
-      (dir !== this.sentDir || (dir && time - this.sentAt > 300)) &&
-      this.snap &&
-      !this.state.final
-    ) {
-      this.sentDir = dir
-      this.sentAt = time
-      this.sendInput({ kind: 'move', dir })
-    }
+    const me = this.snap?.players.find((p) => p.id === this.selfId)
+    if (!me?.alive || this.state.final) return
+    if (dir === this.sentDir && !(dir && time - this.sentAt > 300)) return
+    this.sentDir = dir
+    this.sentAt = time
+    this.sendInput({ kind: 'move', dir })
   }
 
   protected frame(snap: BomberSnapshot | null, time: number): void {
@@ -389,7 +388,7 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
         this.views.set(p.id, view)
         if (!p.alive) {
           avatar.setExpression('ko')
-          avatar.image.setAlpha(0.25).setAngle(90)
+          avatar.image.setAlpha(p.left ? 0 : 0.25).setAngle(p.left ? 0 : 90)
           shadow.setVisible(false)
         }
       }
@@ -440,7 +439,7 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
       for (const p of snap.players) {
         const was = prevById.get(p.id)
         if (!was) continue
-        if (was.alive && !p.alive) this.knockOut(p)
+        if (was.alive && !p.alive && !p.left) this.knockOut(p)
         if (
           p.id === this.selfId &&
           (p.range > was.range || p.bombs > was.bombs || p.speed > was.speed)
@@ -464,7 +463,9 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
       if (view && !p.alive && view.alive) {
         view.alive = false
         view.avatar.setExpression('ko')
-        this.tweens.add({ targets: view.avatar.image, angle: 90, alpha: 0.25, duration: 300 })
+        // A leaver just fades off the board; a knock-out keels over.
+        const fall = p.left ? { alpha: 0 } : { angle: 90, alpha: 0.25 }
+        this.tweens.add({ targets: view.avatar.image, ...fall, duration: 300 })
       }
     }
     const me = snap.players.find((p) => p.id === this.selfId)
@@ -474,15 +475,22 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
       this.t('game.common.left', { n: alive, total: snap.players.length }),
       alive <= 1 ? PALETTE.red : PALETTE.text,
     )
+    // The KO stat is glued into one trailing token (no-break spaces), so a crowded strip clips the name,
+    // not the score.
+    const stat = (p: BomberPlayer): string =>
+      `${this.t('game.bomber.kos', { n: p.kos })}${p.alive || p.left ? '' : ' ✗'}`.replaceAll(
+        ' ',
+        '\u00a0',
+      )
     this.strip?.set(
       snap.players.map((p) => ({
-        text: `${this.label(p.id)} ${this.t('game.bomber.kos', { n: p.kos })}${p.alive ? '' : ' ✗'}`,
+        text: `${this.label(p.id)} ${stat(p)}`,
         avatar: this.state.avatarOf(p.id),
         color: this.state.colorOf(p.id),
         dim: !p.alive,
       })),
     )
-    if (this.state.final && me && this.banner && !this.banner.visible) {
+    if (this.state.final && me && !me.left && this.banner && !this.banner.visible) {
       const won = me.alive && snap.players.length > 1 && alive === 1
       showBanner(
         this,

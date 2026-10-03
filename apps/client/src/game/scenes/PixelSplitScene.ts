@@ -76,6 +76,7 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
     const stripSize = compact ? 11 : 13
+    const stripRows = width < 600 ? 3 : 2
     const stripH = PlayerStrip.rowH(stripSize)
     this.strip = new PlayerStrip(
       this,
@@ -83,10 +84,10 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
       this.top + 2 + stripH / 2,
       width - 24,
       stripSize,
-      1,
+      stripRows,
     )
     const cx = width / 2
-    const top = this.top + stripH + 2
+    const top = this.top + stripRows * stripH + 2
     this.leftKey = ensurePixelBlock(this, 'pp-split-left', 16, LEFT_COLOR, 2)
     this.rightKey = ensurePixelBlock(this, 'pp-split-right', 16, RIGHT_COLOR, 2)
 
@@ -329,7 +330,8 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
     this.lastScore = myScore
 
     if (!obj) {
-      this.showFinished()
+      // Out of objects — or a spectator, not in this round at all.
+      this.showFinished(!(this.selfId in snap.objects))
       return
     }
     if (obj.index !== this.drawnIndex) this.drawObject(obj)
@@ -355,7 +357,7 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
     if (this.handle) punch(this, this.handle, 0.1, 60)
   }
 
-  private showFinished(): void {
+  private showFinished(spectator: boolean): void {
     for (const c of this.cells) c.img.setVisible(false)
     this.cutGfx?.clear()
     this.boardGfx?.setVisible(false)
@@ -363,7 +365,8 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
       o?.setVisible(false)
     if (this.finished) return
     this.finished = true
-    if (this.banner) showBanner(this, this.banner, this.t('game.common.finished'), PALETTE.lime)
+    if (this.banner && !spectator)
+      showBanner(this, this.banner, this.t('game.common.finished'), PALETTE.lime)
     this.waitText?.setText(this.t('game.common.waiting'))
   }
 }

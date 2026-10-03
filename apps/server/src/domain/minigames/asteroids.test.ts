@@ -89,7 +89,7 @@ describe('Asteroids', () => {
     clear(s)
     const [a, b] = [ship(s, 'a'), ship(s, 'b')]
     Object.assign(a, { x: 0.3, y: 0.5, a: 0, vx: 0, vy: 0, shieldUntil: 0 })
-    Object.assign(b, { x: 0.6, y: 0.5, vx: 0, vy: 0, shieldUntil: 1_000_000 })
+    Object.assign(b, { x: 0.6, y: 0.5, vx: 0, vy: 0, shieldUntil: 1_000_000, piloted: true })
     game.onInput(s, 'a', { kind: 'controls', rot: 0, thrust: false, fire: true }, 0)
     run(s, 0, 400)
     expect(b.alive).toBe(true) // shield up
@@ -108,7 +108,7 @@ describe('Asteroids', () => {
     const s = init(['a'])
     clear(s)
     const a = ship(s, 'a')
-    Object.assign(a, { x: 0.5, y: 0.5, vx: 0, vy: 0, shieldUntil: 0 })
+    Object.assign(a, { x: 0.5, y: 0.5, vx: 0, vy: 0, shieldUntil: 0, piloted: true })
     s.rocks = [{ id: 1, x: 0.52, y: 0.5, vx: 0, vy: 0, size: 2 }]
     run(s, 0, 50)
     expect(a.alive).toBe(false)
@@ -130,5 +130,51 @@ describe('Asteroids', () => {
     expect(game.getResult(s).placements).toEqual(['c', 'b', 'a'])
     game.onInput(s, 'a', { kind: 'controls', rot: 7 as 1, thrust: true, fire: false }, 0)
     expect(ship(s, 'a').rot).toBe(0)
+  })
+
+  test('a bigger field gets a bigger rock supply; up to four pilots keep the tuned one', () => {
+    const four = init(['a', 'b', 'c', 'd'])
+    expect(four.rocks).toHaveLength(6)
+    expect([four.minMass, four.refillMs]).toEqual([16, 1800])
+    const twelve = init(Array.from({ length: 12 }, (_, i) => `p${i}`))
+    expect(twelve.rocks).toHaveLength(10)
+    expect([twelve.minMass, twelve.refillMs]).toEqual([28, 600])
+  })
+
+  test('a ship nobody has piloted yet is a ghost: no kill to farm, no rock to ram', () => {
+    const s = init(['a', 'b'])
+    clear(s)
+    const [a, b] = [ship(s, 'a'), ship(s, 'b')]
+    Object.assign(a, { x: 0.3, y: 0.5, a: 0, vx: 0, vy: 0, shieldUntil: 0 })
+    Object.assign(b, { x: 0.6, y: 0.5, vx: 0, vy: 0, shieldUntil: 0 })
+    s.rocks = [{ id: 1, x: 0.6, y: 0.62, vx: 0, vy: -0.2, size: 1 }] // drifts through b
+    game.onInput(s, 'a', { kind: 'controls', rot: 0, thrust: false, fire: true }, 0)
+    run(s, 0, 900)
+    expect(b.alive).toBe(true)
+    expect(a.kills).toBe(0)
+    expect(game.snapshot(s, 900).ships.map((x) => x.idle)).toEqual([false, true])
+    // A neutral keep-alive doesn't unpark it; the first real control does, behind a fresh shield.
+    game.onInput(s, 'b', { kind: 'controls', rot: 0, thrust: false, fire: false }, 900)
+    expect(b.piloted).toBe(false)
+    game.onInput(s, 'b', { kind: 'controls', rot: 1, thrust: false, fire: false }, 900)
+    expect(b.piloted).toBe(true)
+    expect(b.shieldUntil).toBe(900 + ASTEROIDS.shieldMs)
+  })
+
+  test('a pilot who leaves takes their ship and bullets out of the sky; the others keep theirs', () => {
+    const s = init(['a', 'b', 'c'])
+    clear(s)
+    for (const id of ['a', 'b', 'c'])
+      game.onInput(s, id, { kind: 'controls', rot: 0, thrust: false, fire: true }, 0)
+    run(s, 0, 100)
+    expect(s.bullets.map((b) => b.owner)).toEqual([0, 1, 2])
+    game.leave(s, 'b', 100)
+    run(s, 100, 10_000)
+    expect(ship(s, 'b').alive).toBe(false)
+    const snap = game.snapshot(s, 10_000)
+    expect(snap.ships.map((x) => x.id)).toEqual(['a', 'c'])
+    // Bullets name their shooter by index into the ships on the wire.
+    expect(new Set(snap.bullets.map((b) => b[4]))).toEqual(new Set([0, 1]))
+    expect(game.getResult(s).placements).toContain('b')
   })
 })

@@ -12,6 +12,7 @@ import {
   shade,
 } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
+import { DuelWatch } from './duelWatch'
 
 // Mirrors the server's pong.ts: paddles sit at x = 0.04 / 0.96 and return the ball when its centre is
 // within ±PAD_HALF of the paddle centre; first to WIN_SCORE takes the duel.
@@ -20,6 +21,9 @@ const PAD_HALF = 0.13
 const WIN_SCORE = 5
 const KEY_SPEED = 1.4 // normalized field heights per second with the keyboard
 const TRAIL = 8
+// How long the bye's "no rival" card and the GOLDEN POINT call stay over the court.
+const BYE_CARD_MS = 3000
+const GOLDEN_CARD_MS = 1600
 
 // Pixel paddle, 4 cells thick: outlined pill with a lit and a shaded edge. Drawn upright; transposed
 // for the portrait (paddles-at-the-ends) layout.
@@ -47,6 +51,8 @@ interface Side {
 // while the ball + opponent paddle come from the snapshot, smoothed by the interpolator. Landscape
 // screens play left↔right; portrait phones rotate the court so you defend the bottom edge and slide the
 // paddle with your thumb. The mapping is purely visual — the wire stays normalized (x along, y across).
+// A tie at the bell plays a golden point. The bye (or a player who joined mid-round) watches someone
+// else's duel, read-only, from that duellist's end of the court.
 export class PongScene extends MiniGameScene<PongSnapshot> {
   private me?: Side
   private opp?: Side
@@ -54,6 +60,7 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
   private trailGfx?: Phaser.GameObjects.Graphics
   private banner?: Phaser.GameObjects.Text
   private subline?: Phaser.GameObjects.Text
+  private hint?: Phaser.GameObjects.Text
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
   private readonly interp = new SnapshotInterpolator<PongSnapshot>(100)
   private trail: { x: number; y: number }[] = []
@@ -68,8 +75,16 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
   private lastBallY = 0.5
   private lastDir = 0
   private wasDone = false
+  private wasGolden = false
   // undefined = not applied yet, so the first view (even a bye's null) always runs setOpponent.
   private oppId: string | null | undefined = undefined
+  // Whose end of the court is drawn as "yours": you while you play, else the duellist being watched.
+  private viewId: string | null | undefined = undefined
+  private playing = false
+  // Only a human move sends the paddle (an untouched paddle must not count as playing).
+  private touched = false
+  private byeShown = false
+  private readonly watch = new DuelWatch()
   private vertical = false
   private compact = false
   // Court geometry. "Along" = the server's x axis (your paddle → theirs), "across" = its y axis.
@@ -103,7 +118,13 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
     this.lastBallY = 0.5
     this.lastDir = 0
     this.wasDone = false
+    this.wasGolden = false
     this.oppId = undefined
+    this.viewId = undefined
+    this.playing = false
+    this.touched = false
+    this.byeShown = false
+    this.watch.reset()
 
     const { width, height } = this.scale
     this.compact = Math.min(width, height) < 520
@@ -142,7 +163,7 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
       .setDisplaySize(this.ballR * 2, this.ballR * 2)
       .setDepth(20)
 
-    this.add
+    this.hint = this.add
       .text(
         width / 2,
         height - hintH / 2,
@@ -262,58 +283,111 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
   }
 
   private aim(p: Phaser.Input.Pointer): void {
+    if (!this.playing) return
+    this.touched = true
     const { x, y } = this.court
     const c = this.vertical ? p.x - x : p.y - y
     this.padY = Phaser.Math.Clamp((c - this.acrossStart) / this.acrossLen, 0, 1)
   }
 
   private maybeSend(now: number): void {
+    if (!this.playing || !this.touched) return
     if (now - this.lastSentAt < 60 || Math.abs(this.padY - this.lastSentY) < 0.01) return
     this.lastSentAt = now
     this.lastSentY = this.padY
     this.sendInput({ kind: 'move', y: this.padY })
   }
 
-  protected frame(snap: PongSnapshot | null, _time: number, delta: number): void {
+  protected frame(snap: PongSnapshot | null, time: number, delta: number): void {
     const now = this.time.now
     if (snap && this.state.tick !== this.lastTick) {
       this.lastTick = this.state.tick
       this.interp.push(snap, now)
-      const view = snap.players[this.selfId]
+      const own = snap.players[this.selfId]
+      this.playing = !!own && own.opponentId !== null
+      const viewId = this.playing
+        ? this.selfId
+        : this.watch.pick(snap.players, time, (_, v) => v.side === 'left')
+      if (viewId !== this.viewId) this.setView(viewId, own?.opponentId === null)
+      const view = viewId === null ? undefined : snap.players[viewId]
       if (view) this.onView(view)
     }
 
-    const step = (KEY_SPEED * delta) / 1000
-    const back = this.vertical ? this.cursors?.left : this.cursors?.up
-    const fwd = this.vertical ? this.cursors?.right : this.cursors?.down
-    if (back?.isDown) this.padY -= step
-    if (fwd?.isDown) this.padY += step
-    this.padY = Phaser.Math.Clamp(this.padY, 0, 1)
-    this.maybeSend(now)
+    if (this.playing) {
+      const step = (KEY_SPEED * delta) / 1000
+      const back = this.vertical ? this.cursors?.left : this.cursors?.up
+      const fwd = this.vertical ? this.cursors?.right : this.cursors?.down
+      if (back?.isDown || fwd?.isDown) this.touched = true
+      if (back?.isDown) this.padY -= step
+      if (fwd?.isDown) this.padY += step
+      this.padY = Phaser.Math.Clamp(this.padY, 0, 1)
+      this.maybeSend(now)
+    }
 
-    const mePos = this.paddlePos(true, this.padY)
-    this.me?.paddle.setPosition(mePos.x, mePos.y)
-
-    const latest = this.interp.latest()?.players[this.selfId]
-    if (!latest) return
-    // Interpolate ball + opponent paddle — except across a point (the ball teleports back to serve).
+    const viewId = this.viewId
+    const latest = viewId ? this.interp.latest()?.players[viewId] : undefined
+    if (!viewId || !latest) {
+      const mePos = this.paddlePos(true, this.padY)
+      this.me?.paddle.setPosition(mePos.x, mePos.y)
+      return
+    }
+    // Interpolate ball + paddles from the snapshot (yours is local while you play) — except across a
+    // point (the ball teleports back to serve).
     let ballX = latest.ballX
     let ballY = latest.ballY
     let oppY = latest.oppY
+    let youY = latest.youY
     const sample = this.interp.sample(now)
-    const from = sample?.from.players[this.selfId]
-    const to = sample?.to.players[this.selfId]
+    const from = sample?.from.players[viewId]
+    const to = sample?.to.players[viewId]
     if (sample && from && to) {
       oppY = lerp(from.oppY, to.oppY, sample.t)
+      youY = lerp(from.youY, to.youY, sample.t)
       const served = from.scoreYou !== to.scoreYou || from.scoreOpp !== to.scoreOpp
       ballX = served ? to.ballX : lerp(from.ballX, to.ballX, sample.t)
       ballY = served ? to.ballY : lerp(from.ballY, to.ballY, sample.t)
     }
+    const mePos = this.paddlePos(true, this.playing ? this.padY : youY)
+    this.me?.paddle.setPosition(mePos.x, mePos.y)
     const oppPos = this.paddlePos(false, oppY)
     this.opp?.paddle.setPosition(oppPos.x, oppPos.y)
     const b = this.toScreen(ballX, ballY)
     this.ball?.setPosition(b.x, b.y).setVisible(!latest.done)
     this.drawTrail(b, !latest.done)
+  }
+
+  // A new viewpoint: your own duel on the first snapshot, or the next duel a spectator watches. The
+  // near end takes the viewed duellist's colors; a bye first hears it scores a draw, then watches.
+  private setView(viewId: string | null, bye: boolean): void {
+    this.viewId = viewId
+    this.synced = false
+    this.wasDone = false
+    this.wasGolden = false
+    this.trail = []
+    this.banner?.setVisible(false)
+    this.subline?.setVisible(false)
+    this.hud?.setCenter('')
+    const me = this.me
+    if (me && viewId) {
+      const color = this.state.colorOf(viewId, PALETTE.lime)
+      me.color = color
+      me.paddle.setTexture(this.paddleKey(color))
+      me.digit.setColor(hexToCss(color))
+      me.name.setText(this.label(viewId)).setColor(hexToCss(color))
+    }
+    if (this.playing) return
+    this.hud?.setScore(bye ? this.t('game.common.duelBye') : '')
+    if (bye && !this.byeShown && this.banner) {
+      this.byeShown = true
+      const text = this.t('game.common.duelBye')
+      showBanner(this, this.banner, text, PALETTE.amber)
+      this.subline?.setText(this.t('game.pixelPong.bye')).setVisible(true)
+      this.time.delayedCall(BYE_CARD_MS, () => {
+        if (this.banner?.text !== text) return
+        this.banner.setVisible(false)
+        this.subline?.setVisible(false)
+      })
+    }
   }
 
   private drawTrail(b: { x: number; y: number }, live: boolean): void {
@@ -334,10 +408,18 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
     })
   }
 
-  // Discrete events from each fresh snapshot: points, paddle returns, the final result.
+  // Discrete events from each fresh snapshot: points, paddle returns, golden point, the final result.
   private onView(view: PongPlayerView): void {
     if (view.opponentId !== this.oppId) this.setOpponent(view.opponentId)
-    this.hud?.setScore(this.t('game.common.pts', { n: view.scoreYou }))
+    if (this.playing) this.hud?.setScore(this.t('game.common.pts', { n: view.scoreYou }))
+    else if (view.opponentId) {
+      this.hint?.setText(
+        this.t('game.common.duelWatch', {
+          a: this.state.nameOf(this.viewId ?? ''),
+          b: this.state.nameOf(view.opponentId),
+        }),
+      )
+    }
     this.me?.digit.setText(String(view.scoreYou))
     this.opp?.digit.setText(String(view.scoreOpp))
     if (!this.synced) {
@@ -347,7 +429,9 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
       this.lastBallX = view.ballX
       this.lastBallY = view.ballY
       this.wasDone = view.done
-      if (view.done) this.showResult(view, false)
+      this.wasGolden = view.golden
+      if (view.golden) this.hud?.setCenter(this.t('game.pixelPong.golden'), PALETTE.amber)
+      if (view.done && view.opponentId) this.showResult(view, false)
       return
     }
 
@@ -369,8 +453,25 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
     this.lastBallX = view.ballX
     this.lastBallY = view.ballY
 
+    if (view.golden && !this.wasGolden) this.onGolden()
+    this.wasGolden = view.golden
     if (view.done && !this.wasDone) this.showResult(view, true)
     this.wasDone = view.done
+  }
+
+  // Tied at the bell: a quick call over the court, then a GOLDEN POINT chip while it lasts.
+  private onGolden(): void {
+    const golden = this.t('game.pixelPong.golden')
+    this.hud?.setCenter(golden, PALETTE.amber)
+    this.sfx.go()
+    if (!this.banner) return
+    showBanner(this, this.banner, golden, PALETTE.amber)
+    this.subline?.setText(this.t('game.pixelPong.goldenHint')).setVisible(true)
+    this.time.delayedCall(GOLDEN_CARD_MS, () => {
+      if (this.banner?.text !== golden) return
+      this.banner.setVisible(false)
+      this.subline?.setVisible(false)
+    })
   }
 
   private setOpponent(id: string | null): void {
@@ -390,7 +491,11 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
     const exit = this.toScreen(mine ? 1 - PAD_X : PAD_X, this.lastBallY)
     this.trail = []
     if (side) punch(this, side.digit, 0.5, 140)
-    if (mine) {
+    if (!this.playing) {
+      // Watching: a neutral pop for either end.
+      this.sfx.pop()
+      burst(this, exit.x, exit.y, side?.color ?? PALETTE.amber, 20, 260)
+    } else if (mine) {
       this.sfx.correct()
       burst(this, exit.x, exit.y, this.me?.color ?? PALETTE.lime, 20, 260)
       floatText(
@@ -420,6 +525,19 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
   private showResult(view: PongPlayerView, withFx: boolean): void {
     const banner = this.banner
     if (!banner) return
+    this.hud?.setCenter('')
+    if (!this.playing) {
+      // Watching: who took the duel (the bye's own result is its draw, said up front).
+      const winner = view.won === null ? null : view.won ? this.viewId : (view.opponentId ?? null)
+      const text = winner
+        ? this.t('game.common.duelWinner', { name: this.state.nameOf(winner) })
+        : this.t('game.common.draw')
+      banner.setFontSize(fitFontSize(text, this.scale.width * 0.9, this.compact ? 24 : 40))
+      showBanner(this, banner, text, winner ? this.state.colorOf(winner) : PALETTE.amber)
+      this.subline?.setVisible(false)
+      if (withFx) this.sfx.tick()
+      return
+    }
     const text =
       view.won === null
         ? this.t('game.common.draw')
@@ -430,7 +548,9 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
     banner.setFontSize(fitFontSize(text, this.scale.width * 0.9, this.compact ? 24 : 40))
     showBanner(this, banner, text, color)
     const sub =
-      view.opponentId === null ? this.t('game.pixelPong.bye') : this.t('game.common.waiting')
+      view.oppLeft && view.opponentId
+        ? this.t('game.common.duelOppLeft', { name: this.state.nameOf(view.opponentId) })
+        : this.t('game.common.waiting')
     this.subline?.setText(sub).setVisible(true)
     if (!withFx) return
     if (view.won) {
