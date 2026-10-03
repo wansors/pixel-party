@@ -209,7 +209,11 @@
                 <span class="blurb">{{ catalog.minigameBlurb(g.id) }}</span>
               } @else {
                 <span class="blurb needs">
-                  {{ 'room.lobby.needsPlayers' | transloco: { range: range(g.players.min, g.players.max) } }}
+                  @if (unfitReason(g) === 'teams') {
+                    {{ 'room.lobby.needsTeams' | transloco }}
+                  } @else {
+                    {{ 'room.lobby.needsPlayers' | transloco: { range: range(g.players.min, g.players.max) } }}
+                  }
                 </span>
               }
               <span class="meta">
@@ -313,6 +317,9 @@
       <button type="button" class="arcade-btn" (click)="store.shuffleTeams()">
         {{ 'room.lobby.shuffleTeams' | transloco }}
       </button>
+    }
+    @if (unevenTeams(); as gap) {
+      <span class="hint">{{ 'room.lobby.unevenTeams' | transloco: { gap } }}</span>
     }
     @if (store.isHost()) {
       <button

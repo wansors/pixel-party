@@ -56,4 +56,22 @@ describe('smallerTeam', () => {
       ),
     ).toBe('red')
   })
+
+  test('a seeded RNG breaks a tie either way', () => {
+    const tie = new Map<TeamId, number>([
+      ['red', 2],
+      ['blue', 2],
+    ])
+    expect(smallerTeam(tie, seq([0.1]))).toBe('red')
+    expect(smallerTeam(tie, seq([0.9]))).toBe('blue')
+  })
+})
+
+describe('balancedTeams odd player out', () => {
+  test('the seed decides which team gets the extra member', () => {
+    const ids = ['a', 'b', 'c']
+    const reds = (r: number) =>
+      [...balancedTeams(ids, seq([0.5, 0.5, r])).values()].filter((t) => t === 'red').length
+    expect(new Set([reds(0.1), reds(0.9)])).toEqual(new Set([1, 2]))
+  })
 })

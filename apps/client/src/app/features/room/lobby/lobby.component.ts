@@ -7,6 +7,7 @@ import {
   PALETTE,
   SKILL_AXES,
   type SkillAxis,
+  fitsPlayers,
   hexToCss,
   idealForPlayers,
 } from '@pp/shared'
@@ -108,6 +109,17 @@ export class LobbyComponent {
   isIdeal(g: MiniGameMeta): boolean {
     return idealForPlayers(g.id, this.store.connectedCount())
   }
+
+  // Why a game can't be picked right now: the headcount is outside its range, or a team is empty.
+  unfitReason(g: MiniGameMeta): 'range' | 'teams' {
+    return fitsPlayers(g.id, this.store.connectedCount()) ? 'teams' : 'range'
+  }
+
+  // "3 v 1": teams more than one player apart get a warning next to the shuffle button.
+  readonly unevenTeams = computed(() => {
+    const [red = 0, blue = 0] = this.store.teamSizes()
+    return this.store.usesTeams() && Math.abs(red - blue) > 1 ? `${red} v ${blue}` : null
+  })
 
   deselectShown(): void {
     this.store.deselectGames(this.shownGames().map((g) => g.id))

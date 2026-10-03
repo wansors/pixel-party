@@ -9,13 +9,15 @@ import type {
   TeamId,
   TeamRoundResult,
 } from '@pp/shared'
-import { MINIGAMES_BY_ID, playableGames } from '@pp/shared'
+import { MINIGAMES_BY_ID } from '@pp/shared'
 import type { Room } from '../../domain/entities/Room'
 import type { MiniGame, NormalizedResult, PlayerId } from '../../domain/minigames/MiniGame'
 import { createMiniGame } from '../../domain/minigames/registry'
 import type { Random } from '../../domain/ports/Random'
 import { finalRanking } from '../../domain/services/finalRanking'
 import { type HandicapConfig, applyScoringHandicap } from '../../domain/services/handicap'
+import { demoteIdle } from '../../domain/services/idleDemotion'
+import { gameFitsRoom, playableLineup } from '../../domain/services/lineup'
 import { awardPoints, awardTeamPoints } from '../../domain/services/scoring'
 import {
   type RoundAnalysis,
@@ -44,7 +46,12 @@ export interface SessionConfig {
   // Optional bounded scoring catch-up (scoring-system.md §3.1). Ships OFF; when enabled it only inflates
   // trailing players' own awards within a cap — never reorders a round.
   handicap: HandicapConfig
+  // How long a round player may stay disconnected before they count as gone (the game's `leave` hook
+  // runs and they rank last). Long enough that a page reload isn't punished. Default 5 s.
+  leaveGraceMs?: number
 }
+
+const DEFAULT_LEAVE_GRACE_MS = 5000
 
 type Phase = 'intro' | 'playing' | 'finishing' | 'roundResult' | 'scoreboard' | 'final'
 
@@ -62,8 +69,17 @@ export class SessionEngine {
   // Last published round result, kept so a reconnecting client can be shown the scoreboard it missed.
   private lastResult?: RoundResultDto
   private readonly cumulative = new Map<PlayerId, number>()
-  // Players are snapshotted at round start so a mid-round leave/join can't reshape the result.
+  // The players CONNECTED at round start (D28), snapshotted so a mid-round leave/join can't reshape the
+  // result; only their inputs reach the game.
   private roundPlayers: PlayerId[] = []
+  private roundSet = new Set<PlayerId>()
+  // Who sent at least one input this round, when each round player dropped (cleared on reconnect), and
+  // who the game has been told left. Never-played and gone players rank last (idle demotion).
+  private acted = new Set<PlayerId>()
+  private disconnectedSince = new Map<PlayerId, number>()
+  private left = new Set<PlayerId>()
+  // Byes per player this session, fed back to duel games so byes rotate.
+  private readonly byeCounts = new Map<PlayerId, number>()
   // Team membership snapshotted at round start (empty for FFA rounds); drives team scoring.
   private roundTeams = new Map<TeamId, PlayerId[]>()
   // Phase 4 post-match analysis: one entry per finished round, consumed to build the final radar +
@@ -91,9 +107,9 @@ export class SessionEngine {
 
   start(): void {
     // No-repeat within a session: draw distinct games from the pool and cap the round count at the
-    // number of distinct games (a game never plays twice in one session). Games whose player range
-    // doesn't fit the room's headcount sit the session out (D27); Button Masher fits any room.
-    const playable = playableGames(this.room.minigameIds, this.room.connectedCount)
+    // number of distinct games (a game never plays twice in one session). Games that don't fit the room
+    // (player range, empty team — D27/D28) sit the session out; Button Masher fits any room.
+    const playable = playableLineup(this.room)
     const pool = playable.length ? playable : ['button-masher']
     const requested = this.room.rounds > 0 ? this.room.rounds : pool.length
     this.sequence = this.orderPool(pool, Math.min(requested, pool.length)) as MiniGameId[]
@@ -120,7 +136,8 @@ export class SessionEngine {
   }
 
   onInput(playerId: PlayerId, input: unknown): void {
-    if (this.phase !== 'playing' || !this.game) return
+    if (this.phase !== 'playing' || !this.game || !this.roundSet.has(playerId)) return
+    this.acted.add(playerId)
     this.gameState = this.game.onInput(this.gameState, playerId, input, this.clock.now())
   }
 
@@ -149,6 +166,18 @@ export class SessionEngine {
   }
 
   private beginIntro(now: number): void {
+    // People come and go mid-session: a game that no longer fits who's connected is dropped from the
+    // line-up rather than played short-handed (a duel alone, a team with nobody on it).
+    while (
+      this.roundIndex < this.sequence.length &&
+      !gameFitsRoom(this.sequence[this.roundIndex] as MiniGameId, this.room)
+    ) {
+      this.sequence.splice(this.roundIndex, 1)
+    }
+    if (this.roundIndex >= this.sequence.length) {
+      this.finish()
+      return
+    }
     const id = this.sequence[this.roundIndex] as MiniGameId
     const meta = MINIGAMES_BY_ID.get(id)
     this.room.setPhase('round-intro')
@@ -175,12 +204,23 @@ export class SessionEngine {
       this.advance(now)
       return
     }
+    if (!gameFitsRoom(id, this.room)) {
+      // Someone dropped during the intro and the game no longer fits: skip to the next one that does.
+      this.sequence.splice(this.roundIndex, 1)
+      this.beginIntro(now)
+      return
+    }
     this.game = game
-    this.roundPlayers = this.room.list().map((p) => p.id)
+    const connected = this.room.list().filter((p) => p.connected)
+    this.roundPlayers = connected.map((p) => p.id)
+    this.roundSet = new Set(this.roundPlayers)
+    this.acted = new Set()
+    this.disconnectedSince = new Map()
+    this.left = new Set()
     // Snapshot team membership for the round (empty for FFA games) and feed it to the game.
     this.roundTeams = new Map()
     const teams: Record<PlayerId, TeamId> = {}
-    for (const p of this.room.list()) {
+    for (const p of connected) {
       if (!p.team) continue
       teams[p.id] = p.team
       const bucket = this.roundTeams.get(p.team) ?? []
@@ -193,6 +233,7 @@ export class SessionEngine {
       random: this.random,
       now,
       teams,
+      byeCounts: Object.fromEntries(this.byeCounts),
       config: { durationMs },
     })
     this.tickCount = 0
@@ -203,6 +244,7 @@ export class SessionEngine {
   private tickPlaying(now: number): void {
     const game = this.game
     if (!game) return
+    this.trackLeavers(game, now)
     if (game.tick) {
       this.gameState = game.tick(this.gameState, 1000 / this.config.tickHz, now)
     }
@@ -216,6 +258,35 @@ export class SessionEngine {
       })
     }
     if (game.isFinished(this.gameState, now)) this.beginFinish(now)
+  }
+
+  // Round players who've been disconnected past the grace period are gone: the game's `leave` hook lets
+  // the round carry on without them (no waiting on a seat that can't act). A reconnect inside the grace
+  // period clears the clock.
+  private trackLeavers(game: MiniGame<unknown, unknown>, now: number): void {
+    for (const id of this.roundPlayers) {
+      if (this.left.has(id)) continue
+      if (this.room.get(id)?.connected) {
+        this.disconnectedSince.delete(id)
+        continue
+      }
+      const since = this.disconnectedSince.get(id) ?? now
+      this.disconnectedSince.set(id, since)
+      if (!game.leave || now - since < this.leaveGraceMs) continue
+      this.left.add(id)
+      this.gameState = game.leave(this.gameState, id, now)
+    }
+  }
+
+  // Gone for good this round: told to the game, or (for a game without the hook) still away past the
+  // grace period when the round ends.
+  private isGone(id: PlayerId, now: number): boolean {
+    const since = this.disconnectedSince.get(id)
+    return this.left.has(id) || (since !== undefined && now - since >= this.leaveGraceMs)
+  }
+
+  private get leaveGraceMs(): number {
+    return this.config.leaveGraceMs ?? DEFAULT_LEAVE_GRACE_MS
   }
 
   // The round is over: publish its final state (flagged, so clients can show a FINISH moment), freeze
@@ -242,9 +313,19 @@ export class SessionEngine {
   private endRound(now: number): void {
     const game = this.game as MiniGame<unknown, unknown>
     const id = this.sequence[this.roundIndex] as MiniGameId
-    const result = game.getResult(this.gameState)
-    // Team rounds distribute points by team position; FFA rounds award per player directly.
+    const raw = game.getResult(this.gameState)
+    for (const pid of raw.byes ?? []) this.byeCounts.set(pid, (this.byeCounts.get(pid) ?? 0) + 1)
+    // Team rounds distribute points by team position; FFA rounds award per player directly — with
+    // anyone who never played (no input, or gone) ranked below everyone who did (D28). A bye or a turn
+    // that never came isn't idling.
     const isTeam = game.format === 'team'
+    const excused = new Set([...(raw.byes ?? []), ...(raw.waiting ?? [])])
+    const played = new Set(
+      this.roundPlayers.filter(
+        (pid) => (this.acted.has(pid) || excused.has(pid)) && !this.isGone(pid, now),
+      ),
+    )
+    const result = isTeam ? raw : demoteIdle(raw, played)
     const basePoints = isTeam ? awardTeamPoints(result, this.roundTeams) : awardPoints(result)
     // Optional bounded catch-up on the awarded points, keyed off the standings BEFORE this round. The
     // host lobby toggle (room.handicap) is the on/off switch; the cap comes from server config.
@@ -368,6 +449,10 @@ export class SessionEngine {
       this.beginIntro(now)
       return
     }
+    this.finish()
+  }
+
+  private finish(): void {
     this.phase = 'final'
     this.room.setPhase('final')
     const players = [...this.cumulative.keys()]

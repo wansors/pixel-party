@@ -69,7 +69,9 @@
       "needsPlayers": "Hacen falta {{range}} jugadores",
       "sittingOut": "· {{n}} en el banquillo",
       "sittingOutHint": "Juegos elegidos que no encajan con tanta gente: se saltan esta partida y vuelven si cambia el número de jugadores",
-      "noGamesFit": "Ningún juego elegido vale para {{n}} jugadores"
+      "noGamesFit": "Ningún juego elegido vale para {{n}} jugadores",
+      "needsTeams": "Hace falta gente en los dos equipos",
+      "unevenTeams": "Equipos cojos: {{gap}}"
     },
     "intro": {
       "round": "Ronda",

@@ -5,6 +5,7 @@ import { TranslocoService } from '@jsverse/transloco'
 import {
   type AvatarId,
   MINIGAMES,
+  MINIGAMES_BY_ID,
   type MiniGameFormat,
   type MiniGameId,
   type PlayerDto,
@@ -18,7 +19,6 @@ import {
   type TeamId,
   type TeamRoundResult,
   fitsPlayers,
-  playableGames,
 } from '@pp/shared'
 import { GameClient } from '../../../game/GameClient'
 import { toAvatarId } from '../../../game/avatarSprites'
@@ -142,10 +142,14 @@ export class RoomStore {
   readonly myReady = computed(() => this.me()?.ready ?? false)
   readonly readyCount = computed(() => this.players().filter((p) => p.ready && p.connected).length)
   readonly connectedCount = computed(() => this.players().filter((p) => p.connected).length)
-  // The part of the line-up this headcount actually plays (D27): picked games whose player range fits
-  // the connected players. The rest stay picked and come back if people join or leave.
+  // Connected players per team (only meaningful once the line-up uses teams).
+  readonly teamSizes = computed(() =>
+    TEAMS.map((t) => this.players().filter((p) => p.connected && p.team === t.id).length),
+  )
+  // The part of the line-up this room actually plays (D27/D28): picked games that fit (see `fits`). The
+  // rest stay picked and come back if people join or leave.
   readonly playableGameIds = computed(() =>
-    playableGames(this.selectedGameIds(), this.connectedCount()),
+    [...new Set(this.selectedGameIds())].filter((id) => this.fits(id)),
   )
   // Rounds as the session will run them: the engine caps the count at the playable line-up.
   readonly effectiveRounds = computed(() =>
@@ -468,8 +472,12 @@ export class RoomStore {
     this.configure(this.selectedGameIds().filter((g) => !drop.has(g)))
   }
 
+  // Mirrors the server's gameFitsRoom: the connected headcount is inside the game's player range and,
+  // once teams are dealt, a team game has someone on each side.
   fits(id: MiniGameId): boolean {
-    return fitsPlayers(id, this.connectedCount())
+    if (!fitsPlayers(id, this.connectedCount())) return false
+    if (MINIGAMES_BY_ID.get(id)?.format !== 'team' || !this.usesTeams()) return true
+    return this.teamSizes().every((n) => n > 0)
   }
 
   setRounds(value: number): void {

@@ -30,4 +30,12 @@ describe('pairPlayers', () => {
     const b = pairPlayers(['a', 'b', 'c', 'd'], seq([0.3, 0.6, 0.1, 0.9]))
     expect(a).toEqual(b)
   })
+
+  test('hands the bye to a player with the fewest byes so far', () => {
+    const counts = { a: 1, b: 1, c: 0, d: 1, e: 1 }
+    for (const r of [0.05, 0.5, 0.95]) {
+      const pairs = pairPlayers(['a', 'b', 'c', 'd', 'e'], seq([r, 0.4, 0.7]), counts)
+      expect(pairs.find((p) => p.b === null)?.a).toBe('c')
+    }
+  })
 })

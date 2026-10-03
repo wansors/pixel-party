@@ -1,5 +1,5 @@
 import type { ClientMsg, PlayerDto, ServerMsg } from '@pp/shared'
-import { MINIGAMES_BY_ID, PROTOCOL_VERSION, TEAM_IDS, playableGames } from '@pp/shared'
+import { MINIGAMES_BY_ID, PROTOCOL_VERSION, TEAM_IDS } from '@pp/shared'
 import type { ServerWebSocket } from 'bun'
 import type { Clock } from '../../../application/ports/Clock'
 import type { LiveRoomRegistry } from '../../../application/ports/LiveRoomRegistry'
@@ -12,6 +12,7 @@ import { config } from '../../../config'
 import type { Player } from '../../../domain/entities/Player'
 import type { Room } from '../../../domain/entities/Room'
 import type { Random } from '../../../domain/ports/Random'
+import { playableLineup } from '../../../domain/services/lineup'
 import { balancedTeams, smallerTeam } from '../../../domain/services/teamAssignment'
 import { reapIdleRooms } from '../../live/roomSweeper'
 import type { Logger } from '../../observability/logger'
@@ -172,7 +173,7 @@ export function startGameServer(deps: GameSocketDeps) {
       // Team line-up: slot the newcomer into the smaller team without reshuffling everyone else.
       if (lineupUsesTeams(room)) {
         const p = room.get(result.playerId)
-        if (p && !p.team) p.setTeam(smallerTeam(room.teamCounts()))
+        if (p && !p.team) p.setTeam(smallerTeam(room.teamCounts(), deps.random))
       }
       broadcastLobby(room)
     }
@@ -284,11 +285,9 @@ export function startGameServer(deps: GameSocketDeps) {
       send(ws, { type: 'ACK', intent: 'START_SESSION', ok: false, reason: 'already_started' })
       return
     }
-    // A line-up where no game fits the headcount (D27) would silently fall back to a default game.
-    if (
-      room.minigameIds.length > 0 &&
-      playableGames(room.minigameIds, room.connectedCount).length === 0
-    ) {
+    // A line-up where no game fits the room (headcount, empty team — D27/D28) would silently fall back
+    // to a default game.
+    if (room.minigameIds.length > 0 && playableLineup(room).length === 0) {
       send(ws, { type: 'ACK', intent: 'START_SESSION', ok: false, reason: 'no_games_fit' })
       return
     }

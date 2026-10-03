@@ -208,6 +208,93 @@ describe('SessionEngine', () => {
     expect(intros[0]?.totalRounds).toBe(1)
   })
 
+  test('a player disconnected at round start sits the round out and can not input (D28)', () => {
+    const room = Room.create('SEAT', 12)
+    for (const id of ['a', 'b', 'c']) {
+      room.add(Player.create({ id, name: id, color: '#fff', avatar: 'x' }))
+    }
+    room.get('c')?.setConnected(false)
+    room.configure(['button-masher'], 1)
+
+    let t = 0
+    const captured: ServerMsg[] = []
+    const engine = new SessionEngine(
+      room,
+      { toRoom: (_c, m) => captured.push(m) },
+      { now: () => t },
+      noRandom,
+      CONFIG,
+    )
+    engine.start()
+    for (let i = 0; i < 400 && !engine.isFinished; i++) {
+      t += 1000 / CONFIG.tickHz
+      engine.onInput('a', { kind: 'mash' })
+      engine.onInput('c', { kind: 'mash' })
+      engine.tick()
+    }
+    const result = captured.find((m) => m.type === 'ROUND_RESULT')
+    if (result?.type !== 'ROUND_RESULT') throw new Error('no result')
+    expect(result.result.placements).toEqual(['a', 'b'])
+  })
+
+  test('a player who never played ranks last even when the game ties them with others (D28)', () => {
+    const room = Room.create('IDLE', 12)
+    for (const id of ['a', 'b', 'c']) {
+      room.add(Player.create({ id, name: id, color: '#fff', avatar: 'x' }))
+    }
+    room.configure(['button-masher'], 1)
+
+    let t = 0
+    const captured: ServerMsg[] = []
+    const engine = new SessionEngine(
+      room,
+      { toRoom: (_c, m) => captured.push(m) },
+      { now: () => t },
+      noRandom,
+      CONFIG,
+    )
+    engine.start()
+    for (let i = 0; i < 400 && !engine.isFinished; i++) {
+      t += 1000 / CONFIG.tickHz
+      engine.onInput('a', { kind: 'mash' })
+      // b sends an input the game ignores (no count) — it played, just badly; c never touches anything.
+      engine.onInput('b', { kind: 'noop' })
+      engine.tick()
+    }
+    const result = captured.find((m) => m.type === 'ROUND_RESULT')
+    if (result?.type !== 'ROUND_RESULT') throw new Error('no result')
+    const pts = Object.fromEntries(result.result.scores.map((s) => [s.playerId, s.points]))
+    expect(pts.b).toBeGreaterThan(pts.c as number)
+  })
+
+  test('drops a picked game that no longer fits once a player is gone mid-session (D28)', () => {
+    const room = Room.create('DROP', 12)
+    room.add(Player.create({ id: 'a', name: 'a', color: '#fff', avatar: 'x' }))
+    room.add(Player.create({ id: 'b', name: 'b', color: '#fff', avatar: 'x' }))
+    room.configure(['button-masher', 'sink-the-fleet'], 2)
+
+    let t = 0
+    const captured: ServerMsg[] = []
+    const engine = new SessionEngine(
+      room,
+      { toRoom: (_c, m) => captured.push(m) },
+      { now: () => t },
+      noRandom,
+      CONFIG,
+    )
+    engine.start()
+    // b drops during the first intro: whichever slot the duel drew, it can't be played any more.
+    room.get('b')?.setConnected(false)
+    for (let i = 0; i < 4000 && !engine.isFinished; i++) {
+      t += 1000 / CONFIG.tickHz
+      engine.onInput('a', { kind: 'mash' })
+      engine.tick()
+    }
+    const played = captured.flatMap((m) => (m.type === 'ROUND_RESULT' ? [m.result.minigameId] : []))
+    expect(played).toEqual(['button-masher'])
+    expect(engine.isFinished).toBe(true)
+  })
+
   test('caps rounds at the number of distinct games (no-repeat)', () => {
     const room = Room.create('CAP', 10)
     room.add(Player.create({ id: 'a', name: 'a', color: '#fff', avatar: 'x' }))
