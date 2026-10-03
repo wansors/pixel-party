@@ -19,7 +19,7 @@ import {
   type TeamRoundResult,
 } from '@pp/shared'
 import { GameClient } from '../../../game/GameClient'
-import { toAvatarId } from '../../../game/avatars'
+import { toAvatarId } from '../../../game/avatarSprites'
 import { AudioService } from '../../core/audio/audio.service'
 import { CatalogI18nService } from '../../core/i18n/catalog-i18n.service'
 import { GameSocketService } from '../../core/net/game-socket.service'

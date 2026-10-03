@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core'
 import type { AvatarId } from '@pp/shared'
-import { AVATAR_SPRITES } from '../../game/avatars'
+import { AVATAR_SPRITES } from '../../game/avatarSprites'
 
-// Preset 8x8 "monigote" sprite (grids in game/avatars.ts, shared with the Phaser scenes), rendered as
+// Preset 8x8 "monigote" sprite (grids in game/avatarSprites.ts, shared with the Phaser scenes), rendered as
 // crisp SVG rects (self-hosted, CSP-safe) so every player reads as color + avatar + name, never color
 // alone (art-direction §6).
 

@@ -83,12 +83,14 @@ app/
     room.component.*                      # shell: header, persistent canvas + live board, view switch
     lobby/ intro/ result/ final/ live-board/   # one thin view component per phase
   shared/                                 # reusable UI (pixel avatar, skill radar, audio, language)
-  app.config.ts, app.routes.ts
+  app.config.ts, app.routes.ts            # the room route is lazy: Phaser + every scene load on entering
 game/                                     # Phaser, framework-agnostic
   GameClient.ts                           # boots Phaser, registers SCENES, ServerMsgRouter dispatch
   serverMsgRouter.ts                      # typed ServerMsg dispatch
-  RoundState.ts                           # server snapshots + roster names/colors → scene reads
+  RoundState.ts                           # server snapshots + roster names/colors/avatars → scene reads
   hud.ts, fx.ts, pixelStyle.ts            # standard HUD strip, juice kit, pixel-art texture helpers
+  avatarSprites.ts, avatars.ts            # lobby avatar grids (pure data, also used by the shell) +
+                                          #   per-player Phaser textures
   netcode/SnapshotInterpolator.ts         # client interpolation for real-time scenes
   scenes/MiniGameScene.ts                 # common scene base (snapshot guard, HUD, crash guard, relayout)
   scenes/index.ts                         # SCENES: the one id → scene map
