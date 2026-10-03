@@ -601,3 +601,29 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   pools are plain arrays, so a toggle could later pick from a milder pool.
 - **Not done**: voiced NPCs, an undertaker sprite in Quick Draw (it is a line, not a character),
   taglines for the remaining 33 games.
+
+### D26 — Spanish is Spain Spanish, colloquial and never neutral; result stats translated — DONE
+
+- **Date**: 2026-10-03. **Context**: the user asked for every Spanish line to be Spain Spanish with
+  personality, not neutral Spanish. The whole `es.json` was reviewed (333 of its 671 strings changed
+  or added), plus the Spanish halves of both quiz banks.
+- **The voice**: tú/vosotros; the pretérito perfecto for what just happened ("¡HAS GANADO!", "te has
+  adelantado", not "ganaste"/"te precipitaste"); Spain vocabulary (pulsar, ordenador, móvil, colega,
+  pillar, petar, pringao, ni fu ni fa, ¡olé tú!); set phrases where the game invites them — Balloon
+  Chicken's cash-out is "ME PLANTO", Marbles Duel is "Pares o Nones" (NONES / PARES), Freeze Doll is the
+  "Escondite Inglés" ("UN, DOS, TRES…" / "¡ESCONDITE INGLÉS!"), Room Rush's carousel is a tiovivo, a
+  wrong-way car is a "¡KAMIKAZE!", and Quick Draw's undertaker quotes "el muerto al hoyo y el vivo al
+  bollo".
+- **Game names** follow suit where a Spanish one fits better than a translation: Hundir la Flota
+  (Sink the Fleet), Patata Caliente (Bomb Relay), Las Cuentas de la Vieja (Quick Math), A Ojo de Buen
+  Cubero (Pixel Weight), Parte y Reparte (Pixel Split), Memoria de Pez (Memory Flash), Trivial Exprés
+  (Lightning Quiz)…
+- **Limits kept**: instructions stay clear first, funny second; pixel-font strings keep their length
+  budget (a prompt squeezed by `fitFontSize` must fit ~45 characters on a phone); the jokes follow
+  D25 (the situation and the loser's pride, never real people or groups).
+- **Result stats in Spanish too.** The per-player stats on the results screen are built in English
+  by the domain ("40 banked", "streak 7", "0.42 off"). Rather than thread structured stats through 55
+  modules and the wire, the client translates their fixed vocabulary word by word
+  (`core/i18n/stat-i18n.ts`, `room.stat.*`) and switches the decimal mark ("0,42 de error"). A new stat
+  word shows in English until it gets an entry there.
+- The rule lives in the `add-i18n-keys` skill so new strings keep the voice.

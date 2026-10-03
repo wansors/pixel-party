@@ -18,12 +18,12 @@ party with friends** — one process, on one local network, no accounts — whic
 permanently **stateless, anonymous, and single-instance by design**: no database (D15), no further
 social/polish phase (D16), no multi-instance scaling (D17). What remains open-ended is growing the
 mini-game catalog with brand-new ideas. Design decisions from the clear-out pass are logged in
-[`implementation-decisions.md`](implementation-decisions.md) (D1–D25). The game is **PC-first**; 37
+[`implementation-decisions.md`](implementation-decisions.md) (D1–D26). The game is **PC-first**; 37
 of the 55 games are tagged `mobileFriendly` (lobby badge + filter, D21).
 
 ### Foundation & platform
 - Bun workspaces monorepo, hexagonal server, `@pp/shared` wire contracts, Biome + TS strict +
-  determinism gate + **GitHub Actions CI**. Test suite: **385 server/shared + 21 client (Karma)**, green.
+  determinism gate + **GitHub Actions CI**. Test suite: **385 server/shared + 24 client (Karma)**, green.
 - Server-authoritative, deterministic core (seeded `Random` + `Clock` ports; the domain never touches
   `Math.random`/`Date.now`). Bun-native WS with a hand-written shape validator (no Zod).
 - Angular 20 shell + Phaser 3 (decoupled); **i18n EN/ES** (Transloco) across the UI + every scene;

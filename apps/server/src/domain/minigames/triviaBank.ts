@@ -85,7 +85,13 @@ export const TRIVIA_BANK: readonly QuizEntry[] = [
   q(
     'sagrada-familia',
     ['In which city is the Sagrada Família?', 'Barcelona', 'Madrid', 'Seville', 'Valencia'],
-    ['¿En qué ciudad está la Sagrada Familia?', 'Barcelona', 'Madrid', 'Sevilla', 'Valencia'],
+    [
+      '¿Dónde está la Sagrada Familia (que algún día acabarán)?',
+      'Barcelona',
+      'Madrid',
+      'Sevilla',
+      'Valencia',
+    ],
   ),
   q(
     'statue-liberty',
@@ -95,12 +101,18 @@ export const TRIVIA_BANK: readonly QuizEntry[] = [
   q(
     'uk-currency',
     ['What is the currency of the UK?', 'The pound', 'The euro', 'The dollar', 'The franc'],
-    ['¿Cuál es la moneda del Reino Unido?', 'La libra', 'El euro', 'El dólar', 'El franco'],
+    [
+      '¿Con qué pagan en el Reino Unido? (El euro, ni en pintura)',
+      'La libra',
+      'El yen',
+      'El dólar',
+      'El franco',
+    ],
   ),
   q(
     'peseta',
     ['Before the euro, Spain used the…', 'Peseta', 'Lira', 'Escudo', 'Franc'],
-    ['Antes del euro, en España se usaba…', 'La peseta', 'La lira', 'El escudo', 'El franco'],
+    ['Antes del euro, en España pagábamos con…', 'Pesetas', 'Liras', 'Escudos', 'Francos'],
   ),
   // --- Science and nature ----------------------------------------------------------------------------
   q(
@@ -210,12 +222,18 @@ export const TRIVIA_BANK: readonly QuizEntry[] = [
   q(
     'adult-bones',
     ['How many bones does an adult human have?', '206', '106', '306', '186'],
-    ['¿Cuántos huesos tiene un adulto?', '206', '106', '306', '186'],
+    [
+      '¿Cuántos huesos tiene un adulto? Sin contar los que te rompas hoy',
+      '206',
+      '106',
+      '306',
+      '186',
+    ],
   ),
   q(
     'heart-chambers',
     ['How many chambers does the human heart have?', '4', '2', '3', '6'],
-    ['¿Cuántas cavidades tiene el corazón humano?', '4', '2', '3', '6'],
+    ['¿Cuántas cavidades tiene el corazón? Hasta el del ex', '4', '2', '3', '6'],
   ),
   q(
     'largest-organ',
@@ -377,7 +395,7 @@ export const TRIVIA_BANK: readonly QuizEntry[] = [
   q(
     'minutes-day',
     ['How many minutes are in a day?', '1,440', '1,240', '1,600', '960'],
-    ['¿Cuántos minutos tiene un día?', '1.440', '1.240', '1.600', '960'],
+    ['¿Cuántos minutos tiene un día? Sin calculadora, listillo', '1.440', '1.240', '1.600', '960'],
   ),
   q(
     'football-players',

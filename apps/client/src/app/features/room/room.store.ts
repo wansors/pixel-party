@@ -23,6 +23,7 @@ import { toAvatarId } from '../../../game/avatarSprites'
 import { linesOf, pickLine } from '../../../game/quips'
 import { AudioService } from '../../core/audio/audio.service'
 import { CatalogI18nService } from '../../core/i18n/catalog-i18n.service'
+import { localizeStat } from '../../core/i18n/stat-i18n'
 import { GameSocketService } from '../../core/net/game-socket.service'
 import type { RadarAxis } from '../../shared/skill-radar.component'
 
@@ -521,7 +522,8 @@ export class RoomStore {
 
   // Game-specific performance detail for a player on the round-result screen (e.g. "142 ms").
   roundStat(id: string): string {
-    return this.roundResult()?.result.stats?.[id] ?? ''
+    const stat = this.roundResult()?.result.stats?.[id] ?? ''
+    return stat ? localizeStat(stat, this.transloco.translateObject('room.stat') ?? {}) : ''
   }
 
   // Catch-up bonus points a player earned this round (0 = none / handicap off).
@@ -564,7 +566,10 @@ export class RoomStore {
       const streak = id === winnerId ? (this.winStreak.get(id) ?? 0) + 1 : 0
       this.winStreak.set(id, streak)
     }
-    const lastRank = Math.max(0, ...result.scores.map((s) => s.rank))
+    const ranks = result.scores.map((s) => s.rank)
+    const lastRank = Math.max(...ranks)
+    // A full tie has no last place to razz.
+    const allTied = lastRank === Math.min(...ranks)
     const callouts: Record<string, string> = {}
     for (const s of result.scores) {
       const tier =
@@ -572,7 +577,7 @@ export class RoomStore {
           ? 'streak'
           : s.playerId === winnerId
             ? 'winner'
-            : s.rank === lastRank && result.scores.length > 1
+            : s.rank === lastRank && !allTied
               ? 'loser'
               : 'other'
       const options = linesOf(this.transloco.translate<unknown>(`room.result.callout.${tier}`))

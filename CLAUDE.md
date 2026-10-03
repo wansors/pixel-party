@@ -134,7 +134,8 @@ blueprint in `docs/technical-architecture.md`.
 - **Bun-native WebSockets** (topic pub/sub); wire contracts in `@pp/shared` as discriminated unions with
   a **hand-written** shape validator (**no Zod**).
 - **Angular 20** shell (all DOM/UI) + **Phaser 3** (mini-game canvas only), kept decoupled.
-- **i18n**: **Transloco** (`@jsverse/transloco`), EN/ES, mirroring `../utopia-offline` — static bundled
+- **i18n**: **Transloco** (`@jsverse/transloco`), EN/ES (the Spanish is Spain Spanish, colloquial and
+  playful — never neutral, D26), mirroring `../utopia-offline` — static bundled
   loader (`assets/i18n/{en,es}.json`), `LanguageService` (signal + localStorage `pp_lang`, default EN),
   `CatalogI18nService` for mini-game names/blurbs (English fallback to `@pp/shared` meta), runtime
   EN|ES toggle. Phaser scenes receive a `Translate` fn injected via `GameClient` (framework-agnostic).

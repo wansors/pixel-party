@@ -27,8 +27,14 @@ python3 .claude/skills/add-i18n-keys/i18n-add.py '{
   `youWin`, `youLose`, `draw`, `out`, `miss`, `perfect`, `great`, `good`, `wrong`, `nice`, `waiting`,
   `finished`, `done`, `correct {n}`) — reuse before adding.
 - Interpolation is `{{name}}` (Transloco); scenes call `this.t('game.x.key', { name })`.
-- Spanish: natural, fully accented (á é í ó ú ñ ¡ ¿), same tone/length budget as the English (pixel
-  font is wide — keep HUD/banners short).
+- Spanish is **Spain Spanish, colloquial and playful — never neutral** (D26): tú/vosotros, the
+  pretérito perfecto for recent events ("¡HAS GANADO!", "te has adelantado"), Spain vocabulary
+  (pulsar, ordenador, móvil, vale, colega, pillar, petar, pringao, ni fu ni fa) and set phrases where
+  they fit (me planto, pares o nones, escondite inglés). Fully accented (á é í ó ú ñ ¡ ¿), same
+  length budget as the English (the pixel font is wide — keep HUD/banners short; prompts squeezed
+  with `fitFontSize` must fit ~45 chars on a phone).
+- Server-side result stats (`NormalizedResult.stats`, English) are translated word by word on the
+  client (`core/i18n/stat-i18n.ts` + `room.stat.*`): a new stat word needs an entry there.
 - Arrays are flavor-line pools (`room.result.callout.*`, `game.common.stamps`, NPC heckles), read
   with `quip()` / `pickLine()` from `game/quips.ts` (a seeded pick, the same line on every client). The
   two languages' pools don't need to match line for line — each gets its own jokes.

@@ -21,16 +21,16 @@
     "createRoom": "Crear sala",
     "roomCode": "CÓDIGO",
     "join": "Entrar",
-    "cantReach": "No se pudo conectar con el servidor",
-    "roomNotFound": "Sala {{code}} no encontrada",
-    "kicked": "El anfitrión te ha expulsado de la sala",
-    "tagline": "{{n}} minijuegos · una sala · piques sin fin",
-    "or": "o únete a un amigo"
+    "cantReach": "No hay manera de conectar con el servidor",
+    "roomNotFound": "La sala {{code}} no existe. ¿Seguro que es esa?",
+    "kicked": "El anfitrión te ha echado de la sala",
+    "tagline": "{{n}} minijuegos · una sala · piques para rato",
+    "or": "o métete en la de un colega"
   },
   "room": {
     "code": "SALA",
-    "reconnecting": "Reconectando...",
-    "connecting": "Conectando...",
+    "reconnecting": "Reconectando… no te vayas",
+    "connecting": "Conectando…",
     "lobby": {
       "title": "Sala de espera",
       "players": "jugador(es)",
@@ -38,68 +38,69 @@
       "off": "desc.",
       "ready": "listo",
       "games": "Juegos",
-      "selectAll": "Seleccionar todos",
+      "selectAll": "Todos",
       "selectNone": "Ninguno",
       "allGames": "Todos",
-      "coverage": "Cobertura de habilidades",
+      "coverage": "Habilidades que se van a poner a prueba",
       "rounds": "Rondas:",
-      "notReady": "No listo",
-      "imReady": "Estoy listo",
-      "start": "Empezar",
-      "makeHost": "Hacer anfitrión",
-      "kick": "Expulsar",
-      "swapTeam": "Cambiar equipo",
-      "shuffleTeams": "Rebarajar equipos",
-      "handicap": "Remontada (catch-up)",
+      "notReady": "Aún no",
+      "imReady": "¡Estoy listo!",
+      "start": "¡A jugar!",
+      "makeHost": "Pasar el mando",
+      "kick": "Echar",
+      "swapTeam": "Cambiar de equipo",
+      "shuffleTeams": "Rehacer equipos",
+      "handicap": "Ayudita para remontar",
       "roomCode": "Código de sala",
-      "share": "Comparte el código o el enlace",
+      "share": "Pásales el código o el enlace",
       "playersCount": "{{n}} jugadores",
       "readyCount": "{{n}}/{{total}} listos",
       "selectedCount": "{{n}}/{{total}} elegidos",
-      "lineup": "Selección",
-      "hostPicks": "El anfitrión elige los juegos",
-      "waitingHost": "Esperando a que el anfitrión empiece…",
-      "noGames": "Elige al menos un juego",
+      "lineup": "Los juegos",
+      "hostPicks": "Los juegos los elige el anfitrión",
+      "waitingHost": "Esperando a que el anfitrión se decida…",
+      "noGames": "Elige al menos un juego, hombre",
       "you": "tú",
       "mobileFilter": "Móvil",
-      "mobileHint": "Se juega bien en el móvil"
+      "mobileHint": "Se juega bien con el móvil"
     },
     "intro": {
       "round": "Ronda",
       "go": "¡YA!",
       "howTo": "Cómo se juega",
-      "getReady": "¡PREPÁRATE!",
-      "mobileFriendly": "Apto para móvil",
-      "bestOnPc": "Mejor en PC"
+      "getReady": "¡PREPARADOS!",
+      "mobileFriendly": "Va bien en el móvil",
+      "bestOnPc": "Mejor en ordenador"
     },
     "result": {
-      "roundWinner": "GANADOR DE RONDA",
+      "roundWinner": "GANADOR DE LA RONDA",
       "teamWinner": "EQUIPO GANADOR",
-      "catchup": "+{{n}} remontada",
+      "catchup": "+{{n}} de ayudita",
       "callout": {
         "streak": [
           "¡MASACRE TOTAL!!!",
           "¡IMPARABLE!",
           "¡EN LLAMAS!",
-          "¡ARRASANDO!",
-          "Que alguien lo pare.",
+          "¡QUÉ BARBARIDAD!",
+          "Que alguien lo pare, por favor.",
           "¿Esto es legal?",
-          "¡Deja algo para los demás!"
+          "¡Deja algo para los demás, hombre!"
         ],
         "winner": [
-          "¡Eres el mejor!",
-          "¡Campeón!",
-          "¡Lo clavaste!",
-          "¡A la cima!",
+          "¡Eres un crack!",
+          "¡Olé tú!",
+          "¡La has clavado!",
+          "¡Toma ya!",
           "Disfrútalo, que dura poco.",
           "Ya no hay quien te aguante.",
           "Talento puro. O potra.",
           "¿Humildad? Ni la conoces."
         ],
         "loser": [
-          "¡Perdedor!!",
-          "Mejor suerte la próxima.",
-          "Auch.",
+          "¡Pringao!",
+          "¡Manco!",
+          "Menudo paquete.",
+          "Vaya tela.",
           "Farolillo rojo.",
           "Tus antepasados te miran.",
           "¡Trofeo a la participación!",
@@ -108,9 +109,10 @@
           "Que la tierra te sea leve."
         ],
         "other": [
-          "Buen esfuerzo.",
-          "En la media.",
-          "Sigue así.",
+          "Ni fu ni fa.",
+          "Ahí, del montón.",
+          "Ni frío ni calor.",
+          "Sigue así, campeón.",
           "¡No está mal!",
           "Gloriosamente normalito.",
           "Nadie recordará esto.",
@@ -121,46 +123,76 @@
     },
     "scoreboard": {
       "title": "Puntuaciones",
-      "nextRound": "Empieza la siguiente ronda...",
+      "nextRound": "Que empieza la siguiente…",
       "live": "Clasificación"
     },
     "final": {
       "title": "* CLASIFICACIÓN FINAL *",
       "first": "1º",
       "newHighScore": "¡NUEVO RÉCORD!",
-      "playAgain": "Jugar otra vez",
-      "waitingHost": "Esperando a que el anfitrión inicie otra partida…",
+      "playAgain": "¡Otra, otra!",
+      "waitingHost": "Esperando a que el anfitrión monte otra partida…",
       "spoon": "FAROLILLO ROJO: {{name}}",
       "spoonLines": [
         "Suerte en tu próxima vida.",
         "Alguien tenía que perder. Gracias.",
-        "Siempre hay una próxima vez. Creo.",
+        "Lo importante es participar. Eso dicen.",
+        "Hay más días que longanizas.",
         "Estadísticamente admirable.",
-        "Hay más días que longanizas."
+        "Mañana será otro día. Peor, seguramente."
       ]
     },
     "summary": {
       "profileTitle": "Tu perfil de habilidades",
-      "title": "Resumen de la sesión",
-      "mvp": "Más victorias",
+      "title": "Lo mejor de la partida",
+      "mvp": "El que más ha ganado",
       "wins": "{{n}} rondas",
-      "comeback": "Remontada",
+      "comeback": "La remontada",
       "positions": "+{{n}} puestos",
       "roundWinner": "ganó"
     },
-    "joinRejected": "Entrada rechazada: {{reason}}",
-    "intentRejected": "{{intent}} rechazado: {{reason}}",
+    "joinRejected": "No te dejan entrar: {{reason}}",
+    "intentRejected": "{{intent}} denegado: {{reason}}",
     "header": {
       "round": "RONDA {{n}}/{{total}}"
     },
     "format": {
       "ffa": "Todos contra todos",
       "team": "Por equipos",
-      "duel": "Duelo 1 contra 1"
+      "duel": "Mano a mano"
     },
     "live": {
       "round": "RON",
       "total": "PTS"
+    },
+    "stat": {
+      "decimal": ",",
+      "finishedIn": "terminado en",
+      "falseStart": "salida nula",
+      "noTap": "ni lo ha tocado",
+      "clearedAll": "¡limpio!",
+      "banked": "guardados",
+      "burst": "¡petado!",
+      "passes": "pases",
+      "taps": "golpes",
+      "correct": "aciertos",
+      "sunk": "hundidos",
+      "noMark": "sin marca",
+      "dnf": "sin terminar",
+      "lap": "VUELTA",
+      "lines": "líneas",
+      "streak": "racha",
+      "done": "¡hecho!",
+      "pairs": "parejas",
+      "level": "nivel",
+      "cleared": "saltados",
+      "long": "de largo",
+      "right": "bien",
+      "wrong": "mal",
+      "pulls": "tirones",
+      "solved": "¡resuelto!",
+      "off": "de error",
+      "steps": "pasos"
     }
   },
   "team": {
@@ -168,10 +200,10 @@
     "blue": "Azul"
   },
   "reason": {
-    "room_not_found": "Sala no encontrada",
-    "room_full": "La sala está llena",
-    "session_in_progress": "La partida ya está en curso",
-    "name_taken": "Ese nombre ya está en uso"
+    "room_not_found": "Esa sala no existe",
+    "room_full": "La sala está a tope",
+    "session_in_progress": "La partida ya ha empezado",
+    "name_taken": "Ese nombre ya lo tiene otro"
   },
   "catalog": {
     "axis": {
@@ -185,136 +217,136 @@
     },
     "minigame": {
       "reaction-duel": {
-        "name": "Duelo de Reflejos",
-        "blurb": "Toca en cuanto la luz se ponga verde. Si te precipitas, quedas fuera.",
-        "tagline": "La paciencia es una virtud. Adelantarse, una derrota."
+        "name": "Reflejos de Gato",
+        "blurb": "Pulsa en cuanto se ponga verde. Si te adelantas, a la calle.",
+        "tagline": "Quien se adelanta, palma. Así de cruel."
       },
       "button-masher": {
-        "name": "Machaca Botones",
-        "blurb": "Machaca lo más rápido que puedas antes de que acabe el tiempo."
+        "name": "Aporrea el Botón",
+        "blurb": "Aporrea el botón como si no hubiera mañana antes de que se acabe el tiempo."
       },
       "color-trap": {
         "name": "Trampa de Color",
-        "blurb": "Toca el color de la TINTA de la palabra, no lo que dice. Cuidado con la trampa."
+        "blurb": "Pulsa el color de la TINTA, no lo que pone. Ojo, que engaña."
       },
       "trivia": {
-        "name": "Quiz Relámpago",
-        "blurb": "Responde rápido: acertar puntúa y la velocidad da bonus."
+        "name": "Trivial Exprés",
+        "blurb": "Cultura general a toda pastilla: acertar puntúa y responder rápido, más."
       },
       "balloon-chicken": {
         "name": "Globo Gallina",
-        "blurb": "Infla para sumar, pero retírate antes de que explote… o lo pierdes todo.",
+        "blurb": "Infla para sumar y plántate antes de que pete… o lo pierdes todo.",
         "tagline": "La avaricia rompe el saco. Y el globo."
       },
       "number-rush": {
-        "name": "Fiebre Numérica",
-        "blurb": "Toca los números del 1 al 25 en orden lo más rápido que puedas."
+        "name": "Fiebre de Números",
+        "blurb": "Pulsa del 1 al 25 en orden, a toda leche."
       },
       "quick-math": {
-        "name": "Cálculo Rápido",
-        "blurb": "Resuelve todas las cuentas que puedas antes de que acabe el tiempo."
+        "name": "Las Cuentas de la Vieja",
+        "blurb": "Saca todas las cuentas que puedas antes de que se acabe el tiempo. Sin calculadora."
       },
       "odd-one-out": {
         "name": "El Intruso",
         "blurb": "Encuentra la casilla que desentona. La cuadrícula no para de crecer."
       },
       "higher-lower": {
-        "name": "Mayor o Menor",
-        "blurb": "Adivina si la siguiente carta es mayor o menor. Un fallo y se acabó."
+        "name": "¿Mayor o Menor?",
+        "blurb": "¿La siguiente carta es mayor o menor? Una cagada y se acabó."
       },
       "bug-smash": {
-        "name": "Aplasta Bichos",
-        "blurb": "Aplasta los bichos, esquiva las bombas. Ganan las manos más rápidas."
+        "name": "Matabichos",
+        "blurb": "Espachurra los bichos y no toques las bombas. Gana la mano más rápida."
       },
       "stop-clock": {
         "name": "Para el Reloj",
-        "blurb": "Detén la aguja lo más cerca del objetivo que puedas. Tres intentos."
+        "blurb": "Para la aguja lo más cerca posible del objetivo. Tres intentos."
       },
       "memory-flash": {
-        "name": "Destello de Memoria",
-        "blurb": "Cuenta el destello: ¿cuántos del color objetivo viste?"
+        "name": "Memoria de Pez",
+        "blurb": "Un fogonazo de colores: ¿cuántos había del color que te piden?"
       },
       "simon": {
         "name": "Simón",
-        "blurb": "Observa la secuencia y repítela. Crece en cada ronda."
+        "blurb": "Mira la secuencia y repítela. Cada ronda, una más."
       },
       "pixel-hoops": {
-        "name": "Pixel Canasta",
-        "blurb": "Carga y suelta para encestar. Encadena canastas para hacer combos."
+        "name": "Tiro a Canasta",
+        "blurb": "Carga, suelta y encesta. Encadena canastas para hacer combos."
       },
       "pixel-weight": {
-        "name": "Pixel Peso",
-        "blurb": "Un objeto de píxeles parpadea: adivina de cuántos píxeles está hecho."
+        "name": "A Ojo de Buen Cubero",
+        "blurb": "Un objeto de píxeles aparece un momento: ¿de cuántos píxeles está hecho?"
       },
       "pixel-split": {
-        "name": "Pixel Corte",
-        "blurb": "Corta el objeto en dos mitades con el mismo número de píxeles."
+        "name": "Parte y Reparte",
+        "blurb": "Córtalo en dos mitades con los mismos píxeles. Quien parte y reparte…"
       },
       "tug-of-war": {
         "name": "Sogatira",
-        "blurb": "Dos equipos, una cuerda. Machacad juntos para llevar la marca a vuestro lado.",
+        "blurb": "Dos equipos, una cuerda. Aporread juntos para traer la marca a vuestro lado.",
         "tagline": "Trabajo en equipo: siempre hay a quién echarle la culpa."
       },
       "sink-the-fleet": {
-        "name": "Hunde la Flota",
-        "blurb": "Batalla naval cara a cara. Disparad por turnos y hunde a tu rival antes de que te hunda.",
-        "tagline": "En algún lugar, un almirante diminuto está llorando."
+        "name": "Hundir la Flota",
+        "blurb": "El de toda la vida, cara a cara: disparad por turnos y húndele la flota antes que él a ti.",
+        "tagline": "¡Tocado y hundido! Y tu orgullo, también."
       },
       "bomb-relay": {
-        "name": "Relevo Bomba",
-        "blurb": "Pasa la bomba por tu equipo: machaca tu tramo y pásala antes de que estalle la mecha.",
-        "tagline": "Patata caliente, mecha corta, amistades más cortas."
+        "name": "Patata Caliente",
+        "blurb": "La bomba pasa por tu equipo: aporrea tu tramo y pásala antes de que pete la mecha.",
+        "tagline": "Mecha corta, paciencia más corta y amistades cortísimas."
       },
       "pixel-beat": {
-        "name": "Pixel Beat",
-        "blurb": "Toca al ritmo antes de que se apague. Todo es cuestión de precisión."
+        "name": "Dale al Ritmo",
+        "blurb": "Pulsa al compás antes de que se apague. Aquí manda el oído."
       },
       "fleet-battle": {
-        "name": "Batalla de Flotas",
-        "blurb": "Hundir la flota en equipo — coordina los disparos con tu escuadra para hundir al rival primero."
+        "name": "Hundid la Flota",
+        "blurb": "Hundir la flota por equipos: poneos de acuerdo para disparar y hundid al rival primero."
       },
       "maze-sprint": {
-        "name": "Sprint del Laberinto",
-        "blurb": "Corre por el mismo laberinto que todos. El primero en salir gana."
+        "name": "Laberinto Exprés",
+        "blurb": "El mismo laberinto para todos. El primero que salga, gana."
       },
       "line-clear-sprint": {
-        "name": "Sprint de Líneas",
-        "blurb": "Apila piezas, borra líneas, contra el reloj. Gana quien más líneas complete."
+        "name": "Líneas Contrarreloj",
+        "blurb": "Apila piezas y haz líneas contra el reloj. Gana quien más líneas borre."
       },
       "quick-tetris": {
-        "name": "Tetris Rápido",
-        "blurb": "Un sprint de Tetris corto y frenético — el primero en completar el objetivo gana."
+        "name": "Tetris Exprés",
+        "blurb": "Un sprint de Tetris cortito y de infarto: gana el primero en llegar al objetivo."
       },
       "bubble-pop": {
-        "name": "Explota Burbujas",
-        "blurb": "Dispara burbujas del mismo color para explotar grupos de tres o más. Vacía el tablero el primero."
+        "name": "Revienta Pompas",
+        "blurb": "Junta tres o más pompas del mismo color para reventarlas. Gana quien limpie antes el tablero."
       },
       "fruit-catch": {
-        "name": "Atrapa Frutas",
-        "blurb": "Mueve la cesta para atrapar la fruta que cae… y esquiva las bombas."
+        "name": "Pilla la Fruta",
+        "blurb": "Mueve la cesta para pillar la fruta que cae… y ni se te ocurra coger una bomba."
       },
       "pixel-rain": {
-        "name": "Lluvia de Píxeles",
-        "blurb": "Esquiva los bloques que caen. Gana el último en pie.",
-        "tagline": "Llueven bloques. Nadie ha traído paraguas."
+        "name": "Chaparrón de Píxeles",
+        "blurb": "Esquiva los bloques que caen del cielo. Gana el último que quede en pie.",
+        "tagline": "Llueven bloques y tú sin paraguas."
       },
       "pixel-dash": {
-        "name": "Carrera Pixel",
-        "blurb": "Toca para saltar los obstáculos que se te echan encima. Gana quien supere más."
+        "name": "Corre que te Pillo",
+        "blurb": "Pulsa para saltar todo lo que se te echa encima. Gana quien más salte."
       },
       "snake-arena": {
-        "name": "Arena Serpiente",
-        "blurb": "Come, crece y no te estrelles. Gana la serpiente más larga.",
-        "tagline": "Come, crece y estréllate contra un amigo."
+        "name": "La Serpiente",
+        "blurb": "Come, crece y no te la pegues. Gana la serpiente más larga.",
+        "tagline": "Come, crece y estámpate contra un amigo."
       },
       "pixel-pong": {
         "name": "Pixel Pong",
-        "blurb": "Pong cara a cara. El primero en llegar a cinco puntos gana el duelo.",
+        "blurb": "Pong cara a cara. El primero que llegue a cinco se lleva el duelo.",
         "tagline": "Dos palas, una bola y cero piedad."
       },
       "sumo-push": {
-        "name": "Empuje Sumo",
-        "blurb": "Echa a todos del círculo. Gana el último luchador en pie."
+        "name": "Sumo a Empujones",
+        "blurb": "Saca a todos del círculo a empujones. Gana el último que quede dentro."
       },
       "match-pairs": {
         "name": "Parejas",
@@ -322,139 +354,140 @@
       },
       "quick-draw": {
         "name": "Desenfunda",
-        "blurb": "Espera a FUEGO y desenfunda primero. Si te adelantas, pierdes.",
+        "blurb": "Espera a que ponga FUEGO y desenfunda el primero. Si te adelantas, palmas.",
         "tagline": "El enterrador ya está tomando medidas."
       },
       "pixel-roulette": {
         "name": "Ruleta Pixel",
-        "blurb": "Gira para sacar un número al azar. Gana el más alto: pura suerte."
+        "blurb": "Gira y saca un número. Gana el más alto: potra pura y dura."
       },
       "sudoku-race": {
         "name": "Sudoku Exprés",
-        "blurb": "Todos resuelven el mismo mini sudoku. Gana la cuadrícula correcta más rápida."
+        "blurb": "Todos el mismo minisudoku. Gana quien lo complete bien antes."
       },
       "micro-race": {
         "name": "Micro Carreras",
-        "blurb": "Coches diminutos, circuitos de mesa. Tres vueltas, empuja a tus rivales y cruza la meta primero."
+        "blurb": "Cochecitos y circuitos de mesa: tres vueltas, empujones y a cruzar la meta el primero."
       },
       "dash-100m": {
         "name": "100 metros lisos",
-        "blurb": "Alterna IZQUIERDA y DERECHA lo más rápido que puedas. ¡Espera al disparo!"
+        "blurb": "Alterna IZQUIERDA y DERECHA a toda pastilla. ¡Espera al disparo!"
       },
       "hurdles-110m": {
         "name": "110 metros vallas",
-        "blurb": "Corre con IZQ/DER y SALTA cada valla. Si la tocas, pierdes velocidad."
+        "blurb": "Corre con IZQ/DER y SALTA cada valla. Si te la llevas por delante, adiós velocidad."
       },
       "long-jump": {
         "name": "Salto de longitud",
-        "blurb": "Corre por la pista, mantén SALTA en la tabla para fijar el ángulo y suelta para volar. 3 intentos."
+        "blurb": "Coge carrerilla, mantén SALTA en la tabla para fijar el ángulo y suelta para volar. Tres intentos."
       },
       "javelin-throw": {
-        "name": "Jabalina",
-        "blurb": "Coge velocidad, mantén LANZA antes de la línea para apuntar y suelta. Gana el lanzamiento más largo."
+        "name": "Lanzamiento de Jabalina",
+        "blurb": "Coge carrerilla, mantén LANZA antes de la línea para apuntar y suelta. Gana el lanzamiento más largo."
       },
       "glass-bridge": {
         "name": "Puente de Cristal",
-        "blurb": "Cruzad de uno en uno: ¿cristal IZQUIERDO o DERECHO? Uno aguanta, el otro se rompe. Atento al destello.",
+        "blurb": "Cruzad de uno en uno: ¿cristal IZQUIERDO o DERECHO? Uno aguanta y el otro se rompe. Fíjate en el brillo.",
         "tagline": "La mitad de los cristales aguanta. La otra mitad es un funeral."
       },
       "freeze-doll": {
-        "name": "Muñeca Congelada",
-        "blurb": "Mantén para andar mientras canta y quédate quieto antes de que se gire. ¡Su láser detecta cualquier movimiento!",
-        "tagline": "Ella canta, tú andas. Ella se gira, tú te haces mueble."
+        "name": "Escondite Inglés",
+        "blurb": "Mantén para andar mientras canta y quédate quieto parao antes de que se gire. ¡Su láser lo ve todo!",
+        "tagline": "Un, dos, tres… ¡al escondite inglés! Y el que se mueva, palma."
       },
       "room-rush": {
-        "name": "Carrera de Salas",
-        "blurb": "Se canta un número: llena una sala con exactamente esa gente. ¡Empuja, acelera y cierra la puerta!",
-        "tagline": "Como el juego de la silla, pero perder es para siempre."
+        "name": "Sálvese Quien Pueda",
+        "blurb": "Cantan un número: métete en una sala con justo esa gente. ¡Empuja, corre y cierra la puerta!",
+        "tagline": "Como el juego de la silla, pero aquí perder es para siempre."
       },
       "sumo-ice": {
-        "name": "Sumo en Hielo",
-        "blurb": "Sumo sobre un témpano que se derrite: resbala, empuja y no te caigas. ¡Gana el último que quede seco!",
+        "name": "Sumo sobre Hielo",
+        "blurb": "Sumo en un témpano que se derrite: resbala, empuja y no te caigas al agua. ¡Gana el último que quede seco!",
         "tagline": "El hielo es fino. Tu dignidad, también."
       },
       "pang": {
         "name": "Pang",
-        "blurb": "Arponea los globos que rebotan: cada impacto los divide en otros más pequeños. Gana quien más reviente, ¡y esquívalos!",
+        "blurb": "Arponea los globos que rebotan: cada vez se parten en otros más pequeños. Gana quien más reviente, ¡y que no te toquen!",
         "tagline": "Revienta los globos antes de que te revienten a ti."
       },
       "star-blaster": {
         "name": "Star Blaster",
-        "blurb": "Las mismas oleadas para todos: esquiva la lluvia de balas, tu nave dispara sola. Gana la mejor puntuación.",
-        "tagline": "Dispara a todo. No preguntes nunca."
+        "blurb": "Las mismas oleadas para todos: esquiva la lluvia de balas, que tu nave dispara sola. Gana la mejor puntuación.",
+        "tagline": "Dispara a todo. Pregunta nunca."
       },
       "asteroids": {
-        "name": "Arena de Asteroides",
-        "blurb": "Un cielo compartido que da la vuelta: gira, acelera y dispara. Las rocas puntúan, ¡las naves rivales mucho más!",
-        "tagline": "En el espacio, nadie te oye culpar al lag."
+        "name": "Asteroides",
+        "blurb": "Un cielo para todos que da la vuelta: gira, acelera y dispara. Las rocas puntúan; las naves de tus colegas, mucho más.",
+        "tagline": "En el espacio, nadie te oye echarle la culpa al lag."
       },
       "bomber-express": {
         "name": "Bomber Express",
-        "blurb": "Todos empiezan al máximo: explosiones enormes, cinco bombas y botas rápidas. ¡Gana el último en pie!",
-        "tagline": "Déjales un regalito a tus amigos. Hace tic-tac."
+        "blurb": "Todos empiezan a tope: explosiones enormes, cinco bombas y botas rápidas. ¡Gana el último en pie!",
+        "tagline": "Déjales un regalito a tus colegas. Hace tic-tac."
       },
       "brawl": {
-        "name": "Pelea Callejera",
-        "blurb": "Una calle y todos a golpes: combos de puñetazos, patadas, lanzamientos, tuberías y pollo. ¡Gana el último en pie!",
-        "tagline": "La amistad acaba donde empieza la botella."
+        "name": "Repartiendo Tortas",
+        "blurb": "Una calle y todos contra todos: combos de puñetazos, patadas, llaves, tuberías y pollo asado. ¡Gana el último en pie!",
+        "tagline": "Aquí se reparten tortas gratis. Y botellazos."
       },
       "rally-stage": {
         "name": "Tramo de Rally",
-        "blurb": "De punta a punta contra el reloj: la grava derrapa, el asfalto agarra y hay tiempos parciales. Gana el tramo más rápido."
+        "blurb": "De punta a punta contra el crono: en la grava derrapas, el asfalto agarra y hay parciales. Gana el tramo más rápido."
       },
       "speed-circuit": {
         "name": "Circuito de Velocidad",
-        "blurb": "Dos vueltas rueda con rueda: métete en el rebufo, pisa los turbos y llega primero a la bandera."
+        "blurb": "Dos vueltas rueda con rueda: pégate al rebufo, pisa los turbos y llega el primero a la bandera."
       },
       "honeycomb-cut": {
-        "name": "Galleta de Miel",
-        "blurb": "Recorta la forma de la galleta con la aguja. ¡Si te sales de la línea o vas con prisa, se agrieta!",
+        "name": "Recorta el Caramelo",
+        "blurb": "Recorta la forma del caramelo con la aguja. ¡Si te sales o vas con prisas, se raja!",
         "tagline": "Pulso firme. Si rompes el caramelo, el caramelo te rompe a ti."
       },
       "jump-rope": {
         "name": "Comba Gigante",
-        "blurb": "Una comba gigante gira cada vez más rápido: toca para saltar cuando pase bajo tus pies. ¡Dos fallos y estás fuera!",
-        "tagline": "Salta o tropieza. A la cuerda le da igual."
+        "blurb": "Una comba gigante gira cada vez más rápido: pulsa para saltar cuando te pase por los pies. ¡Dos fallos y fuera!",
+        "tagline": "«Al pasar la barca…» y tú, de morros al suelo."
       },
       "marbles-duel": {
-        "name": "Duelo de Canicas",
-        "blurb": "¿Par o impar? Esconde canicas en el puño y apuesta por las de tu rival. Gánalas todas para ganar el duelo.",
+        "name": "Pares o Nones",
+        "blurb": "¿Pares o nones? Esconde canicas en el puño y apuesta por las de tu rival. Quítale todas y es tuyo el duelo.",
         "tagline": "Quítale las canicas. Luego, la dignidad."
       },
       "weird-trivia": {
         "name": "Trivial Rarito",
-        "blurb": "Raro pero cierto: elige la respuesta real entre las absurdas. Cuanto antes, más puntos.",
+        "blurb": "Raro, pero de verdad: pilla la respuesta real entre las absurdas. Cuanto antes, más puntos.",
         "tagline": "Todo es verdad. Por desgracia."
       }
     }
   },
   "game": {
     "common": {
-      "done": "¡Hecho!",
+      "done": "¡Listo!",
       "correct": "{{n}} aciertos",
       "pts": "{{n}} pts",
       "level": "Nivel {{n}}",
       "you": "tú",
-      "youWin": "¡GANASTE!",
-      "youLose": "PERDISTE",
+      "youWin": "¡HAS GANADO!",
+      "youLose": "HAS PERDIDO",
       "draw": "EMPATE",
       "out": "¡FUERA!",
       "combo": "x{{n}} COMBO",
-      "miss": "FALLO",
+      "miss": "¡PIFIA!",
       "perfect": "¡PERFECTO!",
-      "great": "¡GENIAL!",
+      "great": "¡OLÉ!",
       "good": "BIEN",
-      "wrong": "¡ERROR!",
+      "wrong": "¡MAL!",
       "nice": "¡BIEN!",
-      "waiting": "Esperando al resto…",
+      "waiting": "Esperando a los rezagados…",
       "finished": "¡TERMINADO!",
       "finish": "¡FIN!",
       "left": "QUEDAN {{n}}/{{total}}",
       "spectating": [
         "Estás fuera: disfruta del espectáculo",
+        "A la grada, que hay sitio.",
         "Fuera. Tu fantasma puede abuchear a gusto.",
         "Eliminado. ¿Has probado a ser mejor?",
-        "Estás fuera. Toma apuntes, novato.",
+        "Fuera. Toma apuntes, pringao.",
         "Fuera. Tu funeral, en la siguiente ronda.",
         "Modo espectador: perder, pero con estilo."
       ],
@@ -463,7 +496,7 @@
         "D.E.P.",
         "¡FIAMBRE!",
         "¡A LA CAJA!",
-        "¡CHAO!",
+        "¡AGUR!",
         "¡KAPUT!",
         "¡AL HOYO!",
         "¡FINIQUITADO!"
@@ -471,22 +504,22 @@
     },
     "reaction": {
       "wait": "ESPERA…",
-      "instruction": "Toca cuando la pantalla se ponga verde",
-      "tap": "¡TOCA!",
+      "instruction": "Pulsa cuando se ponga verde",
+      "tap": "¡PULSA!",
       "go": "¡Dale, dale!",
       "tooEarly": "DEMASIADO PRONTO",
-      "falseStart": "Te precipitaste — fuera esta ronda",
-      "nice": "¡Buen reflejo!",
+      "falseStart": "Te has adelantado: fuera esta ronda",
+      "nice": "¡Qué reflejos!",
       "ms": "{{ms}} ms",
       "falseStartTag": "SALIDA NULA"
     },
     "buttonMasher": {
-      "mash": "¡MACHACA!",
-      "hint": "Toca / pulsa ESPACIO lo más rápido que puedas"
+      "mash": "¡APORREA!",
+      "hint": "Aporrea ESPACIO (o la pantalla) como si no hubiera mañana"
     },
     "colorTrap": {
-      "instruction": "Toca el color de la TINTA, no la palabra",
-      "locked": "Bloqueado — espera al siguiente",
+      "instruction": "Pulsa el color de la TINTA, no lo que pone",
+      "locked": "Hecho. Espera a la siguiente",
       "words": {
         "red": "ROJO",
         "green": "VERDE",
@@ -496,58 +529,60 @@
     },
     "trivia": {
       "progress": "P {{index}} / {{total}}",
-      "getReady": "Prepárate…",
-      "locked": "Respuesta bloqueada — espera",
-      "hint": "Toca una respuesta — rápido suma más",
+      "getReady": "Atento a la siguiente…",
+      "locked": "Respuesta enviada. Ahora, a sufrir…",
+      "hint": "Pulsa una respuesta: cuanto antes, más puntos",
       "timeUp": "¡TIEMPO!"
     },
     "balloon": {
       "pump": "INFLAR",
-      "cashOut": "RETIRAR",
+      "cashOut": "ME PLANTO",
       "pop": "¡PUM!",
-      "cashed": "GUARDADO",
-      "bust": "REVENTÓ",
+      "cashed": "TE PLANTAS",
+      "bust": "PETADO",
       "bustLines": [
         "La avaricia rompe el saco. Y el globo.",
-        "Solo tenías que parar.",
+        "Solo tenías que plantarte.",
+        "¡Te has pasado de frenada!",
         "D.E.P. globo. D.E.P. puntos.",
         "Valiente. Equivocado, pero valiente."
       ],
       "cashLines": [
         "¡Gallina! Pero gallina con pasta.",
+        "Más vale pájaro en mano…",
         "El dinero del cobarde también vale.",
-        "A salvo. Y un poco aburrido."
+        "A salvo. Y un pelín aburrido."
       ]
     },
     "numberRush": {
       "done": "¡FIN!",
       "find": "Busca {{n}}",
-      "hint": "Toca del 1 al {{n}} en orden"
+      "hint": "Pulsa del 1 al {{n}} en orden"
     },
     "higherLower": {
       "higher": "▲ MAYOR",
       "lower": "▼ MENOR",
       "streak": "Racha: {{n}}",
       "prompt": "¿Mayor o menor que esta?",
-      "out": "Se acabó — espera"
+      "out": "Fuera. A esperar sentadito."
     },
     "stopClock": {
       "stop": "PARAR",
       "doneBtn": "FIN",
       "info": "Intento {{n}}/{{total}}   err {{err}}",
       "prompt": "¡Para en el objetivo verde!",
-      "done": "Sin intentos — espera",
+      "done": "Sin intentos. Ahora, a mirar",
       "try": "Intento {{n}}/{{total}}",
       "off": "{{err}} de error"
     },
     "simon": {
-      "watch": "Observa...",
+      "watch": "Atento…",
       "repeat": "¡Repite!",
-      "out": "FUERA — espera",
+      "out": "FUERA — a mirar",
       "yourTurn": "¡TU TURNO!"
     },
     "memoryFlash": {
-      "memorize": "¡Memoriza!",
+      "memorize": "¡Quédate con ello!",
       "howMany": "¿Cuántos {{color}}?",
       "colors": {
         "RED": "ROJOS",
@@ -559,14 +594,14 @@
     "pixelHoops": {
       "hint": "Mantén para cargar, suelta para lanzar",
       "swish": "¡CANASTA! x{{combo}}",
-      "miss": "FALLO",
+      "miss": "¡AL AIRE!",
       "combo": "{{score}} pts   combo {{combo}}",
       "swishShort": "¡CANASTA!"
     },
     "pixelWeight": {
       "weigh": "¡Pesa {{object}}!",
       "howMany": "¿Cuántos píxeles?",
-      "guess": "ADIVINA",
+      "guess": "¡A OJO!",
       "actual": "Eran {{n}}",
       "objects": {
         "HEART": "el CORAZÓN",
@@ -581,55 +616,55 @@
       }
     },
     "pixelSplit": {
-      "prompt": "Divídelo por igual",
+      "prompt": "A partes iguales, ¿eh?",
       "cut": "CORTAR"
     },
     "tugOfWar": {
       "pull": "¡TIRA!",
-      "hint": "Toca / pulsa ESPACIO para tirar de la cuerda hacia tu lado",
+      "hint": "Pulsa la pantalla o ESPACIO para tirar de la cuerda",
       "team": "Tu equipo",
-      "spectator": "Sin equipo — miras esta ronda",
-      "leads": "¡{{team}} EN CABEZA!",
-      "almost": "¡CASI!",
+      "spectator": "Sin equipo: esta ronda te toca mirar",
+      "leads": "¡VA GANANDO {{team}}!",
+      "almost": "¡QUE SE ESCAPA!",
       "teamWins": "¡GANA {{team}}!"
     },
     "sinkTheFleet": {
-      "yourTurn": "TU TURNO — ¡dispara!",
-      "waitTurn": "Turno del rival...",
+      "yourTurn": "TE TOCA — ¡fuego!",
+      "waitTurn": "Le toca al rival…",
       "target": "Aguas enemigas",
       "yourFleet": "Tu flota",
-      "won": "¡FLOTA HUNDIDA — GANAS!",
-      "lost": "Tu flota ha caído...",
+      "won": "¡TOCADO Y HUNDIDO! HAS GANADO",
+      "lost": "Te han hundido la flota…",
       "draw": "Tiempo agotado — empate",
-      "bye": "Sin rival esta ronda — victoria directa",
-      "hint": "Toca una celda en aguas enemigas para disparar en tu turno",
+      "bye": "Sin rival esta ronda: victoria por la cara",
+      "hint": "En tu turno, pulsa una casilla de aguas enemigas para disparar",
       "hit": "¡TOCADO!",
       "splash": "¡AGUA!",
       "hitsChip": "IMPACTOS {{n}}/{{total}}"
     },
     "bombRelay": {
-      "mash": "¡MACHACA — pásala!",
-      "waiting": "Espera la bomba...",
-      "teammateHolds": "Un compañero tiene la bomba",
+      "mash": "¡DALE CAÑA y pásala!",
+      "waiting": "Espera a que te llegue la bomba…",
+      "teammateHolds": "La bomba la tiene un compañero",
       "relays": "pases",
       "booms": "explosiones",
-      "hint": "Solo puedes machacar mientras TÚ tienes la bomba",
-      "spectator": "Sin equipo — miras esta ronda",
+      "hint": "Solo puedes aporrear cuando la bomba la tienes TÚ",
+      "spectator": "Sin equipo: esta ronda te toca mirar",
       "pass": "¡PASE!",
       "boom": "¡BUM!",
-      "getReady": "¡PREPÁRATE!"
+      "getReady": "¡PREPARADOS!"
     },
     "pixelBeat": {
-      "tapHint": "Toca o pulsa ESPACIO al ritmo",
+      "tapHint": "Pulsa la pantalla o ESPACIO al compás",
       "streak": "{{n}} de racha"
     },
     "fleetBattle": {
-      "hint": "Toca una casilla en aguas enemigas para disparar en el turno de tu equipo",
-      "spectator": "Sin equipo — miras esta ronda",
+      "hint": "En el turno de tu equipo, pulsa una casilla de aguas enemigas para disparar",
+      "spectator": "Sin equipo: esta ronda te toca mirar",
       "yourTurn": "TURNO DE {{team}} — ¡fuego!",
       "waitTurn": "Esperando a {{team}}...",
-      "won": "FLOTA HUNDIDA — ¡TU EQUIPO GANA!",
-      "lost": "La flota de tu equipo ha caído...",
+      "won": "¡TOCADO Y HUNDIDO! GANA TU EQUIPO",
+      "lost": "Os han hundido la flota…",
       "draw": "Se acabó el tiempo — empate",
       "hit": "¡TOCADO!",
       "splash": "¡AGUA!",
@@ -640,28 +675,28 @@
     },
     "mazeSprint": {
       "steps": "{{n}} pasos",
-      "hint": "¡Llega a la bandera! Flechas, WASD o el mando"
+      "hint": "¡A la bandera! Flechas, WASD o la cruceta"
     },
     "bubblePop": {
       "score": "{{n}} pts",
-      "hint": "Apunta una columna y suelta para disparar"
+      "hint": "Apunta a una columna y suelta para disparar"
     },
     "lineClearSprint": {
       "lines": "{{n}} líneas",
       "progress": "{{n}} líneas",
-      "win": "¡COMPLETADO!",
-      "toppedOut": "TABLERO LLENO",
+      "win": "¡CONSEGUIDO!",
+      "toppedOut": "¡HASTA ARRIBA!",
       "hint": "← → mover · ↑ girar · ↓ / Espacio soltar"
     },
     "quickTetris": {
       "lines": "{{n}} líneas",
       "progress": "{{n}} / {{target}} líneas",
       "win": "¡OBJETIVO CUMPLIDO!",
-      "toppedOut": "TABLERO LLENO",
+      "toppedOut": "¡HASTA ARRIBA!",
       "hint": "← → mover · ↑ girar · ↓ / Espacio soltar"
     },
     "fruitCatch": {
-      "hint": "Arrastra o usa ◀ ▶: atrapa fruta, esquiva bombas",
+      "hint": "Arrastra o usa ◀ ▶: pilla la fruta y ojo con las bombas",
       "bomb": "¡BUM!"
     },
     "pixelRain": {
@@ -671,41 +706,41 @@
       "lastStanding": "¡ÚLTIMO EN PIE!"
     },
     "pixelDash": {
-      "hint": "¡Toca o pulsa Espacio para saltar!"
+      "hint": "¡Pulsa la pantalla o Espacio para saltar!"
     },
     "bugSmash": {
-      "hint": "¡Aplasta los bichos y esquiva las bombas!"
+      "hint": "¡Espachurra los bichos y no toques las bombas!"
     },
     "snakeArena": {
       "hint": "Desliza o usa las flechas para girar",
       "length": "Longitud {{n}}"
     },
     "oddOneOut": {
-      "prompt": "¡Toca la casilla distinta!"
+      "prompt": "¡Pulsa la casilla que desentona!"
     },
     "pixelPong": {
       "hint": "Arrastra para mover tu pala: ¡gana quien llegue a {{n}}!",
-      "bye": "Sin rival esta ronda: victoria gratis"
+      "bye": "Sin rival esta ronda: victoria por la cara"
     },
     "quickDraw": {
       "wait": "ESPERA…",
       "fire": "¡FUEGO!",
-      "instruction": "¡Desenfunda en cuanto el cartel diga FUEGO!",
-      "tapNow": "¡Toca ya, desenfunda!",
+      "instruction": "¡Desenfunda en cuanto el cartel ponga FUEGO!",
+      "tapNow": "¡Ya! ¡Desenfunda!",
       "vs": "VS",
       "bang": "¡BANG!",
-      "early": "¡PRONTO!",
-      "yourTime": "Desenfundaste en {{ms}} ms",
-      "oppJumped": "¡{{name}} se precipitó!",
-      "tooEarly": "Demasiado pronto: te precipitaste",
-      "slower": "{{name}} desenfundó antes ({{ms}} ms)",
-      "noDraw": "Nadie desenfundó a tiempo",
-      "bye": "Sin rival esta ronda: ¡victoria gratis!",
+      "early": "¡ANSIAS!",
+      "yourTime": "Has desenfundado en {{ms}} ms",
+      "oppJumped": "¡{{name}} se ha adelantado, el ansias!",
+      "tooEarly": "Te has adelantado, vaquero",
+      "slower": "{{name}} ha sido más rápido ({{ms}} ms)",
+      "noDraw": "Nadie ha desenfundado. Menudos pistoleros.",
+      "bye": "Sin rival esta ronda: ¡victoria por la cara!",
       "undertaker": [
-        "El enterrador ya te toma medidas.",
+        "El enterrador ya te está tomando medidas.",
         "Caja de pino, talla mediana.",
         "Tus botas, para el caballo.",
-        "Aquí yaces tú. Se te echará de menos un rato."
+        "El muerto al hoyo y el vivo al bollo."
       ]
     },
     "matchPairs": {
@@ -713,14 +748,14 @@
       "pairs": "{{n}}/{{total}} parejas"
     },
     "sumoPush": {
-      "hint": "Mantén y arrastra o usa las flechas para empujar",
+      "hint": "Mantén y arrastra (o flechas) para empujar",
       "alive": "{{n}}/{{total}} dentro"
     },
     "sudokuRace": {
       "pickCell": "Elige una casilla",
       "pickDigit": "Elige una cifra",
-      "rule": "Cada fila, columna y caja lleva del 1 al {{n}} una vez",
-      "cooldown": "Cifra incorrecta — ¡espera!"
+      "rule": "Cada fila, columna y caja lleva del 1 al {{n}} una sola vez",
+      "cooldown": "Cifra mal puesta. ¡Castigado un momento!"
     },
     "roulette": {
       "hint": "¡Gana el número más alto!",
@@ -728,10 +763,10 @@
       "spin": "GIRAR",
       "spun": "{{n}}/{{total}} han girado",
       "jackpot": "¡BOTE!",
-      "ouch": "¡AY!"
+      "ouch": "¡QUÉ MALA PATA!"
     },
     "quickMath": {
-      "cooldown": "Respuesta incorrecta — ¡espera!"
+      "cooldown": "Mal. ¡Castigado un momento!"
     },
     "microRace": {
       "hint": "Mantén pulsado hacia donde quieras ir  ·  o ←→ girar, ↑ acelerar, ↓ frenar",
@@ -742,27 +777,27 @@
       "go": "¡YA!",
       "finished": "¡META! P{{pos}}",
       "time": "TIEMPO {{time}}",
-      "hurry": "¡CORRE!",
-      "rescued": "¡FUERA DE PISTA!",
-      "wrongWay": "¡AL REVÉS!",
+      "hurry": "¡CORRE, QUE NO LLEGAS!",
+      "rescued": "¡TE HAS SALIDO!",
+      "wrongWay": "¡KAMIKAZE!",
       "bump": "¡PUM!",
-      "outOfTime": "¡SIN TIEMPO!"
+      "outOfTime": "¡SE ACABÓ EL TIEMPO!"
     },
     "athletics": {
-      "set": "LISTOS...",
+      "set": "LISTOS…",
       "go": "¡YA!",
       "falseStart": "¡SALIDA NULA!",
-      "wait": "¡SANCIÓN, ESPERA!",
+      "wait": "¡CASTIGADO, ESPERA!",
       "ouch": "¡AY!",
       "place": "P{{n}}",
       "jump": "SALTA",
       "speed": "VELOCIDAD",
       "foul": "NULO",
       "best": "MEJOR",
-      "newBest": "¡NUEVA MARCA!",
+      "newBest": "¡MARCA PERSONAL!",
       "noMark": "SIN MARCA",
       "attempt": "INTENTO {{n}}/{{total}}",
-      "hintDash": "Alterna ← → (o A / D) para correr. ¡No te muevas antes del disparo!",
+      "hintDash": "Alterna ← → (o A / D) para correr. ¡Ni te muevas antes del disparo!",
       "hintHurdles": "Alterna ← → para correr · ESPACIO / ↑ para saltar cada valla"
     },
     "longJump": {
@@ -776,11 +811,11 @@
     "glassBridge": {
       "vest": "DORSAL #{{n}}",
       "yourJump": "¡TE TOCA! ¿IZQUIERDA O DERECHA?",
-      "walking": "Cruzando el cristal seguro…",
-      "waitTurn": "Tienes {{n}} delante · ¡señala (o miente)!",
-      "nextUp": "Vas después · ¡estudia el puente!",
-      "crossedHint": "¡Lo lograste! Sigue señalando…",
-      "fallenHint": "Has caído · sigue liando",
+      "walking": "Pisando sobre seguro…",
+      "waitTurn": "Tienes {{n}} delante · ¡señala o miente!",
+      "nextUp": "Vas después · ¡estúdiate el puente!",
+      "crossedHint": "¡Lo has conseguido! Sigue señalando…",
+      "fallenHint": "Te has caído · sigue liándola",
       "jumpLeft": "◀ SALTA",
       "jumpRight": "SALTA ▶",
       "pointLeft": "◀ SEÑALA",
@@ -794,6 +829,7 @@
         "ESE NO ERA.",
         "¡CUIDADO CON EL HUECO!",
         "¡UUUUUH!",
+        "¡MENUDO TORTAZO!",
         "¿QUIÉN ES EL SIGUIENTE?",
         "ESO TIENE QUE DOLER."
       ]
@@ -801,19 +837,20 @@
     "freezeDoll": {
       "walk": "ANDAR",
       "run": "CORRER",
-      "green": "LUZ VERDE",
-      "red": "LUZ ROJA",
+      "green": "UN, DOS, TRES…",
+      "red": "¡ESCONDITE INGLÉS!",
       "ready": "PREPARADOS…",
-      "readyHint": "Mantén ANDAR (↑) o CORRER (SHIFT) cuando cante",
-      "goHint": "¡Muévete! Para antes de que se gire",
-      "freeze": "¡QUIETO!",
+      "readyHint": "Mantén ↑ ANDAR o SHIFT CORRER mientras canta",
+      "goHint": "¡Muévete! Y para antes de que se gire",
+      "freeze": "¡QUIETO PARAO!",
       "hit": "¡TOCADO! Te queda un corazón",
       "safe": "¡A SALVO!",
-      "safeHint": "¡Lo lograste! Mira a los demás…",
-      "tooSlow": "¡DEMASIADO LENTO!",
+      "safeHint": "¡Conseguido! Mira cómo sufren los demás…",
+      "tooSlow": "¡TORTUGA!",
       "doll": [
         "TE HE VISTO.",
         "¡PILLADO!",
+        "¡QUE TE VEO!",
         "NI UN PELO.",
         "MUÉVETE OTRA VEZ. ATRÉVETE.",
         "¿EL SIGUIENTE?",
@@ -824,9 +861,9 @@
       "dash": "¡EMPUJA!",
       "number": "¡SALAS DE {{n}}!",
       "call": "RONDA {{n}}",
-      "musicHint": "Súbete al carrusel… espera al número",
-      "callHint": "¡Entra en una sala de exactamente {{n}}!",
-      "lockedHint": "¡A SALVO! La puerta está cerrada",
+      "musicHint": "Súbete al tiovivo… y espera al número",
+      "callHint": "¡Métete en una sala con {{n}} justos!",
+      "lockedHint": "¡A SALVO! Puerta cerrada",
       "safe": "¡A SALVO!",
       "survived": "¡SUPERVIVIENTE!"
     },
@@ -844,7 +881,7 @@
     },
     "starBlaster": {
       "score": "{{n}} PTS",
-      "warning": "¡CUIDADO! JEFE",
+      "warning": "¡OJO! JEFAZO",
       "final": "{{n}} PUNTOS"
     },
     "asteroids": {
@@ -865,7 +902,7 @@
     "brawl": {
       "punch": "PUÑO",
       "kick": "PATADA",
-      "grab": "AGARRE",
+      "grab": "LLAVE",
       "kos": "{{n}} KO",
       "pow": "¡POW!",
       "wham": "¡ZAS!",
@@ -887,7 +924,7 @@
       "crack": "¡CRAC!",
       "cracks": "GRIETAS {{n}}/{{max}}",
       "done": "¡RECORTADA EN {{s}}s!",
-      "slow": "¡DEMASIADO DEPRISA! FRENA",
+      "slow": "¡SIN PRISAS! RELAJA LA MANO",
       "hint": "Mantén pulsado y repasa la línea con la aguja"
     },
     "jumpRope": {
@@ -897,7 +934,8 @@
       "survived": "¡SIGUES SALTANDO!",
       "turners": [
         "¡EL SIGUIENTE!",
-        "TORPE.",
+        "¡PATO!",
+        "¡VAYA PAQUETE!",
         "QUÉ ELEGANCIA. NO.",
         "ES UNA CUERDA, NO UN ABRAZO.",
         "OTRO QUE MUERDE EL POLVO."
@@ -905,25 +943,25 @@
     },
     "marbles": {
       "hide": "ESCONDER",
-      "odd": "IMPAR",
-      "even": "PAR",
+      "odd": "NONES",
+      "even": "PARES",
       "hidePrompt": "ESCONDE CANICAS",
-      "guessPrompt": "APUESTA · ¿PAR O IMPAR?",
+      "guessPrompt": "APUESTA · ¿PARES O NONES?",
       "waiting": "Esperando a {{name}}…",
       "turn": "Turno {{n}}",
       "theirs": "{{name}} · {{n}}",
       "mine": "TUS CANICAS · {{n}}",
       "reveal": "{{n}} · ¡{{parity}}!",
       "youTake": "¡Te llevas {{n}}!",
-      "theyTake": "Se lleva {{n}}",
-      "bye": "Sin rival esta ronda: ¡victoria gratis!"
+      "theyTake": "Se lleva {{n}}. Ay.",
+      "bye": "Sin rival esta ronda: ¡victoria por la cara!"
     },
     "weirdTrivia": {
-      "hint": "Raro pero cierto: toca la de verdad",
-      "trueStory": "★ VERÍDICO ★",
+      "hint": "Raro, pero de verdad: pulsa la buena",
+      "trueStory": "★ COMO LO OYES ★",
       "nobody": "¡NI DIOS LO SABÍA!",
-      "everybody": "¡DEMASIADO FÁCIL!",
-      "fooled": "¡{{n}} PICARON!"
+      "everybody": "¡CHUPADO!",
+      "fooled": "¡{{n}} HAN PICADO!"
     }
   }
 }

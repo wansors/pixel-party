@@ -161,6 +161,35 @@
     "live": {
       "round": "RND",
       "total": "PTS"
+    },
+    "stat": {
+      "decimal": ".",
+      "finishedIn": "finished in",
+      "falseStart": "false start",
+      "noTap": "no tap",
+      "clearedAll": "cleared!",
+      "banked": "banked",
+      "burst": "burst",
+      "passes": "passes",
+      "taps": "taps",
+      "correct": "correct",
+      "sunk": "sunk",
+      "noMark": "NM",
+      "dnf": "DNF",
+      "lap": "LAP",
+      "lines": "lines",
+      "streak": "streak",
+      "done": "done",
+      "pairs": "pairs",
+      "level": "level",
+      "cleared": "cleared",
+      "long": "long",
+      "right": "right",
+      "wrong": "wrong",
+      "pulls": "pulls",
+      "solved": "solved",
+      "off": "off",
+      "steps": "steps"
     }
   },
   "team": {
