@@ -1,9 +1,4 @@
-import {
-  PALETTE,
-  type WeirdTriviaLang,
-  type WeirdTriviaReveal,
-  type WeirdTriviaSnapshot,
-} from '@pp/shared'
+import { PALETTE, type WeirdTriviaReveal, type WeirdTriviaSnapshot } from '@pp/shared'
 import type Phaser from 'phaser'
 import { ensureAvatarTexture } from '../avatars'
 import { floatText } from '../fx'
@@ -16,8 +11,7 @@ import { QuizSceneBase, type QuizView } from './QuizSceneBase'
 const PICK_PX = 32
 const PICK_PIXEL = PICK_PX / 16
 
-// Weird Trivia canvas on the shared quiz-show board (QuizSceneBase). The question ships in both
-// languages and the scene shows the player's. Locking an answer gives no verdict; the reveal phase does
+// Weird Trivia canvas on the shared quiz-show board (QuizSceneBase), in the player's language. Locking an answer gives no verdict; the reveal phase does
 // it for everybody at once: the right tile lights up, each player's avatar pops onto the tile they
 // picked (grinning or wincing), the board turns into the fun fact and the crowd gets a quip ("NOBODY
 // KNEW!", "3 FELL FOR IT!").
@@ -34,11 +28,6 @@ export class WeirdTriviaScene extends QuizSceneBase<WeirdTriviaSnapshot> {
     super.create()
     this.revealedIndex = -1
     this.pickIcons = []
-  }
-
-  // The bundle's own language code (Phaser scenes only see the translate function).
-  private lang(): WeirdTriviaLang {
-    return this.t('lang.code') === 'es' ? 'es' : 'en'
   }
 
   protected view(snap: WeirdTriviaSnapshot): QuizView {

@@ -178,7 +178,13 @@
             >
               <span class="gname">{{ catalog.minigameName(g.id) }}</span>
               @if (store.isHost()) {
-                <span class="check" aria-hidden="true"><i class="tick"></i></span>
+                <span
+                  class="check tick-box"
+                  [class.on]="store.isSelected(g.id)"
+                  aria-hidden="true"
+                >
+                  <i class="tick"></i>
+                </span>
               }
               <span class="blurb">{{ catalog.minigameBlurb(g.id) }}</span>
               <span class="meta">
@@ -237,7 +243,7 @@
             [disabled]="!store.isHost()"
             (change)="store.toggleHandicap($any($event.target).checked)"
           />
-          <span class="box" aria-hidden="true"><i class="tick"></i></span>
+          <span class="tick-box" aria-hidden="true"><i class="tick"></i></span>
           {{ 'room.lobby.handicap' | transloco }}
         </label>
         @if (store.selectedGameIds().length > 0) {

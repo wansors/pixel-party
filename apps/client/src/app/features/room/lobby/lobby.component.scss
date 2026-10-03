@@ -382,25 +382,6 @@
     position: absolute;
     top: 0.45rem;
     right: 0.45rem;
-    width: 1rem;
-    height: 1rem;
-    display: grid;
-    place-content: center;
-    font-size: var(--fs-xs);
-    color: var(--c-bg);
-    background: var(--c-bg);
-    border: 2px solid var(--c-frame-lit);
-  }
-  .check .tick {
-    visibility: hidden;
-    transform: scale(0.72);
-  }
-  &.selected .check {
-    background: var(--c-lime);
-    border-color: var(--c-lime);
-    .tick {
-      visibility: visible;
-    }
   }
   .blurb {
     flex: 1;
@@ -463,32 +444,13 @@
     align-items: center;
     gap: 0.45rem;
     cursor: pointer;
+    --tick-box-on: var(--c-cyan);
     input {
       position: absolute;
       opacity: 0;
       pointer-events: none;
     }
-    .box {
-      width: 1.1rem;
-      height: 1.1rem;
-      display: grid;
-      place-content: center;
-      color: var(--c-bg);
-      background: var(--c-bg);
-      border: 2px solid var(--c-frame-lit);
-    }
-    .box .tick {
-      visibility: hidden;
-      transform: scale(0.72);
-    }
-    input:checked + .box {
-      background: var(--c-cyan);
-      border-color: var(--c-cyan);
-      .tick {
-        visibility: visible;
-      }
-    }
-    input:focus-visible + .box {
+    input:focus-visible + .tick-box {
       outline: 2px solid var(--c-amber);
     }
     &.disabled {
@@ -538,9 +500,6 @@
   .game-grid {
     overflow: visible;
     grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
-  }
-  .code-card .code {
-    font-size: var(--fs-xl);
   }
 }
 

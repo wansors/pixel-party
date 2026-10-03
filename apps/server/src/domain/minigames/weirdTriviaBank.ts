@@ -1,4 +1,4 @@
-import type { WeirdTriviaLang } from '@pp/shared'
+import type { QuizEntry, QuizEntryText } from './quizCore'
 
 // Weird Trivia question bank: strange but TRUE facts (every right answer is real and verifiable; the
 // decoys are absurd-but-plausible and false). Each language is written natively — its own phrasing and
@@ -6,17 +6,11 @@ import type { WeirdTriviaLang } from '@pp/shared'
 // language (`tittle`), as long as both are true and equally hard. Budgets (checked by the tests): a
 // question fits the board, a choice fits a tile (≤ 24 chars), a fact fits the reveal (≤ 120 chars).
 
-export interface WeirdFactText {
-  q: string
-  right: string
-  wrong: readonly [string, string, string]
+export interface WeirdFactText extends QuizEntryText {
   fact: string
 }
 
-export interface WeirdFact {
-  id: string
-  text: Record<WeirdTriviaLang, WeirdFactText>
-}
+export type WeirdFact = QuizEntry<WeirdFactText>
 
 export const WEIRD_TRIVIA_BANK: readonly WeirdFact[] = [
   // --- Animals -------------------------------------------------------------------------------------

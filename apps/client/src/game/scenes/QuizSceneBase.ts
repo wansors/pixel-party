@@ -1,4 +1,4 @@
-import { PALETTE } from '@pp/shared'
+import { PALETTE, type QuizLang } from '@pp/shared'
 import type Phaser from 'phaser'
 import { addBanner, burst, floatText, punch, ring, shake, showBanner } from '../fx'
 import {
@@ -96,6 +96,13 @@ export abstract class QuizSceneBase<S> extends MiniGameScene<S> {
   private lightPhase = -1
 
   protected abstract view(snap: S): QuizView
+
+  // The question banks ship every language; this is the player's (each translation bundle names its
+  // own code — Phaser scenes only see the translate function).
+  protected lang(): QuizLang {
+    return this.t('lang.code') === 'es' ? 'es' : 'en'
+  }
+
   // Called every frame after the board is up to date: judge a locked pick, play a reveal.
   protected abstract judge(snap: S, view: QuizView): void
 

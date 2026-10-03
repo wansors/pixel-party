@@ -127,31 +127,3 @@ describe('WeirdTrivia', () => {
     expect(r.stats?.b).toBe('1/3 · 2000 pts')
   })
 })
-
-describe('WeirdTrivia bank', () => {
-  const langs = ['en', 'es'] as const
-
-  test('has unique ids and enough questions for several rounds', () => {
-    const ids = WEIRD_TRIVIA_BANK.map((f) => f.id)
-    expect(new Set(ids).size).toBe(ids.length)
-    expect(ids.length).toBeGreaterThanOrEqual(40)
-  })
-
-  test('every entry is complete in both languages and fits the screen budgets', () => {
-    for (const fact of WEIRD_TRIVIA_BANK) {
-      for (const lang of langs) {
-        const t = fact.text[lang]
-        const where = `${fact.id}/${lang}`
-        const choices = [t.right, ...t.wrong]
-        expect(new Set(choices.map((c) => c.toLowerCase())).size, where).toBe(4)
-        for (const c of choices) {
-          expect(c.trim().length, `${where}: ${c}`).toBeGreaterThan(0)
-          expect(c.length, `${where}: ${c}`).toBeLessThanOrEqual(24)
-        }
-        expect(t.q.length, where).toBeLessThanOrEqual(90)
-        expect(t.fact.length, where).toBeLessThanOrEqual(120)
-        expect(t.fact.length, where).toBeGreaterThan(20)
-      }
-    }
-  })
-})

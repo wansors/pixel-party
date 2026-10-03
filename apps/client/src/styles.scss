@@ -191,6 +191,32 @@ img {
   }
 }
 
+// ── Pixel checkbox ──────────────────────────────────────────────────────────
+// An outlined square showing the pixel tick when on: add `.on`, or put it right after a (visually
+// hidden) checkbox input. `--tick-box-on` sets the "on" color (lime by default).
+.tick-box {
+  display: grid;
+  place-content: center;
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  color: var(--c-bg);
+  background: var(--c-bg);
+  border: 2px solid var(--c-frame-lit);
+  .tick {
+    visibility: hidden;
+    transform: scale(0.72);
+  }
+  &.on,
+  :checked + & {
+    background: var(--tick-box-on, var(--c-lime));
+    border-color: var(--tick-box-on, var(--c-lime));
+    .tick {
+      visibility: visible;
+    }
+  }
+}
+
 // ── Blink (leader row, "PRESS START") ───────────────────────────────────────
 @keyframes arcade-blink {
   0%,

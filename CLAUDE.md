@@ -72,8 +72,8 @@ Documentation lives in `docs/`:
   (`tetrisCore` holds the shared engine behind `lineClearSprint`/`quickTetris`; `athleticsCore` the
   sprint model behind `trackRace` (`Dash100m`, `Hurdles110m`) and `fieldEvent` (`LongJump`,
   `JavelinThrow`); `raceCore` the car engine behind `microRace` and `courseRace` (`RallyStage`,
-  `SpeedCircuit`); `quizCore` the shared quiz rules behind `trivia` and `weirdTrivia`, whose bilingual
-  bank is `weirdTriviaBank`)
+  `SpeedCircuit`); `quizCore` the shared quiz rules and bilingual bank format behind `trivia` and
+  `weirdTrivia`, whose banks are `triviaBank` / `weirdTriviaBank`)
   + `registry`, `services/{scoring,teamAssignment,pairing,sessionAnalysis,handicap,finalRanking}`,
   `ports/Random`), `application/`
   (`session/SessionEngine`+`SessionManager`, `use-cases/`, `ports/`), `infrastructure/`

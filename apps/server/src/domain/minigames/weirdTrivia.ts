@@ -1,25 +1,25 @@
 import {
+  type QuizLang,
   WEIRD_TRIVIA,
   type WeirdTriviaInput,
-  type WeirdTriviaLang,
   type WeirdTriviaPhase,
   type WeirdTriviaSnapshot,
-  type WeirdTriviaText,
 } from '@pp/shared'
 import type { Random } from '../ports/Random'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
-import { rankByPoints, rightAnswerPoints, shuffle } from './quizCore'
+import {
+  type DealtQuestion,
+  dealQuestion,
+  rankByPoints,
+  rightAnswerPoints,
+  shuffle,
+} from './quizCore'
 import { WEIRD_TRIVIA_BANK, type WeirdFact } from './weirdTriviaBank'
 
 const DEFAULT_DURATION_MS = 50_000
-const LANGS: readonly WeirdTriviaLang[] = ['en', 'es']
 
-interface Question {
-  id: string
-  text: Record<WeirdTriviaLang, WeirdTriviaText>
-  fact: Record<WeirdTriviaLang, string>
-  // Display slot of the right answer (the same in every language).
-  correct: number
+interface Question extends DealtQuestion {
+  fact: Record<QuizLang, string>
 }
 
 export interface WeirdTriviaState {
@@ -38,19 +38,8 @@ export interface WeirdTriviaState {
   rightAnswers: Map<PlayerId, number>
 }
 
-// One seeded slot order shared by both languages, so the right answer sits in the same slot for
-// everybody whatever language they play in.
 function toQuestion(fact: WeirdFact, random: Random): Question {
-  const order = shuffle([0, 1, 2, 3], random) // 0 = the right answer, 1..3 = the decoys
-  const text = {} as Record<WeirdTriviaLang, WeirdTriviaText>
-  const facts = {} as Record<WeirdTriviaLang, string>
-  for (const lang of LANGS) {
-    const t = fact.text[lang]
-    const options = [t.right, ...t.wrong]
-    text[lang] = { q: t.q, choices: order.map((i) => options[i]) }
-    facts[lang] = t.fact
-  }
-  return { id: fact.id, text, fact: facts, correct: order.indexOf(0) }
+  return { ...dealQuestion(fact, random), fact: { en: fact.text.en.fact, es: fact.text.es.fact } }
 }
 
 function configNumber(config: Record<string, unknown> | undefined, key: string): number | null {

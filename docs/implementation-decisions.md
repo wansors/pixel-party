@@ -557,8 +557,13 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   points ranking) on the server and `QuizSceneBase` (board, tiles, keys, contestant lights) on the
   client. Lightning Quiz behaves as before, with one visible change: the four answer labels now share
   one font size (the largest at which the longest one fits) instead of shrinking one by one.
-- **Not done**: Lightning Quiz's own bank is still English-only. Moving it to the same bilingual
-  format is a follow-up.
+- **Lightning Quiz followed** the same day. Its bank (`triviaBank.ts`) moved to the same bilingual
+  format and grew from 12 English-only questions to 53 in EN and ES. Two questions were dropped
+  because their answer depends on a convention: how many continents there are (Spanish schools teach
+  5 or 6) and which color is "primary" (green is one in RGB light). Its snapshot now carries `text`
+  per language instead of `question`/`choices`, a breaking wire change, so `PROTOCOL_VERSION` went to 2.
+  The two quizzes share the bank format and the deal (`quizCore.dealQuestion`: one slot order for
+  every language).
 
 ### D25 — Dark / acid humor pass: seeded banter pools, NPC heckles, no spicy toggle — DONE
 

@@ -1,54 +1,23 @@
 import type { TriviaInput, TriviaSnapshot } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
-import { rankByPoints, rightAnswerPoints, shuffle } from './quizCore'
+import {
+  type DealtQuestion,
+  dealQuestion,
+  rankByPoints,
+  rightAnswerPoints,
+  shuffle,
+} from './quizCore'
+import { TRIVIA_BANK } from './triviaBank'
 
 // 4 x 7.5s = 30s total, matching the catalog's 30s cap (SessionEngine only ever forwards `durationMs`,
 // never `questions`/`questionMs`, so these defaults are trivia's real round length in production).
 const DEFAULT_QUESTIONS = 4
 const DEFAULT_QUESTION_MS = 7500
-
-interface Question {
-  q: string
-  choices: string[]
-  answer: number
-}
-
-// Small in-repo bank (English; i18n is a later phase). A seeded shuffle picks and orders the subset so
-// every player in a room gets the identical quiz.
-const QUESTION_BANK: readonly Question[] = [
-  {
-    q: 'Which planet is closest to the Sun?',
-    choices: ['Venus', 'Mercury', 'Mars', 'Earth'],
-    answer: 1,
-  },
-  { q: 'How many continents are there?', choices: ['5', '6', '7', '8'], answer: 2 },
-  {
-    q: 'What is the largest ocean?',
-    choices: ['Atlantic', 'Indian', 'Arctic', 'Pacific'],
-    answer: 3,
-  },
-  { q: 'What gas do plants absorb?', choices: ['Oxygen', 'Nitrogen', 'CO2', 'Helium'], answer: 2 },
-  { q: 'How many sides does a hexagon have?', choices: ['5', '6', '7', '8'], answer: 1 },
-  { q: 'Which is a primary color?', choices: ['Green', 'Orange', 'Blue', 'Purple'], answer: 2 },
-  { q: 'What is H2O commonly known as?', choices: ['Salt', 'Water', 'Sugar', 'Acid'], answer: 1 },
-  { q: 'How many legs does a spider have?', choices: ['6', '8', '10', '12'], answer: 1 },
-  {
-    q: 'Which animal is the fastest on land?',
-    choices: ['Lion', 'Cheetah', 'Horse', 'Gazelle'],
-    answer: 1,
-  },
-  {
-    q: 'What is the capital of Japan?',
-    choices: ['Seoul', 'Beijing', 'Tokyo', 'Bangkok'],
-    answer: 2,
-  },
-  { q: 'How many minutes in an hour?', choices: ['30', '60', '90', '100'], answer: 1 },
-  { q: 'Which is not a mammal?', choices: ['Whale', 'Bat', 'Shark', 'Dog'], answer: 2 },
-]
+const CHOICES = 4
 
 export interface TriviaState {
   players: PlayerId[]
-  questions: Question[]
+  questions: DealtQuestion[]
   startedAt: number
   questionMs: number
   answered: Map<PlayerId, Set<number>>
@@ -67,10 +36,11 @@ export class Trivia implements MiniGame<TriviaState, TriviaInput> {
       typeof ctx.config?.questions === 'number' ? ctx.config.questions : DEFAULT_QUESTIONS
     const questionMs =
       typeof ctx.config?.questionMs === 'number' ? ctx.config.questionMs : DEFAULT_QUESTION_MS
-    const questions = shuffle(QUESTION_BANK, ctx.random).slice(
-      0,
-      Math.min(count, QUESTION_BANK.length),
-    )
+    // A seeded shuffle picks the subset and deals each question, so every player in a room gets the
+    // identical quiz (in their own language: the bank is bilingual, see triviaBank).
+    const questions = shuffle(TRIVIA_BANK, ctx.random)
+      .slice(0, Math.min(count, TRIVIA_BANK.length))
+      .map((entry) => dealQuestion(entry, ctx.random))
     return {
       players: [...ctx.players],
       questions,
@@ -87,14 +57,15 @@ export class Trivia implements MiniGame<TriviaState, TriviaInput> {
 
   onInput(state: TriviaState, playerId: PlayerId, input: TriviaInput, now: number): TriviaState {
     if (input.kind !== 'answer') return state
-    if (typeof input.question !== 'number' || typeof input.choice !== 'number') return state
+    if (typeof input.question !== 'number' || !Number.isInteger(input.choice)) return state
+    if (input.choice < 0 || input.choice >= CHOICES) return state
     const answered = state.answered.get(playerId)
     if (!answered) return state
     const idx = this.currentIndex(state, now)
     if (idx < 0 || idx >= state.questions.length) return state
     if (input.question !== idx || answered.has(idx)) return state
     answered.add(idx)
-    if (input.choice === state.questions[idx].answer) {
+    if (input.choice === state.questions[idx].correct) {
       const questionStart = state.startedAt + idx * state.questionMs
       const earned = rightAnswerPoints(questionStart + state.questionMs - now, state.questionMs)
       state.points.set(playerId, (state.points.get(playerId) ?? 0) + earned)
@@ -125,8 +96,7 @@ export class Trivia implements MiniGame<TriviaState, TriviaInput> {
     return {
       index: Math.min(idx, state.questions.length),
       total: state.questions.length,
-      question: question?.q ?? null,
-      choices: question?.choices ?? [],
+      text: question?.text ?? null,
       questionRemainingMs: live ? Math.max(0, questionStart + state.questionMs - now) : 0,
       scores: Object.fromEntries(state.points),
       answeredCurrent,

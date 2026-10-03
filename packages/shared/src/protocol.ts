@@ -5,7 +5,7 @@ import type { TeamId } from './theme'
 // changed semantics). The server stamps it on WELCOME; the client compares against its own compiled
 // constant and surfaces a "please refresh" notice on mismatch — a stale cached bundle then fails loud
 // instead of misbehaving silently.
-export const PROTOCOL_VERSION = 1
+export const PROTOCOL_VERSION = 2
 
 // ---------------------------------------------------------------------------------------------------
 // Shared DTOs

@@ -5,21 +5,23 @@ import { QuizSceneBase, type QuizView } from './QuizSceneBase'
 // Suspense beat between locking an answer and revealing it (the verdict is already in the snapshot).
 const REVEAL_DELAY_MS = 450
 
-// Lightning Quiz canvas on the shared quiz-show board (QuizSceneBase). The correct answer never rides
-// the live snapshot, but the server scores an answer the moment it lands — so after a short suspense
-// beat the locked tile reveals right (score went up) or wrong (it didn't).
+// Lightning Quiz canvas on the shared quiz-show board (QuizSceneBase), in the player's language (the
+// bank is bilingual). The correct answer never rides the live snapshot, but the server scores an answer
+// the moment it lands — so after a short suspense beat the locked tile reveals right (score went up) or
+// wrong (it didn't).
 export class TriviaScene extends QuizSceneBase<TriviaSnapshot> {
   constructor(...deps: SceneDeps) {
     super('trivia', ...deps)
   }
 
   protected view(snap: TriviaSnapshot): QuizView {
+    const text = snap.text?.[this.lang()] ?? null
     return {
       index: snap.index,
       total: snap.total,
-      question: snap.question,
-      choices: snap.choices,
-      open: snap.question !== null,
+      question: text?.q ?? null,
+      choices: text?.choices ?? [],
+      open: text !== null,
       answered: snap.answeredCurrent,
       scores: snap.scores,
     }
@@ -27,7 +29,7 @@ export class TriviaScene extends QuizSceneBase<TriviaSnapshot> {
 
   // The HUD bar drains per question (it refills each time a new one lands).
   protected override remainingMs(snap: TriviaSnapshot): number | null {
-    return snap.question === null ? 0 : snap.questionRemainingMs
+    return snap.text === null ? 0 : snap.questionRemainingMs
   }
 
   protected judge(_snap: TriviaSnapshot, v: QuizView): void {

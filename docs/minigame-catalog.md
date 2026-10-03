@@ -85,6 +85,9 @@ Then (2026-10-03) J1 Weird Trivia (`weird-trivia`), the first brand-new idea aft
 - **Rules**: per-question time limit (7.5 s). Points for correct answer + speed bonus.
 - **Win condition**: highest total score. · **Result**: ranking by points.
 - **Latency**: low. · **Complexity**: medium (question bank + i18n).
+- **The bank** (2026-10-03, D24): 53 general-knowledge questions, server-side (`triviaBank.ts`),
+  written natively in EN and ES; each round deals 4 of them with the options shuffled. Questions whose
+  answer depends on a convention (how many continents, which colors are primary) are left out.
 
 ### A4. ✅ Sequence memory ("Simon") — implemented (`simon`)
 - **Concept**: repeat a growing sequence of colors/sounds.
