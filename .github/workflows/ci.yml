@@ -48,6 +48,10 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: latest
+      # The Angular CLI and Vitest run on Node (Angular 22: ^22.22.3 || ^24.15), not on the runner's default.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
       - run: bun install --frozen-lockfile
       # Vitest through Angular's unit-test builder (jsdom, no browser needed).
       - run: bun run test:client
