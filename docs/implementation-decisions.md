@@ -935,4 +935,17 @@ misses — each would be speculative or gated, and the project rule is "nothing 
     production build;
   - a party-mode sweep of all 55 games at 1920x1080 with 12 players, compared against the Phaser 3
     baseline from the same line-ups.
+- **Performance**, Phaser 3.90 vs 4.2: the same Angular 22 build of each, measured one after the other
+  on an otherwise idle machine. Setup: the 12 heaviest real-time games, 12 players, 1920x1080, the
+  playtest `--perf` probe with software WebGL (SwiftShader).
+  - **Frames per second** (the whole frame, including the emulated GPU work): 22.2 → **26.4**
+    (+19 %). Brawl +39 %, Pang +49 %, Snake +58 %.
+  - **JS heap**: 34.5 → **31.6 MB** (−8 %).
+  - **Phaser's own step** (the JS side of update and render): 1.3 → 1.5 ms on average.
+    - Most games are flat. Honeycomb Cut halves its step.
+    - Two games got dearer: Asteroids, from its Mask-filter clip (2.1 → 2.9 ms, p95 7.1 ms), and Rally
+      Stage (1.8 → 3.0 ms, p95 6.8 ms).
+    - The worst p95 is still under half of a 60 fps frame (16.7 ms).
+  - **Download**: the game chunk grows by 31 kB gzipped (426 → 457 kB). Angular 22 leaves the initial
+    load where it was (133 kB).
 - **Still pinned**: TypeScript 7 waits for Angular (22.2 requires `>=6.0 <6.1`).
