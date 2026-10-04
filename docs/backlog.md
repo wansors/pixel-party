@@ -226,8 +226,9 @@ seeded variants of the same content, because snapshots are broadcast to the whol
   - chiptune loops by mood during rounds (2 action, 2 think, 1 tension) plus a results loop, rotating
     between rounds;
   - silence in the three games whose sound is the game.
-- [ ] *Optional*: more produced tracks (like the Suno theme) per mood. The director would need a
-      per-mood mp3 list next to the chip songs.
+- [ ] *Optional*: more produced tracks (like the Suno theme) per mood. The Suno prompts are ready
+      in [`music-prompts.md`](music-prompts.md); the director would need a per-mood mp3 list next to
+      the chip songs.
 
 ## How this backlog works
 

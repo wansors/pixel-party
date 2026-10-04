@@ -28,6 +28,7 @@ session-wide ranking.
 | [`docs/minigame-ideas.md`](docs/minigame-ideas.md) | ~30 mini-game ideas ranked by priority (fun, healthy competition, effort, latency). |
 | [`docs/scoring-system.md`](docs/scoring-system.md) | Scoring across mini-games, session ranking, tiebreakers, and handicap. |
 | [`docs/player-fit-audit.md`](docs/player-fit-audit.md) | Per-game player range (min/max/recommended) and the balance & correctness audit of all 55 games. |
+| [`docs/music-prompts.md`](docs/music-prompts.md) | Suno prompts for the extra soundtrack songs (one or two per music mood). |
 | [`docs/pc-launch-audit.md`](docs/pc-launch-audit.md) | PC performance & gameplay audit of all 55 games (controls, prediction, frame cost, snapshot size) and its fixes. |
 | [`docs/technical-architecture.md`](docs/technical-architecture.md) | Stack & architecture — mirrors the `utopia-offline` reference project. |
 | [`docs/art-direction.md`](docs/art-direction.md) | Retro classic-arcade pixel-art visual identity (web, HUD, scoreboards). |
