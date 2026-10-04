@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { Random } from '../ports/Random'
 import { LineClearSprint } from './lineClearSprint'
-import { FALL_INTERVAL_MS, ROWS, createPlayerBoard } from './tetrisCore'
+import { createPlayerBoard, FALL_INTERVAL_MS, ROWS } from './tetrisCore'
 
 const zero: Random = { next: () => 0 }
 

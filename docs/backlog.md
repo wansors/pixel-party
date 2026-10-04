@@ -28,10 +28,10 @@ below.
 
 ### Foundation & platform
 - Bun workspaces monorepo, hexagonal server, `@pp/shared` wire contracts, Biome + TS strict +
-  determinism gate + **GitHub Actions CI**. Test suite: **677 server/shared + 33 client (Karma)**, green.
+  determinism gate + **GitHub Actions CI**. Test suite: **683 server/shared + 37 client (Vitest)**, green.
 - Server-authoritative, deterministic core (seeded `Random` + `Clock` ports; the domain never touches
   `Math.random`/`Date.now`). Bun-native WS with a hand-written shape validator (no Zod).
-- Angular 20 shell + Phaser 3 (decoupled); **i18n EN/ES** (Transloco) across the UI + every scene;
+- Angular 22 shell + Phaser 4 (decoupled); **i18n EN/ES** (Transloco) across the UI + every scene;
   **audio** (music + synthesized 8-bit SFX + volume sliders); **retro arcade** look & feel (palette
   theme, arcade frame, self-hosted pixel font + avatars, high-score tables, CRT overlay).
 
@@ -240,25 +240,24 @@ seeded variants of the same content, because snapshots are broadcast to the whol
 - [x] **PC first, also on screen** (D34): the mobile-friendly badges, the **Mobile** filter and the
       intro's device badge only show while someone in the room joined from a phone.
 
-## Maintenance — dependencies (reviewed 2026-10-04)
+## Maintenance — dependencies (reviewed 2026-10-04) — DONE
 
-- [x] Bun 1.4.2 is the latest release; CI already installs `latest`, and the README asks for 1.3+.
-- [x] Angular patched to the latest 20.3 release (runtime 20.3.33, CLI and build 20.3.37). This closes
-      the Angular advisories, all of them in features we don't use: SSR, `HttpTransferCache`, Angular
-      i18n. `bun audit fix` and a `piscina` 5.3.2 override cleared 59 of 60 advisories; all of them
-      were in build or test tooling, since the server has no dependencies.
-- [ ] `braces` 3.0.3 (high, stack-exhaustion DoS): no fixed version is published yet. It only reaches
-      dev file watchers and Karma, never a player's browser or the game server. Re-run `bun audit`
-      once a fix ships.
-- [ ] **Angular 20 → 22** (`ng update` one major at a time) before Angular 20's long-term support
-      ends (~November 2026). It brings zone.js 0.16 and Jasmine 7, and probably Vitest instead of
-      Karma.
-- [ ] *Post-launch, evaluate*: **Phaser 3.90 → 4**, a renderer rewrite touching all 55 scenes. 3.90 is
-      the final, stable v3, so it stays for launch.
-- [ ] *Blocked*: **TypeScript 7** (the native compiler) waits until Angular supports it; Angular 20
-      requires `<6.0`.
-- [ ] *Optional*: **Biome 1.9 → 2.x**, a dev-only change that needs `biome migrate` plus a pass over
-      the new lint rules.
+Everything was upgraded before the public beta, so the launch is tested on the stack it ships with
+(D35).
+- [x] Bun 1.4.2 is the latest release; CI installs `latest`, and the README asks for 1.3+.
+- [x] **Angular 20 → 22.2** (one major at a time, with the official migrations), **TypeScript 6.0**
+      and **zone.js 0.16**.
+- [x] **Phaser 3.90 → 4.2**: masks became Mask filters, render textures need `render()`, the
+      hit-flash tint uses the new tint modes. All 55 games swept at 1920x1080 with 12 players.
+- [x] **Biome 1.9 → 2.5**: config migrated (keeping the recommended rules), imports sorted, and the
+      new rules' findings fixed (unused imports, `forEach` callbacks returning values, optional
+      chains).
+- [x] **Karma/Jasmine → Vitest** through Angular's unit-test builder (jsdom, no browser). CI runs
+      the client specs plus a production build.
+- [x] rxjs 7.8.2, tslib 2.8.1, Transloco 8.4.0, GitHub Actions `checkout@v7`. `bun audit`: **0**
+      advisories; `braces` left with Karma.
+- [ ] *Blocked*: **TypeScript 7** (the native compiler) waits until Angular supports it; Angular 22.2
+      requires `>=6.0 <6.1`.
 
 ## How this backlog works
 

@@ -1,26 +1,26 @@
 import {
   ATHLETICS_STRIDE,
+  athleticsStrideGain,
   type FieldAthlete,
   type FieldEventSnapshot,
   PALETTE,
-  athleticsStrideGain,
 } from '@pp/shared'
 import type Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, flash, ring, shake, showBanner } from '../fx'
 import { bodyStyle, fitFontSize, headlineStyle, shade } from '../pixelStyle'
 import { PlayerStrip } from '../playerStrip'
-import { MiniGameScene } from './MiniGameScene'
 import {
   ATHLETE_H,
+  ensureCrowdTile,
+  ensureFlagTexture,
   GRASS,
   METRES_PER_FRAME,
   RunnerTracker,
   StridePad,
   TARTAN,
-  ensureCrowdTile,
-  ensureFlagTexture,
 } from './athleticsKit'
+import { MiniGameScene } from './MiniGameScene'
 
 const SPRITE_M = 2.2 // world metres the athlete's box spans
 
@@ -315,7 +315,7 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
 
   private step(foot: 'L' | 'R'): void {
     const me = this.me()
-    if (!me || me.phase !== 'run' || this.aimStart >= 0) return
+    if (me?.phase !== 'run' || this.aimStart >= 0) return
     this.sendInput({ kind: 'step', foot })
     // The server's stride rule, mirrored (the other foot, not faster than the cap): a counted stride
     // speeds the run-up right away; the next snapshot confirms it.

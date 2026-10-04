@@ -1,6 +1,6 @@
 ---
 name: verify-all
-description: Run Pixel Party's full quality gate — Biome lint, the domain determinism check, TypeScript across server/shared/client, server+shared bun tests, the Angular production build and (optionally) Karma client tests. Use before committing or declaring a change done, and to bootstrap Bun on a machine that lacks it.
+description: Run Pixel Party's full quality gate — Biome lint, the domain determinism check, TypeScript across server/shared/client, server+shared bun tests, the Angular production build, the Vitest client specs and the dependency audit. Use before committing or declaring a change done, and to bootstrap Bun on a machine that lacks it.
 ---
 
 # Verify everything (the CI gate, locally)
@@ -14,8 +14,8 @@ curl -fsSL -o bun.zip https://github.com/oven-sh/bun/releases/latest/download/bu
 unzip -o -q bun.zip && ln -sf bun bun-linux-x64/bunx && ln -sf bun bun-linux-x64/node
 export PATH="$BUNDIR/bun-linux-x64:$PATH"; cd - && bun install
 ```
-(`node` → bun shim lets the Angular CLI dev server/build run without a Node install — but not Karma,
-see below.)
+(`node` → bun shim lets the Angular CLI dev server/build run without a Node install — but not the
+client specs, see below.)
 
 ## 1. The gate (same order as CI — stop at the first failure and fix it)
 ```bash
@@ -25,12 +25,15 @@ bun run typecheck         # server (incl. tests), shared, client
 bun run test              # server + shared suites (bun test, grouped by scripts/test-server.sh)
 bun run build:client      # Angular production build — the ONLY check that type-checks templates
 ```
-Client specs (Karma + headless Chrome), as CI runs them:
+Client specs (Vitest through Angular's unit-test builder, jsdom — no browser), as CI runs them, and
+the dependency audit:
 ```bash
-CHROME_BIN=/usr/bin/google-chrome bun run --filter client test -- --watch=false --browsers=ChromeHeadless
+bun run test:client       # 10 spec files; `ng test --watch=false` under the hood
+bun audit                 # known advisories in the dependency tree (0 expected)
 ```
-Karma needs a **real Node** (it fails with `No provider for "proxies"` under the `node` → bun shim).
-Without a system Node, unpack the official LTS tarball privately and put it first on the PATH:
+Vitest's workers need a **real Node**; under the `node` → bun shim they die with `Worker exited
+unexpectedly`. Without a system Node, unpack the official LTS tarball privately and put it first on
+the PATH:
 ```bash
 V=$(curl -fsSL https://nodejs.org/dist/index.json | python3 -c "import json,sys;print([r['version'] for r in json.load(sys.stdin) if r['lts']][0])")
 curl -fsSL "https://nodejs.org/dist/$V/node-$V-linux-x64.tar.xz" | tar -xJ -C "${TMPDIR:-/tmp}"

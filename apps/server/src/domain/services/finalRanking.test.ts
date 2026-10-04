@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { type Tiebreakers, finalRanking } from './finalRanking'
+import { finalRanking, type Tiebreakers } from './finalRanking'
 
 const tb = (
   firsts: Record<string, number>,

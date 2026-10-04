@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  MAX_ROOM_PLAYERS,
-  MINIGAMES,
   fitsPlayers,
   idealForPlayers,
+  MAX_ROOM_PLAYERS,
+  MINIGAMES,
   playableGames,
 } from './minigames'
 

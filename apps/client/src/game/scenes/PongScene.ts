@@ -10,8 +10,8 @@ import {
   hexToCss,
   shade,
 } from '../pixelStyle'
-import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 import { DuelWatch, verdictKey } from './duelWatch'
+import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // Mirrors the server's pong.ts: paddles sit at x = 0.04 / 0.96 and return the ball when its centre is
 // within ±PAD_HALF of the paddle centre (speeding it up by SPEEDUP, capped at MAX_VX, and angling it

@@ -15,15 +15,15 @@ import type { MiniGame, NormalizedResult, PlayerId } from '../../domain/minigame
 import { createMiniGame } from '../../domain/minigames/registry'
 import type { Random } from '../../domain/ports/Random'
 import { finalRanking } from '../../domain/services/finalRanking'
-import { type HandicapConfig, applyScoringHandicap } from '../../domain/services/handicap'
+import { applyScoringHandicap, type HandicapConfig } from '../../domain/services/handicap'
 import { demoteIdle } from '../../domain/services/idleDemotion'
 import { gameFitsRoom, playableLineup } from '../../domain/services/lineup'
 import { awardPoints, awardTeamPoints } from '../../domain/services/scoring'
 import {
-  type RoundAnalysis,
   buildRadars,
   buildSummary,
   placementShares,
+  type RoundAnalysis,
 } from '../../domain/services/sessionAnalysis'
 import type { Clock } from '../ports/Clock'
 import type { Publisher } from '../ports/Publisher'

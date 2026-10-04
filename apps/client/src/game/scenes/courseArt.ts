@@ -1,8 +1,8 @@
 import {
   type CourseDef,
   type CourseTheme,
-  type MicroRacePoint,
   inStretch,
+  type MicroRacePoint,
   sampleCourse,
 } from '@pp/shared'
 

@@ -3,7 +3,7 @@ import Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, floatText, punch, ring, showBanner } from '../fx'
 import { bodyStyle, ensurePixelGrid, headlineStyle, shade, teamColor } from '../pixelStyle'
-import { type Shadow, YouMarker, addShadow } from '../playerMarks'
+import { addShadow, type Shadow, YouMarker } from '../playerMarks'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 const ROPE = 0xc9a36b

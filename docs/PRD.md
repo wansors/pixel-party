@@ -202,8 +202,8 @@ outcomes. See `minigame-catalog.md` §H and `scoring-system.md`.
 ## 8. Technical considerations
 
 > **Stack decided.** Pixel Party mirrors the architecture of the reference project `utopia-offline`:
-> **Bun** monorepo, **TypeScript**, **hexagonal** server, **Bun-native WebSockets**, **Angular 20 +
-> Phaser 3** client, **no database** (permanently stateless/anonymous — see below), **Biome**,
+> **Bun** monorepo, **TypeScript**, **hexagonal** server, **Bun-native WebSockets**, **Angular 22 +
+> Phaser 4** client, **no database** (permanently stateless/anonymous — see below), **Biome**,
 > server-authoritative + deterministic core.
 > Full blueprint in [`technical-architecture.md`](technical-architecture.md). This section is a summary.
 
@@ -223,8 +223,8 @@ outcomes. See `minigame-catalog.md` §H and `scoring-system.md`.
 | Server | Hexagonal (domain / application / infrastructure) |
 | Real time | Bun-native WebSockets (topic pub/sub) — no ws/socket.io |
 | Wire validation | Hand-written discriminated unions + shape validator (no Zod) |
-| Client shell | Angular 20 (`@angular/build`) — all DOM/UI |
-| Game rendering | Phaser 3 — mini-game canvas only |
+| Client shell | Angular 22 (`@angular/build`) — all DOM/UI |
+| Game rendering | Phaser 4 — mini-game canvas only |
 | State authority | Server-authoritative + deterministic (seeded `Random`, `Clock`) |
 | Persistence | **No DB, permanently** — all in-memory/ephemeral, by design (see `technical-architecture.md` §7) |
 

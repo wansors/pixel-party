@@ -142,7 +142,9 @@ describe('RoomRush', () => {
     // Pack exactly N players into the first room.
     spots(room.slot)
       .slice(0, n)
-      .forEach(([x, y], i) => park(s, `p${i}`, x, y))
+      .forEach(([x, y], i) => {
+        park(s, `p${i}`, x, y)
+      })
     t = run(s, t, t + 50)
     expect(room.locked).toBe(true)
     for (let i = 0; i < n; i++) expect(body(s, `p${i}`).safe).toBe(true)

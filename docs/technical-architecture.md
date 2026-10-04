@@ -4,7 +4,7 @@
 - **Date**: 2026-07-16
 
 This document defines the technical stack and architecture for Pixel Party. It deliberately **mirrors
-the `utopia-offline` reference project** (Bun monorepo, hexagonal server, Angular 20 + Phaser 3 client,
+the `utopia-offline` reference project** (Bun monorepo, hexagonal server, Angular + Phaser client,
 Bun-native WebSockets, server-authoritative + deterministic core). The same conventions apply; only the
 domain changes (rooms / sessions / mini-games / scoring instead of an MMORPG world).
 
@@ -21,14 +21,14 @@ domain changes (rooms / sessions / mini-games / scoring instead of an MMORPG wor
 | Server | Bun process, **hexagonal** (domain / application / infrastructure) |
 | Real-time transport | **Bun-native WebSockets** (`Bun.serve`) with topic pub/sub — no ws, no socket.io |
 | Wire validation | **Hand-written** discriminated-union types + shape validator — **no Zod** |
-| Client shell | **Angular 20** (standalone components, `@angular/build`) — all DOM/UI |
-| Game rendering | **Phaser 3** — mini-game canvas only, decoupled from Angular |
+| Client shell | **Angular 22** (standalone components, `@angular/build`) — all DOM/UI |
+| Game rendering | **Phaser 4** (WebGL) — mini-game canvas only, decoupled from Angular |
 | Shared contracts | `packages/shared` (`@pp/shared`): protocol + catalog data + the deterministic game rules the client predicts with, consumed by both apps |
 | Serving | **Party mode** (`bun run start`): one Bun process serves the production client build, `/api` and `/ws` on one port; `bun run dev` (Angular dev server + game server) for development only |
 | Persistence | **None, permanently** — everything in-memory/ephemeral by design (no `bun:sqlite`, ever) |
-| Lint/format | **Biome** (100 cols, single quotes, semicolons as-needed) |
-| Tests | **`bun test`** (server/shared) + **Karma/Jasmine** (client) |
-| CI | GitHub Actions: determinism → lint → typecheck → test |
+| Lint/format | **Biome 2** (100 cols, single quotes, semicolons as-needed) |
+| Tests | **`bun test`** (server/shared) + **Vitest** via Angular's unit-test builder (client) |
+| CI | GitHub Actions: determinism → lint → typecheck → test; client specs + production build |
 
 ---
 
@@ -45,7 +45,7 @@ pixel-party/
 ├── bun.lock
 ├── apps/
 │   ├── server/             # Bun game server (hexagonal)
-│   └── client/             # Angular 20 + Phaser 3
+│   └── client/             # Angular 22 + Phaser 4
 └── packages/
     └── shared/             # @pp/shared — wire contracts + mini-game catalog metadata
 ```
@@ -203,7 +203,7 @@ Fixed-timestep tick (`buildSimulationLoop`) for **real-time mini-games**:
 
 ---
 
-## 5. Client (Angular 20 + Phaser 3)
+## 5. Client (Angular 22 + Phaser 4)
 
 Same split as utopia: **Angular owns all DOM/UI** (join screen, lobby, host config, results,
 scoreboard, final ranking, HUD/overlays); **Phaser owns the mini-game canvas only**. The two are
@@ -230,7 +230,7 @@ decoupled and talk through one thin service.
   not per frame).
 - **Reconnect**: bounded exponential backoff `min(1000 * 2^attempts, 30_000)`, suppressed on
   intentional close or protocol mismatch. Rejoin restores the player's session scoreboard (FR-2.3).
-- **Build**: Angular 20 via `@angular/build` (`ng serve`/`ng build`). The WS URL is derived from
+- **Build**: Angular 22 via `@angular/build` (`ng serve`/`ng build`), TypeScript 6.0 (Angular 22's range). The WS URL is derived from
   `location` at runtime, so a build talks to whichever server served it (see *Serving* below).
 - **Keys**: `MiniGameScene` captures Space/Enter/arrows while a scene runs (blurring a focused page
   control first), and `onKey` ignores the OS auto-repeat unless a binding asks for it; held keys and
@@ -345,8 +345,8 @@ wire types in `@pp/shared`, one scene + its `SCENES` entry, one `MINIGAMES` cata
 - **TypeScript**: `strict`, `noImplicitReturns`, `noEmit`; `typecheck` runs `tsc --noEmit` per package.
 - **Tests**: `bun test` for server/shared (colocated `*.test.ts` and/or `apps/server/test/`), a
   `scripts/test-server.sh` splitting WS-handshake suites from the rest (avoids WS resource exhaustion
-  and Phaser-under-Bun `window is not defined`). Client specs `*.spec.ts` under Karma/Jasmine (Phaser
-  stubbed in specs).
+  and Phaser-under-Bun `window is not defined`). Client specs `*.spec.ts` run on Vitest (jsdom, no
+  browser) through Angular's `@angular/build:unit-test` builder; Phaser is stubbed in specs.
 - **Determinism gate**: `scripts/check-determinism.sh` greps `apps/server/src/domain/` for
   `Math.random | Date.now | performance.now` and fails the build if found — the mini-game domain must be
   a pure function of `(seed via Random, time via Clock)`.
@@ -389,7 +389,8 @@ Intentional differences given Pixel Party's nature:
 ## 10. Open technical questions
 
 1. ~~Confirm `@angular/build` (Angular 20) vs a lighter Phaser-only client~~ — **decided/implemented:
-   Angular 20 shell + Phaser 3, decoupled (`GameClient`), for parity with the reference.**
+   Angular shell + Phaser, decoupled (`GameClient`), for parity with the reference** (now Angular 22 +
+   Phaser 4, D35).
 2. ~~Room-code format/length and collision handling~~ — **implemented: 4-char code from an unambiguous
    alphabet (no 0/O/1/I), regenerated on collision in `LiveRooms` (`ROOM_CODE_LEN` env, default 4).**
 3. ~~TICK_HZ and snapshot throttle defaults~~ — **implemented: `TICK_HZ` 20, snapshot every 3 ticks

@@ -4,12 +4,12 @@ import {
   type BomberDir,
   type BomberPlayer,
   type BomberSnapshot,
-  PALETTE,
   bomberStepDir,
+  PALETTE,
 } from '@pp/shared'
 import Phaser from 'phaser'
-import { AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
-import { addBanner, burst, eliminate, flash, floatText, shake, showBanner } from '../fx'
+import { AvatarSprite, avatarPx } from '../avatars'
+import { addBanner, eliminate, flash, floatText, shake, showBanner } from '../fx'
 import {
   ensureBevelPanel,
   ensurePixelGrid,
@@ -17,7 +17,7 @@ import {
   fitFontSize,
   headlineStyle,
 } from '../pixelStyle'
-import { type Shadow, YouMarker, addShadow } from '../playerMarks'
+import { addShadow, type Shadow, YouMarker } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -135,9 +135,8 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
   private compact = false
   private board = { x: 0, y: 0, cell: 0 }
   // The board (floor, walls, crates, power-ups) baked into one render texture; a cell is redrawn only
-  // when the grid changes there. `stamp` is the off-list image each cell is drawn with.
+  // when the grid changes there.
   private boardRT?: Phaser.GameObjects.RenderTexture
-  private stamp?: Phaser.GameObjects.Image
   private splinters?: Phaser.GameObjects.Particles.ParticleEmitter
   private keys = {
     wall: '',
@@ -351,9 +350,6 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
       .renderTexture(this.board.x, this.board.y, cell * W, cell * H)
       .setOrigin(0, 0)
       .setDepth(5)
-    const stamp = this.make.image({ key: this.keys.floorA, add: false }).setOrigin(0.5)
-    this.stamp = stamp
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => stamp.destroy())
     // One emitter for every crate that bursts (a chain can break a dozen in one snapshot).
     const chip = ensurePixelGrid(this, {
       key: 'bx-chip',
@@ -627,9 +623,16 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
 
   private paintGrid(grid: string): void {
     const rt = this.boardRT
-    const stamp = this.stamp
-    if (!rt || !stamp || grid === this.grid) return
+    if (!rt || grid === this.grid) return
     const cell = this.board.cell
+    // Stamps take their values when queued (a drawn game object would be read at render time).
+    const stamp = (texture: string, x: number, y: number, size: number) => {
+      const frame = this.textures.getFrame(texture)
+      rt.stamp(texture, undefined, x, y, {
+        scaleX: size / frame.width,
+        scaleY: size / frame.height,
+      })
+    }
     for (let i = 0; i < grid.length; i++) {
       const c = grid[i]
       if (c === this.grid[i]) continue
@@ -649,12 +652,13 @@ export class BomberExpressScene extends MiniGameScene<BomberSnapshot> {
               ? this.keys[c]
               : floor
       // The floor under it first (power-up icons have holes), then the cell's content.
-      rt.draw(stamp.setTexture(floor).setPosition(at.x, at.y).setDisplaySize(cell, cell))
+      stamp(floor, at.x, at.y, cell)
       if (key === floor) continue
       // Power-up icons sit on the floor, a little smaller than the tile.
       const size = c === 'r' || c === 'b' || c === 's' ? cell * 0.8 : cell
-      rt.draw(stamp.setTexture(key).setDisplaySize(size, size))
+      stamp(key, at.x, at.y, size)
     }
+    rt.render()
     this.grid = grid
   }
 

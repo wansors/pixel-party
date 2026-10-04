@@ -1,6 +1,6 @@
 import type { TrackRaceInput, TrackRaceSnapshot, TrackRunner } from '@pp/shared'
+import { coast, createRunner, DRAG, isFoot, type Runner, rankSorted, stride } from './athleticsCore'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
-import { DRAG, type Runner, coast, createRunner, isFoot, rankSorted, stride } from './athleticsCore'
 
 const DEFAULT_DURATION_MS = 30_000
 // The starting gun fires at a seeded, unannounced moment after "SET": anticipating is a gamble.

@@ -71,7 +71,7 @@ export class Sumo implements MiniGame<SumoState, SumoInput> {
   onInput(state: SumoState, playerId: PlayerId, input: SumoInput, now: number): SumoState {
     if (now < state.startedAt || now >= state.endsAt) return state
     const body = state.bodies.get(playerId)
-    if (!body || !body.alive) return state
+    if (!body?.alive) return state
     if (input?.kind === 'dash') return this.dash(state, body, now, input.seq)
     if (input?.kind !== 'move') return state
     const { dx, dy } = input

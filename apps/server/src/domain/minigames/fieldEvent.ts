@@ -1,6 +1,6 @@
 import type { FieldAthlete, FieldEventInput, FieldEventSnapshot, FieldPhase } from '@pp/shared'
+import { coast, createRunner, isFoot, type Runner, rankSorted, stride } from './athleticsCore'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
-import { type Runner, coast, createRunner, isFoot, rankSorted, stride } from './athleticsCore'
 
 const DEFAULT_DURATION_MS = 45_000
 export const ATTEMPTS = 3

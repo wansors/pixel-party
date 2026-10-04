@@ -4,13 +4,13 @@ import {
   type FreezeDollRunner,
   type FreezeDollSnapshot,
   type FreezeDollStatus,
-  PALETTE,
   freezeDollMove,
   freezeDollSpeed,
   freezeDollSweepAt,
+  PALETTE,
 } from '@pp/shared'
 import Phaser from 'phaser'
-import { type AvatarExpression, AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
+import { type AvatarExpression, AvatarSprite, avatarPx } from '../avatars'
 import {
   addBanner,
   burst,
@@ -30,7 +30,7 @@ import {
   hexToCss,
   shade,
 } from '../pixelStyle'
-import { type Shadow, YouMarker, addShadow } from '../playerMarks'
+import { addShadow, type Shadow, YouMarker } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -570,7 +570,7 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
   // the server's position (run on at its speed). Stunned, finished or out, it simply follows the server.
   private predict(snap: FreezeDollSnapshot, since: number, dt: number): void {
     const me = snap.runners.find((r) => r.id === this.selfId)
-    if (!me || me.status !== 'racing' || this.state.final) {
+    if (me?.status !== 'racing' || this.state.final) {
       this.pred = undefined
       return
     }

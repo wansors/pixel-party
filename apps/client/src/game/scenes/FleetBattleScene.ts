@@ -4,11 +4,11 @@ import { burst, floatText, punch, shake } from '../fx'
 import { bodyStyle, headlineStyle, hexToCss, teamColor } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 import {
+  drawSegmentBar,
+  layoutBoards,
   NavalBoard,
   NavalEndCard,
   type NavalShot,
-  drawSegmentBar,
-  layoutBoards,
   setFittedText,
   setTextColor,
 } from './navalGrid'

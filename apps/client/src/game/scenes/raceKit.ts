@@ -135,11 +135,10 @@ export class RaceMinimap {
     g.lineStyle(2, PALETTE.frame, 1).strokeRect(x - 6, y - 6, w + 12, this.h + 12)
     g.lineStyle(Math.max(3, halfWidth * 2 * this.s), 0x8a8d99, 1)
     g.beginPath()
-    samples.forEach((p, i) =>
-      i === 0
-        ? g.moveTo(x + p.x * this.s, y + p.y * this.s)
-        : g.lineTo(x + p.x * this.s, y + p.y * this.s),
-    )
+    samples.forEach((p, i) => {
+      if (i === 0) g.moveTo(x + p.x * this.s, y + p.y * this.s)
+      else g.lineTo(x + p.x * this.s, y + p.y * this.s)
+    })
     if (closed) g.closePath()
     g.strokePath()
     // Start (and a stage's finish) line.

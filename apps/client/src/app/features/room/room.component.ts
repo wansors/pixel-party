@@ -1,10 +1,10 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  DestroyRef,
-  type OnInit,
   computed,
+  DestroyRef,
   inject,
+  type OnInit,
   signal,
 } from '@angular/core'
 import { ActivatedRoute, Router } from '@angular/router'

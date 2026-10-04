@@ -124,7 +124,9 @@ export class Sfx {
   // Short rising arpeggio for winning a round.
   win(): void {
     const notes = [523.25, 659.25, 783.99, 1046.5] // C5 E5 G5 C6
-    notes.forEach((f, i) => this.tone(f, i === notes.length - 1 ? 260 : 90, { delayMs: i * 90 }))
+    notes.forEach((f, i) => {
+      this.tone(f, i === notes.length - 1 ? 260 : 90, { delayMs: i * 90 })
+    })
   }
 
   // Session-end fanfare: a triumphant two-voice phrase for the final podium.
@@ -153,9 +155,9 @@ export class Sfx {
   eliminated(): void {
     this.tone(1400, 120, { type: 'sawtooth', slideTo: 180, gain: 0.22 })
     const fall = [392.0, 349.23, 293.66] // G4 F4 D4
-    fall.forEach((f, i) =>
-      this.tone(f, i === fall.length - 1 ? 320 : 110, { type: 'triangle', delayMs: 140 + i * 120 }),
-    )
+    fall.forEach((f, i) => {
+      this.tone(f, i === fall.length - 1 ? 320 : 110, { type: 'triangle', delayMs: 140 + i * 120 })
+    })
   }
 
   // Distant thunder for a lightning flash: a low, rumbling downward sweep.
@@ -313,9 +315,9 @@ export class Sfx {
   shatter(): void {
     this.noise(260, { filter: 'highpass', freq: 3500, freqTo: 1800, gain: 0.26 })
     const shards = [2637, 3136, 2349, 3520]
-    shards.forEach((f, i) =>
-      this.tone(f, 60, { type: 'triangle', delayMs: 40 + i * 45, gain: 0.07 }),
-    )
+    shards.forEach((f, i) => {
+      this.tone(f, 60, { type: 'triangle', delayMs: 40 + i * 45, gain: 0.07 })
+    })
   }
 
   // A gunshot — the starting pistol, a six-shooter: a sharp crack with a short boom under it.

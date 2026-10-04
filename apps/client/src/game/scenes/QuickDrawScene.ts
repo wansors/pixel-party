@@ -11,8 +11,8 @@ import {
   hexToCss,
   shade,
 } from '../pixelStyle'
-import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 import { DuelWatch, verdictKey } from './duelWatch'
+import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // Stepped sky bands, top to horizon: a tense dusk while waiting, a blazing sunset once the signal
 // fires.

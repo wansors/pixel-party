@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  RADAR_NEUTRAL,
-  type RoundAnalysis,
   buildRadars,
   buildSummary,
   placementShares,
+  RADAR_NEUTRAL,
+  type RoundAnalysis,
 } from './sessionAnalysis'
 
 const round = (over: Partial<RoundAnalysis>): RoundAnalysis => ({

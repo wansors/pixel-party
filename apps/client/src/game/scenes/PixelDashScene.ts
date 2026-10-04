@@ -11,7 +11,7 @@ import {
   headlineStyle,
   shade,
 } from '../pixelStyle'
-import { type Shadow, addShadow } from '../playerMarks'
+import { addShadow, type Shadow } from '../playerMarks'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // Mirrors the server's pixelDash.ts: an obstacle's `t` is its time-to-arrival over LEAD_MS (1 = just

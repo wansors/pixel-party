@@ -35,7 +35,9 @@ const ALL_SOLUTIONS: number[][] = (() => {
   const perms: number[][] = []
   const permute = (rest: number[], acc: number[]): void => {
     if (rest.length === 0) perms.push(acc)
-    rest.forEach((d, i) => permute([...rest.slice(0, i), ...rest.slice(i + 1)], [...acc, d]))
+    rest.forEach((d, i) => {
+      permute([...rest.slice(0, i), ...rest.slice(i + 1)], [...acc, d])
+    })
   }
   permute([1, 2, 3, 4], [])
   const clash = (rows: number[][], row: number[]) =>

@@ -97,7 +97,6 @@ function lobbyState(room: Room): LobbyStateMsg {
 export function startGameServer(deps: GameSocketDeps) {
   // Assigned right after Bun.serve returns (synchronously, before any socket message can arrive), so
   // the handlers below can close over it. The publisher fans engine output over the room topic.
-  // biome-ignore lint/style/useConst: forward-declared; assigned after the server it depends on exists.
   let manager: SessionManager
 
   const send = (ws: ServerWebSocket<SocketData>, msg: ServerMsg): void => {

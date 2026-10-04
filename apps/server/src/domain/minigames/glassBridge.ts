@@ -115,7 +115,7 @@ export class GlassBridge implements MiniGame<GlassBridgeState, GlassBridgeInput>
       t += between(rng(), GLINT_GAP_MS)
     }
     const runners = new Map<PlayerId, Runner>()
-    order.forEach((id, i) =>
+    order.forEach((id, i) => {
       runners.set(id, {
         id,
         vest: i + 1,
@@ -124,8 +124,8 @@ export class GlassBridge implements MiniGame<GlassBridgeState, GlassBridgeInput>
         reached: 0,
         blind: 0,
         decided: false,
-      }),
-    )
+      })
+    })
     const state: GlassBridgeState = {
       order,
       runners,

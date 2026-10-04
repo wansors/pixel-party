@@ -87,7 +87,7 @@ Documentation lives in `docs/`:
   (palette + `TEAMS`), `games/` (per-game wire snapshot/input types; `pixelObjects` holds the shared
   pixel-art set for weight/split; `tetrisSprint` is shared by `line-clear-sprint`/`quick-tetris`;
   `athletics` by the four track & field events; `microRace` also holds the circuit layouts).
-- `apps/client` — Angular 20 shell; `features/join`; `features/room` = `RoomStore` (per-room state,
+- `apps/client` — Angular 22 shell; `features/join`; `features/room` = `RoomStore` (per-room state,
   ServerMsg handling, intents, Phaser bridge) + `RoomComponent` shell + one view component per phase
   (`lobby/`, `intro/`, `result/`, `final/`, `live-board/`); `core/net/game-socket.service`; `game/`
   (Phaser, framework-agnostic): `GameClient`, `serverMsgRouter`, `RoundState` (snapshot + roster
@@ -144,7 +144,8 @@ blueprint in `docs/technical-architecture.md`.
   (seeded `Random`, `Clock` ports; the domain never calls `Math.random`/`Date.now`).
 - **Bun-native WebSockets** (topic pub/sub); wire contracts in `@pp/shared` as discriminated unions with
   a **hand-written** shape validator (**no Zod**).
-- **Angular 20** shell (all DOM/UI) + **Phaser 3** (mini-game canvas only), kept decoupled.
+- **Angular 22** shell (all DOM/UI) + **Phaser 4** (mini-game canvas only), kept decoupled. TypeScript
+  6.0 (Angular 22 caps it below 6.1).
 - **i18n**: **Transloco** (`@jsverse/transloco`), EN/ES (the Spanish is Spain Spanish, colloquial and
   playful — never neutral, D26), mirroring `../utopia-offline` — static bundled
   loader (`assets/i18n/{en,es}.json`), `LanguageService` (signal + localStorage `pp_lang`, default EN),
@@ -156,7 +157,8 @@ blueprint in `docs/technical-architecture.md`.
   `bun:sqlite`, accounts, or history (see `docs/implementation-decisions.md` D15).
 - **Retro classic-arcade pixel-art** visual identity across web, HUD and mini-games (see
   `docs/art-direction.md`); self-hosted assets, CSP-safe.
-- **Biome** (100 cols, single quotes, semicolons as-needed); `bun test` + Karma for client.
+- **Biome 2** (100 cols, single quotes, semicolons as-needed); `bun test` + Vitest for client (Angular's
+  unit-test builder, jsdom).
 - Mini-games are **pluggable modules** (common contract); the session engine stays game-agnostic.
 
 ## Key constraints (from the PRD)

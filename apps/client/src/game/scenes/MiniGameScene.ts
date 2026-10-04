@@ -1,12 +1,12 @@
 import type { ClientMsg, MiniGameId } from '@pp/shared'
 import Phaser from 'phaser'
-import type { RoundState } from '../RoundState'
-import type { Sfx } from '../Sfx'
 import { type AvatarWarmSpec, avatarWarmups } from '../avatars'
 import { Hud } from '../hud'
 import type { Translate } from '../i18n'
 import { addArcadeBackdrop } from '../pixelStyle'
 import { linesOf, pickLine } from '../quips'
+import type { RoundState } from '../RoundState'
+import type { Sfx } from '../Sfx'
 
 // Everything a scene needs from the outside world, in the order GameClient hands it over.
 export type SceneDeps = readonly [

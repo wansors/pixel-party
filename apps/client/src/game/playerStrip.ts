@@ -110,7 +110,9 @@ export class PlayerStrip {
     let keep = longest
     while (keep > MIN_NAME && !fits(size, keep)) keep -= 1
     if (keep < longest) {
-      this.chips.forEach((c, i) => c.label.setText(clipName(texts[i] as string, keep)))
+      this.chips.forEach((c, i) => {
+        c.label.setText(clipName(texts[i] as string, keep))
+      })
     }
     this.layout(size)
   }

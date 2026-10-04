@@ -2,9 +2,9 @@ import {
   HONEYCOMB,
   type HoneycombPlayer,
   type HoneycombSnapshot,
-  PALETTE,
   honeycombIsCut,
   honeycombOutline,
+  PALETTE,
 } from '@pp/shared'
 import Phaser from 'phaser'
 import { addBanner, burst, eliminate, flash, floatText, shake, showBanner } from '../fx'
@@ -216,7 +216,7 @@ export class HoneycombCutScene extends MiniGameScene<HoneycombSnapshot> {
       this.drawnCut = ''
       this.grooved = new Array<boolean>(this.outline.length).fill(false)
       this.poppedOut = false
-      this.grooves?.clear()
+      this.grooves?.clear().render()
     }
     const me = snap.players.find((p) => p.id === this.selfId)
     const fresh = this.state.tick !== this.lastTick
@@ -295,11 +295,12 @@ export class HoneycombCutScene extends MiniGameScene<HoneycombSnapshot> {
       fresh = true
       g.fillStyle(shade(CANDY, 0.35), 1)
       g.fillPoints(
-        this.outline.map((p) => ({ x: p.x * size, y: p.y * size })),
+        this.outline.map((p) => ({ x: p.x * size, y: p.y * size })) as Phaser.Math.Vector2[],
         true,
       )
     }
-    if (fresh) rt.draw(g)
+    // Rendered right away: the queued draw reads the scratch graphics, which is cleared next.
+    if (fresh) rt.draw(g).render()
     g.clear()
   }
 

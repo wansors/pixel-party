@@ -1,6 +1,6 @@
 import type { TeamId, TugOfWarInput, TugOfWarSnapshot } from '@pp/shared'
-import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 import { MASHER_MAX_PRESSES_PER_SEC } from './buttonMasher'
+import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 15_000
 // Per-capita pull lead that ends the round instantly (a decisive win before the timer). Per-capita, so

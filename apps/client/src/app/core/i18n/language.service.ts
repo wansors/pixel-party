@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core'
 import { TranslocoService } from '@jsverse/transloco'
-import { AVAILABLE_LANGS, DEFAULT_LANG, LANG_STORAGE_KEY, type Lang, isLang } from './i18n.tokens'
+import { AVAILABLE_LANGS, DEFAULT_LANG, isLang, LANG_STORAGE_KEY, type Lang } from './i18n.tokens'
 
 // The single seam for the active UI language. Holds the active `lang` signal, hydrates it from
 // localStorage on construction (falling back to DEFAULT_LANG on a missing/corrupt/invalid value), and

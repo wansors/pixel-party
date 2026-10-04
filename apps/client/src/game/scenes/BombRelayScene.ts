@@ -529,7 +529,9 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
     const holderIdx = view.members.indexOf(view.holderId)
     const nextIdx = members.length > 1 ? (holderIdx + 1) % view.members.length : -1
     col.chain.clear()
-    col.chainIcons.forEach((icon, i) => icon.setVisible(i < members.length))
+    col.chainIcons.forEach((icon, i) => {
+      icon.setVisible(i < members.length)
+    })
     members.forEach((id, i) => {
       const x = x0 + i * step
       const c = this.state.colorOf(id, PALETTE.dim)

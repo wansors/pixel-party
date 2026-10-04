@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  columnCounts,
   PIXEL_OBJECTS,
   type PixelCell,
   type PixelSplitObject,
-  columnCounts,
   packCells,
   unpackCells,
 } from '@pp/shared'

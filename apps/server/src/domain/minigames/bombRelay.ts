@@ -1,7 +1,7 @@
 import type { BombRelayInput, BombRelaySnapshot, TeamId } from '@pp/shared'
 import type { Random } from '../ports/Random'
-import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 import { MASHER_MAX_PRESSES_PER_SEC } from './buttonMasher'
+import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 25_000
 const LEG_TAPS = 12 // mashes to fill a leg and pass the bomb on

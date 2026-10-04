@@ -2,8 +2,8 @@ import {
   ASTEROIDS,
   type AsteroidsShip,
   type AsteroidsSnapshot,
-  PALETTE,
   asteroidsFly,
+  PALETTE,
 } from '@pp/shared'
 import Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
@@ -74,7 +74,6 @@ interface ShipView {
 export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
   private compact = false
   private arena = { x: 0, y: 0, scale: 1 }
-  private clip?: Phaser.Display.Masks.GeometryMask
   private sky?: Phaser.GameObjects.Graphics
   private g?: Phaser.GameObjects.Graphics
   // Everything in the sky lives in ONE masked container (rocks, then bullets/chevrons, then pods, then
@@ -233,20 +232,23 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
       y: Math.round(areaTop + (areaBottom - areaTop - H * scale) / 2),
       scale,
     }
-    const shape = this.make.graphics({ x: 0, y: 0 }, false)
-    shape.fillStyle(0xffffff, 1)
-    shape.fillRect(this.arena.x, this.arena.y, W * scale, H * scale)
-    this.clip = shape.createGeometryMask()
+    const clip = this.make.graphics({ x: 0, y: 0 }, false)
+    clip.fillStyle(0xffffff, 1)
+    clip.fillRect(this.arena.x, this.arena.y, W * scale, H * scale)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => clip.destroy())
     this.sky = this.add.graphics().setDepth(1)
     this.paintSky()
     this.g = this.add.graphics()
     this.rockLayer = this.add.container(0, 0)
     this.podLayer = this.add.container(0, 0)
     this.pilotLayer = this.add.container(0, 0)
-    this.add
+    const field = this.add
       .container(0, 0, [this.rockLayer, this.g, this.podLayer, this.pilotLayer])
       .setDepth(40)
-      .setMask(this.clip)
+      .enableFilters()
+    // Clipped to the arena by a Mask filter; the rectangle never changes, so it's captured once.
+    const mask = field.filters?.internal.addMask(clip)
+    if (mask) mask.autoUpdate = false
     this.shipPx = avatarPx(Math.max(24, Math.round(ASTEROIDS.shipR * 2 * scale * 1.6)))
     this.marker = new YouMarker(this, this.compact ? 8 : 12, 60)
     for (let size = 1; size <= 3; size++) {

@@ -1,9 +1,10 @@
-import { DestroyRef, Injectable, NgZone, computed, inject, signal } from '@angular/core'
+import { computed, DestroyRef, Injectable, inject, NgZone, signal } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { Router } from '@angular/router'
 import { TranslocoService } from '@jsverse/transloco'
 import {
   type AvatarId,
+  fitsPlayers,
   MINIGAMES,
   MINIGAMES_BY_ID,
   type MiniGameFormat,
@@ -11,17 +12,16 @@ import {
   type PlayerDto,
   type PlayerRadarDto,
   type RoundResultDto,
-  SKILL_AXES,
   type ScoreEntryDto,
   type ServerMsg,
   type SessionSummaryDto,
+  SKILL_AXES,
   TEAMS,
   type TeamId,
   type TeamRoundResult,
-  fitsPlayers,
 } from '@pp/shared'
-import { GameClient } from '../../../game/GameClient'
 import { toAvatarId } from '../../../game/avatarSprites'
+import { GameClient } from '../../../game/GameClient'
 import { linesOf, pickLine } from '../../../game/quips'
 import { AudioService } from '../../core/audio/audio.service'
 import { CatalogI18nService } from '../../core/i18n/catalog-i18n.service'

@@ -10,11 +10,11 @@ import type { Random } from '../ports/Random'
 import {
   CAR_R,
   FINISH_WINDOW_MS,
+  formatRaceTime,
   GO_DELAY_MS,
   LAPS,
   MicroRace,
   type MicroRaceState,
-  formatRaceTime,
 } from './microRace'
 import { nearestDistance } from './raceCore'
 

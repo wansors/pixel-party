@@ -2,14 +2,14 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { TranslocoPipe } from '@jsverse/transloco'
 import {
   AXIS_COLORS,
+  fitsPlayers,
+  hexToCss,
+  idealForPlayers,
   MINIGAMES,
   type MiniGameMeta,
   PALETTE,
   SKILL_AXES,
   type SkillAxis,
-  fitsPlayers,
-  hexToCss,
-  idealForPlayers,
 } from '@pp/shared'
 import { CatalogI18nService } from '../../../core/i18n/catalog-i18n.service'
 import { PixelAvatarComponent } from '../../../shared/pixel-avatar.component'

@@ -122,6 +122,18 @@ Shared kit — reuse before writing a private helper (duplicates were hoisted ou
    - Check with the playtest `--perf` probe at 1920x1080 and 12 players.
 9. Short header comment per scene; Biome style; no dead code / `any`.
 
+### Phaser 4 specifics (since D35)
+- **Clipping** a playfield: `enableFilters()` on the Layer/Container, then
+  `filters?.internal.addMask(whiteRectGraphics)` and `autoUpdate = false` for a static rectangle
+  (`AsteroidsScene`, `StarBlasterScene`). `setMask`/geometry masks do nothing in WebGL any more.
+- **RenderTexture** draws are queued: call `rt.render()` after a batch. `rt.draw(obj)` keeps a
+  *reference*, so a reused stamp object must not be mutated before `render()`. Prefer
+  `rt.stamp(key, undefined, x, y, { scaleX, scaleY, originX, originY })`, which copies its values
+  (`BomberExpressScene`, `SumoIceScene`); `rt.clear(x, y, w, h)` erases a rectangle.
+- White hit flash: `setTint(0xffffff).setTintMode(Phaser.TintModes.FILL)` (`setTintFill` is gone);
+  `clearTint()` resets the mode too.
+- `Graphics.fillPoints` is typed `Vector2[]`; plain `{ x, y }` points work, so cast them.
+
 References: `ButtonMasherScene.ts` (tap game: arcade button + player-colored race lanes),
 `FruitCatchScene.ts` (real-time: `ServerClock` extrapolation, procedural sprites, catch/bomb
 feedback), `SumoScene.ts` (real-time physics: `SnapshotInterpolator`).

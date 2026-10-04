@@ -570,7 +570,9 @@ export class NavalBoard {
       this.lastOutline.setVisible(false)
       this.reticle.setVisible(false)
       // Un-shot cells keep their (splash-textured) mark image hidden.
-      this.marks.forEach((m, i) => m.setVisible(this.mark[i] !== 'water'))
+      this.marks.forEach((m, i) => {
+        m.setVisible(this.mark[i] !== 'water')
+      })
     }
   }
 

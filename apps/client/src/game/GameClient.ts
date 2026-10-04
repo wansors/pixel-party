@@ -1,9 +1,9 @@
 import type { ClientMsg, MiniGameId, ServerMsg } from '@pp/shared'
 import Phaser from 'phaser'
-import { RoundState } from './RoundState'
-import type { Sfx } from './Sfx'
 import type { Translate } from './i18n'
 import { ensurePixelFontLoaded, installTextColorGuard } from './pixelStyle'
+import { RoundState } from './RoundState'
+import type { Sfx } from './Sfx'
 import { SCENES } from './scenes'
 import { ServerMsgRouter } from './serverMsgRouter'
 

@@ -2,8 +2,8 @@ import { type HigherLowerCard, type HigherLowerSnapshot, PALETTE } from '@pp/sha
 import type Phaser from 'phaser'
 import { addBanner, burst, flash, floatText, ring, shake, showBanner } from '../fx'
 import {
-  CARD_INK,
   bodyStyle,
+  CARD_INK,
   ensureBevelPanel,
   ensureCardTexture,
   ensurePixelGrid,
@@ -321,7 +321,7 @@ export class HigherLowerScene extends MiniGameScene<HigherLowerSnapshot> {
 
   private act(action: Action): void {
     const card = this.snap?.cards[this.selfId]
-    if (!card || card.status !== 'playing' || this.snap?.remainingMs === 0) return
+    if (card?.status !== 'playing' || this.snap?.remainingMs === 0) return
     this.sfx.click()
     const b = this.buttons[action]
     if (b) {

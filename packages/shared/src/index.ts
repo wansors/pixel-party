@@ -1,5 +1,5 @@
-export * from './protocol'
 export * from './catalog'
 export * from './games'
+export * from './protocol'
 export * from './theme'
 export * from './version'

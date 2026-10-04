@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { type CourseDef, RALLY_STAGES, SPEED_CIRCUITS, inStretch, sampleCourse } from '@pp/shared'
+import { type CourseDef, inStretch, RALLY_STAGES, SPEED_CIRCUITS, sampleCourse } from '@pp/shared'
 import { SeededRandom } from '../../infrastructure/driven/random/SeededRandom'
 import type { Random } from '../ports/Random'
 import { type CourseRaceState, GO_DELAY_MS, RallyStage, SpeedCircuit } from './courseRace'

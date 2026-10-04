@@ -1,9 +1,9 @@
 import {
+  integrateRaceCar,
   type MicroRacePoint,
   type RaceCarBody,
   type RaceCarPhysics,
   type RaceCarTuning,
-  integrateRaceCar,
   raceClamp1,
   raceWorldWalls,
   raceWrapAngle,

@@ -7,12 +7,12 @@ import {
   type CourseDef,
   type CourseKind,
   type CourseRaceSnapshot,
+  courseDef,
+  inStretch,
   type MicroRacePoint,
   PALETTE,
   RACE_DRAFT_TUNING,
   type RaceCarTuning,
-  courseDef,
-  inStretch,
   sampleCourse,
 } from '@pp/shared'
 import Phaser from 'phaser'
@@ -20,10 +20,10 @@ import { ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, flash, floatText, ring, shake, showBanner } from '../fx'
 import { ServerClock } from '../netcode/ServerClock'
 import { bodyStyle, ensurePixelGrid, headlineStyle, hexToCss, shade } from '../pixelStyle'
-import { YouMarker, nameTagStyle } from '../playerMarks'
+import { nameTagStyle, YouMarker } from '../playerMarks'
+import { COURSE_TEXEL, paintCourse } from './courseArt'
 import type { SceneDeps } from './MiniGameScene'
 import { MiniGameScene } from './MiniGameScene'
-import { COURSE_TEXEL, paintCourse } from './courseArt'
 import { CAR_ROWS } from './microRaceArt'
 import { DriveControls, LabelDeclutter, RaceMinimap, RaceStandings } from './raceKit'
 import { type CarPose, OwnCar, RivalCars, RoadIndex, raceClock } from './raceNet'

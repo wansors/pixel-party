@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { TeamId } from '@pp/shared'
-import { DEFAULT_AWARD_TABLE, awardPoints, awardTeamPoints } from './scoring'
+import { awardPoints, awardTeamPoints, DEFAULT_AWARD_TABLE } from './scoring'
 
 describe('awardPoints', () => {
   test('awards table points in placement order (no ties)', () => {

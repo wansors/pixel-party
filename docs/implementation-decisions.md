@@ -901,3 +901,38 @@ misses — each would be speculative or gated, and the project rule is "nothing 
 - **Not changed**: line-ups and scoring ignore the hint; nothing is filtered automatically. The
   catalog's `mobileFriendly` tags stay as they are. Adding an optional field doesn't break the wire,
   so the protocol version stays at 4.
+
+### D35 — Upgrade everything before the beta: Angular 22, Phaser 4, Biome 2, Vitest — DONE
+
+- **Date**: 2026-10-04. **Context**: the user wanted every dependency current before going to
+  production, so the launch is tested on the stack it ships with rather than upgraded afterwards.
+- **What**:
+  - **Angular 20 → 21 → 22.2**, each step with `ng update --migrate-only`. The CLI can't see the
+    hoisted dependencies of the Bun workspace, so versions were bumped by hand first.
+    **TypeScript 6.0** came with it (`baseUrl` dropped, explicit `types` and `rootDir`), plus
+    **zone.js 0.16**. Components that relied on the old default change detection got
+    `ChangeDetectionStrategy.Eager` from the migration.
+  - **Phaser 3.90 → 4.2**: only a handful of scenes used APIs that changed.
+    - Asteroids and Star Blaster clip their playfield with a Mask filter (geometry masks are
+      Canvas-only now).
+    - Bomber Express, Sumo Ice and Honeycomb Cut call `render()` on their render textures. They
+      `stamp()` tiles by key instead of drawing one reused image, because a queued `draw` reads the
+      object later.
+    - Brawl's hit flash uses `TintModes.FILL`, and two `fillPoints` calls are cast to `Vector2[]`.
+
+    `pixelArt: true` still turns on `roundPixels`. The `minigame-scene` skill lists these rules for
+    new scenes.
+  - **Biome 1.9 → 2.5**: the migrated config said `preset: "none"`, which would have switched off
+    every lint rule; it now keeps the recommended set. HTML processing is disabled, as in 1.9, so it
+    leaves the Angular templates alone. The new rules' findings were fixed in code, not suppressed.
+  - **Karma/Jasmine → Vitest** with Angular's `@angular/build:unit-test` builder (jsdom). The only
+    spec change was `toBeTrue()` → `toBe(true)`. CI's client job runs the specs and a production
+    build, and no longer needs Chrome.
+  - Remaining packages at their latest; GitHub Actions `checkout@v7`; `bun audit` reports 0
+    advisories.
+- **Verified**:
+  - the full gate: lint, determinism, typecheck, 683 server/shared tests, 37 client specs and the
+    production build;
+  - a party-mode sweep of all 55 games at 1920x1080 with 12 players, compared against the Phaser 3
+    baseline from the same line-ups.
+- **Still pinned**: TypeScript 7 waits for Angular (22.2 requires `>=6.0 <6.1`).

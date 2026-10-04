@@ -108,7 +108,7 @@ promo video).
 
 ## Tech
 
-**Bun** monorepo · **TypeScript** · **hexagonal** server · **Bun-native WebSockets** · **Angular 20 +
-Phaser 3** client · **no database** (stateless, anonymous, by design) · **Biome**. Server-authoritative
+**Bun** monorepo · **TypeScript** · **hexagonal** server · **Bun-native WebSockets** · **Angular 22 +
+Phaser 4** client · **no database** (stateless, anonymous, by design) · **Biome**. Server-authoritative
 and deterministic, mirroring the `utopia-offline` reference project. See
 [`docs/technical-architecture.md`](docs/technical-architecture.md).

@@ -1,13 +1,12 @@
 import {
-  BUBBLE,
   type BubblePopBoard,
   type BubblePopSnapshot,
   type BubbleShot,
-  PALETTE,
   bubbleJammed,
   bubbleLandingRow,
   bubbleNextShot,
   bubbleShoot,
+  PALETTE,
 } from '@pp/shared'
 import Phaser from 'phaser'
 import { AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'

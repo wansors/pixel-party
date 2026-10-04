@@ -1,8 +1,8 @@
-import { Injectable, effect, signal } from '@angular/core'
+import { effect, Injectable, signal } from '@angular/core'
 import type { MiniGameId } from '@pp/shared'
-import { Sfx } from '../../../game/Sfx'
 import { CHIP_SONGS, ChipMusic } from '../../../game/chipMusic'
 import { roundMusic } from '../../../game/musicMoods'
+import { Sfx } from '../../../game/Sfx'
 
 const THEME_FADE_MS = 600
 

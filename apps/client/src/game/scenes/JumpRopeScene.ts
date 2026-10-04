@@ -1,6 +1,6 @@
 import { JUMP_ROPE, type JumpRopePlayer, type JumpRopeSnapshot, PALETTE } from '@pp/shared'
 import type Phaser from 'phaser'
-import { AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
+import { AvatarSprite, avatarPx } from '../avatars'
 import {
   addBanner,
   burst,
@@ -19,7 +19,7 @@ import {
   hexToCss,
   shade,
 } from '../pixelStyle'
-import { type Shadow, YouMarker, addShadow } from '../playerMarks'
+import { addShadow, type Shadow, YouMarker } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 

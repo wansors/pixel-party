@@ -349,7 +349,7 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
 
   private tap(pad: number, byPointer: boolean): void {
     const me = this.snap?.players[this.selfId]
-    if (!me || !me.alive || this.playing) return
+    if (!me?.alive || this.playing) return
     // Debounce double-fired taps on the same pad; keys need none (auto-repeat is already filtered),
     // and a fast typist may hit two pads well inside 120 ms.
     if (byPointer && this.time.now - this.lastTapAt < 120 && this.lastTapPad === pad) return
@@ -429,7 +429,9 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
       // "YOUR TURN!" blinks arcade-style (stepped, not faded).
       this.playing || Math.floor(now / 450) % 2 === 0,
     )
-    this.pads.forEach((_, i) => this.setPad(i, active?.pad === i || now < (this.litUntil[i] ?? 0)))
+    this.pads.forEach((_, i) => {
+      this.setPad(i, active?.pad === i || now < (this.litUntil[i] ?? 0))
+    })
   }
 
   private setPad(i: number, lit: boolean): void {
@@ -499,7 +501,9 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
     }
     this.setState(this.prompt?.text ?? '', clearedAll ? PALETTE.lime : PALETTE.red, false)
     const blink = now < this.hintUntil && Math.floor(now / 180) % 2 === 0
-    this.pads.forEach((_, i) => this.setPad(i, blink && i === this.hintPad))
+    this.pads.forEach((_, i) => {
+      this.setPad(i, blink && i === this.hintPad)
+    })
     this.renderPips(
       me.seq.length,
       me.pos,

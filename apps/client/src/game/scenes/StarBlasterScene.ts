@@ -1,4 +1,6 @@
 import {
+  buildStarScript,
+  forEachStarBullet,
   PALETTE,
   STAR,
   STAR_ENEMY,
@@ -7,8 +9,6 @@ import {
   type StarEnemy,
   type StarEnemyKind,
   type StarScript,
-  buildStarScript,
-  forEachStarBullet,
   starEnemyAt,
 } from '@pp/shared'
 import Phaser from 'phaser'
@@ -257,7 +257,11 @@ export class StarBlasterScene extends MiniGameScene<StarBlasterSnapshot> {
     const clipShape = this.make.graphics({ x: 0, y: 0 }, false)
     clipShape.fillStyle(0xffffff, 1)
     clipShape.fillRect(this.view.x, this.view.y, STAR.w * scale, STAR.h * scale)
-    this.world = this.add.layer().setDepth(30).setMask(clipShape.createGeometryMask())
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => clipShape.destroy())
+    this.world = this.add.layer().setDepth(30).enableFilters()
+    // Clipped to the view by a Mask filter; the rectangle never changes, so it's captured once.
+    const mask = this.world.filters?.internal.addMask(clipShape)
+    if (mask) mask.autoUpdate = false
     this.stars = this.add.graphics().setDepth(1)
     this.fx = this.add.graphics().setDepth(45)
     this.world.add(this.fx)

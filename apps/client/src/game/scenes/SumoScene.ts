@@ -19,7 +19,7 @@ import {
   fitText,
   headlineStyle,
 } from '../pixelStyle'
-import { type Shadow, YouMarker, addShadow, nameTagStyle } from '../playerMarks'
+import { addShadow, nameTagStyle, type Shadow, YouMarker } from '../playerMarks'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // Bodies are circles of radius PLAYER_R in the normalized arena (ring centred at 0.5, 0.5; its radius

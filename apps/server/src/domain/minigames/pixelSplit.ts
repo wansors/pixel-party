@@ -1,10 +1,10 @@
 import {
+  columnCounts,
   PIXEL_OBJECTS,
   type PixelObject,
   type PixelSplitInput,
   type PixelSplitObject,
   type PixelSplitSnapshot,
-  columnCounts,
   packCells,
 } from '@pp/shared'
 import type { Random } from '../ports/Random'

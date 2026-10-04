@@ -1,28 +1,28 @@
 import {
   ATHLETICS_STRIDE,
   type AthleticsFoot,
+  athleticsStrideGain,
   PALETTE,
   type TrackRaceSnapshot,
   type TrackRunner,
-  athleticsStrideGain,
 } from '@pp/shared'
 import type Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, flash, floatText, shake, showBanner } from '../fx'
 import { bodyStyle, ensureBevelPanel, fitFontSize, headlineStyle } from '../pixelStyle'
-import { YouMarker, nameTagStyle } from '../playerMarks'
-import { MiniGameScene } from './MiniGameScene'
+import { nameTagStyle, YouMarker } from '../playerMarks'
 import {
   ATHLETE_H,
-  GRASS,
-  METRES_PER_FRAME,
-  RunnerTracker,
-  StridePad,
   ensureCheckerTexture,
   ensureCrowdTile,
   ensureHurdleTexture,
   ensureTrackTile,
+  GRASS,
+  METRES_PER_FRAME,
+  RunnerTracker,
+  StridePad,
 } from './athleticsKit'
+import { MiniGameScene } from './MiniGameScene'
 
 // Mirrors the server's trackRace.ts AIR_MS: how long a hurdle jump stays airborne.
 const AIR_MS = 480
@@ -397,7 +397,9 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     this.crowd?.setTilePosition(camX * this.ppm * 0.7, 0)
     this.startLine?.setX(toX(0))
     this.finishLine?.setX(toX(snap.distance))
-    this.marks.forEach((t, i) => t.setX(toX((i + 1) * 10)))
+    this.marks.forEach((t, i) => {
+      t.setX(toX((i + 1) * 10))
+    })
     for (const t of this.laneNums) t.setX(toX(-1.6))
 
     const { width } = this.scale

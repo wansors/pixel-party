@@ -1,11 +1,11 @@
 import {
+  buildStarScript,
   STAR,
   STAR_ENEMY,
   type StarBlasterInput,
   type StarBlasterSnapshot,
   type StarEnemy,
   type StarScript,
-  buildStarScript,
   starBulletNear,
   starEnemyAt,
 } from '@pp/shared'

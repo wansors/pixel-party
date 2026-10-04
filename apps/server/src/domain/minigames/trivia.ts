@@ -1,10 +1,10 @@
 import type { TriviaInput, TriviaSnapshot } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 import {
-  type QuizState,
   answerQuiz,
   dealQuestion,
   leaveQuiz,
+  type QuizState,
   quizResult,
   quizSnapshot,
   shuffle,

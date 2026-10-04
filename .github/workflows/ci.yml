@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [develop, main]
   pull_request:
 
 concurrency:
@@ -14,7 +14,7 @@ jobs:
     name: server + shared
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -26,16 +26,14 @@ jobs:
       - run: bun run test
 
   client:
-    name: client (browser)
+    name: client (specs + production build)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
-      # ubuntu-latest ships Google Chrome; point Karma's ChromeHeadless launcher at it.
-      - name: Run client specs (headless)
-        env:
-          CHROME_BIN: /usr/bin/google-chrome
-        run: bun run --filter client test -- --watch=false --browsers=ChromeHeadless
+      # Vitest through Angular's unit-test builder (jsdom, no browser needed).
+      - run: bun run test:client
+      - run: bun run build:client

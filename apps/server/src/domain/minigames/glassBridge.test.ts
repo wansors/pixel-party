@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { GlassSide } from '@pp/shared'
 import { SeededRandom } from '../../infrastructure/driven/random/SeededRandom'
-import { GlassBridge, type GlassBridgeState, decideMsFor } from './glassBridge'
+import { decideMsFor, GlassBridge, type GlassBridgeState } from './glassBridge'
 
 const game = new GlassBridge()
 const init = (players: string[], seed = 7, durationMs = 75_000): GlassBridgeState =>

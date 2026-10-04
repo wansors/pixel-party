@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { QUIZ_LANGS } from '@pp/shared'
 import type { Random } from '../ports/Random'
-import { type QuizEntry, dealQuestion, rankByPoints, rightAnswerPoints } from './quizCore'
+import { dealQuestion, type QuizEntry, rankByPoints, rightAnswerPoints } from './quizCore'
 import { TRIVIA_BANK } from './triviaBank'
 import { WEIRD_TRIVIA_BANK } from './weirdTriviaBank'
 

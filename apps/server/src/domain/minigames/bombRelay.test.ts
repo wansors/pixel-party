@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import type { MiniGameInitCtx } from './MiniGame'
 import { BombRelay } from './bombRelay'
+import type { MiniGameInitCtx } from './MiniGame'
 
 // next() = 0 -> every hidden fuse is exactly FUSE_MIN (2500ms), which keeps the timing tests exact.
 const ctx = (): MiniGameInitCtx => ({

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { Random } from '../ports/Random'
-import { MIN_STEP_MS, MazeSprint, type MazeSprintState } from './mazeSprint'
+import { MazeSprint, type MazeSprintState, MIN_STEP_MS } from './mazeSprint'
 
 const SIZE = 9
 const CELLS = SIZE * SIZE

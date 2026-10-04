@@ -415,7 +415,7 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     this.paintRows(snap)
     this.paintTarget(snap, time)
     this.paintArrows(snap)
-    this.detectEvents(snap, time)
+    this.detectEvents(snap)
     this.placeRunners(snap, time, delta)
     // Strip, prompt and buttons only change with the snapshot.
     if (snap !== this.chromeRef) {
@@ -507,7 +507,7 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     }
   }
 
-  private detectEvents(snap: GlassBridgeSnapshot, time: number): void {
+  private detectEvents(snap: GlassBridgeSnapshot): void {
     // Lightning: one flash per glint id, with a sparkle on the tempered panel.
     if (snap.glint && snap.glint.id !== this.lastGlint) {
       this.lastGlint = snap.glint.id

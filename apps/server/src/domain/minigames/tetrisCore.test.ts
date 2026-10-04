@@ -18,14 +18,14 @@ import {
 } from '@pp/shared'
 import type { Random } from '../ports/Random'
 import {
-  COLS,
-  FALL_INTERVAL_MS,
-  ROWS,
   applyInput,
   boardView,
+  COLS,
   createPlayerBoard,
   createQueue,
+  FALL_INTERVAL_MS,
   isTetrisInput,
+  ROWS,
   restartBoard,
   shapeAtOf,
 } from './tetrisCore'

@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import type { Random } from '../ports/Random'
 import { MIN_STRIDE_MS } from './athleticsCore'
-import { AIR_MS, Dash100m, FALSE_START_PENALTY_MS, HURDLES_110M, Hurdles110m } from './trackRace'
 import type { TrackRaceState } from './trackRace'
+import { AIR_MS, Dash100m, FALSE_START_PENALTY_MS, HURDLES_110M, Hurdles110m } from './trackRace'
 
 // next()=0.5 → the gun fires at 1600 + 700 = 2300 ms after the round starts.
 const half: Random = { next: () => 0.5 }

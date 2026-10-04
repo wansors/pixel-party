@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import type { TeamId } from '@pp/shared'
 import { SeededRandom } from '../../infrastructure/driven/random/SeededRandom'
-import type { MiniGameInitCtx } from './MiniGame'
 import { FleetBattle, type FleetBattleState } from './fleetBattle'
+import type { MiniGameInitCtx } from './MiniGame'
 
 const baseCtx = (seed = 7): MiniGameInitCtx => ({
   players: ['a', 'b', 'c', 'd'],

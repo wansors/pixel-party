@@ -13,15 +13,15 @@ import {
 } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 import {
-  type GridSlot,
-  type RaceCar,
   clamp1,
   collideCars,
   followRoad,
   formatRaceTime,
+  type GridSlot,
   gridSlots,
   inSlipstream,
   integrateCar,
+  type RaceCar,
   retireCar,
   worldWalls,
 } from './raceCore'

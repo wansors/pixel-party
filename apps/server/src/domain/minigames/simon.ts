@@ -63,7 +63,7 @@ export class Simon implements MiniGame<SimonState, SimonInput> {
     if (input.kind !== 'pad' || typeof input.pad !== 'number') return state
     if (now >= state.endsAt) return state
     const p = state.ps.get(playerId)
-    if (!p || !p.alive) return state
+    if (!p?.alive) return state
     if (input.pad === p.pads[state.seq[p.pos] as number]) {
       p.pos += 1
       if (p.pos >= p.level) {

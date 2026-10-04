@@ -59,7 +59,7 @@ export class HigherLower implements MiniGame<HigherLowerState, HigherLowerInput>
     now: number,
   ): HigherLowerState {
     const run = state.runs.get(playerId)
-    if (!run || run.status !== 'playing' || now >= state.endsAt) return state
+    if (run?.status !== 'playing' || now >= state.endsAt) return state
     if (input.kind === 'bank') {
       run.status = 'banked'
       return state

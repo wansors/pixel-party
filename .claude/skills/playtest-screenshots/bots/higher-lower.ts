@@ -9,7 +9,7 @@ const targets = new Map<string, number>()
 
 export default function play(s: View, me: string): unknown {
   const card = s.cards[me]
-  if (!card || card.status !== 'playing' || Math.random() < 0.5) return null
+  if (card?.status !== 'playing' || Math.random() < 0.5) return null
   const target = targets.get(me) ?? 3 + Math.floor(Math.random() * 6)
   targets.set(me, target)
   if ((s.scores[me] ?? 0) >= target) return { kind: 'bank' }

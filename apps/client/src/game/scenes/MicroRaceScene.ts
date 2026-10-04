@@ -23,16 +23,16 @@ import {
   headlineStyle,
   shade,
 } from '../pixelStyle'
-import { YouMarker, nameTagStyle } from '../playerMarks'
+import { nameTagStyle, YouMarker } from '../playerMarks'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 import {
   CAR_COLS,
   CAR_LINES,
   CAR_ROWS,
+  paintMicroTrack,
   TEXEL,
   TRACK_TEX_H,
   TRACK_TEX_W,
-  paintMicroTrack,
 } from './microRaceArt'
 import { DriveControls, LabelDeclutter, RaceMinimap, RaceStandings } from './raceKit'
 import { type CarPose, OwnCar, RivalCars, RoadIndex, raceClock } from './raceNet'

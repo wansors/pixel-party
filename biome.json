@@ -1,6 +1,10 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
-  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
@@ -8,27 +12,49 @@
     "lineWidth": 100
   },
   "javascript": {
-    "formatter": { "quoteStyle": "single", "semicolons": "asNeeded" }
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "asNeeded"
+    }
   },
   "linter": {
     "enabled": true,
-    "rules": { "recommended": true }
+    "rules": {
+      "preset": "recommended"
+    }
   },
   "overrides": [
     {
-      "include": ["**/tsconfig.*.json"],
-      "json": { "parser": { "allowComments": true } }
+      "includes": ["**/tsconfig.*.json"],
+      "json": {
+        "parser": {
+          "allowComments": true
+        }
+      }
     },
     {
-      "include": ["apps/client/**"],
+      "includes": ["**/apps/client/**"],
       "linter": {
         "rules": {
-          "complexity": { "useLiteralKeys": "off" }
+          "complexity": {
+            "useLiteralKeys": "off"
+          }
         }
       }
     }
   ],
   "files": {
-    "ignore": ["dist", "node_modules", "**/*.gen.ts", "**/.angular"]
+    "includes": ["**", "!**/dist", "!**/node_modules", "!**/*.gen.ts", "!**/.angular"]
+  },
+  "html": {
+    "formatter": {
+      "enabled": false
+    },
+    "linter": {
+      "enabled": false
+    },
+    "assist": {
+      "enabled": false
+    }
   }
 }

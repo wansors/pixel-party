@@ -7,11 +7,11 @@ import {
 import type { Random } from '../ports/Random'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 import {
-  type DealtQuestion,
-  type QuizState,
   answerQuiz,
+  type DealtQuestion,
   dealQuestion,
   leaveQuiz,
+  type QuizState,
   quizResult,
   quizSnapshot,
   shuffle,

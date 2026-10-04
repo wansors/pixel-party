@@ -11,8 +11,8 @@ import {
   hexToCss,
   shade,
 } from '../pixelStyle'
-import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 import { type DuelSeat, DuelWatch, verdictKey } from './duelWatch'
+import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // Marbles Duel (odd or even): your rival across the table at the top, you at the bottom, each with your
 // lobby avatar and your pouch of marbles. When you HIDE, pick how many go in your fist (− / +, then
@@ -57,7 +57,6 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
   private theirsText?: Phaser.GameObjects.Text
   private banner?: Phaser.GameObjects.Text
   private layoutKey = ''
-  private lastView?: MarblesPlayerView
   private myAvatar?: AvatarSprite
   private rivalAvatar?: AvatarSprite
   private rows = { theirs: 0, mine: 0, centre: 0, controls: 0 }
@@ -92,7 +91,6 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
     this.committedTurn = -1
     this.lastDigit = { d: -1, at: 0 }
     this.pouchKey = ''
-    this.lastView = undefined
     this.myAvatar = undefined
     this.rivalAvatar = undefined
     this.revealShown = 0
@@ -318,7 +316,6 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
     this.paintPouches(v)
     this.paintAvatars(v, time)
     this.paintTimer(v)
-    this.lastView = v
   }
 
   // A new seat at the table: yours on the first snapshot, or the next duel a spectator watches (a
@@ -328,7 +325,6 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
     this.viewId = viewId
     this.layoutKey = ''
     this.pouchKey = ''
-    this.lastView = undefined
     this.revealShown = 0
     this.myAvatar?.image.destroy()
     this.rivalAvatar?.image.destroy()

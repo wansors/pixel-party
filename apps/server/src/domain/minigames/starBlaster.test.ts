@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  buildStarScript,
   STAR,
   STAR_ENEMY,
-  buildStarScript,
   starBulletNear,
   starBulletsAt,
   starEnemyAt,

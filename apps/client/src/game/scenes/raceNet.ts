@@ -1,11 +1,11 @@
 import {
+  integrateRaceCar,
   type MicroRacePoint,
   RACE_STEP_S,
   RACE_WALL_BOUNCE,
   type RaceCarBody,
   type RaceCarPhysics,
   type RaceCarTuning,
-  integrateRaceCar,
   raceWorldWalls,
   raceWrapAngle,
 } from '@pp/shared'

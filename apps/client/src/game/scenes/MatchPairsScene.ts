@@ -2,8 +2,8 @@ import { type MatchSnapshot, PALETTE } from '@pp/shared'
 import Phaser from 'phaser'
 import { addBanner, burst, floatText, ring, showBanner } from '../fx'
 import {
-  CARD_INK,
   bodyStyle,
+  CARD_INK,
   ensureCardTexture,
   ensurePixelGrid,
   fitText,

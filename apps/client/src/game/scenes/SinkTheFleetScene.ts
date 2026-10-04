@@ -1,20 +1,20 @@
 import {
+  decodeShot,
   PALETTE,
   type SinkTheFleetDuelView,
   type SinkTheFleetSnapshot,
-  decodeShot,
 } from '@pp/shared'
 import type Phaser from 'phaser'
 import { burst, floatText, punch, shake } from '../fx'
 import { bodyStyle, headlineStyle } from '../pixelStyle'
-import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 import { DuelWatch, verdictKey } from './duelWatch'
+import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 import {
+  drawSegmentBar,
+  layoutBoards,
   NavalBoard,
   NavalEndCard,
   type NavalShot,
-  drawSegmentBar,
-  layoutBoards,
   setFittedText,
   setTextColor,
 } from './navalGrid'

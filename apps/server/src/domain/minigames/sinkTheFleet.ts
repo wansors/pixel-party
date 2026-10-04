@@ -1,4 +1,4 @@
-import { type SinkTheFleetInput, type SinkTheFleetSnapshot, encodeShot } from '@pp/shared'
+import { encodeShot, type SinkTheFleetInput, type SinkTheFleetSnapshot } from '@pp/shared'
 import type { Random } from '../ports/Random'
 import { type DuelOutcome, rankDuels } from '../services/duelRanking'
 import { pairPlayers } from '../services/pairing'

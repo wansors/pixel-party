@@ -1,6 +1,6 @@
 import { BRAWL, type BrawlAction, type BrawlFighter, type BrawlSnapshot, PALETTE } from '@pp/shared'
 import Phaser from 'phaser'
-import { type AvatarExpression, AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
+import { type AvatarExpression, AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, eliminate, flash, floatText, shake, showBanner } from '../fx'
 import { ensureBevelPanel, ensurePixelGrid, fitFontSize, headlineStyle, shade } from '../pixelStyle'
 import { YouMarker } from '../playerMarks'
@@ -504,7 +504,8 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
         .setAngle(lying ? face * -90 : action === 'hurt' ? face * -8 : 0)
         .setAlpha(action === 'ko' ? 0.35 : f.guard ? (Math.floor(time / 90) % 2 ? 0.45 : 1) : 1)
       // A white flash on the frame a hit lands.
-      if (action === 'hurt' && ms < 120) view.avatar.image.setTintFill(0xffffff)
+      if (action === 'hurt' && ms < 120)
+        view.avatar.image.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL)
       else view.avatar.image.clearTint()
       this.paintLimbs(g, f, action, face, ms, p, lying)
       this.paintHp(view, f, p)

@@ -1,4 +1,4 @@
-import { SnapshotInterpolator, lerp } from './SnapshotInterpolator'
+import { lerp, SnapshotInterpolator } from './SnapshotInterpolator'
 
 describe('SnapshotInterpolator', () => {
   it('returns undefined before any snapshot', () => {

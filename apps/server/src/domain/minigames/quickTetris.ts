@@ -2,15 +2,15 @@ import type { TetrisSprintInput, TetrisSprintSnapshot } from '@pp/shared'
 import { tetrisFall } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 import {
-  COLS,
-  type PlayerBoardState,
-  ROWS,
   acknowledge,
   applyInput,
   boardView,
+  COLS,
   createPlayerBoard,
   createQueue,
   isTetrisInput,
+  type PlayerBoardState,
+  ROWS,
   shapeAtOf,
 } from './tetrisCore'
 

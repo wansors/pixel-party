@@ -1,8 +1,8 @@
 import { PALETTE, SUMO_ICE, type SumoIceBody, type SumoIceSnapshot } from '@pp/shared'
 import type Phaser from 'phaser'
-import { AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
+import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, eliminate, flash, floatText, ring, shake, showBanner } from '../fx'
-import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
+import { lerp, SnapshotInterpolator } from '../netcode/SnapshotInterpolator'
 import { ensurePixelGrid, fitFontSize, headlineStyle, hexToCss, shade } from '../pixelStyle'
 import { YouMarker } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
@@ -88,7 +88,6 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
   private water?: Phaser.GameObjects.TileSprite
   // The solid ice, baked: a tile is drawn in when the floe is first seen and erased when it cracks.
   private floe?: Phaser.GameObjects.RenderTexture
-  private stamp?: Phaser.GameObjects.Image
   // Cracking tiles (a handful at a time) as flickering images, pooled.
   private cracks = new Map<number, Phaser.GameObjects.Image>()
   private crackPool: Phaser.GameObjects.Image[] = []
@@ -195,9 +194,6 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
       }),
     }
     this.floe = this.add.renderTexture(x0, y0, size, size).setOrigin(0, 0).setDepth(5)
-    const stamp = this.make.image({ key: this.tileKeys.ice, add: false }).setOrigin(0, 0)
-    this.stamp = stamp
-    this.events.once('shutdown', () => stamp.destroy())
     const dot = ensurePixelGrid(this, {
       key: 'ice-chip',
       rows: ['W'],
@@ -293,8 +289,8 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
   private paintTiles(snap: SumoIceSnapshot): void {
     const next = snap.tiles
     const floe = this.floe
-    const stamp = this.stamp
-    if (next === this.tiles || !floe || !stamp) return
+    if (next === this.tiles || !floe) return
+    const ice = this.textures.getFrame(this.tileKeys.ice)
     const first = this.tiles === ''
     const me = snap.bodies.find((b) => b.id === this.selfId)
     const x0 = this.arena.cx - this.arena.size / 2
@@ -305,9 +301,14 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
       const was = this.tiles[i]
       if (c === was) continue
       const r = this.cellRect(i)
-      stamp.setPosition(r.x, r.y).setDisplaySize(r.w, r.h)
-      if (c === '#') floe.draw(stamp)
-      else if (was === '#') floe.erase(stamp)
+      if (c === '#') {
+        floe.stamp(this.tileKeys.ice, undefined, r.x, r.y, {
+          originX: 0,
+          originY: 0,
+          scaleX: r.w / ice.width,
+          scaleY: r.h / ice.height,
+        })
+      } else if (was === '#') floe.clear(r.x, r.y, r.w, r.h)
       if (c === '%') this.showCrack(i, x0 + r.x + r.w / 2, y0 + r.y + r.h / 2, r.w, r.h)
       else this.hideCrack(i)
       if (c === '.' && !first && was !== undefined && was !== '.') {
@@ -320,6 +321,7 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
         }
       }
     }
+    floe.render()
     // One splash however many tiles went under together.
     if (sankNear) this.sfx.splash()
     this.tiles = next
@@ -350,7 +352,7 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
     const me = snap.bodies.find((b) => b.id === this.selfId)
     const text = this.state.final
       ? ''
-      : !me || !me.alive
+      : !me?.alive
         ? this.quip('game.common.spectating', this.selfId)
         : this.compact
           ? ''

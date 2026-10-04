@@ -6,9 +6,9 @@ import {
   roomRushSlotAngle,
 } from '@pp/shared'
 import type Phaser from 'phaser'
-import { AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
+import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, eliminate, flash, floatText, ring, shake, showBanner } from '../fx'
-import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
+import { lerp, SnapshotInterpolator } from '../netcode/SnapshotInterpolator'
 import {
   ensureBevelPanel,
   ensurePixelGrid,
@@ -17,7 +17,7 @@ import {
   hexToCss,
   shade,
 } from '../pixelStyle'
-import { type Shadow, YouMarker, addShadow } from '../playerMarks'
+import { addShadow, type Shadow, YouMarker } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -524,7 +524,7 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
           ? shade(PALETTE.lime, -0.6)
           : shade(PALETTE.amber, -0.62)
       g.fillStyle(fill, 1)
-      g.fillPoints(pts, true)
+      g.fillPoints(pts as Phaser.Math.Vector2[], true)
       const wall = room ? (room.locked ? PALETTE.lime : PALETTE.amber) : PALETTE.frame
       g.lineStyle(wallW, wall, 1)
       const line = (a: { x: number; y: number }, b: { x: number; y: number }): void => {

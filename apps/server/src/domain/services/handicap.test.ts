@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { type HandicapConfig, applyScoringHandicap } from './handicap'
+import { applyScoringHandicap, type HandicapConfig } from './handicap'
 
 const ON: HandicapConfig = { enabled: true, maxBonusPct: 0.2 }
 const OFF: HandicapConfig = { enabled: false, maxBonusPct: 0.2 }

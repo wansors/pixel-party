@@ -17,7 +17,9 @@ export function balancedTeams(
   }
   const first = Math.floor(random.next() * TEAM_IDS.length)
   const out = new Map<PlayerId, TeamId>()
-  shuffled.forEach((id, idx) => out.set(id, TEAM_IDS[(first + idx) % TEAM_IDS.length] as TeamId))
+  shuffled.forEach((id, idx) => {
+    out.set(id, TEAM_IDS[(first + idx) % TEAM_IDS.length] as TeamId)
+  })
   return out
 }
 

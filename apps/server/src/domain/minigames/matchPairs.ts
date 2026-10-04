@@ -5,7 +5,6 @@ import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './Mi
 const COLS = 4
 const ROWS = 4
 const PAIRS = 8
-const CARDS = COLS * ROWS
 const DEFAULT_DURATION_MS = 60_000
 
 export interface MatchPairsState {

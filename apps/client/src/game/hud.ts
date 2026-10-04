@@ -1,7 +1,7 @@
 import { PALETTE } from '@pp/shared'
 import type Phaser from 'phaser'
-import type { Sfx } from './Sfx'
 import { headlineStyle, hexToCss } from './pixelStyle'
+import type { Sfx } from './Sfx'
 
 // Standard in-canvas HUD strip shared by every mini-game scene (art-direction §4): a score chip on the
 // left, an optional status chip in the middle (e.g. the survivors counter), the seconds left on the right and a segmented, draining pixel time bar underneath. The bar

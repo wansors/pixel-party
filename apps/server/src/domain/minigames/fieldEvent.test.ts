@@ -188,7 +188,9 @@ describe('FieldEvent (long jump)', () => {
     expect(result.placements[0]).toBe('a')
     expect(result.stats?.a).toMatch(/^\d+\.\d\dm$/)
     const snap = game.snapshot(s, now)
-    expect(snap.athletes[0]?.best).toBe(Math.max(...(s.athletes.get('a')?.marks as number[])))
+    expect(snap.athletes[0]?.best).toBe(
+      Math.max(...((s.athletes.get('a')?.marks ?? []) as number[])),
+    )
     expect(snap.markMs).toBe(MARK_MS)
   })
 
