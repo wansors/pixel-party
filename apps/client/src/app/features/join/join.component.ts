@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { FormsModule } from '@angular/forms'
 import { ActivatedRoute, Router } from '@angular/router'
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco'
-import { AVATARS, type AvatarId, MINIGAMES, PLAYER_COLORS } from '@pp/shared'
+import { APP_VERSION, AVATARS, type AvatarId, MINIGAMES, PLAYER_COLORS } from '@pp/shared'
 import { firstValueFrom } from 'rxjs'
 import { environment } from '../../../environments/environment'
 import { AudioService } from '../../core/audio/audio.service'
@@ -94,7 +94,10 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
           }
         </div>
       </div>
-      <footer><app-language-toggle /></footer>
+      <footer>
+        <app-language-toggle />
+        <span class="version">v{{ version }}</span>
+      </footer>
     </main>
   `,
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -113,6 +116,8 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
     .sound { position: fixed; top: 0.75rem; right: 0.75rem; z-index: 10; }
     footer { position: fixed; bottom: 0.75rem; left: 0; right: 0; display: flex;
       justify-content: center; z-index: 10; }
+    .version { position: absolute; right: 0.9rem; bottom: 0.35rem; color: var(--c-dim);
+      font-size: var(--fs-xs); letter-spacing: 0.08em; }
     .cabinet { width: min(calc(100vw - 2rem), 380px); }
     .body > * { min-width: 0; }
     .body { display: grid; gap: 0.9rem; padding: 1.1rem; }
@@ -137,6 +142,7 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
   `,
 })
 export class JoinComponent {
+  readonly version = APP_VERSION
   private readonly http = inject(HttpClient)
   private readonly router = inject(Router)
   private readonly transloco = inject(TranslocoService)

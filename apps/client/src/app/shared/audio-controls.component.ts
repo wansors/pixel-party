@@ -1,8 +1,10 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core'
 import { TranslocoPipe } from '@jsverse/transloco'
+import { APP_VERSION } from '@pp/shared'
 import { AudioService } from '../core/audio/audio.service'
 
-// Compact sound settings: a SND button toggling a popover with music / SFX volume sliders.
+// Compact settings: a SND button toggling a popover with music / SFX volume sliders and the app
+// version (handy when someone's tab runs an old build).
 @Component({
   selector: 'app-audio-controls',
   imports: [TranslocoPipe],
@@ -34,6 +36,7 @@ import { AudioService } from '../core/audio/audio.service'
               (change)="audio.sfx.click()"
             />
           </label>
+          <span class="version">Pixel Party v{{ version }}</span>
         </div>
       }
     </div>
@@ -65,9 +68,17 @@ import { AudioService } from '../core/audio/audio.service'
       width: 100%;
       accent-color: var(--c-amber);
     }
+    .version {
+      padding-top: 0.4rem;
+      border-top: 2px solid var(--c-panel-alt);
+      color: var(--c-dim);
+      font-size: var(--fs-xs);
+      text-align: right;
+    }
   `,
 })
 export class AudioControlsComponent {
   readonly audio = inject(AudioService)
   readonly open = signal(false)
+  readonly version = APP_VERSION
 }

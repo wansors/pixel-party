@@ -1,4 +1,5 @@
 import { networkInterfaces } from 'node:os'
+import { APP_VERSION } from '@pp/shared'
 import type { SessionConfig } from './application/session/SessionEngine'
 import { CreateRoomUseCase } from './application/use-cases/CreateRoomUseCase'
 import { JoinRoomUseCase } from './application/use-cases/JoinRoomUseCase'
@@ -60,12 +61,16 @@ export function bootstrap() {
     site,
   })
 
-  logger.info('server_listening', { url: `http://localhost:${server.port}`, client: !!site })
+  logger.info('server_listening', {
+    url: `http://localhost:${server.port}`,
+    version: APP_VERSION,
+    client: !!site,
+  })
   if (site) {
     // Party mode: tell the host which address everyone else should open.
     const urls = lanUrls(server.port ?? config.port)
     logger.info('party_ready', { urls })
-    console.log(`\n  ▶ Pixel Party is on — open ${urls[0]} on every device\n`)
+    console.log(`\n  ▶ Pixel Party v${APP_VERSION} is on — open ${urls[0]} on every device\n`)
   }
   return server
 }

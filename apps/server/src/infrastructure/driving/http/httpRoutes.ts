@@ -1,3 +1,4 @@
+import { APP_VERSION } from '@pp/shared'
 import type { LiveRoomRegistry } from '../../../application/ports/LiveRoomRegistry'
 import type { CreateRoomUseCase } from '../../../application/use-cases/CreateRoomUseCase'
 import { config } from '../../../config'
@@ -39,7 +40,7 @@ export async function handleHttp(req: Request, deps: HttpDeps): Promise<Response
 
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(origin) })
 
-  if (url.pathname === '/api/health') return json({ ok: true }, 200, origin)
+  if (url.pathname === '/api/health') return json({ ok: true, version: APP_VERSION }, 200, origin)
 
   if (url.pathname === '/api/metrics' && req.method === 'GET') {
     return json(deps.metricsSnapshot?.() ?? {}, 200, origin)
