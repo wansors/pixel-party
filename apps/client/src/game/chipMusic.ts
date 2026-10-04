@@ -129,7 +129,8 @@ export class ChipMusic {
   play(song: ChipSong): void {
     if (this.song === song && this.timer) return
     this.stop()
-    const ctx = (this.ctx ??= new AudioContext())
+    this.ctx ??= new AudioContext()
+    const ctx = this.ctx
     if (ctx.state === 'suspended') void ctx.resume()
     this.master = ctx.createGain()
     this.master.gain.setValueAtTime(0.0001, ctx.currentTime)

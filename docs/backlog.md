@@ -230,6 +230,26 @@ seeded variants of the same content, because snapshots are broadcast to the whol
       in [`music-prompts.md`](music-prompts.md); the director would need a per-mood mp3 list next to
       the chip songs.
 
+## Maintenance — dependencies (reviewed 2026-10-04)
+
+- [x] Bun 1.4.2 is the latest release; CI already installs `latest`, and the README asks for 1.3+.
+- [x] Angular patched to the latest 20.3 release (runtime 20.3.33, CLI and build 20.3.37). This closes
+      the Angular advisories, all of them in features we don't use: SSR, `HttpTransferCache`, Angular
+      i18n. `bun audit fix` and a `piscina` 5.3.2 override cleared 59 of 60 advisories; all of them
+      were in build or test tooling, since the server has no dependencies.
+- [ ] `braces` 3.0.3 (high, stack-exhaustion DoS): no fixed version is published yet. It only reaches
+      dev file watchers and Karma, never a player's browser or the game server. Re-run `bun audit`
+      once a fix ships.
+- [ ] **Angular 20 → 22** (`ng update` one major at a time) before Angular 20's long-term support
+      ends (~November 2026). It brings zone.js 0.16 and Jasmine 7, and probably Vitest instead of
+      Karma.
+- [ ] *Post-launch, evaluate*: **Phaser 3.90 → 4**, a renderer rewrite touching all 55 scenes. 3.90 is
+      the final, stable v3, so it stays for launch.
+- [ ] *Blocked*: **TypeScript 7** (the native compiler) waits until Angular supports it; Angular 20
+      requires `<6.0`.
+- [ ] *Optional*: **Biome 1.9 → 2.x**, a dev-only change that needs `biome migrate` plus a pass over
+      the new lint rules.
+
 ## How this backlog works
 
 - **Phases** are ordered by priority. Phase 0 is the MVP; later phases are independent epics that can be
