@@ -67,6 +67,8 @@ Documentation lives in `docs/`:
 - `player-fit-audit.md` — per-game player range + the balance/correctness audit of all 55 games (D27).
 - `pc-launch-audit.md` — the PC performance & gameplay audit of all 55 games and its fixes (D30).
 - `implementation-decisions.md` — KISS decision log (what was built/deferred and why; revertable).
+- `docker.md` — running the Docker image (the port, every env var; also the Docker Hub page) and
+  `release.md` — how a green push to `develop` becomes a version + image (D36).
 
 ## Code layout (implemented)
 

@@ -949,3 +949,54 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   - **Download**: the game chunk grows by 31 kB gzipped (426 → 457 kB). Angular 22 leaves the initial
     load where it was (133 kB).
 - **Still pinned**: TypeScript 7 waits for Angular (22.2 requires `>=6.0 <6.1`).
+
+### D36 — One Docker image, released from every green push to develop — DONE
+
+- **Date**: 2026-10-04. **Context**: for the launch, the user wants:
+  - a Docker image of the whole game, published to their Docker Hub account;
+  - a release, with at least a minor version bump, every time a change lands on `develop`, which
+    is the trunk;
+  - documentation of the variables and ports clear enough that whoever sets it up knows exactly
+    what to pass.
+- **What**:
+  - **`Dockerfile`, multi-stage**:
+    - **Build stage** on the build platform (Node for the Angular CLI plus the Bun binary). It builds
+      the client and bundles the server into a single `server.js` with `bun build`.
+      `NODE_ENV=production` is set at bundle time, because Bun's bundler would otherwise bake in
+      `development`.
+    - **Runtime stage**: `oven/bun:<v>-slim` plus those two outputs, nothing else. It runs as the
+      unprivileged `bun` user, with a `/api/health` HEALTHCHECK, port 3000, and no transpiler cache
+      (so it runs `--read-only`). The runtime stage has no `RUN` steps, so the `linux/arm64` image
+      needs no emulation.
+  - **`PUBLIC_URL`**: the address announced at startup. Inside a container the server only sees its
+    internal IP, so the banner would point players at an unreachable 172.x address.
+  - **Versioning** (`scripts/release-version.ts`, tested):
+    - every release bumps the minor;
+    - `type!:` or `BREAKING CHANGE:` bumps the major;
+    - a patch only by hand;
+    - the first release publishes the current 1.0.0 unchanged.
+
+    It writes every `package.json` and `APP_VERSION`.
+  - **CI** (`ci.yml`): after the gate passes on `develop`:
+    1. bump, commit `chore(release): vX.Y.Z [skip ci]`, tag, GitHub Release;
+    2. build and push `linux/amd64` + `linux/arm64` as `X.Y.Z`, `X.Y`, `X` and `latest`;
+    3. update the Docker Hub description from `docs/docker.md`.
+
+    A run whose commit is no longer the head of `develop` steps aside; the newer run releases both.
+    Pull requests build the image without pushing it. The whole release step waits until the
+    `DOCKERHUB_USERNAME` variable exists, so CI stays green before the account is configured.
+  - **Docs**: [`docker.md`](docker.md) is for whoever runs the image. It covers:
+    - the one port and how to remap it;
+    - every variable, with its default and when to change it;
+    - storage (none), health, resources, Compose, host networking, proxies, tags and
+      troubleshooting.
+
+    It doubles as the Docker Hub page. [`release.md`](release.md) is for the maintainer: the flow and
+    the one-time GitHub/Docker Hub setup.
+- **Verified locally** (no Docker on this machine):
+  - the bundled `server.js` serves the client, the client routes, the gzipped assets and the API from
+    an otherwise empty folder, with no writable home or temp directory;
+  - the version script against a scratch clone;
+  - the first real image build runs in CI.
+- **Trade-off**: release commits land on `develop` from CI, so local clones `git pull --rebase`
+  before pushing.

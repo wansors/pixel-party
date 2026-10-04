@@ -24,11 +24,11 @@ domain changes (rooms / sessions / mini-games / scoring instead of an MMORPG wor
 | Client shell | **Angular 22** (standalone components, `@angular/build`) — all DOM/UI |
 | Game rendering | **Phaser 4** (WebGL) — mini-game canvas only, decoupled from Angular |
 | Shared contracts | `packages/shared` (`@pp/shared`): protocol + catalog data + the deterministic game rules the client predicts with, consumed by both apps |
-| Serving | **Party mode** (`bun run start`): one Bun process serves the production client build, `/api` and `/ws` on one port; `bun run dev` (Angular dev server + game server) for development only |
+| Serving | **Party mode** (`bun run start`): one Bun process serves the production client build, `/api` and `/ws` on one port; the same in one **Docker image** (server bundled into one file, [`docker.md`](docker.md)); `bun run dev` (Angular dev server + game server) for development only |
 | Persistence | **None, permanently** — everything in-memory/ephemeral by design (no `bun:sqlite`, ever) |
 | Lint/format | **Biome 2** (100 cols, single quotes, semicolons as-needed) |
 | Tests | **`bun test`** (server/shared) + **Vitest** via Angular's unit-test builder (client) |
-| CI | GitHub Actions: determinism → lint → typecheck → test; client specs + production build |
+| CI | GitHub Actions: determinism → lint → typecheck → test; client specs + production build; on `develop`, a release: version bump + tag + multi-arch image on Docker Hub ([`release.md`](release.md)) |
 
 ---
 

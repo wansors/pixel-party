@@ -61,6 +61,24 @@ every device`. It is one process on one port, with no allowed-origins setup to d
 socket share an origin. Assets are gzipped, and the hashed bundles are cached by the browsers. Use
 `bun run start:server` to serve an existing build again without rebuilding.
 
+### Docker (the easiest way to host a party)
+
+One image holds the whole game: server, web client, API and WebSocket on one port.
+
+```bash
+docker run -d --name pixel-party --restart unless-stopped -p 3000:3000 <dockerhub-user>/pixel-party
+```
+
+Then open `http://<that machine's LAN IP>:3000` on every device. [`docs/docker.md`](docs/docker.md)
+covers everything you can configure:
+- every environment variable, with its default;
+- the single port (3000/TCP: web, API and WebSocket);
+- Compose, host networking and reverse proxies;
+- health checks, resource use and updates.
+
+Every green push to `develop` is released automatically as a new version and image
+([`docs/release.md`](docs/release.md)).
+
 ### Development
 
 Start everything with one command:
@@ -94,7 +112,9 @@ bun run lint            # Biome
 bun run lint:determinism # domain purity gate (no Math.random / Date.now in domain/)
 bun run typecheck       # tsc --noEmit across server, shared, client
 bun run test            # server + shared (bun test)
+bun run test:client     # client specs (Vitest, needs Node)
 bun run build:client    # production Angular build
+bun audit               # dependency advisories
 bun scripts/bench-games.ts  # server perf: tick cost + snapshot size of every game at 12 players
 ```
 

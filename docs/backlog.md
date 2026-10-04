@@ -237,6 +237,12 @@ seeded variants of the same content, because snapshots are broadcast to the whol
       screen, in `/api/health` and in the server's startup banner.
 - [x] **The host can skip a round** that misbehaves (D33): a two-click **SKIP GAME** button in the
       header during the intro and the round. No points; the next round starts at once.
+- [x] **Docker image + automatic releases** (D36): one image with the whole game (server bundled
+      into one file, web client, one port), pushed to Docker Hub for amd64 and arm64 by every green
+      push to `develop`, which also bumps the version (minor; major for breaking changes).
+      [`docker.md`](docker.md) documents every variable and the port.
+  - [ ] Configure `DOCKERHUB_USERNAME` (variable) and `DOCKERHUB_TOKEN` (secret) in GitHub
+        ([`release.md`](release.md)). Until then CI skips the release step.
 - [x] **PC first, also on screen** (D34): the mobile-friendly badges, the **Mobile** filter and the
       intro's device badge only show while someone in the room joined from a phone.
 

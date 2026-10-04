@@ -45,6 +45,9 @@ export const config = {
   // served when SERVE_CLIENT isn't "false" and the build exists.
   clientDir: process.env.CLIENT_DIR ?? `${import.meta.dir}/../../client/dist/client/browser`,
   serveClient: (process.env.SERVE_CLIENT ?? (isDevelopment ? 'false' : 'true')) !== 'false',
+  // The address players should open, announced at startup instead of this machine's own LAN
+  // addresses: inside a container those are internal (172.x) and unreachable (docs/docker.md).
+  publicUrl: (process.env.PUBLIC_URL ?? '').trim().replace(/\/+$/, ''),
   // Bounded scoring catch-up (Phase 3). Ships OFF; enable per deployment while tuning. The cap is an
   // integer percent (default 20 → up to +20% for the furthest-behind player).
   handicapEnabled: (process.env.HANDICAP_ENABLED ?? '').toLowerCase() === 'true',

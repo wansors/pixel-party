@@ -9,7 +9,7 @@ set -euo pipefail
 
 shopt -s nullglob globstar
 SERVER_TESTS=(apps/server/src/**/*.test.ts apps/server/test/*.test.ts)
-SHARED_TESTS=(packages/shared/src/**/*.test.ts)
+SHARED_TESTS=(packages/shared/src/**/*.test.ts scripts/*.test.ts)
 
 if [[ ${#SERVER_TESTS[@]} -eq 0 && ${#SHARED_TESTS[@]} -eq 0 ]]; then
   echo "no server/shared test suites found yet — nothing to run."

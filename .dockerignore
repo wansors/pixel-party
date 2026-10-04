@@ -1,0 +1,15 @@
+# Only what the image build needs: sources, manifests and the lockfile.
+.git
+.github
+.claude
+.angular
+**/.angular
+**/node_modules
+**/dist
+docs
+coverage
+*.log
+.env
+.env.*
+Dockerfile
+.dockerignore

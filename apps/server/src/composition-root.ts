@@ -68,7 +68,7 @@ export function bootstrap() {
   })
   if (site) {
     // Party mode: tell the host which address everyone else should open.
-    const urls = lanUrls(server.port ?? config.port)
+    const urls = config.publicUrl ? [config.publicUrl] : lanUrls(server.port ?? config.port)
     logger.info('party_ready', { urls })
     console.log(`\n  ▶ Pixel Party v${APP_VERSION} is on — open ${urls[0]} on every device\n`)
   }
