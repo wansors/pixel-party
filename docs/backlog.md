@@ -19,7 +19,8 @@ permanently **stateless, anonymous, and single-instance by design**: no database
 social/polish phase (D16), no multi-instance scaling (D17). What remains open-ended is growing the
 mini-game catalog with brand-new ideas. Design decisions from the clear-out pass are logged in
 [`implementation-decisions.md`](implementation-decisions.md) (D1–D32). The game is **PC-first**; 37
-of the 55 games are tagged `mobileFriendly` (lobby badge + filter, D21). Rooms hold up to **12
+of the 55 games are tagged `mobileFriendly` (lobby badge + filter, D21, shown only while a phone is in
+the room, D34). Rooms hold up to **12
 players** (usually 4–8) and every game declares the headcounts it supports (D27); the per-game
 player-fit & balance audit ([`player-fit-audit.md`](player-fit-audit.md)) and its fixes (D28, D29)
 are tracked in **[Next iterations](#next-iterations--player-fit--balance-audit-2026-10-03--done)**
@@ -236,6 +237,8 @@ seeded variants of the same content, because snapshots are broadcast to the whol
       screen, in `/api/health` and in the server's startup banner.
 - [x] **The host can skip a round** that misbehaves (D33): a two-click **SKIP GAME** button in the
       header during the intro and the round. No points; the next round starts at once.
+- [x] **PC first, also on screen** (D34): the mobile-friendly badges, the **Mobile** filter and the
+      intro's device badge only show while someone in the room joined from a phone.
 
 ## Maintenance — dependencies (reviewed 2026-10-04)
 

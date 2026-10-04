@@ -5,6 +5,8 @@ export interface PlayerProps {
   name: string
   color: string
   avatar: string
+  // Joined from a touch-first device (phone/tablet) — only drives the lobby's mobile hints.
+  touch?: boolean
 }
 
 // Anonymous, ephemeral player (no account in Phase 1). Private constructor + static factories:
@@ -19,16 +21,25 @@ export class Player {
     readonly avatar: string,
     private _ready = false,
     private _connected = true,
+    readonly touch = false,
   ) {}
 
   static create(props: PlayerProps): Player {
     const name = props.name.trim()
     if (name.length === 0) throw new Error('player name must not be empty')
-    return new Player(props.id, name, props.color, props.avatar)
+    return new Player(props.id, name, props.color, props.avatar, false, true, props.touch === true)
   }
 
   static reconstitute(props: PlayerProps & { ready: boolean; connected: boolean }): Player {
-    return new Player(props.id, props.name, props.color, props.avatar, props.ready, props.connected)
+    return new Player(
+      props.id,
+      props.name,
+      props.color,
+      props.avatar,
+      props.ready,
+      props.connected,
+      props.touch === true,
+    )
   }
 
   get name(): string {

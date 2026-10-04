@@ -166,7 +166,8 @@ blueprint in `docs/technical-architecture.md`.
 - No install, no mandatory sign-up; entry via room code/link.
 - **PC-first** (keyboard/mouse on a big screen, D21). Every scene still has touch controls and must not
   break at phone sizes, but only games flagged `mobileFriendly` in the catalog promise a good phone
-  experience (lobby badge + "Mobile" filter, "Best on PC" on the round intro).
+  experience (lobby badge + "Mobile" filter, "Best on PC" on the round intro). Those hints only show
+  while someone in the room joined from a phone (D34); an all-PC party never sees them.
 - **Rooms of up to 12 players** (usually 4–8). Every mini-game declares the headcounts it supports
   (`MINIGAMES[].players`, D27): the lobby only lets the host pick games that fit the connected players
   and the engine skips the rest. Per-game ranges and the balance audit: `docs/player-fit-audit.md`.

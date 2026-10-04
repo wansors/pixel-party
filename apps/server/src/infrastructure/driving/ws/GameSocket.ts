@@ -72,6 +72,7 @@ function toPlayerDto(p: Player): PlayerDto {
     ready: p.ready,
     connected: p.connected,
     team: p.team,
+    touch: p.touch || undefined,
   }
 }
 
@@ -156,6 +157,7 @@ export function startGameServer(deps: GameSocketDeps) {
       name: msg.name,
       color: msg.color,
       avatar: msg.avatar,
+      touch: msg.touch === true,
     })
     if (!result.ok) {
       send(ws, { type: 'JOIN_REJECTED', reason: result.reason })

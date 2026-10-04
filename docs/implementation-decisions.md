@@ -391,7 +391,8 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   The 100 m dash stays mobile-friendly (two thumbs alternating is natural).
 - **Not done (KISS)**: no device detection or automatic filtering — the host knows who's on a phone.
   Revisit if hosts keep picking PC-only games for phone players: the client could report a coarse
-  "touch device" hint on JOIN and the lobby could warn.
+  "touch device" hint on JOIN and the lobby could warn. *Superseded in part by D34: the hint now
+  exists, and the badges only show while a phone is in the room.*
 
 ### D22 — Catalog growth: roadmap game wave (elimination rounds, arcade classics, racers) — DONE
 
@@ -881,3 +882,22 @@ misses — each would be speculative or gated, and the project rule is "nothing 
     skipped…". `rounds_skipped` is counted in `/api/metrics`.
 - **Not changed**: the protocol version stays at 4. The change only adds messages; an older client
   ignores `ROUND_SKIPPED` and moves on at the next `ROUND_INTRO`.
+
+### D34 — Mobile hints only while a phone is in the room — DONE
+
+- **Date**: 2026-10-04. **Context**: the launch target is a LAN party on PCs. The mobile-friendly
+  badges (D21) were noise on every game card, on the lobby's filter row and on every round intro for
+  a room where nobody is on a phone. The user: they only make sense when someone joins from a phone.
+- **What**:
+  - `JOIN` carries an optional `touch` hint: the client sends true when its primary pointer is coarse
+    (`matchMedia('(pointer: coarse)')`), so phones and tablets count and touchscreen laptops don't.
+    The server stores it on `Player` and sends it back as `PlayerDto.touch`.
+  - The lobby shows the **Mobile** filter chip and the cards' phone tags only while a connected player
+    has `touch`. A small cyan phone next to that player's name tells the host who it is. The round
+    intro's **Mobile-friendly** / **Best on PC** badge follows the same rule. If the phone leaves,
+    the filter stops applying.
+  - The playtest driver emulates touch at phone sizes (width under 600 px), so phone shots join as a
+    phone.
+- **Not changed**: line-ups and scoring ignore the hint; nothing is filtered automatically. The
+  catalog's `mobileFriendly` tags stay as they are. Adding an optional field doesn't break the wire,
+  so the protocol version stays at 4.

@@ -8,6 +8,7 @@ export interface JoinRoomInput {
   name: string
   color: string
   avatar: string
+  touch?: boolean
 }
 
 export type JoinRoomResult =
@@ -32,6 +33,7 @@ export class JoinRoomUseCase {
       name: input.name,
       color: input.color,
       avatar: input.avatar,
+      touch: input.touch,
     })
     room.add(player)
     return { ok: true, playerId: player.id, isHost: room.isHost(player.id) }

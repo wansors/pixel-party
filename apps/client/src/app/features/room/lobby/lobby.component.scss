@@ -145,6 +145,11 @@
       padding: 0 0.25rem;
       border: 2px solid currentColor;
     }
+    &.on-phone {
+      display: inline-flex;
+      align-items: center;
+      color: var(--c-cyan);
+    }
   }
   .ready-mark {
     display: inline-flex;

@@ -39,6 +39,7 @@ export class LobbyComponent {
   readonly axisFilter = signal<SkillAxis | null>(null)
   // Mobile filter (client-only, combines with the axis filter): Pixel Party is PC-first, so when some
   // players joined from their phones the host can narrow the grid to the games that play well there.
+  // The chip (and the cards' phone tags) only show while a phone is in the room.
   readonly mobileOnly = signal(false)
   // "Ideal for N" filter (client-only, combines with the others): only games whose recommended player
   // range holds the current headcount (D27).
@@ -47,7 +48,7 @@ export class LobbyComponent {
   // Host sees the whole catalog (narrowed by the filters); everyone else just sees the line-up.
   readonly shownGames = computed<readonly MiniGameMeta[]>(() => {
     const axis = this.axisFilter()
-    const mobile = this.mobileOnly()
+    const mobile = this.mobileOnly() && this.store.phoneInRoom()
     const ideal = this.idealOnly()
     const count = this.store.connectedCount()
     const pool = this.store.isHost()

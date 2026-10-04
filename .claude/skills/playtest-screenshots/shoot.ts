@@ -112,7 +112,16 @@ const browser = await puppeteer.launch({
   ],
 })
 const page = await browser.newPage()
-await page.setViewport({ width: w, height: h, deviceScaleFactor: 1 })
+// Phone sizes get touch emulation, so the page sees a coarse pointer and joins as a phone (the lobby's
+// mobile hints only show while one is in the room).
+const phone = w < 600
+await page.setViewport({
+  width: w,
+  height: h,
+  deviceScaleFactor: 1,
+  hasTouch: phone,
+  isMobile: phone,
+})
 // --lang=es: preselect the UI language (LanguageService reads localStorage `pp_lang`).
 const lang = flags.find((f) => f.startsWith('--lang='))?.slice('--lang='.length)
 const keysArg = flags.find((f) => f.startsWith('--keys='))?.slice('--keys='.length)

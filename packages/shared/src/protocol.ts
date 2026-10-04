@@ -21,6 +21,8 @@ export interface PlayerDto {
   connected: boolean
   // Team assignment (Phase 2). Present only while the room's line-up includes a team-format game.
   team?: TeamId
+  // True when the player joined from a phone or tablet (the JOIN `touch` hint); absent otherwise.
+  touch?: boolean
 }
 
 // The room lifecycle phase drives which UI/scene is active.
@@ -90,7 +92,9 @@ export interface SessionSummaryDto {
 
 export type ClientMsg =
   // Announce presence after the socket opens (name/color/avatar chosen on the join screen).
-  | { type: 'JOIN'; name: string; color: string; avatar: string }
+  // `touch`: the player is on a touch-first device (phone/tablet). Only then does the lobby bother
+  // with mobile-friendly badges and the Mobile filter — the party is PC-first (D21).
+  | { type: 'JOIN'; name: string; color: string; avatar: string; touch?: boolean }
   // Reclaim an existing seat after a socket drop (transient reconnect or page reload). Carries the
   // previously minted playerId; the server re-attaches it and replays the current session state.
   | { type: 'REJOIN'; playerId: string }

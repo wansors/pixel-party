@@ -43,6 +43,9 @@ cd "$WORK" && timeout 180 bun shoot.ts <tag>-phone 390x844 fruit-catch
   to check crowded layouts — mind each game's player range, D27), `--perf` logs a frame-cost probe at
   every shot (Phaser step avg/p95/max ms, long tasks, heap, live objects/tweens/textures) to stdout and
   `<tag>/perf.jsonl` — WebGL via SwiftShader, so read step cost and object growth, not fps.
+  `--skip` (with `--me-host`) presses the header's SKIP GAME button twice mid-way through round 1
+  (shots `-skip-armed`, `-skipped`). Sizes under 600 px wide emulate touch, so the browser player
+  joins as a phone and the lobby's mobile hints show (D34).
 - Party mode (the production build, as players get it): build the client, start the server with
   `NODE_ENV=production` (it serves the build on :3000) and point the driver at it with
   `PP_CLIENT=http://localhost:3000 PP_SERVER=http://localhost:3000`. A session is capped at 20

@@ -19,7 +19,11 @@ const isStrArray = (v: unknown): v is string[] => Array.isArray(v) && v.every(is
 // Exhaustive per-type table. `satisfies Record<ClientMsg['type'], Validator>` is load-bearing: adding a
 // future ClientMsg variant FAILS typecheck until a validator is added here.
 const VALIDATORS = {
-  JOIN: (m) => isStr(m.name) && isStr(m.color) && isStr(m.avatar),
+  JOIN: (m) =>
+    isStr(m.name) &&
+    isStr(m.color) &&
+    isStr(m.avatar) &&
+    (m.touch === undefined || isBool(m.touch)),
   REJOIN: (m) => isStr(m.playerId),
   SET_READY: (m) => isBool(m.ready),
   HOST_CONFIG: (m) =>

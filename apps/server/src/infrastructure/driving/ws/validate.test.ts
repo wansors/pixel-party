@@ -20,6 +20,13 @@ describe('isValidClientMsg', () => {
     expect(isValidClientMsg({ type: 'SKIP_ROUND' })).toBe(true)
   })
 
+  test('JOIN takes an optional boolean touch hint', () => {
+    const join = { type: 'JOIN', name: 'Ana', color: '#fff', avatar: 'cat' }
+    expect(isValidClientMsg(join)).toBe(true)
+    expect(isValidClientMsg({ ...join, touch: true })).toBe(true)
+    expect(isValidClientMsg({ ...join, touch: 'yes' })).toBe(false)
+  })
+
   test('HOST_CONFIG handicap is an optional boolean', () => {
     expect(isValidClientMsg({ type: 'HOST_CONFIG', minigameIds: ['a'], rounds: 3 })).toBe(true)
     expect(

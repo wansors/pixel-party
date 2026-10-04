@@ -90,8 +90,10 @@ export class RoundIntroComponent {
     return (id && MINIGAMES_BY_ID.get(id)?.axes) || []
   })
 
-  // PC-first: tell phone players up front whether this round plays well on their device.
+  // PC-first: when someone plays from a phone, tell the room up front whether this round plays well
+  // there. An all-PC room never sees the badge.
   readonly mobileFriendly = computed<'yes' | 'no' | null>(() => {
+    if (!this.store.phoneInRoom()) return null
     const id = this.store.intro()?.game
     const meta = id ? MINIGAMES_BY_ID.get(id) : undefined
     return meta ? (meta.mobileFriendly ? 'yes' : 'no') : null

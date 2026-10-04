@@ -55,6 +55,11 @@ export interface LiveRow {
 
 const NEUTRAL = '#7b88a8'
 
+// A phone or tablet: the primary pointer is a finger. Touchscreen laptops keep a fine pointer, so they
+// count as PCs.
+const onTouchDevice = (): boolean =>
+  typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
+
 // Best-effort read of "how each player is doing so far this round" out of a mini-game's snapshot.
 // Snapshot shapes vary per game (see packages/shared/src/games/*), but most FFA games expose one of
 // these player-id-keyed, higher-is-better tallies. Games without one simply show no round column.
@@ -145,6 +150,9 @@ export class RoomStore {
   readonly myReady = computed(() => this.me()?.ready ?? false)
   readonly readyCount = computed(() => this.players().filter((p) => p.ready && p.connected).length)
   readonly connectedCount = computed(() => this.players().filter((p) => p.connected).length)
+  // Someone is playing from a phone: only then are the mobile-friendly badges and filter worth showing
+  // (a LAN party is PC-first, D21).
+  readonly phoneInRoom = computed(() => this.players().some((p) => p.connected && p.touch))
   // Connected players per team (only meaningful once the line-up uses teams).
   readonly teamSizes = computed(() =>
     TEAMS.map((t) => this.players().filter((p) => p.connected && p.team === t.id).length),
@@ -249,7 +257,7 @@ export class RoomStore {
 
   private sendJoin(): void {
     const { name, color, avatar } = this.identity
-    this.net.send({ type: 'JOIN', name, color, avatar })
+    this.net.send({ type: 'JOIN', name, color, avatar, touch: onTouchDevice() })
   }
 
   private handle(msg: ServerMsg): void {

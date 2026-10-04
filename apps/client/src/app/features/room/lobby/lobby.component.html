@@ -37,6 +37,15 @@
                     {{ store.teamName(p.team) }}
                   </span>
                 }
+                @if (p.touch) {
+                  <span
+                    class="tag on-phone"
+                    role="img"
+                    [title]="'room.lobby.onPhone' | transloco"
+                    [attr.aria-label]="'room.lobby.onPhone' | transloco"
+                    ><i class="phone"></i
+                  ></span>
+                }
                 @if (!p.connected) {
                   <span class="tag off">{{ 'room.lobby.off' | transloco }}</span>
                 }
@@ -168,19 +177,21 @@
             {{ 'room.lobby.idealFilter' | transloco: { n: store.connectedCount() } }}
           </button>
         </li>
-        <li class="extra-filter">
-          <button
-            type="button"
-            class="axis-chip"
-            [class.active]="mobileOnly()"
-            [attr.aria-pressed]="mobileOnly()"
-            [title]="'room.lobby.mobileHint' | transloco"
-            (click)="mobileOnly.set(!mobileOnly())"
-          >
-            <i class="phone" aria-hidden="true"></i>
-            {{ 'room.lobby.mobileFilter' | transloco }}
-          </button>
-        </li>
+        @if (store.phoneInRoom()) {
+          <li class="extra-filter">
+            <button
+              type="button"
+              class="axis-chip"
+              [class.active]="mobileOnly()"
+              [attr.aria-pressed]="mobileOnly()"
+              [title]="'room.lobby.mobileHint' | transloco"
+              (click)="mobileOnly.set(!mobileOnly())"
+            >
+              <i class="phone" aria-hidden="true"></i>
+              {{ 'room.lobby.mobileFilter' | transloco }}
+            </button>
+          </li>
+        }
       </ul>
 
       <ul class="game-grid">
@@ -220,7 +231,7 @@
                 @for (a of g.axes; track a) {
                   <span class="axis-dot" [style.background]="axisColor(a)" [title]="catalog.axisLabel(a)"></span>
                 }
-                @if (g.mobileFriendly) {
+                @if (g.mobileFriendly && store.phoneInRoom()) {
                   <span
                     class="mobile-tag"
                     role="img"
