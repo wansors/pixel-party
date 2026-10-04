@@ -42,6 +42,7 @@ it. Decision log: D37.
 | 8 | Medium | CI gave every job the repository's default token scope. Actions were pinned by mutable tags, although the release job hands them the Docker Hub token. A dispatch input was interpolated into a shell script. | Fixed |
 | 9 | Medium | The image shipped third-party code (Angular, Phaser, rxjs, Transloco…) without its license notices. | Fixed |
 | 10 | Low | No browser hardening headers (CSP, `nosniff`, framing). | Fixed |
+| 16 | Low | The container ignored SIGTERM (PID 1 has no default handler), so every `docker stop`, restart or update waited 10 s and then killed it. | Fixed |
 | 11 | — | The background music was made with Suno; its terms depend on the plan it was made with. | **Owner's decision** |
 | 12 | — | Two spellings of the owner's name: `LICENSE` says "Andrea Cisneros", `docs/PRD.md` says "Andrés Cisneros". | **Owner's decision** |
 | 13 | Info | The local repository keeps `refs/original/*`, a backup left by an earlier `git filter-branch`, with 34 commits under a work e-mail. Plain pushes never send these refs, and GitHub has none of them. | Recommendation |
@@ -87,6 +88,9 @@ client.
   off, because its inline `<script>` would break under the policy.
 
   Verified: a full session in headless Chrome logs no CSP violation.
+
+- **16: clean shutdown.** `index.ts` handles SIGTERM and SIGINT: it stops the loops, closes the
+  sockets and exits 0. Measured: `podman stop` went from 10 s plus a kill to 0.13 s.
 
 ## For the owner
 
