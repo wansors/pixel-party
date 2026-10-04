@@ -1,9 +1,9 @@
 import { PALETTE, SUMO_ICE, type SumoIceBody, type SumoIceSnapshot } from '@pp/shared'
 import type Phaser from 'phaser'
-import { AvatarSprite, avatarPx } from '../avatars'
+import { AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, eliminate, flash, floatText, ring, shake, showBanner } from '../fx'
 import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
-import { ensurePixelGrid, shade } from '../pixelStyle'
+import { ensurePixelGrid, fitFontSize, headlineStyle, hexToCss, shade } from '../pixelStyle'
 import { YouMarker } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
@@ -13,11 +13,43 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 // once a tile sinks (with a splash). Every wrestler is their lobby avatar on a little shadow; bumps
 // throw ice chips; the first fall is a lifebuoy back onto the core (blinking while it's a ghost), the
 // second an ELIMINATED splash. Steer with the arrows/WASD or by holding the
-// pointer where you want to go — on ice you only nudge your momentum, so plan your slides.
+// pointer where you want to go — on ice you only nudge your momentum, so plan your slides. A small
+// arrow at your feet shows where you're pushing the moment you press (your body follows the server).
+// Rendering is cheap on purpose: the water is one scrolling tile sprite, the solid ice is baked into
+// one render texture (redrawn only where a tile changes), and only the few cracking tiles are images.
 
+// Minimum gap between ice-crack sounds (a ring of tiles often starts cracking at once).
+const CRACK_SOUND_GAP_MS = 400
 const N = SUMO_ICE.grid
 const CONTACT = SUMO_ICE.playerR * 2 * 1.25
 const IMPACT_COOLDOWN_MS = 400
+// Rivals' moments play at this fraction of the volume (yours stay full); rivals' bumps (softer still)
+// at most this often, so a scrum on the ice is a few thuds, not a drum roll.
+const RIVAL_LEVEL = 0.5
+const RIVAL_BUMP_MS = 250
+// Snapshots arrive every ~150 ms: interpolating a full interval behind keeps bodies gliding instead of
+// pausing and hopping each time one lands.
+const RENDER_DELAY_MS = 150
+// One water ripple tile (repeated and slowly scrolled): '.' deep water, '-' a ripple dash.
+const WATER_ROWS = [
+  '................................',
+  '................................',
+  '...------...............--------',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '..............-------...........',
+  '................................',
+  '................................',
+  '................................',
+  '-----...........................',
+  '................................',
+  '.......................------....',
+  '................................',
+  '................................',
+]
+const ARROW_ROWS = ['__W___', '__WW__', 'WWWWW_', 'WWWWWW', 'WWWWW_', '__WW__', '__W___']
 
 // 8×8 ice tiles: solid (white-cyan with highlights) and cracking (dark crack lines through it).
 const ICE_ROWS = [
@@ -50,11 +82,23 @@ interface View {
 }
 
 export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
-  private readonly interp = new SnapshotInterpolator<SumoIceSnapshot>(100)
+  private readonly interp = new SnapshotInterpolator<SumoIceSnapshot>(RENDER_DELAY_MS)
   private compact = false
   private arena = { cx: 0, cy: 0, size: 0 }
-  private water?: Phaser.GameObjects.Graphics
-  private tileImgs: Phaser.GameObjects.Image[] = []
+  private water?: Phaser.GameObjects.TileSprite
+  // The solid ice, baked: a tile is drawn in when the floe is first seen and erased when it cracks.
+  private floe?: Phaser.GameObjects.RenderTexture
+  private stamp?: Phaser.GameObjects.Image
+  // Cracking tiles (a handful at a time) as flickering images, pooled.
+  private cracks = new Map<number, Phaser.GameObjects.Image>()
+  private crackPool: Phaser.GameObjects.Image[] = []
+  private crackSoundAt = 0
+  private splash?: Phaser.GameObjects.Particles.ParticleEmitter
+  private arrow?: Phaser.GameObjects.Image
+  private prompt?: Phaser.GameObjects.Text
+  private promptText = ''
+  private steerDir = { dx: 0, dy: 0 }
+  private warmed = false
   private tileKeys = { ice: '', crack: '' }
   private tiles = ''
   private views = new Map<string, View>()
@@ -74,6 +118,7 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
   private prev?: SumoIceSnapshot
   private pairDist = new Map<string, number>()
   private impactAt = new Map<string, number>()
+  private rivalBumpAt = Number.NEGATIVE_INFINITY
   private ended = false
 
   constructor(...deps: SceneDeps) {
@@ -85,7 +130,12 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
     const { width, height } = this.scale
     this.compact = Math.min(width, height) < 520
     this.interp.reset()
-    this.tileImgs = []
+    this.cracks = new Map()
+    this.crackSoundAt = 0
+    this.crackPool = []
+    this.promptText = ''
+    this.steerDir = { dx: 0, dy: 0 }
+    this.warmed = false
     this.tiles = ''
     this.views = new Map()
     this.aim = undefined
@@ -97,17 +147,42 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
     this.prev = undefined
     this.pairDist = new Map()
     this.impactAt = new Map()
+    this.rivalBumpAt = Number.NEGATIVE_INFINITY
     this.ended = false
 
     const stripSize = this.compact ? 11 : 13
     this.strip = new PlayerStrip(this, width / 2, this.top + 8, width - 24, stripSize, 2)
     const areaTop = this.top + 8 + PlayerStrip.rowH(stripSize) * 2
-    const areaBottom = height - (this.compact ? 16 : 20)
+    // The prompt line along the bottom: the keys while you're on the ice, a heckle once you're out.
+    const promptSize = this.compact ? 12 : 16
+    this.prompt = this.add
+      .text(
+        width / 2,
+        height - (this.compact ? 10 : 14),
+        '',
+        headlineStyle(promptSize, PALETTE.dim),
+      )
+      .setOrigin(0.5, 1)
+      .setDepth(600)
+    const areaBottom = this.prompt.y - promptSize - (this.compact ? 8 : 10)
     const size = Math.floor(Math.min(width - 16, areaBottom - areaTop))
     this.arena = { cx: width / 2, cy: areaTop + (areaBottom - areaTop) / 2, size }
     this.avatarPx = avatarPx(Math.round(SUMO_ICE.playerR * 2 * size * 1.25))
+    const x0 = Math.round(this.arena.cx - size / 2)
+    const y0 = Math.round(this.arena.cy - size / 2)
 
-    this.water = this.add.graphics().setDepth(1)
+    const waterKey = ensurePixelGrid(this, {
+      key: 'ice-water',
+      rows: WATER_ROWS,
+      legend: { '.': 0x0d2a4a, '-': 0x1f4f7a },
+      pixelSize: Math.max(2, Math.round(size / 220)),
+    })
+    this.water = this.add.tileSprite(x0, y0, size, size, waterKey).setOrigin(0, 0).setDepth(1)
+    this.add
+      .rectangle(x0, y0, size, size)
+      .setOrigin(0, 0)
+      .setStrokeStyle(4, PALETTE.frameLit)
+      .setDepth(2)
     const px = Math.max(1, Math.floor(size / N / 8))
     const legend = { W: 0xdff6ff, h: 0xffffff, w: 0x9fd8ee, k: 0x2b5d7a }
     this.tileKeys = {
@@ -119,17 +194,35 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
         pixelSize: px,
       }),
     }
-    const cell = size / N
-    for (let i = 0; i < N * N; i++) {
-      const p = this.toScreen(((i % N) + 0.5) / N, (Math.floor(i / N) + 0.5) / N)
-      this.tileImgs.push(
-        this.add
-          .image(p.x, p.y, this.tileKeys.ice)
-          .setDisplaySize(Math.ceil(cell), Math.ceil(cell))
-          .setDepth(5)
-          .setVisible(false),
-      )
-    }
+    this.floe = this.add.renderTexture(x0, y0, size, size).setOrigin(0, 0).setDepth(5)
+    const stamp = this.make.image({ key: this.tileKeys.ice, add: false }).setOrigin(0, 0)
+    this.stamp = stamp
+    this.events.once('shutdown', () => stamp.destroy())
+    const dot = ensurePixelGrid(this, {
+      key: 'ice-chip',
+      rows: ['W'],
+      legend: { W: 0xffffff },
+      pixelSize: 4,
+    })
+    this.splash = this.add
+      .particles(0, 0, dot, {
+        speed: { min: 50, max: 140 },
+        angle: { min: 0, max: 360 },
+        lifespan: { min: 260, max: 520 },
+        gravityY: 180,
+        scale: { start: 1.3, end: 0.4 },
+        alpha: { start: 1, end: 0 },
+        tint: [0x9fd8ee, 0xdff6ff],
+        emitting: false,
+      })
+      .setDepth(850)
+    const arrowKey = ensurePixelGrid(this, {
+      key: 'ice-steer',
+      rows: ARROW_ROWS,
+      legend: { W: PALETTE.amber },
+      pixelSize: this.compact ? 2 : 3,
+    })
+    this.arrow = this.add.image(0, 0, arrowKey).setDepth(58).setAlpha(0.85).setVisible(false)
     this.marker = new YouMarker(this, this.compact ? 8 : 12, 75)
     this.banner = addBanner(this)
 
@@ -157,75 +250,122 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
   }
 
   protected frame(snap: SumoIceSnapshot | null, time: number): void {
-    this.paintWater(time)
+    // The ripples drift slowly (one scrolling tile sprite, nothing redrawn).
+    if (this.water) this.water.tilePositionX = (time / 90) % 4096
     if (!snap) return
+    if (!this.warmed) {
+      this.warmed = true
+      this.warmAvatars(
+        snap.bodies.map((b) => b.id),
+        [
+          ['front', 'hurt', 0],
+          ['front', 'ko', 0],
+          ['back', 'idle', 0],
+          ['side', 'idle', 0],
+        ],
+      )
+    }
     if (this.state.tick !== this.lastTick) {
       this.lastTick = this.state.tick
       this.interp.push(snap, time)
       this.onSnapshot(snap, time)
+      this.paintTiles(snap)
+      this.paintPrompt(snap)
     }
     this.steer(snap, time)
-    this.paintTiles(snap, time)
+    // Cracking tiles flicker (only the few that are cracking are touched).
+    for (const [i, img] of this.cracks)
+      img.setAlpha(Math.floor(time / 110 + i) % 2 === 0 ? 1 : 0.75)
     this.paintBodies(time)
   }
 
-  private paintWater(time: number): void {
-    const g = this.water as Phaser.GameObjects.Graphics
-    const { cx, cy, size } = this.arena
-    const x0 = cx - size / 2
-    const y0 = cy - size / 2
-    g.clear()
-    g.fillStyle(0x0d2a4a, 1)
-    g.fillRect(x0, y0, size, size)
-    // Slow ripples: short light dashes drifting along rows (deterministic from index + time).
-    g.fillStyle(0x1f4f7a, 1)
-    const rows = 14
-    for (let r = 0; r < rows; r++) {
-      const y = y0 + ((r + 0.5) / rows) * size
-      for (let k = 0; k < 6; k++) {
-        const x = x0 + ((k / 6 + ((r * 0.37 + time / 9000) % 1) + (r % 2) * 0.08) % 1) * size
-        g.fillRect(
-          Math.round(x),
-          Math.round(y + Math.sin(time / 700 + r + k) * 2),
-          Math.round(size / 28),
-          2,
-        )
-      }
-    }
-    g.lineStyle(4, PALETTE.frameLit, 1)
-    g.strokeRect(x0, y0, size, size)
+  // Cell i's exact pixel rectangle inside the floe texture (cells tile without gaps or overlaps).
+  private cellRect(i: number): { x: number; y: number; w: number; h: number } {
+    const c = this.arena.size / N
+    const gx = i % N
+    const gy = Math.floor(i / N)
+    const x = Math.round(gx * c)
+    const y = Math.round(gy * c)
+    return { x, y, w: Math.round((gx + 1) * c) - x, h: Math.round((gy + 1) * c) - y }
   }
 
-  // Tiles change only a few times a second: update just those that did, with a splash when one sinks.
-  private paintTiles(snap: SumoIceSnapshot, time: number): void {
+  // Tiles change only a few times a second: redraw just those that did, with a splash when one sinks.
+  private paintTiles(snap: SumoIceSnapshot): void {
     const next = snap.tiles
+    const floe = this.floe
+    const stamp = this.stamp
+    if (next === this.tiles || !floe || !stamp) return
     const first = this.tiles === ''
     const me = snap.bodies.find((b) => b.id === this.selfId)
+    const x0 = this.arena.cx - this.arena.size / 2
+    const y0 = this.arena.cy - this.arena.size / 2
+    let sankNear = false
     for (let i = 0; i < N * N; i++) {
       const c = next[i]
       const was = this.tiles[i]
-      const img = this.tileImgs[i]
-      if (!img) continue
-      if (c === '%') img.setAlpha(Math.floor(time / 110 + i) % 2 === 0 ? 1 : 0.75)
       if (c === was) continue
-      img.setVisible(c !== '.')
-      if (c === '#') img.setTexture(this.tileKeys.ice).setAlpha(1)
-      else if (c === '%') img.setTexture(this.tileKeys.crack)
-      else if (!first && was !== undefined && was !== '.') {
-        burst(this, img.x, img.y, 0x9fd8ee, 8, 140)
+      const r = this.cellRect(i)
+      stamp.setPosition(r.x, r.y).setDisplaySize(r.w, r.h)
+      if (c === '#') floe.draw(stamp)
+      else if (was === '#') floe.erase(stamp)
+      if (c === '%') this.showCrack(i, x0 + r.x + r.w / 2, y0 + r.y + r.h / 2, r.w, r.h)
+      else this.hideCrack(i)
+      if (c === '.' && !first && was !== undefined && was !== '.') {
+        this.splash?.explode(8, x0 + r.x + r.w / 2, y0 + r.y + r.h / 2)
         // Only the tiles going down right next to you make a sound (the floe melts all round long).
         if (me?.alive) {
           const tx = ((i % N) + 0.5) / N
           const ty = (Math.floor(i / N) + 0.5) / N
-          if (Math.hypot(tx - me.x, ty - me.y) < 0.16) this.sfx.pop()
+          if (Math.hypot(tx - me.x, ty - me.y) < 0.16) sankNear = true
         }
       }
     }
+    // One splash however many tiles went under together.
+    if (sankNear) this.sfx.splash()
     this.tiles = next
   }
 
+  private showCrack(i: number, x: number, y: number, w: number, h: number): void {
+    if (this.cracks.has(i)) return
+    // The ice's warning creak — once however many tiles start cracking together.
+    if (this.time.now - this.crackSoundAt > CRACK_SOUND_GAP_MS) {
+      this.crackSoundAt = this.time.now
+      this.sfx.crack()
+    }
+    const img = this.crackPool.pop() ?? this.add.image(0, 0, this.tileKeys.crack).setDepth(6)
+    img.setPosition(x, y).setDisplaySize(w, h).setAlpha(1).setVisible(true)
+    this.cracks.set(i, img)
+  }
+
+  private hideCrack(i: number): void {
+    const img = this.cracks.get(i)
+    if (!img) return
+    this.cracks.delete(i)
+    img.setVisible(false)
+    this.crackPool.push(img)
+  }
+
+  // Bottom line: how to steer while you're on the ice; a heckle once you're in the water.
+  private paintPrompt(snap: SumoIceSnapshot): void {
+    const me = snap.bodies.find((b) => b.id === this.selfId)
+    const text = this.state.final
+      ? ''
+      : !me || !me.alive
+        ? this.quip('game.common.spectating', this.selfId)
+        : this.compact
+          ? ''
+          : this.t('game.sumoIce.hint')
+    if (!this.prompt || text === this.promptText) return
+    this.promptText = text
+    this.prompt
+      .setText(text)
+      .setColor(hexToCss(me?.alive ? PALETTE.dim : PALETTE.text))
+      .setFontSize(fitFontSize(text, this.scale.width - 24, this.compact ? 12 : 16))
+  }
+
   private steer(snap: SumoIceSnapshot, time: number): void {
-    if (!snap.bodies.some((b) => b.id === this.selfId && b.alive)) return
+    this.steerDir = { dx: 0, dy: 0 }
+    if (!snap.bodies.some((b) => b.id === this.selfId && b.alive) || this.state.final) return
     const keys = this.cursors
     const w = this.wasd
     const kx =
@@ -241,6 +381,7 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
     if (kx !== 0 || ky !== 0 || this.aim) this.steered = true
     if (!this.steered) return
     const mag = Math.hypot(dir.dx, dir.dy)
+    if (mag > 0.001) this.steerDir = { dx: dir.dx / mag, dy: dir.dy / mag }
     const key =
       mag < 0.001 ? '0' : `${Math.round((dir.dx / mag) * 20)},${Math.round((dir.dy / mag) * 20)}`
     if ((key !== this.sentDir || time - this.sentAt > 250) && !this.state.final) {
@@ -303,8 +444,11 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
     const p = this.toScreen((a.x + b.x) / 2, (a.y + b.y) / 2)
     burst(this, p.x, p.y, 0xdff6ff, 10, 180)
     if (a.id === this.selfId || b.id === this.selfId) {
-      this.sfx.pop()
+      this.sfx.hit()
       shake(this, 0.006, 120)
+    } else if (now - this.rivalBumpAt >= RIVAL_BUMP_MS) {
+      this.rivalBumpAt = now
+      this.sfx.quiet(() => this.sfx.hit(0.8), RIVAL_LEVEL * 0.6)
     }
   }
 
@@ -321,7 +465,13 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
       this.quip('game.common.stamps', b.id),
       this.compact ? 12 : 16,
     )
-    this.sfx.eliminated()
+    this.sfx.quiet(
+      () => {
+        this.sfx.splash()
+        this.sfx.eliminated()
+      },
+      b.id === this.selfId ? 1 : RIVAL_LEVEL,
+    )
     if (b.id === this.selfId) {
       flash(this, 0x29a8f2, 220, 0.3)
       this.marker?.hide()
@@ -350,10 +500,12 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
       PALETTE.amber,
       this.compact ? 12 : 16,
     )
+    // Into the water (a rival's fall softer); losing your own life also stings.
+    this.sfx.quiet(() => this.sfx.splash(), to.id === this.selfId ? 1 : RIVAL_LEVEL)
     if (to.id === this.selfId) {
-      this.sfx.wrong()
+      this.sfx.hurt()
       flash(this, 0x29a8f2, 200, 0.25)
-    } else this.sfx.pop()
+    }
   }
 
   // Into the water: shrink, spin and fade under the surface.
@@ -372,6 +524,7 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
   }
 
   private paintBodies(time: number): void {
+    this.arrow?.setVisible(false)
     const sample = this.interp.sample(time)
     if (!sample) return
     for (const b of sample.to.bodies) {
@@ -402,8 +555,11 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
       const s = jump
         ? this.toScreen(b.x, b.y)
         : this.toScreen(lerp(from.x, b.x, sample.t), lerp(from.y, b.y, sample.t))
-      // Faces where it slides; dazed (hurt) while it blinks back in after a lifebuoy.
-      if (!Number.isNaN(view.x) && !jump) view.avatar.faceMotion(s.x - view.x, s.y - view.y)
+      // Faces where it slides (you: where you push, at once); dazed (hurt) while it blinks back in
+      // after a lifebuoy.
+      const push = b.id === this.selfId ? this.steerDir : { dx: 0, dy: 0 }
+      if (push.dx !== 0 || push.dy !== 0) view.avatar.faceMotion(push.dx, push.dy, 0.1)
+      else if (!Number.isNaN(view.x) && !jump) view.avatar.faceMotion(s.x - view.x, s.y - view.y)
       view.x = s.x
       view.y = s.y
       view.avatar.setExpression(b.ghost ? 'hurt' : 'idle').tick(time)
@@ -414,6 +570,15 @@ export class SumoIceScene extends MiniGameScene<SumoIceSnapshot> {
       if (b.id === this.selfId) {
         if (b.alive) this.marker?.place(s.x, s.y - this.avatarPx * 0.62, time)
         else this.marker?.hide()
+        // Your push, at your feet, the moment you press.
+        if (b.alive && (push.dx !== 0 || push.dy !== 0))
+          this.arrow
+            ?.setVisible(true)
+            .setPosition(
+              Math.round(s.x + push.dx * this.avatarPx * 0.75),
+              Math.round(s.y + this.avatarPx * 0.1 + push.dy * this.avatarPx * 0.75),
+            )
+            .setRotation(Math.atan2(push.dy, push.dx))
       }
     }
   }

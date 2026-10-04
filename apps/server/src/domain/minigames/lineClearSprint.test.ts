@@ -1,9 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import type { Random } from '../ports/Random'
 import { LineClearSprint } from './lineClearSprint'
-import { FALL_INTERVAL_MS, ROWS } from './tetrisCore'
+import { FALL_INTERVAL_MS, ROWS, createPlayerBoard } from './tetrisCore'
 
-// Always draws the "I" piece (shapeIndex 0, width 4) so the piece sequence is fully predictable.
 const zero: Random = { next: () => 0 }
 
 const nn = <T>(x: T | undefined): T => {
@@ -11,20 +10,32 @@ const nn = <T>(x: T | undefined): T => {
   return x
 }
 
-const init = (players: string[], durationMs = 60_000) =>
-  new LineClearSprint().init({ players, seed: 1, random: zero, now: 0, config: { durationMs } })
+// Every piece is an I (four wide, one tall), so the sequence is fully predictable.
+const init = (players: string[], durationMs = 60_000) => {
+  const state = new LineClearSprint().init({
+    players,
+    seed: 1,
+    random: zero,
+    now: 0,
+    config: { durationMs },
+  })
+  state.queue = new Array(300).fill(0)
+  for (const id of players) state.boards.set(id, createPlayerBoard(state.queue))
+  return state
+}
 
 describe('LineClearSprint', () => {
   test('a piece falls over successive tick calls, and locks once it cannot fall further', () => {
     const game = new LineClearSprint()
     let state = init(['p'])
+    // The I's one row sits at y + 1: it spawns at y = -1 and rests on the floor at y = ROWS - 2.
     for (let i = 0; i < 11; i++) state = game.tick(state, FALL_INTERVAL_MS, i * FALL_INTERVAL_MS)
-    expect(nn(state.boards.get('p')).current.y).toBe(11) // fell all the way to the floor
+    expect(nn(state.boards.get('p')).current?.y).toBe(ROWS - 2) // fell all the way to the floor
 
     // One more fall step: it can't move further, so it locks and a fresh piece spawns at the top.
     state = game.tick(state, FALL_INTERVAL_MS, 11 * FALL_INTERVAL_MS)
     const after = nn(state.boards.get('p'))
-    expect(after.current.y).toBe(0)
+    expect(after.current?.y).toBe(-1)
     expect(after.board.some((c) => c !== 0)).toBe(true)
     expect(after.toppedOut).toBe(false)
   })
@@ -32,20 +43,20 @@ describe('LineClearSprint', () => {
   test('onInput move shifts the piece when not blocked, and no-ops at the walls', () => {
     const game = new LineClearSprint()
     let state = init(['p'])
-    const startX = nn(state.boards.get('p')).current.x
+    const startX = nn(state.boards.get('p')).current?.x ?? -1
 
     state = game.onInput(state, 'p', { kind: 'move', dir: 'left' }, 0)
-    expect(nn(state.boards.get('p')).current.x).toBe(startX - 1)
+    expect(nn(state.boards.get('p')).current?.x).toBe(startX - 1)
 
     // Now against the left wall: further left is a no-op.
     state = game.onInput(state, 'p', { kind: 'move', dir: 'left' }, 0)
-    expect(nn(state.boards.get('p')).current.x).toBe(startX - 1)
+    expect(nn(state.boards.get('p')).current?.x).toBe(startX - 1)
 
     state = game.onInput(state, 'p', { kind: 'move', dir: 'right' }, 0)
     state = game.onInput(state, 'p', { kind: 'move', dir: 'right' }, 0)
-    const rightmost = nn(state.boards.get('p')).current.x
+    const rightmost = nn(state.boards.get('p')).current?.x
     state = game.onInput(state, 'p', { kind: 'move', dir: 'right' }, 0)
-    expect(nn(state.boards.get('p')).current.x).toBe(rightmost) // blocked at the right wall
+    expect(nn(state.boards.get('p')).current?.x).toBe(rightmost) // blocked at the right wall
   })
 
   test('onInput drop locks the piece immediately', () => {
@@ -53,7 +64,7 @@ describe('LineClearSprint', () => {
     let state = init(['p'])
     state = game.onInput(state, 'p', { kind: 'drop' }, 0)
     const after = nn(state.boards.get('p'))
-    expect(after.current.y).toBe(0) // a fresh piece has already spawned
+    expect(after.current?.y).toBe(-1) // a fresh piece has already spawned
     expect(after.board.some((c) => c !== 0)).toBe(true) // the dropped piece got baked in
   })
 
@@ -131,5 +142,28 @@ describe('LineClearSprint', () => {
     expect(game.isFinished(state, 999)).toBe(false)
     expect(game.isFinished(state, 1000)).toBe(true)
     expect(game.isFinished(state, 1001)).toBe(true)
+  })
+})
+
+describe('LineClearSprint wire + soft drop', () => {
+  test('soft drop moves one row, and the snapshot carries the stack, the piece and the ack', () => {
+    const game = new LineClearSprint()
+    let state = init(['p'])
+    state = game.onInput(state, 'p', { kind: 'soft', seq: 1 }, 0)
+    state = game.onInput(state, 'p', { kind: 'rotate', dir: 'ccw', seq: 2 }, 0)
+    const board = nn(game.snapshot(state, 0).boards.p)
+    expect(board.ack).toBe(2)
+    expect(board.piece).toEqual([0, 1, 0, 3])
+    expect(board.cells).toBe('0'.repeat(72))
+    expect(board.next).toBe('0000')
+  })
+
+  test('malformed inputs are ignored', () => {
+    const game = new LineClearSprint()
+    let state = init(['p'])
+    const before = JSON.stringify(game.snapshot(state, 0))
+    state = game.onInput(state, 'p', { kind: 'warp' } as never, 0)
+    state = game.onInput(state, 'p', { kind: 'move', dir: 'up' } as never, 0)
+    expect(JSON.stringify(game.snapshot(state, 0))).toBe(before)
   })
 })

@@ -1,7 +1,7 @@
 import type { AvatarId } from '@pp/shared'
 import type Phaser from 'phaser'
 import { ensureAvatarTexture } from './avatars'
-import { bodyStyle } from './pixelStyle'
+import { bodyStyle, hexToCss } from './pixelStyle'
 
 // One player's entry in a PlayerStrip: label (name + stat), identity color, dimmed when out/idle. With
 // `avatar` the chip leads with the player's avatar (KO face when dimmed), else with a ■ in their color.
@@ -50,40 +50,66 @@ export class PlayerStrip {
     const key = chips.map((c) => `${c.text}|${c.color}|${c.avatar}|${c.dim ? 1 : 0}`).join(';')
     if (key === this.key) return
     this.key = key
-    for (const c of this.chips) {
-      c.icon?.destroy()
-      c.label.destroy()
+    // Reuse the chips already on screen (new text, color, face) and only create or destroy the
+    // difference: a strip that changes several times a second must not churn display objects.
+    for (const gone of this.chips.splice(chips.length)) {
+      gone.icon?.destroy()
+      gone.label.destroy()
     }
-    this.chips = chips.map((c) => {
-      const label = this.scene.add
-        .text(
-          0,
-          0,
-          c.avatar ? c.text : `■ ${c.text}`,
-          bodyStyle(this.size, c.color, { fontStyle: 'bold' }),
-        )
-        .setOrigin(0, 0.5)
-        .setAlpha(c.dim ? 0.4 : 1)
-      if (!c.avatar) return { label }
-      const icon = this.scene.add
-        .image(
-          0,
-          0,
-          ensureAvatarTexture(this.scene, c.avatar, c.color, 1, 'front', c.dim ? 'ko' : 'idle'),
-        )
-        .setOrigin(0, 0.5)
+    chips.forEach((c, i) => {
+      const text = c.avatar ? c.text : `■ ${c.text}`
+      let view = this.chips[i]
+      if (!view) {
+        view = {
+          label: this.scene.add
+            .text(0, 0, text, bodyStyle(this.size, c.color, { fontStyle: 'bold' }))
+            .setOrigin(0, 0.5),
+        }
+        this.chips[i] = view
+      }
+      view.label.setText(text).setColor(hexToCss(c.color)).setFontSize(this.size)
+      view.label.setAlpha(c.dim ? 0.4 : 1)
+      if (!c.avatar) {
+        view.icon?.destroy()
+        view.icon = undefined
+        return
+      }
+      const face = ensureAvatarTexture(
+        this.scene,
+        c.avatar,
+        c.color,
+        1,
+        'front',
+        c.dim ? 'ko' : 'idle',
+      )
+      view.icon = (view.icon ?? this.scene.add.image(0, 0, face).setOrigin(0, 0.5))
+        .setTexture(face)
         .setAlpha(c.dim ? 0.55 : 1)
-      return { icon, label }
     })
-    let size = this.size
-    const budget = Number.isFinite(this.maxRows) ? this.maxRows * PlayerStrip.rowH(this.size) : 0
-    const overflows = (): boolean =>
-      Number.isFinite(this.maxRows) && this.rowsAt(size) * PlayerStrip.rowH(size) > budget
-    while (size > MIN_FONT && overflows()) size -= 1
-    // Still too wide at the smallest font: clip the names, a character at a time.
+    // Fit the budget by arithmetic, then render once: the font is monospace, so a label's width scales
+    // with its font size and its length — measured once here instead of re-rendering every label at
+    // every candidate size.
     const texts = chips.map((c) => (c.avatar ? c.text : `■ ${c.text}`))
+    const charW = this.chips.map((c, i) => c.label.width / Math.max(1, (texts[i] as string).length))
+    const fits = (size: number, keep: number): boolean => {
+      if (!Number.isFinite(this.maxRows)) return true
+      const widths = this.chips.map(
+        (c, i) =>
+          (c.icon ? ICON + ICON_GAP : 0) +
+          ((charW[i] as number) * clipName(texts[i] as string, keep).length * size) / this.size,
+      )
+      return (
+        this.rowsFor(widths, size) * PlayerStrip.rowH(size) <=
+        this.maxRows * PlayerStrip.rowH(this.size)
+      )
+    }
     const longest = Math.max(0, ...texts.map((t) => splitStat(t).name.length))
-    for (let keep = longest - 1; keep >= MIN_NAME && overflows(); keep--) {
+    let size = this.size
+    while (size > MIN_FONT && !fits(size, longest)) size -= 1
+    // Still too wide at the smallest font: clip the names, a character at a time.
+    let keep = longest
+    while (keep > MIN_NAME && !fits(size, keep)) keep -= 1
+    if (keep < longest) {
       this.chips.forEach((c, i) => c.label.setText(clipName(texts[i] as string, keep)))
     }
     this.layout(size)
@@ -102,14 +128,12 @@ export class PlayerStrip {
     return (c.icon ? ICON + ICON_GAP : 0) + c.label.width
   }
 
-  // Rows needed at a font size (sets the chips' size as a side effect).
-  private rowsAt(size: number): number {
-    for (const c of this.chips) c.label.setFontSize(size)
+  // Rows the chips need at a font size, given each chip's width at that size.
+  private rowsFor(widths: readonly number[], size: number): number {
     const gap = size * 1.4
     let rows = 0
     let rowW = -1
-    for (const c of this.chips) {
-      const w = PlayerStrip.width(c)
+    for (const w of widths) {
       if (rowW < 0 || rowW + gap + w > this.maxW) {
         rows++
         rowW = w

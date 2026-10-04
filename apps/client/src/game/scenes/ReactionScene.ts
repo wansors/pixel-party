@@ -36,7 +36,7 @@ interface Row {
 }
 
 // Reaction Duel canvas: the whole screen is the signal. A red field with a pixel traffic light
-// waits for green; tap (or Space) after it turns. The green moment is scheduled locally from the
+// waits for green; click (or Space / Enter) after it turns. The green moment is scheduled locally from the
 // snapshot's `greenInMs`, so the switch lands on time instead of up to one snapshot late — never
 // early, because the estimate only ever carries extra delay. A tap also reports this client's own
 // reaction time (from the frame that showed green), which the server credits within bounds so the
@@ -139,6 +139,7 @@ export class ReactionScene extends MiniGameScene<ReactionSnapshot> {
 
     this.input.on('pointerdown', () => this.tap())
     this.onKey('SPACE', () => this.tap())
+    this.onKey('ENTER', () => this.tap())
     this.showTitle(this.t('game.reaction.wait'), PALETTE.text)
     this.status.setText(this.t('game.reaction.instruction'))
   }
@@ -149,7 +150,11 @@ export class ReactionScene extends MiniGameScene<ReactionSnapshot> {
     if (snap.falseStarts.includes(this.selfId) || this.selfId in snap.reactions) return
     const ms = this.greenShownAt === null ? undefined : performance.now() - this.greenShownAt
     this.sendInput(ms === undefined ? { kind: 'tap' } : { kind: 'tap', ms: Math.round(ms) })
-    // Instant "got it" on a post-green tap; the time itself arrives with the next snapshot.
+    // The slap on the button sounds on the tap itself (a pre-green one just clicks: the server alone
+    // calls a false start, then buzzes); the time and its chime arrive with the next snapshot.
+    if (!this.wasGreen) this.sfx.click()
+    else this.sfx.hit(0.8)
+    // Instant "got it" on a post-green tap.
     if (this.wasGreen && this.greenLamp) {
       punch(this, this.greenLamp, -0.12, 70)
       ring(

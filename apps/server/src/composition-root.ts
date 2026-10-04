@@ -1,3 +1,4 @@
+import { networkInterfaces } from 'node:os'
 import type { SessionConfig } from './application/session/SessionEngine'
 import { CreateRoomUseCase } from './application/use-cases/CreateRoomUseCase'
 import { JoinRoomUseCase } from './application/use-cases/JoinRoomUseCase'
@@ -5,6 +6,7 @@ import { config } from './config'
 import { CryptoIdGenerator } from './infrastructure/driven/id/CryptoIdGenerator'
 import { SeededRandom } from './infrastructure/driven/random/SeededRandom'
 import { SystemClock } from './infrastructure/driven/time/SystemClock'
+import { loadStaticSite } from './infrastructure/driving/http/staticSite'
 import { startGameServer } from './infrastructure/driving/ws/GameSocket'
 import { LiveRooms } from './infrastructure/live/LiveRooms'
 import { createLogger } from './infrastructure/observability/logger'
@@ -44,6 +46,7 @@ export function bootstrap() {
     },
   }
 
+  const site = config.serveClient ? loadStaticSite(config.clientDir) : null
   const server = startGameServer({
     rooms,
     createRoom,
@@ -54,8 +57,24 @@ export function bootstrap() {
     logger,
     metrics,
     roomIdleTimeoutSec: config.roomIdleTimeoutSec,
+    site,
   })
 
-  logger.info('server_listening', { url: `http://localhost:${server.port}` })
+  logger.info('server_listening', { url: `http://localhost:${server.port}`, client: !!site })
+  if (site) {
+    // Party mode: tell the host which address everyone else should open.
+    const urls = lanUrls(server.port ?? config.port)
+    logger.info('party_ready', { urls })
+    console.log(`\n  ▶ Pixel Party is on — open ${urls[0]} on every device\n`)
+  }
   return server
+}
+
+// This machine's LAN addresses as party URLs (localhost last, for a host playing on this machine).
+function lanUrls(port: number): string[] {
+  const lan = Object.values(networkInterfaces())
+    .flat()
+    .filter((a) => a && a.family === 'IPv4' && !a.internal)
+    .map((a) => `http://${a?.address}:${port}`)
+  return [...lan, `http://localhost:${port}`]
 }

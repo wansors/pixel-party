@@ -1,10 +1,15 @@
-import type { ButtonMasherInput, ButtonMasherSnapshot } from '@pp/shared'
+import {
+  BUTTON_MASHER_MAX_PER_SEC,
+  type ButtonMasherInput,
+  type ButtonMasherSnapshot,
+} from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 10_000
 // Counted presses per player per rolling second: about the best a human finger manages, so an
 // autoclicker or a three-finger drum roll ties with the fastest masher instead of trivially beating them.
-export const MASHER_MAX_PRESSES_PER_SEC = 15
+// (The value lives in @pp/shared so the scene can show the cap.)
+export const MASHER_MAX_PRESSES_PER_SEC = BUTTON_MASHER_MAX_PER_SEC
 const RATE_WINDOW_MS = 1000
 
 export interface ButtonMasherState {

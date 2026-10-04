@@ -1,10 +1,18 @@
 import { describe, expect, test } from 'bun:test'
-import { PIXEL_OBJECTS, type PixelCell, columnCounts } from '@pp/shared'
+import {
+  PIXEL_OBJECTS,
+  type PixelCell,
+  type PixelSplitObject,
+  columnCounts,
+  packCells,
+  unpackCells,
+} from '@pp/shared'
 import type { Random } from '../ports/Random'
 import { PixelSplit, splitPoints } from './pixelSplit'
 
 // Deterministic seed; the exact object order doesn't matter — the tests read counts off the puzzle.
 const zero: Random = { next: () => 0 }
+const cellsOf = (o: PixelSplitObject) => unpackCells(o.cols, o.rows, o.bits)
 const init = (players: string[], now = 0, random: Random = zero) =>
   new PixelSplit().init({ players, seed: 1, random, now, config: { durationMs: 40_000 } })
 
@@ -111,7 +119,21 @@ describe('PixelSplit', () => {
     expect(game.isFinished(s, 500)).toBe(false)
     s = game.leave(s, 'gone', 500)
     expect(game.isFinished(s, 500)).toBe(true)
-    expect(game.snapshot(s, 500).objects.gone).toBeNull()
+    expect(game.snapshot(s, 500).at.gone).toBeNull()
+  })
+
+  test('packed cells round-trip exactly, and each object in play goes on the wire once', () => {
+    for (const o of PIXEL_OBJECTS) {
+      const bits = packCells(o.cols, o.rows, o.cells)
+      expect(bits).toHaveLength(Math.ceil(o.cols / 4) * o.rows)
+      expect(signature(unpackCells(o.cols, o.rows, bits))).toBe(signature(o.cells))
+    }
+    const game = new PixelSplit()
+    let s = init(['a', 'b', 'c'], 0, seeded(4))
+    s = game.onInput(s, 'b', { kind: 'cut', index: 0, cut: 1 }, 100)
+    const snap = game.snapshot(s, 100)
+    expect(snap.at).toEqual({ a: 0, b: 1, c: 0 })
+    expect(snap.objects.map((o) => o.index)).toEqual([0, 1])
   })
 
   test('stale index is ignored', () => {
@@ -128,7 +150,8 @@ describe('PixelSplit', () => {
     const mirrored = new Map<string, Set<boolean>>()
     for (let seed = 1; seed <= 60; seed++) {
       for (const puzzle of init(['a'], 0, seeded(seed)).puzzles) {
-        const { name, cols, pixels } = puzzle.object
+        const { name, cols } = puzzle.object
+        const pixels = cellsOf(puzzle.object)
         const src = PIXEL_OBJECTS.find((o) => o.name === name)
         if (!src) throw new Error(`unknown object ${name}`)
         const flipped = signature(pixels) !== signature(src.cells)
@@ -159,7 +182,8 @@ describe('PixelSplit', () => {
       let s = init(['a'], 0, seeded(seed))
       let expected = 0
       s.puzzles.forEach((puzzle, index) => {
-        const { name, cols, rows, pixels } = puzzle.object
+        const { name, cols, rows } = puzzle.object
+        const pixels = cellsOf(puzzle.object)
         const src = PIXEL_OBJECTS.find((o) => o.name === name)
         if (!src) throw new Error(`unknown object ${name}`)
         // Same pixels, same shape (possibly mirrored), all inside the frame.

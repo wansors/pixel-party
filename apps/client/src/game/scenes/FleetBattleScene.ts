@@ -23,8 +23,8 @@ const otherTeam = (team: TeamId): TeamId => (team === 'red' ? 'blue' : 'red')
 // someone else's call (`aims`), the whole team (`open`), or the other team's turn (`wait`).
 type TurnMode = 'captain' | 'aims' | 'open' | 'wait'
 
-// Fleet Battle (team Battleship) canvas. Two pixel seas: ENEMY WATERS (tap a cell to fire on your
-// team's turn — the first shot uses the turn) and OUR FLEET (the enemy team's shots at us, both
+// Fleet Battle (team Battleship) canvas. Two pixel seas: ENEMY WATERS (click a cell — or aim with the
+// arrows / WASD and fire with SPACE / ENTER — on your team's turn; the first shot uses the turn) and OUR FLEET (the enemy team's shots at us, both
 // splashes and hits). Each team turn has a rotating captain who fires alone for the first half; then
 // anyone on the team may. Players without a team watch both fleets. The snapshot never carries ship
 // positions, only shot results. The turn banner (whose call it is) + bar and the glowing board in play
@@ -44,6 +44,8 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
   private turnMax = 0
   private lastTurn: TeamId | null = null
   private lastMode = ''
+  // The turn bar is in its last stretch on your call (its warning beep plays once).
+  private urgentTurn = false
   // Crew-row names by player, to light up whoever captains the turn.
   private crewNames = new Map<string, Phaser.GameObjects.Text>()
   private endedAt = -1
@@ -52,6 +54,7 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
   private targetFleet: TeamId = 'blue'
   private ownFleet: TeamId = 'red'
   private team: TeamId | undefined
+  private syncedTick = -1
 
   constructor(...deps: SceneDeps) {
     super('fleet-battle', ...deps)
@@ -64,15 +67,18 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
     this.turnMax = 0
     this.lastTurn = null
     this.lastMode = ''
+    this.urgentTurn = false
     this.crewNames = new Map()
     this.endedAt = -1
     this.team = undefined
+    this.syncedTick = -1
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
     const cx = width / 2
 
-    const turnSize = compact ? 16 : 24
-    this.turnSizes = compact ? [16, 12, 8] : [24, 16]
+    const big = Math.min(width, height) >= 900
+    const turnSize = compact ? 16 : big ? 32 : 24
+    this.turnSizes = compact ? [16, 12, 8] : big ? [32, 24, 16] : [24, 16]
     this.turnText = this.add
       .text(cx, this.top + turnSize / 2 + 4, '', headlineStyle(turnSize, PALETTE.amber))
       .setOrigin(0.5)
@@ -85,21 +91,52 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
     this.bar.x = cx - this.bar.w / 2
     this.turnBar = this.add.graphics()
     this.subText = this.add
-      .text(cx, this.bar.y + this.bar.h + 6, '', bodyStyle(compact ? 12 : 14, PALETTE.dim))
+      .text(
+        cx,
+        this.bar.y + this.bar.h + 6,
+        '',
+        bodyStyle(compact ? 12 : big ? 18 : 14, PALETTE.dim),
+      )
       .setOrigin(0.5, 0)
     this.boardsTop = this.bar.y + this.bar.h + (compact ? 6 : 10)
 
-    const hintSize = compact ? 11 : 14
+    const hintSize = compact ? 11 : big ? 16 : 14
     this.hint = this.add
       .text(
         cx,
         height - 8,
-        this.t('game.fleetBattle.hint'),
+        this.t(compact ? 'game.fleetBattle.hint' : 'game.fleetBattle.hintPc'),
         bodyStyle(hintSize, PALETTE.dim, { align: 'center', wordWrap: { width: width * 0.92 } }),
       )
       .setOrigin(0.5, 1)
     this.boardsBottom = height - hintSize * (compact ? 2.6 : 1.8) - 8
     this.card = new NavalEndCard(this)
+
+    // Keyboard aim whenever you may fire (the mouse works too): the cursor walks the enemy sea.
+    const aim = (dx: number, dy: number) => () => {
+      if (this.canFire()) this.target?.moveCursor(dx, dy)
+    }
+    for (const [keys, dx, dy] of [
+      [['LEFT', 'A'], -1, 0],
+      [['RIGHT', 'D'], 1, 0],
+      [['UP', 'W'], 0, -1],
+      [['DOWN', 'S'], 0, 1],
+    ] as const) {
+      for (const key of keys) this.onKey(key, aim(dx, dy), { repeat: true })
+    }
+    const fire = (): void => {
+      if (this.canFire() && this.target?.fireCursor() === false) this.sfx.tick()
+    }
+    this.onKey('SPACE', fire)
+    this.onKey('ENTER', fire)
+  }
+
+  // Your call right now: your team's turn, and you're its captain or the turn is open.
+  private canFire(): boolean {
+    const snap = this.snap
+    if (!snap || snap.done || !this.team) return false
+    const mode = this.modeOf(snap)
+    return mode === 'captain' || mode === 'open'
   }
 
   protected override remainingMs(snap: FleetBattleSnapshot): number {
@@ -183,7 +220,7 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
     const snap = this.snap
     if (!snap || snap.done || !this.team || this.modeOf(snap) === 'aims') return
     if (snap.turn !== this.team || snap.teams[this.team].shots.some((s) => s.cell === cell)) return
-    this.sfx.click()
+    this.sfx.shoot()
     this.sendInput({ kind: 'fire', cell })
     this.target?.setPending(cell)
   }
@@ -195,14 +232,21 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
     const own = this.own
     if (!target || !own) return
 
-    // A board shows the shots fired AT that fleet, i.e. by the other team.
+    // A board shows the shots fired AT that fleet, i.e. by the other team (synced per new snapshot).
     const atTarget = snap.teams[otherTeam(this.targetFleet)]
     const atOwn = snap.teams[otherTeam(this.ownFleet)]
     const fleetCells = atTarget.fleetCells
     const sunk = (fleet: TeamId): boolean => snap.teams[fleet].damage.length >= fleetCells
-    for (const s of target.sync(atTarget.shots, sunk(this.targetFleet)))
-      this.onShot(target, s, true)
-    for (const s of own.sync(atOwn.shots, sunk(this.ownFleet))) this.onShot(own, s, false)
+    if (this.state.tick !== this.syncedTick) {
+      this.syncedTick = this.state.tick
+      const atTargetNew = target.sync(atTarget.shots, sunk(this.targetFleet))
+      for (const s of atTargetNew) this.onShot(target, s, true)
+      const atOwnNew = own.sync(atOwn.shots, sunk(this.ownFleet))
+      for (const s of atOwnNew) this.onShot(own, s, false)
+      // The finishing hit sends the whole fleet under: the wrecks go down with a splash.
+      if (atTargetNew.some((s) => s.hit) && sunk(this.targetFleet)) this.sinkSfx()
+      if (atOwnNew.some((s) => s.hit) && sunk(this.ownFleet)) this.sinkSfx()
+    }
 
     if (this.team) {
       const hits = snap.teams[this.targetFleet].damage.length
@@ -230,7 +274,7 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
       target.setAimable(false)
       this.turnText?.setText('')
       if (this.team) this.subText?.setText('')
-      this.turnBar?.clear()
+      this.turnBar?.clear().setData('bar', '')
       for (const name of this.crewNames.values()) name.setAlpha(1)
       return
     }
@@ -283,6 +327,9 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
     this.turnMax = Math.max(this.turnMax, snap.turnRemainingMs)
     const frac = this.turnMax > 0 ? snap.turnRemainingMs / this.turnMax : 0
     const urgent = mode !== 'wait' && snap.turnRemainingMs < 1500
+    // Your call is about to time out: one warning beep as the bar turns amber.
+    if (urgent && !this.urgentTurn && (mode === 'captain' || mode === 'open')) this.sfx.urgent()
+    this.urgentTurn = urgent
     if (this.turnBar) {
       const { x, y, w, h } = this.bar
       drawSegmentBar(this.turnBar, x, y, w, h, frac, urgent ? PALETTE.amber : color)
@@ -303,7 +350,8 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
       this.endedAt = time
       const c = this.target?.center()
       if (won || (!this.team && snap.winner)) {
-        this.sfx.coin()
+        this.sfx.cheer()
+        if (won) this.sfx.coin()
         const color = snap.winner ? teamColor(snap.winner) : PALETTE.amber
         if (c) {
           burst(this, c.x, c.y, PALETTE.amber, 28, 320)
@@ -356,7 +404,7 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
     const { x, y } = board.cellXY(s.cell)
     const ty = y - board.cell * 0.4
     if (!s.hit) {
-      this.sfx.pop()
+      this.sfx.splash()
       floatText(
         this,
         x,
@@ -368,13 +416,18 @@ export class FleetBattleScene extends MiniGameScene<FleetBattleSnapshot> {
       return
     }
     floatText(this, x, ty, this.t('game.fleetBattle.hit'), incoming ? PALETTE.red : PALETTE.orange)
+    this.sfx.explosion()
     if (incoming) {
-      this.sfx.wrong()
+      this.sfx.hurt()
       shake(this, 0.012, 220)
       board.pulse(PALETTE.red)
     } else {
-      this.sfx.correct()
       shake(this, 0.006, 140)
     }
+  }
+
+  // A fleet's last ship goes down (after the finishing explosion has rung out).
+  private sinkSfx(): void {
+    this.time.delayedCall(320, () => this.sfx.splash())
   }
 }

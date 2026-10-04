@@ -1,27 +1,59 @@
-import { PALETTE, type SumoBody, type SumoSnapshot } from '@pp/shared'
+import {
+  PALETTE,
+  SUMO,
+  type SumoBody,
+  type SumoSnapshot,
+  sumoAim,
+  sumoDash,
+  sumoStep,
+} from '@pp/shared'
 import type Phaser from 'phaser'
-import { AvatarSprite, avatarPx } from '../avatars'
+import { AvatarSprite, type AvatarWarmSpec, avatarPx } from '../avatars'
 import { addBanner, burst, flash, floatText, punch, ring, shake, showBanner } from '../fx'
-import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
+import { ServerClock } from '../netcode/ServerClock'
 import {
   bodyStyle,
   ensurePixelGrid,
   ensurePixelOrb,
   fitFontSize,
+  fitText,
   headlineStyle,
 } from '../pixelStyle'
-import { YouMarker, addShadow, nameTagStyle } from '../playerMarks'
+import { type Shadow, YouMarker, addShadow, nameTagStyle } from '../playerMarks'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
-// Mirrors the server's sumo.ts: bodies are circles of radius PLAYER_R in the normalized arena (ring
-// centred at 0.5, 0.5; its radius arrives in the snapshot). Contact = centres closer than 2·PLAYER_R.
-const PLAYER_R = 0.05
-const DEFAULT_RING = 0.42
+// Bodies are circles of radius PLAYER_R in the normalized arena (ring centred at 0.5, 0.5; its radius
+// arrives in the snapshot). Contact = centres closer than 2·PLAYER_R.
+const PLAYER_R = SUMO.playerR
+const DEFAULT_RING = SUMO.ringR
 const CONTACT = PLAYER_R * 2 * 1.3
 const IMPACT_COOLDOWN_MS = 400
+// Other wrestlers' shoves are heard quietly, and at most this often across the whole ring.
+const RIVAL_BUMP_EVERY_MS = 150
 // The server's dash cooldown, plus a little so a press it would still refuse is never sent.
-const DASH_COOLDOWN_MS = 1500 + 50
-const SEND_EVERY_MS = 60
+const DASH_COOLDOWN_MS = SUMO.dashCooldownMs + 50
+// A pointer's push direction is sent at most this often (keys send every change at once).
+const SEND_EVERY_MS = 33
+// The physics runs forward from the last snapshot in the server's tick steps, but never further than
+// this (a stalled connection freezes the arena instead of letting it drift).
+const TICK_MS = 50
+const MAX_AHEAD_MS = 300
+// A snapshot that disagrees with the prediction is blended in over ~SMOOTH_MS (a big jump snaps).
+const SMOOTH_MS = 90
+const SNAP_DIST = 0.2
+// Avatar textures every wrestler can need, generated a few per frame at the start (not mid-shove).
+const WARM: readonly AvatarWarmSpec[] = [
+  ['front', 'idle', 0],
+  ['side', 'idle', 0],
+  ['back', 'idle', 0],
+  ['front', 'blink', 0],
+  ['side', 'blink', 0],
+  ['back', 'blink', 0],
+  ['front', 'hurt', 0],
+  ['side', 'hurt', 0],
+  ['front', 'ko', 0],
+  ['side', 'ko', 0],
+]
 
 // Order-independent id for a pair of wrestlers (per-pair contact / cooldown tracking).
 function pairKey(a: SumoBody, b: SumoBody): string {
@@ -64,7 +96,7 @@ function dohyoRows(): string[] {
 // A wrestler is the player's lobby avatar on a shadow, facing where it shoves or travels.
 interface Rikishi {
   avatar: AvatarSprite
-  shadow: Phaser.GameObjects.Ellipse
+  shadow: Shadow
   label: Phaser.GameObjects.Text
   color: number
   px: number
@@ -74,11 +106,13 @@ interface Rikishi {
   hurtUntil: number
 }
 
-// Sumo Push canvas (Phase 5). Shared arena: every wrestler is rendered from the snapshot (interpolated
-// by id) on a pixel dohyo drawn to the server's exact ring size, which shrinks over the round; the
-// player steers their own with a drag vector from the ring centre (or the arrow keys) and dashes with
-// Space or the DASH button (a second finger on touch). Shoves, dashes, ring-outs and the last one
-// standing are derived from snapshot deltas.
+// Sumo Push canvas (Phase 5). Shared arena on a pixel dohyo drawn to the server's exact ring size,
+// which shrinks over the round. Every wrestler is drawn where the shared physics (@pp/shared sumo) puts
+// them NOW: the last snapshot stepped forward on the server's clock — your own with the push you hold
+// right now (and a dash the moment you press it), the others with their last push — and corrections
+// from each new snapshot are blended in. The player steers with the arrow keys / WASD or by holding the
+// mouse (a finger) where they want to push, and dashes with SPACE / ENTER or the DASH button (a second
+// finger on touch). Shoves, dashes, ring-outs and the last one standing come from snapshot deltas.
 export class SumoScene extends MiniGameScene<SumoSnapshot> {
   private dohyo?: Phaser.GameObjects.Image
   private shadow?: Phaser.GameObjects.Rectangle
@@ -86,22 +120,35 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
   private marker?: YouMarker
   private banner?: Phaser.GameObjects.Text
   private subline?: Phaser.GameObjects.Text
-  private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
+  private readonly steerKeys: Record<
+    'up' | 'down' | 'left' | 'right',
+    Phaser.Input.Keyboard.Key[]
+  > = { up: [], down: [], left: [], right: [] }
   private readonly bodies = new Map<string, Rikishi>()
-  private readonly interp = new SnapshotInterpolator<SumoSnapshot>(100)
+  private readonly clock = new ServerClock()
   private prevSnap?: SumoSnapshot
+  // The latest snapshot, the bodies stepped forward from it (reused every frame) and the per-body
+  // correction still being blended in.
+  private base?: SumoSnapshot
+  private sim: SumoBody[] = []
+  private readonly offsets = new Map<string, { x: number; y: number }>()
+  private dashSeq = 0
+  private localDash?: { seq: number; at: number }
   private pairDist = new Map<string, number>()
   private impactAt = new Map<string, number>()
+  private rivalBumpAt = Number.NEGATIVE_INFINITY
   private lastTick = -1
   private dir = { dx: 0, dy: 0 }
   // Where the held pointer is (and which pointer steers): every frame the push direction is re-aimed
   // from the player's own wrestler toward it, so "hold where you want to go" keeps working as the
   // wrestler moves.
   private aim?: { x: number; y: number }
+  private arrowDrawn = false
   private steerPointer = -1
   private keyDriven = false
   private lastSentAt = 0
-  private sentDir = ''
+  // The server starts everyone not pushing: nothing goes out until the player steers (D28).
+  private sentDir = '0,0'
   // The DASH button: its orb (the touch target) and the whole button (shadow + orb + label).
   private dashBtn?: Phaser.GameObjects.Image
   private dashUi?: Phaser.GameObjects.Container
@@ -113,7 +160,7 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
   private wasAlive = true
   private won = false
   private compact = false
-  private ringR = DEFAULT_RING
+  private ringR: number = DEFAULT_RING
   private arena = { cx: 0, cy: 0, size: 0 }
 
   constructor(...deps: SceneDeps) {
@@ -122,16 +169,23 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
 
   override create(): void {
     super.create()
-    this.interp.reset()
+    this.clock.reset()
     this.prevSnap = undefined
+    this.base = undefined
+    this.sim = []
+    this.offsets.clear()
+    this.dashSeq = 0
+    this.localDash = undefined
     this.pairDist = new Map()
     this.impactAt = new Map()
+    this.rivalBumpAt = Number.NEGATIVE_INFINITY
     this.lastTick = -1
     this.dir = { dx: 0, dy: 0 }
     this.aim = undefined
+    this.arrowDrawn = false
     this.steerPointer = -1
     this.keyDriven = false
-    this.sentDir = ''
+    this.sentDir = '0,0'
     this.dashReadyAt = 0
     this.dashReady = true
     this.spectating = false
@@ -181,10 +235,10 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     this.dohyo = this.add.image(this.arena.cx, this.arena.cy, dohyoKey)
     this.fitDohyo()
 
-    this.arrow = this.add.graphics().setDepth(25)
+    this.arrow = this.add.graphics().setDepth(25).setVisible(false)
     this.marker = new YouMarker(this, 16, 40)
 
-    this.add
+    const hint = this.add
       .text(
         width / 2,
         height - hintH / 2,
@@ -192,6 +246,7 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
         bodyStyle(this.compact ? 11 : 14, PALETTE.dim),
       )
       .setOrigin(0.5)
+    fitText(hint, width - 16, this.compact ? 11 : 14)
 
     this.banner = addBanner(this)
     this.subline = this.add
@@ -209,8 +264,19 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
       .setVisible(false)
 
     this.buildDashButton(width, height, hintH, pad)
-    this.cursors = this.input.keyboard?.createCursorKeys()
+    const kb = this.input.keyboard
+    if (kb) {
+      const pairs: [keyof typeof this.steerKeys, string, string][] = [
+        ['up', 'UP', 'W'],
+        ['down', 'DOWN', 'S'],
+        ['left', 'LEFT', 'A'],
+        ['right', 'RIGHT', 'D'],
+      ]
+      for (const [dir, a, b] of pairs) this.steerKeys[dir] = [kb.addKey(a), kb.addKey(b)]
+      kb.addKeys('SPACE,ENTER')
+    }
     this.onKey('SPACE', () => this.dash())
+    this.onKey('ENTER', () => this.dash())
     // Steer with one finger, dash with another.
     this.input.addPointer(1)
     this.input.on(
@@ -259,10 +325,19 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     const now = this.time.now
     if (this.spectating || !this.wasAlive || now < this.dashReadyAt || !this.hasDir()) return
     this.pushDir(now, true)
-    this.sendInput({ kind: 'dash' })
+    const seq = ++this.dashSeq
+    this.sendInput({ kind: 'dash', seq })
+    // Predicted from this frame on: the wrestler launches now, not when the snapshot says so.
+    this.localDash = { seq, at: now }
     this.dashReadyAt = now + DASH_COOLDOWN_MS
     this.setDashReady(false)
-    this.sfx.pad(3)
+    this.sfx.whoosh()
+    const me = this.bodies.get(this.selfId)
+    if (me) {
+      burst(this, me.px, me.py, 0xe6cf9f, 10, 140)
+      ring(this, me.px, me.py, me.color, this.arena.size * PLAYER_R * 2)
+      shake(this, 0.004, 90)
+    }
   }
 
   private setDashReady(ready: boolean): void {
@@ -273,13 +348,15 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
   }
 
   // Sends the push direction when it changes (a unit vector, rounded so jitter doesn't spam), never as
-  // a heartbeat: an idle player sends nothing.
+  // a heartbeat: an idle player sends nothing. Keys send at once; a moving pointer at most every
+  // SEND_EVERY_MS.
   private pushDir(now: number, force = false): void {
     const mag = Math.hypot(this.dir.dx, this.dir.dy)
     const dx = mag > 0 ? Math.round((this.dir.dx / mag) * 20) / 20 : 0
     const dy = mag > 0 ? Math.round((this.dir.dy / mag) * 20) / 20 : 0
     const key = `${dx},${dy}`
-    if (key === this.sentDir || (!force && now - this.lastSentAt < SEND_EVERY_MS)) return
+    const throttled = !force && !this.keyDriven && now - this.lastSentAt < SEND_EVERY_MS
+    if (key === this.sentDir || throttled) return
     this.sentDir = key
     this.lastSentAt = now
     this.sendInput({ kind: 'move', dx, dy })
@@ -311,21 +388,19 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     return { dx: aim.x - ox, dy: aim.y - oy }
   }
 
-  protected frame(snap: SumoSnapshot | null): void {
+  protected frame(snap: SumoSnapshot | null, _time: number, delta: number): void {
     const now = this.time.now
-    if (snap && this.state.tick !== this.lastTick) {
-      this.lastTick = this.state.tick
-      this.interp.push(snap, now)
-      this.onSnapshot(snap, now)
-    }
-
-    const kx = (this.cursors?.right.isDown ? 1 : 0) - (this.cursors?.left.isDown ? 1 : 0)
-    const ky = (this.cursors?.down.isDown ? 1 : 0) - (this.cursors?.up.isDown ? 1 : 0)
+    // Steering first, so this frame's prediction already pushes the way the keys say.
+    const down = (dir: keyof typeof this.steerKeys): number =>
+      this.steerKeys[dir].some((k) => k.isDown) ? 1 : 0
+    const kx = down('right') - down('left')
+    const ky = down('down') - down('up')
     if (kx !== 0 || ky !== 0) {
       this.dir = { dx: kx, dy: ky }
       this.keyDriven = true
     } else if (this.keyDriven) {
       this.dir = { dx: 0, dy: 0 }
+      this.pushDir(now, true)
       this.keyDriven = false
     } else if (this.aim) {
       this.dir = this.aimFromSelf(this.aim)
@@ -333,7 +408,66 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     if (!this.spectating && this.wasAlive) this.pushDir(now)
     if (!this.dashReady && now >= this.dashReadyAt) this.setDashReady(true)
 
-    this.renderBodies(now)
+    if (snap && this.state.tick !== this.lastTick) {
+      this.lastTick = this.state.tick
+      this.clock.sync(snap.remainingMs, now)
+      this.rebase(snap, now)
+      this.onSnapshot(snap, now)
+    }
+    this.renderBodies(now, delta)
+  }
+
+  // A new snapshot becomes the base. Where it disagrees with what's on screen, the difference becomes a
+  // correction that fades out (the wrestler glides there instead of jumping).
+  private rebase(snap: SumoSnapshot, now: number): void {
+    const before = this.base ? this.simulate(this.base, now) : []
+    const shown = new Map(before.map((b) => [b.id, { x: b.x, y: b.y }]))
+    const dash = this.localDash
+    const taken = (snap.bodies.find((b) => b.id === this.selfId)?.dash ?? 0) >= (dash?.seq ?? 0)
+    if (dash && (taken || now - dash.at > 1000)) this.localDash = undefined
+    this.base = snap
+    for (const b of this.simulate(snap, now)) {
+      const was = shown.get(b.id)
+      const off = this.offsets.get(b.id) ?? { x: 0, y: 0 }
+      if (was) {
+        off.x += was.x - b.x
+        off.y += was.y - b.y
+      }
+      if (Math.hypot(off.x, off.y) > SNAP_DIST) {
+        off.x = 0
+        off.y = 0
+      }
+      this.offsets.set(b.id, off)
+    }
+  }
+
+  // The base snapshot stepped forward to `now` with the shared physics: the own wrestler pushes the
+  // way the player steers right now (and dashes at the moment they pressed), everyone else keeps
+  // their last push. Reuses the same body objects every frame.
+  private simulate(snap: SumoSnapshot, now: number): SumoBody[] {
+    const sim = this.sim
+    sim.length = snap.bodies.length
+    snap.bodies.forEach((b, i) => {
+      const c = sim[i] ?? ({} as SumoBody)
+      Object.assign(c, b)
+      sim[i] = c
+    })
+    const me = sim.find((b) => b.id === this.selfId)
+    if (me?.alive && this.wasAlive && !this.spectating)
+      Object.assign(me, sumoAim(this.dir.dx, this.dir.dy))
+    if (this.state.final) return sim
+    const elapsed = Math.min(MAX_AHEAD_MS, this.clock.since(snap.remainingMs, now))
+    const dash = this.localDash
+    let dashAt = dash && me && me.dash < dash.seq ? this.clock.since(snap.remainingMs, dash.at) : -1
+    for (let t = 0; t < elapsed; t += TICK_MS) {
+      if (dashAt >= 0 && dashAt <= t && me) {
+        sumoDash(me)
+        dashAt = -1
+      }
+      sumoStep(sim, Math.min(TICK_MS, elapsed - t))
+    }
+    if (dashAt >= 0 && me) sumoDash(me)
+    return sim
   }
 
   // Discrete events per fresh snapshot: shoves (a pair's distance dips into contact), ring-outs, the
@@ -349,6 +483,10 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
 
     if (!this.synced) {
       this.synced = true
+      this.warmAvatars(
+        snap.bodies.map((b) => b.id),
+        WARM,
+      )
       this.spectating = !me
       if (this.spectating) {
         this.wasAlive = false
@@ -385,18 +523,27 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
         this.checkImpact(alive[i] as SumoBody, alive[j] as SumoBody, now)
       }
     }
-    for (const b of alive) if (b.dashing && !prevById.get(b.id)?.dashing) this.onDash(b)
+    for (const b of alive) {
+      // Your own dash already got its feedback the moment you pressed.
+      if (b.id !== this.selfId && b.dashing && !prevById.get(b.id)?.dashing) this.onDash(b)
+    }
 
+    let rivalOut = false
     for (const b of snap.bodies) {
       const before = prevById.get(b.id)
       if (!before?.alive || b.alive) continue
       if (b.id === this.selfId) this.becomeOut(b, true)
-      else this.ringOut(b)
+      else {
+        rivalOut = true
+        this.ringOut(b)
+      }
     }
+    // One sting per snapshot, however many went over the bales (your own out has its own).
+    if (rivalOut && me?.alive !== false) this.sfx.eliminated()
 
     if (me?.alive && !this.won && snap.bodies.length > 1 && alive.length === 1) {
       this.won = true
-      this.sfx.coin()
+      this.sfx.cheer()
       this.showEnd(this.t('game.common.youWin'), PALETTE.lime)
     }
   }
@@ -417,8 +564,11 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     burst(this, p.x, p.y, PALETTE.text, 8, 160)
     burst(this, p.x, p.y, 0xe6cf9f, 6, 120)
     if (a.id === this.selfId || b.id === this.selfId) {
-      this.sfx.pop()
+      this.sfx.hit()
       shake(this, 0.006, 120)
+    } else if (now - this.rivalBumpAt >= RIVAL_BUMP_EVERY_MS) {
+      this.rivalBumpAt = now
+      this.sfx.quiet(() => this.sfx.hit(0.7), 0.35)
     }
   }
 
@@ -435,7 +585,6 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     const body = this.bodyOf(b)
     body.out = true
     const p = this.toScreen(b.x, b.y)
-    this.sfx.pop()
     burst(this, p.x, p.y, body.color, 16, 220)
     ring(this, p.x, p.y, body.color, this.arena.size * PLAYER_R * 2)
     floatText(this, p.x, p.y - 20, this.t('game.common.out'), PALETTE.red, 16)
@@ -450,7 +599,9 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     this.dashUi?.setVisible(false)
     if (withFx) {
       const p = this.toScreen(b.x, b.y)
-      this.sfx.wrong()
+      // Shoved over the bales and down onto the clay.
+      this.sfx.hit(1.4)
+      this.sfx.eliminated()
       burst(this, p.x, p.y, body.color, 26, 300)
       shake(this, 0.014, 260)
       flash(this, PALETTE.red, 160)
@@ -518,29 +669,30 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
     return body
   }
 
-  private renderBodies(now: number): void {
-    const sample = this.interp.sample(now)
-    this.arrow?.clear()
-    if (!sample) return
-    // The ring closes in smoothly between snapshots.
-    const ringR = lerp(sample.from.ring, sample.to.ring, sample.t)
-    if (ringR !== this.ringR) {
-      this.ringR = ringR
+  private renderBodies(now: number, delta: number): void {
+    const base = this.base
+    if (!base) return
+    if (base.ring !== this.ringR) {
+      this.ringR = base.ring
       this.fitDohyo()
     }
-    const fromById = new Map(sample.from.bodies.map((b) => [b.id, b]))
+    const sim = this.simulate(base, now)
+    const fade = Math.exp(-delta / SMOOTH_MS)
     const radius = this.arena.size * PLAYER_R
-    for (const b of sample.to.bodies) {
-      const prev = fromById.get(b.id)
-      const nx = prev ? lerp(prev.x, b.x, sample.t) : b.x
-      const ny = prev ? lerp(prev.y, b.y, sample.t) : b.y
-      const p = this.toScreen(nx, ny)
+    let selfDrawn = false
+    for (const b of sim) {
+      const off = this.offsets.get(b.id)
+      if (off) {
+        off.x *= fade
+        off.y *= fade
+      }
+      const p = this.toScreen(b.x + (off?.x ?? 0), b.y + (off?.y ?? 0))
       const body = this.bodyOf(b)
       const mine = b.id === this.selfId
       if (!body.out) {
         // Face the push direction (own wrestler) or the direction of travel.
         if (mine && this.hasDir()) body.avatar.faceMotion(this.dir.dx, this.dir.dy, 0)
-        else body.avatar.faceMotion(p.x - body.px, p.y - body.py, 0.6)
+        else body.avatar.faceMotion(b.vx, b.vy, 0.05)
         body.avatar.setExpression(now < body.hurtUntil ? 'hurt' : 'idle').tick(now)
         body.shadow.setPosition(p.x, p.y + radius * 0.85)
       }
@@ -548,38 +700,38 @@ export class SumoScene extends MiniGameScene<SumoSnapshot> {
       body.py = p.y
       body.avatar.image.setPosition(p.x, p.y)
       body.label.setPosition(p.x, p.y + radius + 4)
-      if (mine && !body.out) this.drawSelfCues(p, radius, body.color, now)
+      if (mine && !body.out) {
+        this.drawSelfCues(p, radius, body.color, now)
+        selfDrawn = true
+      }
     }
+    if (!selfDrawn) this.arrow?.setVisible(false)
   }
 
   private hasDir(): boolean {
     return this.dir.dx !== 0 || this.dir.dy !== 0
   }
 
-  // "That's you" marker bobbing overhead + an arrow showing where you are shoving.
+  // "That's you" marker bobbing overhead + an arrow showing where you are shoving (drawn once,
+  // pointing right, then just moved and turned every frame).
   private drawSelfCues(p: { x: number; y: number }, radius: number, color: number, now: number) {
     if (this.wasAlive) this.marker?.place(p.x, p.y - radius - 2, now)
     else this.marker?.hide()
     const g = this.arrow
-    if (!g || !this.hasDir()) return
-    const a = Math.atan2(this.dir.dy, this.dir.dx)
-    const ux = Math.cos(a)
-    const uy = Math.sin(a)
-    const tipX = p.x + ux * radius * 2.1
-    const tipY = p.y + uy * radius * 2.1
-    const baseX = p.x + ux * radius * 1.2
-    const baseY = p.y + uy * radius * 1.2
-    g.lineStyle(4, color, 0.9)
-    g.lineBetween(baseX, baseY, tipX, tipY)
-    g.fillStyle(color, 0.9)
-    const s = radius * 0.5
-    g.fillTriangle(
-      tipX + ux * s,
-      tipY + uy * s,
-      tipX - uy * s * 0.8,
-      tipY + ux * s * 0.8,
-      tipX + uy * s * 0.8,
-      tipY - ux * s * 0.8,
-    )
+    if (!g) return
+    if (!this.hasDir()) {
+      g.setVisible(false)
+      return
+    }
+    if (!this.arrowDrawn) {
+      this.arrowDrawn = true
+      const s = radius * 0.5
+      g.clear()
+      g.lineStyle(4, color, 0.9)
+      g.lineBetween(radius * 1.2, 0, radius * 2.1, 0)
+      g.fillStyle(color, 0.9)
+      g.fillTriangle(radius * 2.1 + s, 0, radius * 2.1, s * 0.8, radius * 2.1, -s * 0.8)
+    }
+    g.setPosition(p.x, p.y).setRotation(Math.atan2(this.dir.dy, this.dir.dx)).setVisible(true)
   }
 }

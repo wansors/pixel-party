@@ -31,6 +31,8 @@ interface Arena {
   x: number
   dir: -1 | 0 | 1
   harpoon: { x: number; tip: number } | null
+  // A fire pressed while the harpoon was still flying: honoured if it frees up before then.
+  fireQueuedUntil: number
   balloons: Balloon[]
   pops: number
   lives: number
@@ -82,6 +84,7 @@ export class Pang implements MiniGame<PangState, PangInput> {
         x: PANG.w / 2,
         dir: 0,
         harpoon: null,
+        fireQueuedUntil: 0,
         balloons: [],
         pops: 0,
         lives: PANG.lives,
@@ -112,8 +115,9 @@ export class Pang implements MiniGame<PangState, PangInput> {
     if (!a || a.out) return state
     if (input.kind === 'move') {
       if (input.dir === -1 || input.dir === 0 || input.dir === 1) a.dir = input.dir
-    } else if (input.kind === 'fire' && !a.harpoon) {
-      a.harpoon = { x: a.x, tip: PANG.h }
+    } else if (input.kind === 'fire') {
+      if (!a.harpoon) a.harpoon = { x: a.x, tip: PANG.h }
+      else a.fireQueuedUntil = now + PANG.fireBufferMs
     }
     return state
   }
@@ -177,10 +181,16 @@ export class Pang implements MiniGame<PangState, PangInput> {
       }
       a.pops += 1
       a.lastPopAt = now
-      a.harpoon = null
+      this.reload(a, now)
       return
     }
-    if (h.tip <= 0) a.harpoon = null
+    if (h.tip <= 0) this.reload(a, now)
+  }
+
+  // The harpoon is done: free the gun, or fire the press that came in a moment too early.
+  private reload(a: Arena, now: number): void {
+    a.harpoon = now <= a.fireQueuedUntil ? { x: a.x, tip: PANG.h } : null
+    a.fireQueuedUntil = 0
   }
 
   // A balloon touching the player costs a life (unless still blinking from the last one).
@@ -238,6 +248,7 @@ export class Pang implements MiniGame<PangState, PangInput> {
       arenas: state.arenas.map((a) => ({
         id: a.id,
         x: round(a.x),
+        dir: a.dir,
         harpoon: a.harpoon ? round(a.harpoon.tip) : null,
         harpoonX: a.harpoon ? round(a.harpoon.x) : null,
         balloons: a.balloons.map(

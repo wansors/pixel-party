@@ -53,6 +53,9 @@ export interface StarEnemy {
   path: Path
   // Bullet emissions: absolute times + the pattern fired at each.
   shots: number[]
+  // Where the enemy was at each emission (null = off screen, nothing fired) — derived once from the
+  // path, so evaluating bullets never re-walks it.
+  origins: ({ x: number; y: number } | null)[]
   pattern: StarPattern
   count: number
   speed: number
@@ -124,8 +127,54 @@ function bulletAngle(e: StarEnemy, k: number, j: number): number {
   }
 }
 
-// Every enemy bullet in flight at `t` for one player: emissions only happen while that enemy is alive
-// for them (`killedAt`), and bullets in `consumed` (they hit that player) are gone.
+export function starBulletId(enemy: number, shot: number, bullet: number): string {
+  return `${enemy}:${shot}:${bullet}`
+}
+
+// Enemy ids with at least one consumed bullet (a player is hit 3 times at most, so this stays tiny):
+// a bullet's id string is only built for those.
+function consumedEnemies(consumed: ReadonlySet<string> | undefined): Set<number> | null {
+  if (!consumed || consumed.size === 0) return null
+  const ids = new Set<number>()
+  for (const id of consumed) ids.add(Number.parseInt(id, 10))
+  return ids
+}
+
+// Calls `fn` for every enemy bullet in flight at `t` for one player, in a fixed order (enemy, volley,
+// bullet): emissions only happen while that enemy is alive for them (`killedAt`), and bullets in
+// `consumed` (they hit that player) are gone. Allocation-free on the hot path; `fn` returning true
+// stops the walk.
+export function forEachStarBullet(
+  script: StarScript,
+  t: number,
+  killedAt: ReadonlyMap<number, number>,
+  consumed: ReadonlySet<string> | undefined,
+  fn: (x: number, y: number, enemy: number, shot: number, bullet: number) => boolean | undefined,
+): void {
+  const hitBy = consumedEnemies(consumed)
+  for (const e of script.enemies) {
+    if (e.shots.length === 0 || e.spawnAt > t || e.endAt + STAR.bulletLifeMs < t) continue
+    const dead = killedAt.get(e.id) ?? Number.POSITIVE_INFINITY
+    const checkConsumed = hitBy?.has(e.id) ?? false
+    for (let k = 0; k < e.shots.length; k++) {
+      const at = e.shots[k] as number
+      if (at > t || at >= dead || t - at > STAR.bulletLifeMs) continue
+      const from = e.origins[k]
+      if (!from) continue
+      const d = (e.speed * (t - at)) / 1000
+      for (let j = 0; j < e.count; j++) {
+        if (checkConsumed && consumed?.has(starBulletId(e.id, k, j))) continue
+        const a = bulletAngle(e, k, j)
+        const x = from.x + Math.cos(a) * d
+        const y = from.y + Math.sin(a) * d
+        if (x < -0.05 || x > STAR.w + 0.05 || y < -0.1 || y > STAR.h + 0.05) continue
+        if (fn(x, y, e.id, k, j)) return
+      }
+    }
+  }
+}
+
+// Every enemy bullet in flight at `t` for one player (see forEachStarBullet), as a list.
 export function starBulletsAt(
   script: StarScript,
   t: number,
@@ -133,26 +182,31 @@ export function starBulletsAt(
   consumed?: ReadonlySet<string>,
 ): StarBullet[] {
   const out: StarBullet[] = []
-  for (const e of script.enemies) {
-    if (e.shots.length === 0 || e.spawnAt > t || e.endAt + STAR.bulletLifeMs < t) continue
-    const dead = killedAt.get(e.id) ?? Number.POSITIVE_INFINITY
-    e.shots.forEach((at, k) => {
-      if (at > t || at >= dead || t - at > STAR.bulletLifeMs) return
-      const from = starEnemyAt(e, at)
-      if (!from) return
-      const d = (e.speed * (t - at)) / 1000
-      for (let j = 0; j < e.count; j++) {
-        const id = `${e.id}:${k}:${j}`
-        if (consumed?.has(id)) continue
-        const a = bulletAngle(e, k, j)
-        const x = from.x + Math.cos(a) * d
-        const y = from.y + Math.sin(a) * d
-        if (x < -0.05 || x > STAR.w + 0.05 || y < -0.1 || y > STAR.h + 0.05) continue
-        out.push({ id, x, y })
-      }
-    })
-  }
+  forEachStarBullet(script, t, killedAt, consumed, (x, y, e, k, j) => {
+    out.push({ id: starBulletId(e, k, j), x, y })
+    return false
+  })
   return out
+}
+
+// The first bullet within `r` of (x, y) for one player — the server's hit test — or null.
+export function starBulletNear(
+  script: StarScript,
+  t: number,
+  killedAt: ReadonlyMap<number, number>,
+  consumed: ReadonlySet<string> | undefined,
+  x: number,
+  y: number,
+  r: number,
+): string | null {
+  let hit: string | null = null
+  const r2 = r * r
+  forEachStarBullet(script, t, killedAt, consumed, (bx, by, e, k, j) => {
+    if ((bx - x) ** 2 + (by - y) ** 2 >= r2) return false
+    hit = starBulletId(e, k, j)
+    return true
+  })
+  return hit
 }
 
 // The round's attack script: formations of drones every couple of seconds, a gunner every ~6 s that
@@ -161,8 +215,10 @@ export function buildStarScript(seed: number, durationMs: number): StarScript {
   const rng = mulberry32(seed)
   const enemies: StarEnemy[] = []
   let id = 0
-  const add = (e: Omit<StarEnemy, 'id'>): void => {
-    enemies.push({ ...e, id: id++ })
+  const add = (e: Omit<StarEnemy, 'id' | 'origins'>): void => {
+    const enemy: StarEnemy = { ...e, id: id++, origins: [] }
+    enemy.origins = e.shots.map((at) => starEnemyAt(enemy, at))
+    enemies.push(enemy)
   }
   const bossAt = Math.max(8000, durationMs - 16_000)
   // Drone formations.
@@ -288,8 +344,9 @@ export interface StarBlasterSnapshot {
   remainingMs: number
 }
 
-// Steer with a direction vector (normalized server-side; {0,0} = hold position). The first steer arms
-// the guns; from then on the ship fires itself.
+// Steer with a direction vector: longer than 1 is normalized (full speed), shorter flies slower (a
+// pointer easing onto its target); {0,0} = hold position. The first steer arms the guns; from then on
+// the ship fires itself.
 export interface StarBlasterInput {
   kind: 'move'
   dx: number

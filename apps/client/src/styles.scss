@@ -191,6 +191,16 @@ img {
   }
 }
 
+// ── Skill radar caption ───────────────────────────────────────────────────────
+// The one-line key under the post-match radar (results and final screens).
+.radar-hint {
+  margin: 0.2rem 0 0;
+  color: var(--c-dim);
+  font-family: monospace;
+  font-size: 0.72rem;
+  text-align: center;
+}
+
 // ── Pixel bust ──────────────────────────────────────────────────────────────
 // Head over shoulders in the current color: the "players" icon (lobby player ranges, D27).
 .people {

@@ -6,7 +6,8 @@
 // wins; the rest rank by knock-outs scored, then time survived, then crates broken (also the tiebreak
 // between survivors at the buzzer). Spawn cells (up to 12) are dealt with the round's seed.
 //
-// Movement is tile to tile (held direction); the client interpolates each step.
+// Movement is tile to tile (held direction); the client predicts its own steps and interpolates the
+// others'. A step starts the moment the input arrives (not on the next tick), so prediction stays close.
 
 export const BOMBER = {
   w: 17,
@@ -55,5 +56,32 @@ export interface BomberSnapshot {
   remainingMs: number
 }
 
-// move: the held direction (null = stand still). bomb: drop one where you stand.
-export type BomberInput = { kind: 'move'; dir: BomberDir | null } | { kind: 'bomb' }
+// move: the held direction (null = stand still) and, optionally, the one held before it (`alt`): when
+// `dir` is blocked the player keeps going `alt`, so pressing a turn a little early (still holding the
+// way you were going) takes the turn at the next opening instead of stopping dead. bomb: drop one
+// where you stand.
+export type BomberInput =
+  | { kind: 'move'; dir: BomberDir | null; alt?: BomberDir | null }
+  | { kind: 'bomb' }
+
+export const BOMBER_DIRS: Readonly<Record<BomberDir, readonly [number, number]>> = {
+  up: [0, -1],
+  down: [0, 1],
+  left: [-1, 0],
+  right: [1, 0],
+}
+
+// Which way a held move goes from a tile: `dir` if that tile is walkable, else `alt`, else nowhere.
+// Shared so the client's prediction picks exactly what the server will.
+export function bomberStepDir(
+  dir: BomberDir | null,
+  alt: BomberDir | null,
+  walkable: (dx: number, dy: number) => boolean,
+): BomberDir | null {
+  for (const d of [dir, alt]) {
+    if (!d) continue
+    const [dx, dy] = BOMBER_DIRS[d]
+    if (walkable(dx, dy)) return d
+  }
+  return null
+}

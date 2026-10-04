@@ -1,21 +1,38 @@
-import { type Cell, PALETTE, type SnakeSnapshot, type SnakeView } from '@pp/shared'
+import {
+  type Cell,
+  PALETTE,
+  SNAKE,
+  type SnakeDir,
+  type SnakeSim,
+  type SnakeSnapshot,
+  type SnakeView,
+  snakeCanTurn,
+  snakeCell,
+  snakeStep,
+} from '@pp/shared'
 import type Phaser from 'phaser'
 import { ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, flash, floatText, punch, shake, showBanner } from '../fx'
+import { ServerClock } from '../netcode/ServerClock'
 import {
   bodyStyle,
   ensurePixelGrid,
   fitFontSize,
+  fitText,
   headlineStyle,
   hexToCss,
   shade,
 } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
-type Dir = 'up' | 'down' | 'left' | 'right'
+type Dir = SnakeDir
 
-const DEFAULT_GRID = 15
+const DEFAULT_GRID = SNAKE.grid
 const SWIPE_MIN_PX = 16
+// The prediction never runs more than this many steps past the last snapshot (a stalled connection
+// freezes the snake instead of sending it off on its own).
+const MAX_PREDICT_STEPS = 6
+const PENDING_TTL_MS = 2000
 
 // Snake head, 8x8 cells, facing right (rotated per heading): eyes on both flanks near the snout.
 const HEAD_ROWS = [
@@ -77,10 +94,31 @@ interface Rival {
   dead: boolean
 }
 
+// The last snapshot of this player's snake, ready to step forward.
+interface Base {
+  view: SnakeView
+  food: number | null
+  grid: number
+  step: number
+  stepMs: number
+  t: number
+  remainingMs: number
+}
+
+interface PendingTurn {
+  seq: number
+  dir: Dir
+  at: number // the step it was booked for
+  sentAt: number // scene time
+}
+
 // Snake Arena canvas (Phase 5). The server owns every player's independent board; this renders THIS
 // player's board big (snake in their identity color with a heading-aware head, apple food) and every
-// rival's board as a live mini-map in their colors. Grid movement needs no interpolation — boards are
-// redrawn on each snapshot. Controls: arrow keys / WASD and swipe.
+// rival's board as a live mini-map in their colors. The own snake is predicted with the shared step
+// rule on the server's clock: it steps on time between snapshots, and a turn shows on the very next
+// step (each turn names the step it was meant for, so the server turns on the same cell). The snake
+// waits for the first direction (up to SNAKE.autoStartMs) with a "pick a direction" prompt. Controls:
+// arrow keys / WASD and swipe.
 export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
   private boardGfx?: Phaser.GameObjects.Graphics
   private snakeGfx?: Phaser.GameObjects.Graphics
@@ -95,13 +133,19 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
   private board = { x: 0, y: 0, size: 0 }
   private rivalArea = { x: 0, y: 0, w: 0, h: 0 }
   private cell = 0
-  private grid = DEFAULT_GRID
+  private grid: number = DEFAULT_GRID
   private lastTick = -1
   private lastLen = 0
   private alive = true
   private started = false
-  private lastFood?: Cell
   private swipeStart?: { x: number; y: number }
+  private readonly clock = new ServerClock()
+  private base?: Base
+  private pending: PendingTurn[] = []
+  private seq = 0
+  private drawnKey = ''
+  private shownFood: number | null = null
+  private waitingShown = false
   private selfColor = 0
   private compact = false
 
@@ -116,8 +160,14 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
     this.lastLen = 0
     this.alive = true
     this.started = false
-    this.lastFood = undefined
     this.swipeStart = undefined
+    this.clock.reset()
+    this.base = undefined
+    this.pending = []
+    this.seq = 0
+    this.drawnKey = ''
+    this.shownFood = null
+    this.waitingShown = false
 
     const { width, height } = this.scale
     this.compact = Math.min(width, height) < 520
@@ -163,7 +213,7 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
     this.tongue = this.add.rectangle(0, 0, 1, 1, PALETTE.red).setDepth(10).setVisible(false)
     this.head = this.add.image(0, 0, this.headKey).setDepth(11).setVisible(false)
 
-    this.add
+    const hint = this.add
       .text(
         width / 2,
         height - hintH / 2,
@@ -171,9 +221,9 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
         bodyStyle(this.compact ? 11 : 14, PALETTE.dim),
       )
       .setOrigin(0.5)
+    fitText(hint, width - 16, this.compact ? 11 : 14)
 
     this.banner = addBanner(this)
-    this.banner.setY(this.board.y + this.board.size / 2)
     this.subline = this.add
       .text(
         width / 2,
@@ -187,6 +237,7 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
       .setOrigin(0.5)
       .setDepth(950)
       .setVisible(false)
+    this.placeBanner(0.5)
 
     const keys: [string, Dir][] = [
       ['UP', 'up'],
@@ -199,6 +250,8 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
       ['D', 'right'],
     ]
     for (const [key, dir] of keys) this.onKey(key, () => this.turn(dir))
+    // Captured so the arrows never scroll the page.
+    this.input.keyboard?.addKeys('UP,DOWN,LEFT,RIGHT,W,A,S,D')
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       this.swipeStart = { x: p.x, y: p.y }
     })
@@ -242,9 +295,49 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
     }
   }
 
+  // A turn: booked for the next step as this screen sees it (or after the turns already queued),
+  // shown by the prediction at once and sent with that step for the server to honour.
   private turn(dir: Dir): void {
+    const base = this.base
+    if (!base || !this.alive || this.state.final) return
+    const now = this.time.now
+    const sim = this.predict(now)
+    if (!sim || !snakeCanTurn(sim.sim, dir)) return
+    const at = Math.max(sim.step + 1, (sim.sim.turns.at(-1)?.at ?? 0) + 1)
+    const seq = ++this.seq
+    this.pending.push({ seq, dir, at, sentAt: now })
+    this.sendInput({ kind: 'turn', dir, at, seq })
     this.sfx.click()
-    this.sendInput({ kind: 'turn', dir })
+  }
+
+  // This player's snake right now: the last snapshot stepped forward on the server's clock, with the
+  // turns the server hasn't taken yet booked in. `food` is null once the prediction ate it (the next
+  // apple comes with the next snapshot).
+  private predict(now: number): { sim: SnakeSim; food: number | null; step: number } | null {
+    const base = this.base
+    if (!base) return null
+    const v = base.view
+    const turns = [
+      ...v.turns.map(([dir, at]) => ({ dir, at })),
+      ...this.pending.map((p) => ({ dir: p.dir, at: p.at })),
+    ].sort((a, b) => a.at - b.at)
+    const sim: SnakeSim = {
+      body: [...v.body],
+      dir: v.dir,
+      turns,
+      alive: v.alive,
+      waiting: v.waiting,
+    }
+    const elapsed = this.state.final ? 0 : this.clock.since(base.remainingMs, now)
+    const target = Math.min(
+      base.step + MAX_PREDICT_STEPS,
+      Math.floor((base.t + elapsed) / base.stepMs),
+    )
+    let food = base.food
+    for (let k = base.step + 1; k <= target; k++) {
+      if (snakeStep(sim, k, food, base.grid, base.stepMs) === 'ate') food = null
+    }
+    return { sim, food, step: Math.max(base.step, target) }
   }
 
   private endSwipe(x: number, y: number): void {
@@ -271,62 +364,132 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
       this.food.setDisplaySize(base, base * 1.25).setAngle(Math.sin(time / 240) * 8)
     }
     this.tongue?.setVisible(this.alive && this.head?.visible === true && time % 1400 < 220)
-    if (!snap || this.state.tick === this.lastTick) return
-    this.lastTick = this.state.tick
-    if (snap.grid !== this.grid) this.layoutBoard(snap.grid)
+    if (!snap) return
+    if (this.state.tick !== this.lastTick) {
+      this.lastTick = this.state.tick
+      this.onSnapshot(snap)
+    }
+    this.renderSelf(this.time.now)
+  }
 
+  private onSnapshot(snap: SnakeSnapshot): void {
+    if (snap.grid !== this.grid) this.layoutBoard(snap.grid)
+    this.clock.sync(snap.remainingMs, this.time.now)
     // The first snapshot of this (possibly restarted) scene only syncs state: no replayed events.
     const first = !this.started
     this.started = true
-    const me = snap.snakes[this.selfId]
-    const myFood = snap.food[this.selfId]
-    // A spectator (joined mid-round) has no snake: just the rivals' boards.
-    if (me) this.hud?.setScore(this.t('game.snakeArena.length', { n: me.len }))
     if (this.rivals.length === 0) this.buildRivals(snap)
     this.renderRivals(snap, first)
-
-    if (me) this.trackEvents(me, first)
-    if (me) this.renderSnake(me)
-    if (myFood) {
-      const { x, y } = this.cellCenter(myFood)
-      this.food?.setPosition(x, y).setVisible(me?.alive !== false)
+    // A spectator (joined mid-round) has no snake: just the rivals' boards.
+    const me = snap.snakes[this.selfId]
+    if (!me) return
+    this.base = {
+      view: me,
+      food: snap.food[this.selfId] ?? null,
+      grid: snap.grid,
+      step: snap.step,
+      stepMs: snap.stepMs,
+      t: snap.t,
+      remainingMs: snap.remainingMs,
     }
-    this.lastFood = myFood ? { ...myFood } : undefined
-  }
-
-  private trackEvents(me: SnakeView, first: boolean): void {
+    const now = this.time.now
+    this.pending = this.pending.filter((p) => p.seq > me.ack && now - p.sentAt < PENDING_TTL_MS)
     if (first) {
+      this.seq = Math.max(this.seq, me.ack)
       this.lastLen = me.len
       if (!me.alive) this.becomeOut(me, false)
       return
     }
-    if (me.len > this.lastLen && this.lastFood) {
-      const { x, y } = this.cellCenter(this.lastFood)
-      this.sfx.coin()
-      burst(this, x, y, PALETTE.red, 12, 180)
-      floatText(this, x, y - this.cell / 2, `+${me.len - this.lastLen}`, PALETTE.lime, 16)
-      if (this.head) punch(this, this.head, 0.3, 90)
-    }
-    this.lastLen = me.len
     if (this.alive && !me.alive) this.becomeOut(me, true)
+  }
+
+  // The own snake, food and length from the prediction; redrawn only when the snake moved.
+  private renderSelf(now: number): void {
+    const p = this.predict(now)
+    if (!p) return
+    const { sim, food } = p
+    const len = sim.body.length
+    if (len > this.lastLen && this.drawnKey) this.onEat(sim.body[0] ?? 0, len - this.lastLen)
+    if (len !== this.lastLen || !this.drawnKey) {
+      this.lastLen = len
+      this.hud?.setScore(this.t('game.snakeArena.length', { n: len }))
+    }
+    const key = `${sim.body.join(',')}|${this.alive}`
+    if (key !== this.drawnKey) {
+      this.drawnKey = key
+      this.renderSnake(sim.body, this.alive)
+    }
+    if (food !== this.shownFood) {
+      this.shownFood = food
+      if (food !== null) {
+        const { x, y } = this.cellCenter(snakeCell(food, this.grid))
+        this.food?.setPosition(x, y)
+      }
+    }
+    this.food?.setVisible(food !== null && this.alive)
+    this.showWaiting(this.alive && sim.waiting)
+  }
+
+  private onEat(cell: number, grew: number): void {
+    const { x, y } = this.cellCenter(snakeCell(cell, this.grid))
+    this.sfx.coin()
+    burst(this, x, y, PALETTE.red, 12, 180)
+    floatText(this, x, y - this.cell / 2, `+${grew}`, PALETTE.lime, 16)
+    if (this.head) punch(this, this.head, 0.3, 90)
+  }
+
+  // Before the first direction: "pick a direction" over the board; it clears with a GO when the snake
+  // sets off (on a key, or by itself after the grace).
+  private showWaiting(waiting: boolean): void {
+    if (waiting === this.waitingShown) return
+    this.waitingShown = waiting
+    const banner = this.banner
+    if (!banner) return
+    if (waiting) {
+      // Over the top of the board: the snake waits in the middle.
+      this.placeBanner(0.22)
+      const text = this.t('game.snakeArena.ready')
+      banner.setFontSize(fitFontSize(text, this.board.size * 0.95, this.compact ? 24 : 32))
+      showBanner(this, banner, text, PALETTE.amber)
+      this.subline?.setText(this.t('game.snakeArena.readySub')).setVisible(true)
+      if (this.subline) fitText(this.subline, this.board.size * 0.95, this.compact ? 8 : 16)
+      return
+    }
+    banner.setVisible(false)
+    this.subline?.setVisible(false)
+    this.placeBanner(0.5)
+    this.sfx.go()
+    if (this.head) punch(this, this.head, 0.3, 90)
+  }
+
+  // The banner + subline over the own board, `frac` of the way down it.
+  private placeBanner(frac: number): void {
+    const x = this.board.x + this.board.size / 2
+    const y = this.board.y + this.board.size * frac
+    this.banner?.setPosition(x, y)
+    this.subline?.setPosition(x, y + (this.compact ? 34 : 46))
   }
 
   private becomeOut(me: SnakeView, withFx: boolean): void {
     this.alive = false
+    this.waitingShown = false
+    this.placeBanner(0.5)
     this.head?.setTexture(this.deadHeadKey)
     if (withFx) {
-      this.sfx.wrong()
+      // Head-first into a wall (or a coil): crunch, and out.
+      this.sfx.crash()
+      this.sfx.eliminated()
       shake(this, 0.012, 260)
       flash(this, PALETTE.red, 160)
       const first = me.body[0]
-      if (first) {
-        const { x, y } = this.cellCenter(first)
+      if (first !== undefined) {
+        const { x, y } = this.cellCenter(snakeCell(first, this.grid))
         burst(this, x, y, this.selfColor, 24, 260)
       }
       // The body crumbles: a puff of grey pixels along every few segments.
       me.body.forEach((c, i) => {
         if (i % 3 !== 1) return
-        const { x, y } = this.cellCenter(c)
+        const { x, y } = this.cellCenter(snakeCell(c, this.grid))
         this.time.delayedCall(i * 18, () => burst(this, x, y, PALETTE.dim, 5, 90))
       })
     }
@@ -339,12 +502,12 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
     this.subline?.setText(this.t('game.common.waiting')).setVisible(true)
   }
 
-  private renderSnake(me: SnakeView): void {
+  private renderSnake(cells: number[], alive: boolean): void {
     const g = this.snakeGfx
     if (!g) return
     g.clear()
-    const body = me.body
-    const color = me.alive ? this.selfColor : PALETTE.frame
+    const body = cells.map((c) => snakeCell(c, this.grid))
+    const color = alive ? this.selfColor : PALETTE.frame
     const c = this.cell
     const pad = Math.max(1, Math.floor(c * 0.12))
     const { x: bx, y: by } = this.board
@@ -453,6 +616,7 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
   }
 
   private renderRivals(snap: SnakeSnapshot, first: boolean): void {
+    let out = false
     for (const rival of this.rivals) {
       const view = snap.snakes[rival.id]
       if (!view) continue
@@ -463,13 +627,15 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
       g.clear()
       g.fillStyle(PALETTE.panel, 1)
       g.fillRect(rival.x, rival.y, rival.size, rival.size)
-      const food = snap.food[rival.id]
+      const foodAt = snap.food[rival.id]
+      const food = foodAt === undefined ? undefined : snakeCell(foodAt, grid)
       if (food && view.alive) {
         g.fillStyle(PALETTE.red, 1)
         g.fillRect(rival.x + food.x * cs, rival.y + food.y * cs, Math.max(2, cs), Math.max(2, cs))
       }
-      view.body.forEach((c, i) => {
-        g.fillStyle(i === 0 ? shade(color, 0.4) : color, 1)
+      view.body.forEach((i, n) => {
+        const c = snakeCell(i, grid)
+        g.fillStyle(n === 0 ? shade(color, 0.4) : color, 1)
         g.fillRect(rival.x + c.x * cs, rival.y + c.y * cs, Math.max(2, cs - 1), Math.max(2, cs - 1))
       })
       rival.len
@@ -489,10 +655,14 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
         )
         rival.out.setVisible(true)
         if (!first) {
-          this.sfx.pop()
+          out = true
           punch(this, rival.out, 0.4, 120)
         }
       }
+    }
+    // One quieter sting per snapshot, however many rivals crashed in it (not over your own out).
+    if (out && snap.snakes[this.selfId]?.alive !== false) {
+      this.sfx.quiet(() => this.sfx.eliminated(), 0.6)
     }
   }
 }

@@ -66,6 +66,11 @@ export class GameClient {
     void ensurePixelFontLoaded()
     installTextColorGuard()
     this.game = new Phaser.Game(gameConfig(parent))
+    // Tooling hook: the playtest perf probe (`localStorage.pp_perf`) reads frame cost and live objects
+    // off the game instance. Off for players.
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('pp_perf')) {
+      ;(window as unknown as { __ppGame?: Phaser.Game }).__ppGame = this.game
+    }
     // Register every scene inactive; a round starts the right one by id (scene key === mini-game id).
     const deps = [this.send, this.state, this.sfx, this.t] as const
     for (const [id, Scene] of Object.entries(SCENES)) {

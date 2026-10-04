@@ -18,6 +18,11 @@ const BOARD_W = 30
 const BOARD_H = 20
 const RIM_W = 16
 
+// The everyone strip (PlayerStrip) rebuilds every chip from scratch on any change — new Text objects,
+// each measuring its font again — which cost a frame per snapshot once a full room was scoring. It
+// follows the scores at most twice a second; your own score in the HUD stays immediate.
+const STRIP_EVERY_MS = 500
+
 function boardRows(): string[] {
   const rows: string[] = []
   for (let y = 0; y < BOARD_H; y++) {
@@ -94,7 +99,8 @@ interface PendingShot {
   outcome?: { made: boolean; gained: number; combo: number }
 }
 
-// Pixel Hoops (basketball) canvas. Hold to charge the power meter (tap/Space), release to shoot; match
+// Pixel Hoops (basketball) canvas. Hold to charge the power meter (mouse/touch, Space or Enter), release
+// to shoot (a charge is dropped, not fired, if the window loses focus mid-hold); match
 // the green target band — it shrinks shot by shot (toleranceForShot), and the hoop rides higher for
 // shots that need more power. The ball flies to the hoop along an arc that visibly reflects the power
 // used (short / on target / long); once the server's make/miss verdict is in (score delta as the shot
@@ -115,6 +121,13 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
   private banner?: Phaser.GameObjects.Text
   // Everyone's score at a glance (avatar + name + points) under the HUD.
   private strip?: PlayerStrip
+  private stripSnap?: PixelHoopsSnapshot
+  private scoreSnap?: PixelHoopsSnapshot
+  private stripAt = 0
+  // Whether the meter currently shows a charge (so an idle meter is cleared once, not every frame).
+  private meterShown = false
+  // The shot the target band is placed for.
+  private bandFor = -1
   private ballKey = ''
   private fireKey = ''
   private cell = 4
@@ -159,10 +172,16 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
     this.hoopFor = -1
     this.hoop = { t: 0.5 }
     this.done = false
+    this.stripSnap = undefined
+    this.scoreSnap = undefined
+    this.stripAt = 0
+    this.meterShown = false
+    this.bandFor = -1
 
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
-    const stripSize = compact ? 11 : 13
+    // Everyone's chips read from the couch on a big (1080p) canvas.
+    const stripSize = compact ? 11 : width >= 1400 && height >= 860 ? 16 : 13
     const stripRows = width < 600 ? 3 : 2
     const stripH = PlayerStrip.rowH(stripSize)
     this.strip = new PlayerStrip(
@@ -174,7 +193,8 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
       stripRows,
     )
     const top = this.top + stripRows * stripH + 2
-    this.cell = compact ? 3 : height > 640 ? 5 : 4
+    // Art pixel size: bigger on a big canvas (1080p).
+    this.cell = compact ? 3 : width >= 1400 && height >= 860 ? 6 : height > 640 ? 5 : 4
     const legendFire = { o: 0x7a1f10, b: PALETTE.orange, h: PALETTE.amber, s: PALETTE.red }
     this.ballKey = ensurePixelGrid(this, {
       key: `pp-hoops-ball-${this.cell}`,
@@ -320,7 +340,7 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
       .text(
         width / 2,
         this.floorY + floorH / 2 + 6,
-        this.t('game.pixelHoops.hint'),
+        this.t(compact ? 'game.pixelHoops.hint' : 'game.pixelHoops.keys'),
         bodyStyle(compact ? 12 : 15, PALETTE.text, { stroke: '#10121c', strokeThickness: 3 }),
       )
       .setOrigin(0.5)
@@ -340,8 +360,25 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
 
     this.input.on('pointerdown', () => this.startCharge())
     this.input.on('pointerup', () => this.release())
-    this.onKey('SPACE', () => this.startCharge())
-    this.input.keyboard?.on('keyup-SPACE', () => this.release())
+    this.input.on('pointerupoutside', () => this.release())
+    for (const k of ['SPACE', 'ENTER']) {
+      this.onKey(k, () => this.startCharge())
+      this.input.keyboard?.on(`keyup-${k}`, () => this.release())
+    }
+    // Focus lost mid-hold (alt-tab): the key-up never arrives, so drop the charge instead of letting
+    // it sit at full power and fire on the next press.
+    const drop = (): void => this.dropCharge()
+    this.game.events.on(Phaser.Core.Events.BLUR, drop)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
+      this.game.events.off(Phaser.Core.Events.BLUR, drop),
+    )
+  }
+
+  private dropCharge(): void {
+    if (!this.charging) return
+    this.charging = false
+    this.hand?.setDisplaySize(this.ballSize, this.ballSize)
+    this.drawMeter(0, false)
   }
 
   private hoopY(t: number): number {
@@ -410,7 +447,8 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
     if (!shot) return
     const power = this.power()
     this.shotIndex = shot.index
-    this.sfx.click()
+    // The ball leaves the hand.
+    this.sfx.whoosh()
     this.sendInput({ kind: 'shoot', index: shot.index, power })
     this.launch(shot.index, power, shot.distance)
   }
@@ -493,17 +531,25 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
   protected frame(snap: PixelHoopsSnapshot | null, time: number): void {
     this.shooter?.setExpression(time < this.faceUntil ? this.face : 'idle').tick(time)
     if (!snap) return
-    this.strip?.set(
-      Object.keys(snap.scores).map((id) => ({
-        text: `${this.label(id)} ${snap.scores[id] ?? 0}`,
-        avatar: this.state.avatarOf(id),
-        color: this.state.colorOf(id),
-      })),
-    )
+    // Scores change only with a snapshot: the HUD chip follows each one, the strip is throttled.
+    if (snap !== this.scoreSnap) {
+      this.scoreSnap = snap
+      this.hud?.setScore(this.t('game.common.pts', { n: snap.scores[this.selfId] ?? 0 }))
+    }
+    const now = this.time.now
+    if (snap !== this.stripSnap && (now >= this.stripAt || this.state.final)) {
+      this.stripSnap = snap
+      this.stripAt = now + STRIP_EVERY_MS
+      this.strip?.set(
+        Object.keys(snap.scores).map((id) => ({
+          text: `${this.label(id)} ${snap.scores[id] ?? 0}`,
+          avatar: this.state.avatarOf(id),
+          color: this.state.colorOf(id),
+        })),
+      )
+    }
     const shot = snap.shots[this.selfId] ?? null
-    const myScore = snap.scores[this.selfId] ?? 0
     const combo = snap.combos[this.selfId] ?? 0
-    this.hud?.setScore(this.t('game.common.pts', { n: myScore }))
 
     const p = this.pending
     if (p) this.settle(p)
@@ -522,14 +568,17 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
     // Keep the hoop on the ball in flight; afterwards (or once charging) it moves to the next shot.
     if (!this.pending) this.moveHoopTo(shot.distance, shot.index)
 
-    // Target band = exactly the window the server accepts for this shot.
+    // Target band = exactly the window the server accepts for this shot (placed once per shot).
     const tol = toleranceForShot(shot.index)
-    const bandTop = this.meterY(Math.min(1, shot.distance + tol))
-    const bandBottom = this.meterY(Math.max(0, shot.distance - tol))
-    this.band
-      ?.setPosition(this.meterX, (bandTop + bandBottom) / 2)
-      .setSize(this.meterW, Math.max(6, bandBottom - bandTop))
-    this.bandArrow?.setY(this.meterY(shot.distance))
+    if (shot.index !== this.bandFor) {
+      this.bandFor = shot.index
+      const bandTop = this.meterY(Math.min(1, shot.distance + tol))
+      const bandBottom = this.meterY(Math.max(0, shot.distance - tol))
+      this.band
+        ?.setPosition(this.meterX, (bandTop + bandBottom) / 2)
+        .setSize(this.meterW, Math.max(6, bandBottom - bandTop))
+      this.bandArrow?.setY(this.meterY(shot.distance))
+    }
 
     const power = this.charging ? this.power() : 0
     const inBand = this.charging && Math.abs(power - shot.distance) < tol
@@ -553,8 +602,9 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
   // Segmented pixel fill; turns lime while the charge sits inside the target band.
   private drawMeter(power: number, inBand: boolean): void {
     const g = this.meterFill
-    if (!g) return
+    if (!g || (power <= 0 && !this.meterShown)) return
     g.clear()
+    this.meterShown = power > 0
     if (power <= 0) return
     const seg = 6
     const gap = 2
@@ -614,12 +664,15 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
       floatText(this, this.rimX, rimY - 40, this.t('game.pixelHoops.swishShort'), PALETTE.lime, 24)
       floatText(this, this.rimX + 70, rimY - 10, `+${outcome.gained}`, PALETTE.amber, 16)
       if (outcome.combo >= HOT_COMBO && outcome.combo % HOT_COMBO === 0) {
-        this.sfx.correct()
+        // On fire: the next balls burn.
+        this.sfx.powerUp()
         burst(this, this.rimX, rimY, PALETTE.orange, 20, 300)
       }
       return
     }
-    this.sfx.wrong()
+    // Clank off the rim / backboard, then a dull bounce on the floor.
+    this.sfx.bounce(0.8)
+    this.time.delayedCall(300, () => this.sfx.bounce(0.1))
     shake(this, 0.004, 120)
     floatText(this, this.rimX, rimY - 40, this.t('game.common.miss'), PALETTE.red, 24)
     burst(this, ball.x, ball.y, PALETTE.dim, 6, 90)
@@ -677,7 +730,7 @@ export class PixelHoopsScene extends MiniGameScene<PixelHoopsSnapshot> {
     if (spectator) return
     if (this.banner) showBanner(this, this.banner, this.t('game.common.finished'), PALETTE.lime)
     if (this.firstSnapshot) return // relayout restart: the end state, without the fanfare
-    this.sfx.coin()
+    this.sfx.cheer()
     burst(this, this.scale.width / 2, this.scale.height / 2, shade(PALETTE.amber, 0.2), 24, 260)
   }
 }

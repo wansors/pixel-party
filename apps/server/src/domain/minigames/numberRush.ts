@@ -1,4 +1,8 @@
-import type { NumberRushInput, NumberRushSnapshot } from '@pp/shared'
+import {
+  NUMBER_RUSH_WRONG_COOLDOWN_MS,
+  type NumberRushInput,
+  type NumberRushSnapshot,
+} from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const SIZE = 5
@@ -13,13 +17,16 @@ export interface NumberRushState {
   progress: Map<PlayerId, number>
   // playerId -> ms taken to clear the whole grid (finishers only), for tie-break ranking.
   finishedMs: Map<PlayerId, number>
+  // playerId -> time until which that player's taps are ignored (wrong-number penalty).
+  cooldownUntil: Map<PlayerId, number>
   // Players gone mid-round: the "everybody finished" early out stops waiting for them.
   gone: Set<PlayerId>
 }
 
 // Real-time FFA Schulte grid. A single seeded number layout is shared by everyone; each player taps
-// 1..N in order at their own pace. Pure domain logic: the layout comes from the injected Random port
-// (seeded per round) and time arrives as `now`.
+// 1..N in order at their own pace. A wrong number costs a short tap cooldown, so sweeping every cell in
+// reading order is slower than looking. Pure domain logic: the layout comes from the injected Random
+// port (seeded per round) and time arrives as `now`.
 export class NumberRush implements MiniGame<NumberRushState, NumberRushInput> {
   readonly id = 'number-rush'
   readonly format = 'ffa' as const
@@ -40,6 +47,7 @@ export class NumberRush implements MiniGame<NumberRushState, NumberRushInput> {
       endsAt: ctx.now + durationMs,
       progress: new Map(ctx.players.map((id) => [id, 1])),
       finishedMs: new Map(),
+      cooldownUntil: new Map(),
       gone: new Set(),
     }
   }
@@ -54,8 +62,14 @@ export class NumberRush implements MiniGame<NumberRushState, NumberRushInput> {
     if (now >= state.endsAt) return state
     const next = state.progress.get(playerId)
     if (next === undefined || next > state.grid.length) return state
-    // Wrong cell is simply ignored — hunting for the right one is the whole game (classic Schulte).
-    if (state.grid[input.cell] !== next) return state
+    if (now < (state.cooldownUntil.get(playerId) ?? 0)) return state
+    const n = state.grid[input.cell]
+    // Off the grid, or a number already cleared (a double click): nothing happens.
+    if (n === undefined || n < next) return state
+    if (n !== next) {
+      state.cooldownUntil.set(playerId, now + NUMBER_RUSH_WRONG_COOLDOWN_MS)
+      return state
+    }
     state.progress.set(playerId, next + 1)
     if (next === state.grid.length) state.finishedMs.set(playerId, now - state.startedAt)
     return state
@@ -109,6 +123,9 @@ export class NumberRush implements MiniGame<NumberRushState, NumberRushInput> {
       grid: state.grid,
       size: SIZE,
       progress: Object.fromEntries(state.progress),
+      cooldowns: Object.fromEntries(
+        state.players.map((id) => [id, Math.max(0, (state.cooldownUntil.get(id) ?? 0) - now)]),
+      ),
       remainingMs: Math.max(0, state.endsAt - now),
     }
   }

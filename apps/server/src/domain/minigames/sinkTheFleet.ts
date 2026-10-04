@@ -1,4 +1,4 @@
-import type { SinkTheFleetInput, SinkTheFleetSnapshot } from '@pp/shared'
+import { type SinkTheFleetInput, type SinkTheFleetSnapshot, encodeShot } from '@pp/shared'
 import type { Random } from '../ports/Random'
 import { type DuelOutcome, rankDuels } from '../services/duelRanking'
 import { pairPlayers } from '../services/pairing'
@@ -171,8 +171,9 @@ export class SinkTheFleet implements MiniGame<SinkTheFleetState, SinkTheFleetInp
           opponentId: opp,
           yourTurn: !done && duel.turn === pid,
           turnRemainingMs: done ? 0 : Math.max(0, duel.turnEndsAt - now),
-          shots: duel.shots.get(pid) as { cell: number; hit: boolean }[],
-          damage: [...(duel.hitsTaken.get(pid) as Set<number>)],
+          shots: (duel.shots.get(pid) as { cell: number; hit: boolean }[]).map((s) =>
+            encodeShot(s.cell, s.hit),
+          ),
           hitsOnOpponent: opp ? hitsOn(duel, opp) : 0,
           hitsOnYou: hitsOn(duel, pid),
           fleetCells: FLEET_CELLS,

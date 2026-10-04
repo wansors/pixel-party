@@ -86,6 +86,13 @@ Shared kit — reuse before writing a private helper (duplicates were hoisted ou
 ## Quality bar
 1. Every meaningful event (hit/miss, correct/wrong, level up, knock-out, win/lose) gets a sound AND a
    visual, derived from snapshot deltas — never spammed every frame, never hiding the game.
+   - Pick the fitting sound from the `Sfx` palette (`hit`, `crash`, `explosion`, `shoot`, `jump`,
+     `land`, `whoosh`, `splash`, `step`, `lock`, `lineClear`, `flip`, `bounce`, `gunshot`, `shatter`…),
+     not a generic beep.
+   - Your own actions sound on the input frame.
+   - Other players' moments go through `sfx.quiet(…)` and are throttled, so 12 players stay readable.
+   - In-round music is picked by mood in `game/musicMoods.ts` (D32); mark a game `none` if its own
+     sound is the game.
 2. Pixel-art sprites/beveled tiles over flat rectangles; PALETTE colors; identity colors for players;
    one obvious "what do I do now" prompt.
 3. A clear end/waiting state (banner: `game.common.waiting`, `out`, `youWin`, `youLose`, `draw`…).
@@ -101,7 +108,19 @@ Shared kit — reuse before writing a private helper (duplicates were hoisted ou
    rounds ending early when the remaining seats can't act.
 7. Cosmetic randomness that all players should see alike is derived from ids/indices (not
    `Math.random`); domain code never uses `Math.random`/`Date.now` (`bun run lint:determinism`).
-8. Short header comment per scene; Biome style; no dead code / `any`.
+8. PC launch bar (D30, `docs/pc-launch-audit.md`):
+   - Every action has a key (arrows *and* WASD for movement; Space and/or Enter for the primary
+     action). Name the keys in the hint line and in `catalog.minigame.<id>.controls` (the round-intro
+     card's one-line controls).
+   - Held keys release on window blur.
+   - Your own avatar/board reacts on the frame of the input: put the rules in `@pp/shared`, predict
+     locally and ease into each snapshot. Interpolate rivals with `SnapshotInterpolator` (default
+     150 ms), or render time-driven items from `netcode/ServerClock`.
+   - Scale the main content up at 1080p.
+   - Performance: no per-frame object/Graphics/Text churn (redraw on change, pool), one masked layer
+     rather than a mask per object, avatar textures pre-generated with `this.warmAvatars(ids, specs)`.
+   - Check with the playtest `--perf` probe at 1920x1080 and 12 players.
+9. Short header comment per scene; Biome style; no dead code / `any`.
 
 References: `ButtonMasherScene.ts` (tap game: arcade button + player-colored race lanes),
 `FruitCatchScene.ts` (real-time: `ServerClock` extrapolation, procedural sprites, catch/bomb

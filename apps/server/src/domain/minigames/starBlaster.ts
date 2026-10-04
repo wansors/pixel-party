@@ -3,9 +3,10 @@ import {
   STAR_ENEMY,
   type StarBlasterInput,
   type StarBlasterSnapshot,
+  type StarEnemy,
   type StarScript,
   buildStarScript,
-  starBulletsAt,
+  starBulletNear,
   starEnemyAt,
 } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
@@ -16,6 +17,13 @@ const SHIP_MIN_Y = STAR.h * 0.35 // the ship keeps to the lower part of the scre
 const KILL_MEMORY_MS = STAR.bulletLifeMs
 
 interface Shot {
+  x: number
+  y: number
+}
+
+// An enemy on screen this tick (positions are shared by every arena; kills are per player).
+interface LiveEnemy {
+  e: StarEnemy
   x: number
   y: number
 }
@@ -96,9 +104,11 @@ export class StarBlaster implements MiniGame<StarBlasterState, StarBlasterInput>
     if (input.kind !== 'move' || now >= state.endsAt) return state
     const a = state.arenas.find((x) => x.id === playerId)
     if (!a || a.out || !isNum(input.dx) || !isNum(input.dy)) return state
+    // Longer than 1 → full speed; shorter → slower (a pointer easing onto its target).
     const mag = Math.hypot(input.dx, input.dy)
-    a.dx = mag < 0.001 ? 0 : input.dx / mag
-    a.dy = mag < 0.001 ? 0 : input.dy / mag
+    const k = mag < 0.001 ? 0 : 1 / Math.max(1, mag)
+    a.dx = input.dx * k
+    a.dy = input.dy * k
     if (!a.armed && mag >= 0.001) {
       a.armed = true
       a.nextShotAt = now - state.startedAt
@@ -109,6 +119,13 @@ export class StarBlaster implements MiniGame<StarBlasterState, StarBlasterInput>
   tick(state: StarBlasterState, dt: number, now: number): StarBlasterState {
     const step = dt / 1000
     const t = now - state.startedAt
+    // Every enemy's position this tick, evaluated once for all twelve arenas.
+    const live: LiveEnemy[] = []
+    for (const e of state.script.enemies) {
+      if (e.spawnAt > t || e.endAt <= t) continue
+      const p = starEnemyAt(e, t)
+      if (p) live.push({ e, x: p.x, y: p.y })
+    }
     for (const a of state.arenas) {
       if (a.out) continue
       a.x = Math.max(STAR.shipR, Math.min(STAR.w - STAR.shipR, a.x + a.dx * STAR.shipSpeed * step))
@@ -118,28 +135,23 @@ export class StarBlaster implements MiniGame<StarBlasterState, StarBlasterInput>
         a.shots.push({ x: a.x, y: a.y - 0.03 })
         a.nextShotAt += STAR.shotEveryMs
       }
-      this.moveShots(state, a, step, t)
-      this.hitShip(state, a, t)
+      this.moveShots(a, live, step, t)
+      this.hitShip(state, a, live, t)
     }
     return state
   }
 
   // Player shots climb; one that meets a live enemy is spent on it.
-  private moveShots(state: StarBlasterState, a: Arena, step: number, t: number): void {
-    const live = state.script.enemies.filter(
-      (e) => !a.killedAt.has(e.id) && e.spawnAt <= t && e.endAt > t,
-    )
-    const kept: Shot[] = []
+  private moveShots(a: Arena, live: readonly LiveEnemy[], step: number, t: number): void {
+    let kept = 0
     for (const s of a.shots) {
       s.y -= STAR.shotSpeed * step
       if (s.y < -0.05) continue
       let spent = false
-      for (const e of live) {
+      for (const { e, x, y } of live) {
         if (a.killedAt.has(e.id)) continue
-        const p = starEnemyAt(e, t)
-        if (!p) continue
         const spec = STAR_ENEMY[e.kind]
-        if (Math.hypot(p.x - s.x, p.y - s.y) >= spec.r + STAR.shotR) continue
+        if (Math.hypot(x - s.x, y - s.y) >= spec.r + STAR.shotR) continue
         spent = true
         const hp = (a.hp.get(e.id) ?? spec.hp) - 1
         if (hp <= 0) {
@@ -149,23 +161,28 @@ export class StarBlaster implements MiniGame<StarBlasterState, StarBlasterInput>
         } else a.hp.set(e.id, hp)
         break
       }
-      if (!spent) kept.push(s)
+      if (!spent) a.shots[kept++] = s
     }
-    a.shots = kept
+    a.shots.length = kept
   }
 
   // An enemy bullet or an enemy body touching the ship costs a life (unless it's still blinking).
-  private hitShip(state: StarBlasterState, a: Arena, t: number): void {
+  private hitShip(state: StarBlasterState, a: Arena, live: readonly LiveEnemy[], t: number): void {
     if (t < a.shieldUntil) return
-    const bullet = starBulletsAt(state.script, t, a.killedAt, a.consumed).find(
-      (b) => Math.hypot(b.x - a.x, b.y - a.y) < STAR.shipR + STAR.bulletR,
+    const bullet = starBulletNear(
+      state.script,
+      t,
+      a.killedAt,
+      a.consumed,
+      a.x,
+      a.y,
+      STAR.shipR + STAR.bulletR,
     )
     let rammed = false
     if (!bullet) {
-      for (const e of state.script.enemies) {
+      for (const { e, x, y } of live) {
         if (a.killedAt.has(e.id)) continue
-        const p = starEnemyAt(e, t)
-        if (!p || Math.hypot(p.x - a.x, p.y - a.y) >= STAR_ENEMY[e.kind].r + STAR.shipR) continue
+        if (Math.hypot(x - a.x, y - a.y) >= STAR_ENEMY[e.kind].r + STAR.shipR) continue
         // A drone that rams you is destroyed too (no points); bigger ones just shove through.
         if (e.kind === 'drone') a.killedAt.set(e.id, t)
         rammed = true
@@ -173,7 +190,7 @@ export class StarBlaster implements MiniGame<StarBlasterState, StarBlasterInput>
       }
     }
     if (!bullet && !rammed) return
-    if (bullet) a.consumed.add(bullet.id)
+    if (bullet) a.consumed.add(bullet)
     a.lives -= 1
     a.score = Math.max(0, a.score - STAR.hitPenalty)
     a.shieldUntil = t + STAR.shieldMs
@@ -213,7 +230,8 @@ export class StarBlaster implements MiniGame<StarBlasterState, StarBlasterInput>
 
   snapshot(state: StarBlasterState, now: number): StarBlasterSnapshot {
     const t = now - state.startedAt
-    const ends = new Map(state.script.enemies.map((e) => [e.id, e.endAt]))
+    // Enemy ids are their index in the script.
+    const endOf = (id: number): number => state.script.enemies[id]?.endAt ?? 0
     return {
       seed: state.seed,
       durationMs: state.durationMs,
@@ -227,7 +245,7 @@ export class StarBlaster implements MiniGame<StarBlasterState, StarBlasterInput>
         score: a.score,
         out: a.out,
         armed: a.armed,
-        killed: [...a.killedAt].filter(([id]) => (ends.get(id) ?? 0) + KILL_MEMORY_MS > t),
+        killed: [...a.killedAt].filter(([id]) => endOf(id) + KILL_MEMORY_MS > t),
         hp: [...a.hp],
         consumed: [...a.consumed],
       })),

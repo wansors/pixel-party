@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import type { Random } from '../ports/Random'
 import { QuickTetris, TARGET_LINES } from './quickTetris'
 
-// Always draws the "I" piece (shapeIndex 0) — the exact shapes don't matter for these tests, which
-// drive `doneAt`/`linesCleared` directly rather than simulating a full clear sequence.
+// The exact shapes don't matter for these tests, which drive `doneAt`/`linesCleared` directly rather
+// than simulating a full clear sequence.
 const zero: Random = { next: () => 0 }
 
 const nn = <T>(x: T | undefined): T => {
@@ -78,9 +78,11 @@ describe('QuickTetris', () => {
     state = game.tick(state, 0, 200)
     expect(state.doneAt.get('p')).toBe(200)
 
-    const before = nn(state.boards.get('p')).current.x
-    state = game.onInput(state, 'p', { kind: 'move', dir: 'left' }, 300)
-    expect(nn(state.boards.get('p')).current.x).toBe(before)
+    const before = nn(state.boards.get('p')).current?.x
+    state = game.onInput(state, 'p', { kind: 'move', dir: 'left', seq: 7 }, 300)
+    expect(nn(state.boards.get('p')).current?.x).toBe(before)
+    // ...but the input is still acknowledged, so the client stops replaying it.
+    expect(game.snapshot(state, 300).boards.p?.ack).toBe(7)
   })
 
   test('two finishers rank by finish time ascending; two non-finishers by linesCleared descending', () => {

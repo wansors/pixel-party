@@ -231,4 +231,16 @@ describe('SpeedCircuit', () => {
     expect(b.draft).toBe(true)
     expect(a.draft).toBe(false)
   })
+
+  test('snapshots carry every car velocity and the race clock (client prediction)', () => {
+    const s = init(game, ['a', 'b'])
+    game.onInput(s, 'a', { kind: 'drive', steer: 0, throttle: 1 }, 0)
+    for (let t = GO_DELAY_MS + 50; t <= GO_DELAY_MS + 800; t += 50) game.tick(s, 50, t)
+    const snap = game.snapshot(s, GO_DELAY_MS + 800)
+    expect(snap.raceMs).toBe(800)
+    const a = snap.cars.find((c) => c.id === 'a')
+    expect(Math.hypot(a?.vx ?? 0, a?.vy ?? 0)).toBeGreaterThan(100)
+    expect(a?.vx).toBeCloseTo(car(s, 'a').vx, 0)
+    expect(game.snapshot(s, 1000).raceMs).toBe(0)
+  })
 })

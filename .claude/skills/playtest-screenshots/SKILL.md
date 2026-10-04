@@ -40,7 +40,13 @@ cd "$WORK" && timeout 180 bun shoot.ts <tag>-phone 390x844 fruit-catch
   `--more=N` adds N more in-play shots (`-play3`…), one every 3 s, re-running the interaction first —
   use them to exercise a game's real controls (hold-to-move, LEFT/RIGHT choices) instead of junk,
   `--bots=N` sets how many bots join (default 3 → a 4-player room; `--bots=11` fills a 12-player room
-  to check crowded layouts — mind each game's player range, D27).
+  to check crowded layouts — mind each game's player range, D27), `--perf` logs a frame-cost probe at
+  every shot (Phaser step avg/p95/max ms, long tasks, heap, live objects/tweens/textures) to stdout and
+  `<tag>/perf.jsonl` — WebGL via SwiftShader, so read step cost and object growth, not fps.
+- Party mode (the production build, as players get it): build the client, start the server with
+  `NODE_ENV=production` (it serves the build on :3000) and point the driver at it with
+  `PP_CLIENT=http://localhost:3000 PP_SERVER=http://localhost:3000`. A session is capped at 20
+  rounds, so sweep the catalog in several line-ups.
 - Output: `$WORK/shots/<tag>/NNN-<phase>.png` — look at them with the Read tool.
 - Per game: `-intro` (≈1.8 s into the countdown), `-play1` (≈1.5 s into the round), `-play2` (after a
   few clicks + Space, ≈4 s later), `-finish` (the frozen last frame with the FINISH stamp),

@@ -2,7 +2,7 @@ import { type BugSmashLiveBug, type BugSmashSnapshot, PALETTE } from '@pp/shared
 import Phaser from 'phaser'
 import { ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, flash, floatText, punch, ring, shake, showBanner } from '../fx'
-import { bodyStyle, ensurePixelGrid, hexToCss, shade } from '../pixelStyle'
+import { bodyStyle, ensurePixelGrid, headlineStyle, hexToCss, shade } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 const GRASS = 0x24502e
@@ -10,6 +10,9 @@ const GRASS = 0x24502e
 // only starts seconds after the previous one stopped) — the one case where localHit may carry over.
 const RELAYOUT_GAP_MS = 1000
 const GOO = 0x5fcf3a
+// A swing at an empty hole leaves the mallet stuck in the dirt this long. Aimed whacks barely notice;
+// rolling a hand over all nine keys (smash whatever pops up, bombs included) stops paying.
+const WHIFF_STUN_MS = 400
 const BUG_LEGEND = {
   o: 0x0f2a15,
   b: 0x2a9d3f,
@@ -128,6 +131,20 @@ const MALLET_ROWS = [
   '_____oo_____',
 ]
 
+// Keyboard: the 3x3 lawn maps onto the Q W E / A S D / Z X C block and onto the numpad (7 8 9 on top),
+// row by row. The letter is printed in each tile's corner on keyboard-sized screens.
+const HOLE_KEYS: readonly (readonly string[])[] = [
+  ['Q', 'NUMPAD_SEVEN'],
+  ['W', 'NUMPAD_EIGHT'],
+  ['E', 'NUMPAD_NINE'],
+  ['A', 'NUMPAD_FOUR'],
+  ['S', 'NUMPAD_FIVE'],
+  ['D', 'NUMPAD_SIX'],
+  ['Z', 'NUMPAD_ONE'],
+  ['X', 'NUMPAD_TWO'],
+  ['C', 'NUMPAD_THREE'],
+]
+
 // Beveled grass tile at its real size with a few deterministic tufts.
 function ensureGrassTile(scene: Phaser.Scene, key: string, w: number, h: number): string {
   if (scene.textures.exists(key)) return key
@@ -165,9 +182,11 @@ interface Chip {
 }
 
 // Bug Smash (whack-a-mole) canvas. A 3x3 lawn of dirt holes; the shared seeded timeline pops pixel
-// beetles (and the odd bomb) out of them. Tap a hole to swing the mallet: a bug squashes into goo
+// beetles (and the odd bomb) out of them. Click/tap a hole (or press its key: Q W E / A S D / Z X C or
+// the numpad) to swing the mallet: a bug squashes into goo
 // (+1), a bomb blows up in your face (-1, even below zero). A bug this player just smashed is hidden
-// optimistically (the server confirms through the score). Other players' scores run along the top in
+// optimistically (the server confirms through the score). A whiff at an empty hole sticks the mallet
+// for a moment, so mashing every key is worse than aiming. Other players' scores run along the top in
 // their colors.
 export class BugSmashScene extends MiniGameScene<BugSmashSnapshot> {
   private holes: Hole[] = []
@@ -177,6 +196,11 @@ export class BugSmashScene extends MiniGameScene<BugSmashSnapshot> {
   private cell = { w: 0, h: 0 }
   private spriteSize = 0
   private built = false
+  private scoreSnap?: BugSmashSnapshot
+  // Until when the mallet is stuck after a whiff.
+  private stunUntil = 0
+  // Reused every frame: hole -> the live spawn shown there.
+  private readonly live = new Map<number, BugSmashLiveBug>()
   // Spawn indices this player has already smashed (optimistic local hide). Kept across a relayout
   // restart, or a bug smashed a moment ago would pop back up — and "score" again, locally.
   private readonly localHit = new Set<number>()
@@ -191,6 +215,8 @@ export class BugSmashScene extends MiniGameScene<BugSmashSnapshot> {
     this.built = false
     this.holes = []
     this.chips = []
+    this.scoreSnap = undefined
+    this.stunUntil = 0
     if (this.game.getTime() - this.stoppedAt > RELAYOUT_GAP_MS) this.localHit.clear()
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.stoppedAt = this.game.getTime()
@@ -219,7 +245,12 @@ export class BugSmashScene extends MiniGameScene<BugSmashSnapshot> {
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
     this.add
-      .text(width / 2, height - 10, this.t('game.bugSmash.hint'), bodyStyle(compact ? 12 : 15))
+      .text(
+        width / 2,
+        height - 10,
+        this.t(compact ? 'game.bugSmash.hint' : 'game.bugSmash.keys'),
+        bodyStyle(compact ? 12 : 16),
+      )
       .setOrigin(0.5, 1)
     this.banner = addBanner(this)
     this.banner.setFontSize(compact ? 24 : 34).setWordWrapWidth(width * 0.9)
@@ -273,6 +304,14 @@ export class BugSmashScene extends MiniGameScene<BugSmashSnapshot> {
         .zone(cx, cy, cw + gap, ch + gap)
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => this.smash(i))
+      // Keys only map a 3x3 lawn (the board the server deals); the corner letter names the key.
+      const keys = snap.holes === HOLE_KEYS.length ? HOLE_KEYS[i] : undefined
+      for (const k of keys ?? []) this.onKey(k, () => this.smash(i))
+      if (keys && !compact) {
+        this.add
+          .text(cx - cw / 2 + 10, cy - ch / 2 + 8, keys[0] ?? '', headlineStyle(16, PALETTE.text))
+          .setAlpha(0.55)
+      }
     }
   }
 
@@ -308,11 +347,20 @@ export class BugSmashScene extends MiniGameScene<BugSmashSnapshot> {
     const hole = this.holes[i]
     // A spectator (not in this round) has no score to play for.
     if (!snap || !hole || snap.remainingMs <= 0 || !(this.selfId in snap.scores)) return
+    const now = this.time.now
+    if (now < this.stunUntil) {
+      // Still prying the mallet out of the dirt: a dull tick, no swing.
+      this.sfx.tick()
+      return
+    }
     this.swingMallet(hole)
     const bug = snap.live.find((b) => b.hole === i && !this.localHit.has(b.index))
     if (!bug) {
-      this.sfx.click()
-      burst(this, hole.x, hole.y, 0x8a5a2e, 5, 90)
+      this.stunUntil = now + WHIFF_STUN_MS
+      // The mallet thuds into empty dirt.
+      this.sfx.land()
+      burst(this, hole.x, hole.y, 0x8a5a2e, 8, 110)
+      floatText(this, hole.x, hole.y - this.spriteSize * 0.5, '×', PALETTE.dim, 16)
       return
     }
     this.localHit.add(bug.index)
@@ -321,13 +369,15 @@ export class BugSmashScene extends MiniGameScene<BugSmashSnapshot> {
     hole.sprite.setVisible(false)
     const top = hole.y - this.spriteSize * 0.7
     if (bug.kind === 'bug') {
-      this.sfx.correct()
+      // A solid mallet smack on the bug.
+      this.sfx.hit(1.1)
       this.splat(hole)
       burst(this, hole.x, hole.y - this.spriteSize * 0.3, GOO, 16, 200)
       ring(this, hole.x, hole.y - this.spriteSize * 0.3, PALETTE.lime, this.spriteSize * 0.8)
       floatText(this, hole.x, top, '+1', PALETTE.lime, 22)
     } else {
-      this.sfx.wrong()
+      // Whacked a bomb: it goes off.
+      this.sfx.boom()
       burst(this, hole.x, hole.y - this.spriteSize * 0.3, PALETTE.orange, 26, 320)
       burst(this, hole.x, hole.y - this.spriteSize * 0.3, PALETTE.red, 12, 200)
       shake(this, 0.014, 260)
@@ -383,10 +433,14 @@ export class BugSmashScene extends MiniGameScene<BugSmashSnapshot> {
   protected frame(snap: BugSmashSnapshot | null, time: number): void {
     if (!snap) return
     if (!this.built) this.build(snap)
-    this.hud?.setScore(this.t('game.common.pts', { n: snap.scores[this.selfId] ?? 0 }))
-    this.renderChips(snap)
+    if (snap !== this.scoreSnap) {
+      this.scoreSnap = snap
+      this.hud?.setScore(this.t('game.common.pts', { n: snap.scores[this.selfId] ?? 0 }))
+      this.renderChips(snap)
+    }
 
-    const live = new Map<number, BugSmashLiveBug>()
+    const live = this.live
+    live.clear()
     for (const b of snap.live) {
       if (!this.localHit.has(b.index)) live.set(b.hole, b)
     }

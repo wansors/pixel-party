@@ -4,17 +4,15 @@ import {
   type AsteroidsInput,
   type AsteroidsRock,
   type AsteroidsSnapshot,
+  asteroidsFly,
 } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 60_000
 const W = ASTEROIDS.w
 const H = ASTEROIDS.h
-const THRUST = 0.95
-const DRAG = 0.35
-const MAX_SPEED = 0.75
-const FIRE_MS = 220
-const MAX_BULLETS = 4
+const FIRE_MS = ASTEROIDS.fireMs
+const MAX_BULLETS = ASTEROIDS.maxBullets
 const ROCK_SPEED = [0, 0.22, 0.15, 0.09] as const
 // The field is topped up with a big rock (seeded edge spot) whenever its "mass" (big 4 · medium 2 ·
 // small 1) drops below MIN_MASS, at most every REFILL_MS. Tuned for up to TUNED_SHIPS pilots; a bigger
@@ -209,21 +207,7 @@ export class Asteroids implements MiniGame<AsteroidsState, AsteroidsInput> {
       if (now >= s.respawnAt) this.respawn(state, s, now)
       return
     }
-    s.a += s.rot * ASTEROIDS.turn * step
-    if (s.thrust) {
-      s.vx += Math.cos(s.a) * THRUST * step
-      s.vy += Math.sin(s.a) * THRUST * step
-    }
-    const drag = Math.max(0, 1 - DRAG * step)
-    s.vx *= drag
-    s.vy *= drag
-    const sp = Math.hypot(s.vx, s.vy)
-    if (sp > MAX_SPEED) {
-      s.vx = (s.vx / sp) * MAX_SPEED
-      s.vy = (s.vy / sp) * MAX_SPEED
-    }
-    s.x = wrap(s.x + s.vx * step, W)
-    s.y = wrap(s.y + s.vy * step, H)
+    asteroidsFly(s, s.rot, s.thrust, step)
     const mine = state.bullets.filter((b) => b.owner === s.idx).length
     if (s.fire && now >= s.nextFireAt && mine < MAX_BULLETS) {
       s.nextFireAt = now + FIRE_MS

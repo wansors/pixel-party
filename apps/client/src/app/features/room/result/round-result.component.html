@@ -114,8 +114,10 @@
               [data]="store.myRadar()"
               [color]="store.playerColor(store.selfId())"
               [size]="150"
+              [average]="true"
               [ariaLabel]="'room.summary.profileTitle' | transloco"
             />
+            <p class="radar-hint">{{ 'room.summary.radarHint' | transloco }}</p>
           </div>
         }
       </div>

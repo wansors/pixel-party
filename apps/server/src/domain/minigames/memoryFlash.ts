@@ -1,19 +1,15 @@
-import type {
-  MemoryFlashBoard,
-  MemoryFlashInput,
-  MemoryFlashPixel,
-  MemoryFlashSnapshot,
+import {
+  MEMORY_FLASH_COLORS,
+  type MemoryFlashBoard,
+  type MemoryFlashInput,
+  type MemoryFlashSnapshot,
 } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 40_000
 const LEVELS = 20
-const PALETTE = [
-  { name: 'RED', hex: 0xe63946 },
-  { name: 'GREEN', hex: 0x2a9d3f },
-  { name: 'BLUE', hex: 0x3a7bd5 },
-  { name: 'YELLOW', hex: 0xf4c20d },
-]
+const COLORS = MEMORY_FLASH_COLORS.length
+type FlashColor = (typeof MEMORY_FLASH_COLORS)[number]
 
 export interface MemoryFlashState {
   players: PlayerId[]
@@ -46,7 +42,7 @@ export class MemoryFlash implements MiniGame<MemoryFlashState, MemoryFlashInput>
     for (let level = 0; level < LEVELS; level++) {
       const side = Math.min(4 + Math.floor(level / 3), 8)
       const cellCount = side * side
-      const target = PALETTE[Math.floor(r.next() * PALETTE.length)] as (typeof PALETTE)[number]
+      const target = MEMORY_FLASH_COLORS[Math.floor(r.next() * COLORS)] as FlashColor
       // Fill a growing share of the grid with random palette colours; count the target among them.
       const fill = Math.min(cellCount, 4 + level + Math.floor(r.next() * 3))
       const cells = Array.from({ length: cellCount }, (_, i) => i)
@@ -54,13 +50,13 @@ export class MemoryFlash implements MiniGame<MemoryFlashState, MemoryFlashInput>
         const j = Math.floor(r.next() * (i + 1))
         ;[cells[i], cells[j]] = [cells[j] as number, cells[i] as number]
       }
-      const pixels: MemoryFlashPixel[] = []
+      // One character per cell on the wire: '.' empty, else the colour's index.
+      const burst = new Array<string>(cellCount).fill('.')
       let trueCount = 0
       for (let i = 0; i < fill; i++) {
-        const cell = cells[i] as number
-        const color = PALETTE[Math.floor(r.next() * PALETTE.length)] as (typeof PALETTE)[number]
-        if (color.hex === target.hex) trueCount++
-        pixels.push({ x: cell % side, y: Math.floor(cell / side), color: color.hex })
+        const color = Math.floor(r.next() * COLORS)
+        if (MEMORY_FLASH_COLORS[color]?.hex === target.hex) trueCount++
+        burst[cells[i] as number] = String(color)
       }
       // Four distinct answer options bracketing the true count (never below zero).
       const opts = new Set<number>([trueCount])
@@ -79,7 +75,7 @@ export class MemoryFlash implements MiniGame<MemoryFlashState, MemoryFlashInput>
         level,
         cols: side,
         rows: side,
-        pixels,
+        cells: burst.join(''),
         targetColor: target.hex,
         targetName: target.name,
         flashMs: Math.max(1600 - level * 80, 550),
@@ -155,14 +151,18 @@ export class MemoryFlash implements MiniGame<MemoryFlashState, MemoryFlashInput>
     return { placements: sorted, ranks, stats }
   }
 
+  // Each board in play goes on the wire once, however many players are on it (it's static per level).
   snapshot(state: MemoryFlashState, now: number): MemoryFlashSnapshot {
-    const boards: Record<PlayerId, MemoryFlashBoard | null> = {}
+    const at: Record<PlayerId, number | null> = {}
+    const boards: MemoryFlashBoard[] = []
     for (const id of state.players) {
-      const ptr = state.pointer.get(id) ?? 0
-      boards[id] = state.boards[ptr] ?? null
+      const board = state.boards[state.pointer.get(id) ?? 0]
+      at[id] = board ? board.level : null
+      if (board && !boards.includes(board)) boards.push(board)
     }
     return {
-      boards,
+      boards: boards.sort((a, b) => a.level - b.level),
+      at,
       scores: Object.fromEntries(state.correct),
       remainingMs: Math.max(0, state.endsAt - now),
     }

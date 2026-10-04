@@ -1,6 +1,6 @@
 import { PALETTE, type QuizLang, type QuizReveal, type TriviaSnapshot } from '@pp/shared'
 import type Phaser from 'phaser'
-import { ensureAvatarTexture } from '../avatars'
+import { type AvatarExpression, ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, floatText, punch, ring, shake, showBanner } from '../fx'
 import {
   bodyStyle,
@@ -26,9 +26,29 @@ const PICK_PX = 32
 const PICK_PIXEL = PICK_PX / 16
 // Rooms bigger than this get an extra row of contestant lights.
 const LIGHTS_PER_ROW = 6
+// The lights are rebuilt at most this often (a full room locks in within a second or two, and every
+// rebuild re-creates a dozen chips).
+const LIGHTS_EVERY_MS = 250
+// Avatar textures the board will need (lights and reveal perches), drawn a few per frame ahead of time
+// so the reveal moment doesn't generate a dozen textures in one frame.
+const PREWARM_PER_FRAME = 3
+const PREWARM: readonly [pixel: number, face: AvatarExpression][] = [
+  [1, 'idle'],
+  [1, 'ko'],
+  [PICK_PIXEL, 'happy'],
+  [PICK_PIXEL, 'hurt'],
+]
 
 const CHECK_ROWS = ['______oo', '_____oo_', 'oo__oo__', '_oooo___', '__oo____']
 const CROSS_ROWS = ['oo___oo', '_oo_oo_', '__ooo__', '_oo_oo_', 'oo___oo']
+
+// A–D (either case) or 1–4 → the answer slot; anything else → null.
+function choiceForKey(key: string): number | null {
+  const letter = LETTERS.indexOf(key.toUpperCase())
+  if (letter >= 0) return letter
+  const n = Number(key)
+  return Number.isInteger(n) && n >= 1 && n <= LETTERS.length ? n - 1 : null
+}
 
 // The wire shape every quiz game shares (a game may extend its reveal, e.g. Weird Trivia's fun fact).
 export type QuizSnapshot = Omit<TriviaSnapshot, 'reveal'> & { reveal: QuizReveal | null }
@@ -77,7 +97,7 @@ export interface QuizPick {
 }
 
 // The quiz-show board shared by the quiz games (Lightning Quiz, Weird Trivia): a marquee-lit question
-// board, four chunky lettered answer tiles (tap or keys 1-4) and contestant lights for every player
+// board, four chunky lettered answer tiles (click, or keys A-D / 1-4) and contestant lights for every player
 // showing who has locked in. Answers are tagged with the question index so the server drops stale
 // taps. Each question ends with a reveal: the right tile lights up, this player's pick gets its
 // verdict (unless the game gave it at lock-in, `onLocked`), every player's avatar pops onto the tile
@@ -107,6 +127,9 @@ export abstract class QuizSceneBase<S extends QuizSnapshot> extends MiniGameScen
   private crossKey = ''
   private questionFont = 0
   private lightPhase = -1
+  private lightsKey = ''
+  private lightsAt = Number.NEGATIVE_INFINITY
+  private prewarm: (() => void)[] | null = null
 
   protected view(snap: S): QuizView {
     const text = snap.text?.[this.lang()] ?? null
@@ -148,6 +171,9 @@ export abstract class QuizSceneBase<S extends QuizSnapshot> extends MiniGameScen
     this.revealedIndex = -1
     this.pickIcons = []
     this.lightPhase = -1
+    this.lightsKey = ''
+    this.lightsAt = Number.NEGATIVE_INFINITY
+    this.prewarm = null
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
     this.compact = compact
@@ -163,14 +189,16 @@ export abstract class QuizSceneBase<S extends QuizSnapshot> extends MiniGameScen
     y += progressSize + (compact ? 10 : 14)
 
     // Question board: a beveled panel framed by chasing marquee bulbs.
-    const panelH = Math.round(Math.min(compact ? 170 : 180, height * 0.22))
+    // A big screen (1080p) gets a taller board, bigger question and tiles: read from across the room.
+    const big = !compact && height >= 900
+    const panelH = Math.round(Math.min(compact ? 170 : big ? 200 : 180, height * 0.22))
     const panelW = Math.round(contentW)
     this.panelBox = { x: cx - panelW / 2, y, w: panelW, h: panelH }
     this.panel = this.add
       .image(cx, y + panelH / 2, ensureBevelPanel(this, panelW, panelH, PALETTE.panelAlt, 6, true))
       .setDepth(1)
     this.marquee = this.add.graphics().setDepth(2)
-    this.questionFont = compact ? 19 : 26
+    this.questionFont = compact ? 19 : big ? 32 : 26
     this.question = this.add
       .text(
         cx,
@@ -188,7 +216,7 @@ export abstract class QuizSceneBase<S extends QuizSnapshot> extends MiniGameScen
 
     // Contestant lights: every player, lit once they have locked an answer for this question. The
     // roster sizes the rows (the round's players arrive with the first snapshot).
-    const chipSize = compact ? 11 : 13
+    const chipSize = compact ? 11 : big ? 16 : 13
     const roster = Object.keys(this.state.names).length
     const stripRows = (twoCols ? 1 : 2) + (roster > LIGHTS_PER_ROW ? 1 : 0)
     this.strip = new PlayerStrip(this, cx, y, contentW, chipSize, stripRows)
@@ -196,7 +224,7 @@ export abstract class QuizSceneBase<S extends QuizSnapshot> extends MiniGameScen
 
     const statusY = height - (compact ? 16 : 22)
     this.status = this.add
-      .text(cx, statusY, '', bodyStyle(compact ? 13 : 16, PALETTE.dim))
+      .text(cx, statusY, '', bodyStyle(compact ? 13 : big ? 18 : 16, PALETTE.dim))
       .setOrigin(0.5)
 
     // Answer tiles: 2x2 on wide screens, a single column on phones.
@@ -206,10 +234,14 @@ export abstract class QuizSceneBase<S extends QuizSnapshot> extends MiniGameScen
     const areaTop = y
     const areaH = statusY - 18 - areaTop
     const tileW = Math.round((contentW - gap * (cols - 1)) / cols)
-    const tileH = Math.round(Math.min(compact ? 84 : 120, (areaH - gap * (rows - 1)) / rows))
+    const tileH = Math.round(
+      Math.min(compact ? 84 : big ? 140 : 120, (areaH - gap * (rows - 1)) / rows),
+    )
     const blockH = rows * tileH + (rows - 1) * gap
     const blockTop = areaTop + Math.min(32, Math.max(0, (areaH - blockH) / 3))
-    const labelSize = compact ? 16 : 24
+    // The hint sits just under the tiles (on a tall screen the bottom edge is far from the action).
+    this.status.setY(Math.min(statusY, blockTop + blockH + PRESS_PX + (compact ? 22 : 34)))
+    const labelSize = compact ? 16 : big ? 32 : 24
     this.rightKey = ensureBevelPanel(this, tileW, tileH, RIGHT_COLOR, 4, true)
     this.wrongKey = ensureBevelPanel(this, tileW, tileH, WRONG_COLOR, 4, true)
     const shadowKey = ensureBevelPanel(this, tileW, tileH, shade(PALETTE.bg, -0.5), 0, true)
@@ -276,10 +308,12 @@ export abstract class QuizSceneBase<S extends QuizSnapshot> extends MiniGameScen
     }
 
     this.banner = addBanner(this).setFontSize(compact ? 24 : 32)
+    // The tile's letter (A-D, as printed on its badge) or its number (1-4) answers; a held key never
+    // repeats.
     this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
-      if (e.repeat) return
-      const n = Number(e.key)
-      if (Number.isInteger(n) && n >= 1 && n <= 4) this.answer(n - 1)
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return
+      const slot = choiceForKey(e.key)
+      if (slot !== null) this.answer(slot)
     })
   }
 
@@ -297,7 +331,8 @@ export abstract class QuizSceneBase<S extends QuizSnapshot> extends MiniGameScen
       scoreBefore: v.scores[this.selfId] ?? 0,
       judged: false,
     }
-    this.sfx.click()
+    // Locked in: a chunky clunk on the press itself (the verdict comes with the reveal).
+    this.sfx.lock()
     this.pressTile(choice)
     this.sendInput({ kind: 'answer', question: v.index, choice })
   }
@@ -313,6 +348,7 @@ export abstract class QuizSceneBase<S extends QuizSnapshot> extends MiniGameScen
 
   protected frame(snap: S | null, time: number): void {
     if (!snap) return
+    this.prewarmAvatars(snap)
     const v = this.view(snap)
     this.hud?.setScore(this.t('game.common.pts', { n: v.scores[this.selfId] ?? 0 }))
     if (v.index !== this.shownIndex) this.showQuestion(v)
@@ -320,14 +356,39 @@ export abstract class QuizSceneBase<S extends QuizSnapshot> extends MiniGameScen
     if (snap.reveal && this.revealedIndex !== v.index) {
       this.revealedIndex = v.index
       this.showReveal(snap.reveal as NonNullable<S['reveal']>, v)
+      // The perches pop in this frame; the lights follow a beat later rather than in the same frame.
+      this.lightsAt = this.time.now
     }
 
     const locked =
       v.question !== null && (this.pick?.index === v.index || v.answered.includes(this.selfId))
     this.paintTiles(v, locked, time)
-    this.strip?.set(v.question === null ? [] : this.chips(v))
+    // The lights only change when someone locks in, at the reveal or on a new question — and are
+    // rebuilt at most every LIGHTS_EVERY_MS.
+    if (this.time.now - this.lightsAt >= LIGHTS_EVERY_MS) {
+      const key = `${v.index}:${v.question === null}:${v.reveal !== null}:${v.answered.length}`
+      if (key !== this.lightsKey) {
+        this.lightsKey = key
+        this.lightsAt = this.time.now
+        this.strip?.set(v.question === null ? [] : this.chips(v))
+      }
+    }
     this.status?.setText(this.statusText(v, locked))
     this.drawLights(Math.floor(time / 180))
+  }
+
+  // Queues every avatar texture the board will use on the first snapshot, then draws a few a frame.
+  private prewarmAvatars(snap: S): void {
+    if (this.prewarm === null) {
+      this.prewarm = []
+      for (const id of Object.keys(snap.scores)) {
+        const avatar = this.state.avatarOf(id)
+        const color = this.state.colorOf(id)
+        for (const [pixel, face] of PREWARM)
+          this.prewarm.push(() => ensureAvatarTexture(this, avatar, color, pixel, 'front', face))
+      }
+    }
+    for (let i = 0; i < PREWARM_PER_FRAME && this.prewarm.length > 0; i++) this.prewarm.pop()?.()
   }
 
   // The question closed: the right tile lights up, this player's pick gets its verdict (if the game
@@ -441,7 +502,8 @@ export abstract class QuizSceneBase<S extends QuizSnapshot> extends MiniGameScen
 
     this.fitBoardText(v.question)
     if (this.panel) punch(this, this.panel, 0.03, 90)
-    this.sfx.tick()
+    // The board flips over to the next question (silently when a relayout restart redraws it).
+    if (!this.firstSnapshot) this.sfx.flip()
     this.tiles.forEach((tile, i) => {
       const has = i < v.choices.length
       this.setTileVisible(tile, has)

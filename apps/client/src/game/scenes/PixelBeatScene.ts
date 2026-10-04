@@ -15,7 +15,10 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 const HORIZON_MS = 1500
 // How long a note stays visible after passing the hit ring (it slides on and fades out).
 const TAIL_MS = 220
-const NOTE_POOL = 8
+// Enough for the densest stretch (off-beats at the quickest tempo) across the visible horizon.
+const NOTE_POOL = 12
+// Equalizer: stepped bars, each step EQ_STEP px tall (EQ_STEP - 2 lit + a 2 px gap).
+const EQ_STEP = 8
 // A tap the server hasn't credited within this long (one snapshot + a LAN round trip) was a miss.
 const MISS_TIMEOUT_MS = 300
 // Beats crossed more than this late (a frame hitch) don't pulse — no burst of catch-up pulses.
@@ -54,7 +57,8 @@ interface Chip {
 }
 
 // Pixel Beat canvas: a rhythm highway. Notes (the shared seeded beat timeline) slide in from the
-// right to a pixel hit ring; tap anywhere or hit Space as one crosses it. The ring, lane and an
+// right to a pixel hit ring; click / tap anywhere or hit SPACE (or any letter, digit, arrow or ENTER —
+// two hands can drum the off-beats) as one crosses it. The ring, lane and an
 // equalizer pulse on every beat (with a soft metronome tick), and each credited tap pops PERFECT /
 // GOOD from the server's score delta (MISS when it never gets credited). The round's start is
 // anchored from the snapshot's remainingMs + the catalog duration, so notes line up with the
@@ -67,7 +71,10 @@ export class PixelBeatScene extends MiniGameScene<PixelBeatSnapshot> {
   private lane?: Phaser.GameObjects.Rectangle
   private streakText?: Phaser.GameObjects.Text
   private hint?: Phaser.GameObjects.Text
-  private eq?: Phaser.GameObjects.Graphics
+  // One cropped image per equalizer bar (a full stepped column; the crop shows its lit height).
+  private eqBars: Phaser.GameObjects.Image[] = []
+  private eqCaps: Phaser.GameObjects.Rectangle[] = []
+  private eqMaxH = 0
   private notes: Phaser.GameObjects.Image[] = []
   private chips: Chip[] = []
   private levels: number[] = []
@@ -89,6 +96,8 @@ export class PixelBeatScene extends MiniGameScene<PixelBeatSnapshot> {
   override create(): void {
     super.create()
     this.notes = []
+    this.eqBars = []
+    this.eqCaps = []
     this.chips = []
     this.pending = []
     this.startLocal = Number.POSITIVE_INFINITY
@@ -99,12 +108,13 @@ export class PixelBeatScene extends MiniGameScene<PixelBeatSnapshot> {
     this.primed = false
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
+    const big = Math.min(width, height) >= 900
     const chipRows = Math.ceil(
       Math.max(1, Object.keys(this.state.names).length) / this.chipsPerRow(),
     )
     const contentTop = this.top + chipRows * (compact ? 20 : 26)
 
-    const laneH = compact ? 76 : 104
+    const laneH = compact ? 76 : big ? 144 : 104
     const laneY = Math.round(contentTop + (height - contentTop) * 0.3)
     const hitX = Math.round(width * 0.2)
     const laneEnd = Math.round(width * 0.97)
@@ -135,7 +145,7 @@ export class PixelBeatScene extends MiniGameScene<PixelBeatSnapshot> {
       )
     }
 
-    this.streakSize = compact ? 24 : 32
+    this.streakSize = compact ? 24 : big ? 40 : 32
     this.streakText = this.add
       .text(
         width / 2,
@@ -148,26 +158,59 @@ export class PixelBeatScene extends MiniGameScene<PixelBeatSnapshot> {
     // Equalizer along the bottom, above the hint.
     const bars = compact ? 12 : 24
     this.levels = new Array<number>(bars).fill(0.08)
-    this.eq = this.add.graphics()
     this.layout = {
       hitX,
       laneEnd,
       laneY,
       laneH,
-      eqTop: laneY + laneH / 2 + (compact ? 90 : 120),
+      eqTop: laneY + laneH / 2 + (compact ? 90 : big ? 150 : 120),
       eqBottom: height - (compact ? 34 : 44),
     }
+    this.buildEq()
     this.hint = this.add
       .text(
         width / 2,
         height - 10,
-        this.t('game.pixelBeat.tapHint'),
+        this.t(compact ? 'game.pixelBeat.tapHint' : 'game.pixelBeat.tapHintPc'),
         bodyStyle(compact ? 13 : 16, PALETTE.dim),
       )
       .setOrigin(0.5, 1)
 
     this.input.on('pointerdown', () => this.tap())
-    this.onKey('SPACE', () => this.tap())
+    // Any letter, digit, arrow, SPACE or ENTER is a tap (no auto-repeat; modifiers and browser
+    // shortcuts are left alone).
+    this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return
+      if (/^(?:[a-z0-9 ]|Enter|Arrow(?:Up|Down|Left|Right))$/i.test(e.key)) this.tap()
+    })
+  }
+
+  // The equalizer's bars: one tall stepped column texture per color, shown cropped to each bar's level.
+  private buildEq(): void {
+    const { width } = this.scale
+    const { eqTop, eqBottom } = this.layout
+    const n = this.levels.length
+    const gap = 6
+    const barW = Math.max(2, Math.round((width * 0.9 - gap * (n - 1)) / n))
+    const steps = Math.max(2, Math.floor(Math.max(16, eqBottom - eqTop) / EQ_STEP))
+    this.eqMaxH = steps * EQ_STEP
+    const x0 = width * 0.05
+    for (let i = 0; i < n; i++) {
+      const color = i % 2 === 0 ? PALETTE.cyan : PALETTE.magenta
+      const key = `pp-beat-eq-${color.toString(16)}-${barW}x${this.eqMaxH}`
+      if (!this.textures.exists(key)) {
+        const g = this.make.graphics({ x: 0, y: 0 }, false)
+        g.fillStyle(color, 0.85)
+        for (let s = 0; s < steps; s++) g.fillRect(0, s * EQ_STEP + 2, barW, EQ_STEP - 2)
+        g.generateTexture(key, barW, this.eqMaxH)
+        g.destroy()
+      }
+      const x = Math.round(x0 + i * (barW + gap))
+      this.eqBars.push(this.add.image(x, eqBottom, key).setOrigin(0, 1))
+      this.eqCaps.push(
+        this.add.rectangle(x, eqBottom, barW, EQ_STEP - 2, shade(color, 0.4), 0.85).setOrigin(0, 1),
+      )
+    }
   }
 
   private tap(): void {
@@ -175,7 +218,9 @@ export class PixelBeatScene extends MiniGameScene<PixelBeatSnapshot> {
     const at = this.time.now - this.startLocal
     this.sendInput(Number.isFinite(at) ? { kind: 'tap', at: Math.round(at) } : { kind: 'tap' })
     this.pending.push(this.time.now)
-    // Instant, unjudged acknowledgement; the verdict pops when the server credits (or doesn't).
+    // Instant, unjudged acknowledgement — a kick drum on the frame of the tap, so a run of taps plays
+    // the beat; the verdict pops when the server credits (or doesn't).
+    this.sfx.land()
     if (this.hitRing) {
       punch(this, this.hitRing, -0.1, 60)
       ring(this, this.hitRing.x, this.hitRing.y, PALETTE.text, this.layout.laneH * 0.6)
@@ -234,9 +279,12 @@ export class PixelBeatScene extends MiniGameScene<PixelBeatSnapshot> {
       hits.push(GOOD_POINTS)
       gained -= GOOD_POINTS
     }
+    // A credit that completes a combo of ten rings the combo's arpeggio instead of its own chime.
+    const combo = streak > this.prevStreak && streak % 10 === 0
     hits.forEach((points, i) => {
       this.pending.shift()
-      this.popJudgement(points === PERFECT_POINTS ? 'perfect' : 'good', i)
+      const quiet = combo && i === hits.length - 1
+      this.popJudgement(points === PERFECT_POINTS ? 'perfect' : 'good', i, quiet)
     })
     if (hits.length === 0 && streak === 0 && this.prevStreak > 0) {
       this.pending.shift()
@@ -255,7 +303,7 @@ export class PixelBeatScene extends MiniGameScene<PixelBeatSnapshot> {
     }
   }
 
-  private popJudgement(kind: 'perfect' | 'good' | 'miss', stack: number): void {
+  private popJudgement(kind: 'perfect' | 'good' | 'miss', stack: number, quiet = false): void {
     const { hitX, laneY, laneH } = this.layout
     const y = laneY - laneH / 2 - 14 - stack * 26
     const compact = Math.min(this.scale.width, this.scale.height) < 520
@@ -266,12 +314,12 @@ export class PixelBeatScene extends MiniGameScene<PixelBeatSnapshot> {
       floatText(this, x, y, label, color, size)
     }
     if (kind === 'perfect') {
-      this.sfx.correct()
+      if (!quiet) this.sfx.correct()
       say('game.common.perfect', PALETTE.amber, compact ? 16 : 24)
       burst(this, hitX, laneY, PALETTE.amber, 16, 240)
       ring(this, hitX, laneY, PALETTE.amber, laneH * 0.8)
     } else if (kind === 'good') {
-      this.sfx.click()
+      if (!quiet) this.sfx.click()
       say('game.common.good', PALETTE.cyan, 16)
       ring(this, hitX, laneY, PALETTE.cyan, laneH * 0.7)
     } else {
@@ -295,6 +343,7 @@ export class PixelBeatScene extends MiniGameScene<PixelBeatSnapshot> {
     }
     punch(this, this.streakText, 0.25, 90)
     if (streak % 10 === 0) {
+      this.sfx.lineClear(Math.min(4, streak / 10))
       burst(this, this.streakText.x, this.streakText.y, PALETTE.orange, 24, 260)
       floatText(
         this,
@@ -342,32 +391,21 @@ export class PixelBeatScene extends MiniGameScene<PixelBeatSnapshot> {
     this.levels = this.levels.map((_, i) => 0.35 + 0.65 * hash01(passed, i))
   }
 
-  // Chunky stepped equalizer bars that jump on each beat and decay in between.
+  // Chunky stepped equalizer bars that jump on each beat and decay in between (a crop per bar, no
+  // per-frame drawing).
   private renderEq(delta: number): void {
-    if (!this.eq) return
-    const { eqTop, eqBottom } = this.layout
-    const { width } = this.scale
-    const n = this.levels.length
-    const gap = 6
-    const barW = (width * 0.9 - gap * (n - 1)) / n
-    const x0 = width * 0.05
-    const maxH = Math.max(16, eqBottom - eqTop)
+    const { eqBottom } = this.layout
+    const maxH = this.eqMaxH
     const decay = 0.9 ** (delta / 16)
-    const g = this.eq.clear()
     this.levels.forEach((level, i) => {
       const next = Math.max(0.08, level * decay)
       this.levels[i] = next
-      const steps = Math.max(1, Math.round((next * maxH) / 8))
-      const color = i % 2 === 0 ? PALETTE.cyan : PALETTE.magenta
-      for (let s = 0; s < steps; s++) {
-        g.fillStyle(s === steps - 1 ? shade(color, 0.4) : color, 0.85)
-        g.fillRect(
-          Math.round(x0 + i * (barW + gap)),
-          Math.round(eqBottom - (s + 1) * 8),
-          Math.max(2, Math.round(barW)),
-          6,
-        )
-      }
+      const h = Math.max(1, Math.round((next * maxH) / EQ_STEP)) * EQ_STEP
+      const bar = this.eqBars[i]
+      if (!bar || bar.getData('h') === h) return
+      bar.setData('h', h)
+      bar.setVisible(h > EQ_STEP).setCrop(0, maxH - h + EQ_STEP, bar.width, h - EQ_STEP)
+      this.eqCaps[i]?.setY(eqBottom - h + EQ_STEP)
     })
   }
 

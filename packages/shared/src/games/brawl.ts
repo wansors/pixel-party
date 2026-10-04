@@ -18,6 +18,16 @@ export const BRAWL = {
   speedY: 0.3,
   // How far up/down the street (depth) an attack still connects.
   laneTolerance: 0.05,
+  // Each attack: how long it keeps the fighter busy, and when the next attack may start (ms). Shared so
+  // the client can swing your own attack the moment you press (and not on a press the server refuses).
+  moves: {
+    punch: { ms: 180, cooldownMs: 280 },
+    kick: { ms: 320, cooldownMs: 600 },
+    grab: { ms: 450, cooldownMs: 1400 },
+  },
+  // How long a hit staggers (hurt) and a knock-down floors (down) a fighter.
+  hurtMs: 260,
+  downMs: 900,
 } as const
 
 export type BrawlItemKind = 'pipe' | 'bottle' | 'chicken'

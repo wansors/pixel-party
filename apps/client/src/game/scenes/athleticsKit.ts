@@ -1,5 +1,5 @@
 import { type AthleticsFoot, PALETTE } from '@pp/shared'
-import type Phaser from 'phaser'
+import Phaser from 'phaser'
 import { punch } from '../fx'
 import { ensureBevelPanel, fitFontSize, headlineStyle, shade } from '../pixelStyle'
 
@@ -201,6 +201,21 @@ export class RunnerTracker {
     t.offset = Math.abs(err) > 4 ? 0 : err
   }
 
+  // Your own counted stride, applied on the tap (the next snapshot confirms it): the runner carries on
+  // from where it is on screen with the added speed.
+  nudge(id: string, dv: number, now: number): void {
+    const t = this.tracks.get(id)
+    if (!t) return
+    t.x = this.predict(t, now)
+    t.at = now
+    t.v += dv
+  }
+
+  // Current speed as tracked (the snapshot's, plus any predicted strides since).
+  v(id: string): number {
+    return this.tracks.get(id)?.v ?? 0
+  }
+
   // Current display position; `freeze` stops extrapolating (the round's final snapshot).
   x(id: string, now: number, dtMs: number, freeze = false): number {
     const t = this.tracks.get(id)
@@ -233,7 +248,8 @@ const SPEED_FULL = 11.5 // m/s that fills the speed meter
 // The arcade two-button run pad along the bottom of the canvas: big LEFT / RIGHT buttons (the one to
 // hit next glows), an optional middle action button (JUMP / THROW, press-and-hold aware) and a
 // segmented speed meter above them — slimmer on a landscape phone, where height is scarce. Also binds
-// the keyboard: ← / A / Z and → / D / X for the feet, SPACE / ↑ / W for the action.
+// the keyboard: ← / A / Z and → / D / X for the feet, SPACE / ↑ / W / ENTER for the action (held keys
+// ignore the OS auto-repeat; a held action is released if the window loses focus).
 export class StridePad {
   readonly top: number
   private readonly left: Phaser.GameObjects.Image
@@ -358,9 +374,16 @@ export class StridePad {
     bind(['RIGHT', 'D', 'X'], () => this.foot('R'))
     if (withAction) {
       bind(
-        ['SPACE', 'UP', 'W'],
+        ['SPACE', 'UP', 'W', 'ENTER'],
         () => this.press(),
         () => this.releaseHold(),
+      )
+      // A held action key never sees its keyup once the window loses focus: let go there instead of
+      // leaving the aim climbing to its limit.
+      const onBlur = (): void => this.releaseHold()
+      scene.game.events.on(Phaser.Core.Events.BLUR, onBlur)
+      scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
+        scene.game.events.off(Phaser.Core.Events.BLUR, onBlur),
       )
     }
     this.setSpeed(0)

@@ -5,7 +5,7 @@ import type { TeamId } from './theme'
 // changed semantics). The server stamps it on WELCOME; the client compares against its own compiled
 // constant and surfaces a "please refresh" notice on mismatch — a stale cached bundle then fails loud
 // instead of misbehaving silently.
-export const PROTOCOL_VERSION = 3
+export const PROTOCOL_VERSION = 4
 
 // ---------------------------------------------------------------------------------------------------
 // Shared DTOs
@@ -65,8 +65,9 @@ export interface TeamRoundResult {
 // already produces; never feeds scoring or the line-up.
 // ---------------------------------------------------------------------------------------------------
 
-// A player's skill profile across the session: a 0..1 score per axis (1 = won every game on that axis).
-// Only axes actually played this session are present — the radar draws whatever it receives.
+// A player's skill profile across the session: a 0..1 standing per axis against this room (0.5 = the
+// middle; 1 = won every game on that axis, softened while there are few rounds — D31). Only axes
+// actually played this session are present; the client shows the others as "not measured yet".
 export interface PlayerRadarDto {
   playerId: string
   axes: Partial<Record<SkillAxis, number>>

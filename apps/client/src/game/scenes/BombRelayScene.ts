@@ -20,6 +20,8 @@ const TEAM_ORDER: readonly TeamId[] = ['red', 'blue']
 const SAFE_FUSE_MS = 2500
 const FUSE_STUB = 0.15
 const MAX_CHAIN = 8
+// While you hold a bomb past its safe window, the fuse hisses at you this often.
+const HISS_EVERY_MS = 450
 
 // Classic cartoon bomb, 14 cells wide: metal cap, dark body with a highlight and a band in the team's
 // color so each side's bomb reads as theirs.
@@ -64,6 +66,9 @@ interface Column {
   holder: Phaser.GameObjects.Text
   stats: Phaser.GameObjects.Text
   bar: Phaser.GameObjects.Graphics
+  barKey: string
+  barGlow: Phaser.GameObjects.Rectangle
+  chainKey: string
   barX: number
   barY: number
   barW: number
@@ -80,7 +85,8 @@ interface Column {
 }
 
 // Bomb Relay (team hot potato) canvas: each team's bomb side by side — red left, blue right — with a
-// fuse that burns while its holder mashes (tap / SPACE) to fill the leg and pass it on. Shows who holds
+// fuse that burns while its holder mashes (click / tap / SPACE / ENTER) to fill the leg and pass it on;
+// your own mashes light the leg bar at once (the snapshot catches up). Shows who holds
 // each bomb (name in their identity color + the relay chain), the leg progress, passes and booms, and
 // a big explosion + shake when a fuse blows. Only the current holder's mashes count (server-checked).
 export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
@@ -91,6 +97,14 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
   private sparkKeys: string[] = []
   private primed = false
   private promptMode = ''
+  // Mashes sent since the last snapshot, while holding the bomb: drawn on the leg bar right away.
+  private pendingMashes = 0
+  private lastTick = -1
+  // The sputtering fuse of the bomb in your hands: when it last hissed, and whether it's past safe.
+  private hissAt = 0
+  private hissing = false
+  // A big screen (1080p and up): larger bombs, labels and chain avatars.
+  private big = false
 
   constructor(...deps: SceneDeps) {
     super('bomb-relay', ...deps)
@@ -101,8 +115,13 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
     this.columns = []
     this.primed = false
     this.promptMode = ''
+    this.pendingMashes = 0
+    this.lastTick = -1
+    this.hissAt = 0
+    this.hissing = false
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
+    this.big = Math.min(width, height) >= 900
     const top = this.top
     const avail = height - top
 
@@ -148,8 +167,8 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
       .text(
         width / 2,
         height - 10,
-        this.t('game.bombRelay.hint'),
-        bodyStyle(compact ? 12 : 15, PALETTE.dim, {
+        this.t(compact ? 'game.bombRelay.hint' : 'game.bombRelay.hintPc'),
+        bodyStyle(compact ? 12 : this.big ? 16 : 15, PALETTE.dim, {
           align: 'center',
           wordWrap: { width: width * 0.92 },
         }),
@@ -158,6 +177,7 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
 
     this.input.on('pointerdown', () => this.mash())
     this.onKey('SPACE', () => this.mash())
+    this.onKey('ENTER', () => this.mash())
   }
 
   private buildColumn(
@@ -170,18 +190,19 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
   ): Column {
     const color = teamColor(team)
     const panel = this.add.graphics()
+    const big = this.big
 
     this.add
       .text(
         cx,
-        y + (compact ? 16 : 24),
+        y + (compact ? 16 : big ? 32 : 24),
         this.t(`team.${team}`).toUpperCase(),
-        headlineStyle(16, color),
+        headlineStyle(big ? 24 : 16, color),
       )
       .setOrigin(0.5)
-    const statsY = y + (compact ? 34 : 48)
+    const statsY = y + (compact ? 34 : big ? 64 : 48)
     const stats = this.add
-      .text(cx, statsY, '', bodyStyle(compact ? 11 : 15, PALETTE.text))
+      .text(cx, statsY, '', bodyStyle(compact ? 11 : big ? 20 : 15, PALETTE.text))
       .setOrigin(0.5)
 
     const bombKey = ensurePixelGrid(this, {
@@ -198,7 +219,7 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
       pixelSize: 1,
     })
     // The fuse curls up above the cap, so the bomb sits one fuse-height below the stats line.
-    const bombSize = Math.min(w * (compact ? 0.58 : 0.46), h * 0.3, 140)
+    const bombSize = Math.min(w * (compact ? 0.58 : 0.46), h * 0.3, big ? 210 : 140)
     const bombY = statsY + (compact ? 14 : 20) + bombSize * 0.62 + (bombSize * 8) / 14
     const bomb = this.add
       .image(cx, bombY, bombKey)
@@ -211,13 +232,18 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
       .setDepth(6)
 
     const holder = this.add
-      .text(cx, bombY + bombSize * 0.66 + 6, '', headlineStyle(16, PALETTE.text))
+      .text(cx, bombY + bombSize * 0.66 + 6, '', headlineStyle(big ? 24 : 16, PALETTE.text))
       .setOrigin(0.5, 0)
     const barW = w * 0.8
-    const barY = holder.y + (compact ? 20 : 30)
+    const barY = holder.y + (compact ? 20 : big ? 42 : 30)
     const bar = this.add.graphics()
+    const barH = this.barH()
+    const barGlow = this.add
+      .rectangle(cx, barY + barH / 2, barW + 6, barH + 6)
+      .setStrokeStyle(2, PALETTE.amber)
+      .setVisible(false)
     const chain = this.add.graphics()
-    const chainY = barY + (compact ? 26 : 34)
+    const chainY = barY + (compact ? 26 : big ? 56 : 34)
     const chainIcons = Array.from({ length: MAX_CHAIN }, () =>
       this.add
         .image(cx, chainY, ensureAvatarTexture(this, 'cat', PALETTE.dim, 1))
@@ -229,7 +255,12 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
       w,
       panel,
       // The panel hugs its content (bounded by the space it was given).
-      panelRect: { x: cx - w / 2, y, w, h: Math.min(h, chainY + (compact ? 22 : 30) - y) },
+      panelRect: {
+        x: cx - w / 2,
+        y,
+        w,
+        h: Math.min(h, chainY + (compact ? 22 : big ? 48 : 30) - y),
+      },
       bomb,
       bombY,
       bombSize,
@@ -238,6 +269,9 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
       holder,
       stats,
       bar,
+      barKey: '',
+      barGlow,
+      chainKey: '',
       barX: cx - barW / 2,
       barY,
       barW,
@@ -251,6 +285,10 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
       holderId: '',
       respawnUntil: 0,
     }
+  }
+
+  private barH(): number {
+    return Math.min(this.scale.width, this.scale.height) < 520 ? 10 : this.big ? 20 : 14
   }
 
   protected override remainingMs(snap: BombRelaySnapshot): number {
@@ -272,12 +310,17 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
     if (!snap || snap.roundRemainingMs <= 0 || !this.amHolder()) return
     this.sfx.click()
     this.sendInput({ kind: 'mash' })
+    this.pendingMashes++
     const col = this.columns.find((c) => c.team === this.myTeam())
     if (col) punch(this, col.bomb, 0.06, 50)
   }
 
   protected frame(snap: BombRelaySnapshot | null, time: number): void {
     if (!snap) return
+    if (this.state.tick !== this.lastTick) {
+      this.lastTick = this.state.tick
+      this.pendingMashes = 0
+    }
     const mine = this.myTeam()
     this.hint?.setVisible(mine !== undefined) // spectators have nothing to press
     for (const col of this.columns) {
@@ -320,7 +363,11 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
         yoyo: true,
       })
       punch(this, col.holder, 0.3, 90)
-      if (ours) this.sfx.coin()
+      // Passed on: the fuse fizzes back to life in the next pair of hands.
+      if (ours) {
+        this.sfx.coin()
+        this.sfx.fuse()
+      }
     }
     if (view.explosions > col.explosions) {
       col.legStartedAt = time
@@ -354,7 +401,7 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
       this.sfx.wrong()
       shake(this, 0.01, 200)
     } else if (ours) {
-      this.sfx.tick()
+      this.sfx.fuse()
     }
   }
 
@@ -367,12 +414,14 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
     ring(this, cx, y, PALETTE.orange, s * 1.2)
     ring(this, cx, y, PALETTE.amber, s * 0.7)
     floatText(this, cx, y - s * 0.3, this.t('game.bombRelay.boom'), PALETTE.red, 28)
-    this.sfx.pop()
     if (ours) {
+      this.sfx.boom()
       this.sfx.wrong()
       shake(this, wasMe ? 0.022 : 0.014, 320)
       if (wasMe) flash(this, PALETTE.orange, 180)
     } else {
+      // The other team's bomb goes off across the room: heard, but not in your face.
+      this.sfx.quiet(() => this.sfx.boom(), 0.5)
       shake(this, 0.006, 160)
     }
     // A fresh bomb pops back in for the next holder.
@@ -405,6 +454,8 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
     const elapsed = time - col.legStartedAt
     const danger = elapsed > SAFE_FUSE_MS && time > col.respawnUntil
     const respawning = time < col.respawnUntil
+    const live = !this.state.final && (this.snap?.roundRemainingMs ?? 0) > 0
+    if (ours && view.holderId === this.selfId) this.hiss(danger && live, time)
 
     // Hot bomb: the last stretch blinks red and trembles.
     const hot = danger && Math.floor(time / 110) % 2 === 0
@@ -427,41 +478,53 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
     const holderColor = this.state.colorOf(view.holderId, PALETTE.text)
     const label = view.holderId ? `▲ ${this.label(view.holderId).toUpperCase()}` : ''
     if (col.holder.text !== label) {
-      col.holder.setText(label).setFontSize(16)
-      if (col.holder.width > col.w * 0.92) col.holder.setFontSize(8)
+      const size = this.big ? 24 : 16
+      col.holder.setText(label).setFontSize(size)
+      if (col.holder.width > col.w * 0.92) col.holder.setFontSize(size - 8)
     }
     const holderCss = hexToCss(holderColor)
     if (col.holder.style.color !== holderCss) col.holder.setColor(holderCss)
 
-    const stats = `${this.t('game.bombRelay.relays')}: ${view.relays} · ${this.t('game.bombRelay.booms')}: ${view.explosions}`
-    if (col.stats.text !== stats) col.stats.setText(stats)
-
-    // Leg progress: one segment per mash still needed to pass.
-    const segs = Math.max(1, view.legTarget)
-    const gap = 2
-    const h = this.scale.width < 520 ? 10 : 14
-    const segW = (col.barW - gap * (segs - 1)) / segs
-    col.bar.clear()
-    for (let i = 0; i < segs; i++) {
-      const lit = i < view.legProgress
-      col.bar.fillStyle(lit ? color : PALETTE.panelAlt, 1)
-      col.bar.fillRect(
-        Math.round(col.barX + i * (segW + gap)),
-        col.barY,
-        Math.max(1, Math.round(segW)),
-        h,
+    if (col.stats.getData('n') !== `${view.relays}:${view.explosions}`) {
+      col.stats.setData('n', `${view.relays}:${view.explosions}`)
+      col.stats.setText(
+        `${this.t('game.bombRelay.relays')}: ${view.relays} · ${this.t('game.bombRelay.booms')}: ${view.explosions}`,
       )
     }
-    if (ours && view.holderId === this.selfId) {
-      col.bar.lineStyle(2, PALETTE.amber, 0.6 + 0.4 * Math.abs(Math.sin(time / 150)))
-      col.bar.strokeRect(col.barX - 3, col.barY - 3, col.barW + 6, h + 6)
+
+    // Leg progress: one segment per mash still needed to pass (your own mashes count at once).
+    const mineNow = ours && view.holderId === this.selfId
+    const progress = Math.min(view.legTarget, view.legProgress + (mineNow ? this.pendingMashes : 0))
+    const segs = Math.max(1, view.legTarget)
+    const barKey = `${segs}:${progress}`
+    if (barKey !== col.barKey) {
+      col.barKey = barKey
+      const gap = 2
+      const h = this.barH()
+      const segW = (col.barW - gap * (segs - 1)) / segs
+      col.bar.clear()
+      for (let i = 0; i < segs; i++) {
+        col.bar.fillStyle(i < progress ? color : PALETTE.panelAlt, 1)
+        col.bar.fillRect(
+          Math.round(col.barX + i * (segW + gap)),
+          col.barY,
+          Math.max(1, Math.round(segW)),
+          h,
+        )
+      }
     }
+    col.barGlow
+      .setVisible(mineNow)
+      .setAlpha(mineNow ? 0.6 + 0.4 * Math.abs(Math.sin(time / 150)) : 0)
 
     // Relay chain: every member's avatar in pass order; the holder is bigger, framed and scared stiff
-    // (hurt face), the next one outlined.
+    // (hurt face), the next one outlined. Rebuilt only when the chain or its holder changes.
+    const chainKey = `${view.holderId}|${view.members.join(',')}`
+    if (chainKey === col.chainKey) return
+    col.chainKey = chainKey
     const members = view.members.slice(0, MAX_CHAIN)
-    const pip = 16
-    const step = pip + 10
+    const pip = this.big ? 32 : 16
+    const step = pip + (this.big ? 14 : 10)
     const x0 = col.cx - ((members.length - 1) * step) / 2
     const holderIdx = view.members.indexOf(view.holderId)
     const nextIdx = members.length > 1 ? (holderIdx + 1) % view.members.length : -1
@@ -471,14 +534,14 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
       const x = x0 + i * step
       const c = this.state.colorOf(id, PALETTE.dim)
       const isHolder = i === holderIdx
-      const size = isHolder ? 24 : pip
+      const size = isHolder ? pip * 1.5 : pip
       col.chainIcons[i]
         ?.setTexture(
           ensureAvatarTexture(
             this,
             this.state.avatarOf(id),
             c,
-            1,
+            this.big ? 2 : 1,
             'front',
             isHolder ? 'hurt' : 'idle',
           ),
@@ -501,6 +564,16 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
     })
   }
 
+  // The bomb in your own hands past its safe window: a warning beep as it turns, then the fuse hisses.
+  private hiss(danger: boolean, time: number): void {
+    if (danger && !this.hissing) this.sfx.urgent()
+    if (danger && time - this.hissAt >= HISS_EVERY_MS) {
+      this.hissAt = time
+      this.sfx.fuse()
+    }
+    this.hissing = danger
+  }
+
   // Fuse: a pixel cord curling up from the cap (shorter as it burns) with a flickering spark at its tip.
   private drawFuse(col: Column, frac: number, danger: boolean, time: number): void {
     const g = col.fuse
@@ -521,8 +594,9 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
       tip = { x, y }
     }
     const flicker = Math.floor(time / (danger ? 50 : 90)) % 2
+    const sparkKey = this.sparkKeys[flicker] ?? ''
+    if (col.spark.texture.key !== sparkKey) col.spark.setTexture(sparkKey)
     col.spark
-      .setTexture(this.sparkKeys[flicker] ?? '')
       .setPosition(Math.round(tip.x), Math.round(tip.y))
       .setScale(Math.max(3, Math.round(col.bombSize / 22)) * (danger ? 1.4 : 1))
   }

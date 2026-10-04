@@ -1,14 +1,20 @@
 import type { TeamId, TugOfWarInput, TugOfWarSnapshot } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
+import { MASHER_MAX_PRESSES_PER_SEC } from './buttonMasher'
 
 const DEFAULT_DURATION_MS = 15_000
 // Per-capita pull lead that ends the round instantly (a decisive win before the timer). Per-capita, so
 // uneven teams stay fair: what counts is average effort per member, not raw headcount.
 const WIN_THRESHOLD = 25
+// Pulls counted per member per rolling second — the Button Masher's human ceiling, so an autoclicker
+// or a two-key drum roll pulls as hard as the fastest finger, not harder.
+const RATE_WINDOW_MS = 1000
 
 export interface TugOfWarState {
   team: Map<PlayerId, TeamId>
   pulls: Map<PlayerId, number>
+  // playerId -> times of the pulls counted in the last RATE_WINDOW_MS (oldest first).
+  recent: Map<PlayerId, number[]>
   startedAt: number
   endsAt: number
 }
@@ -33,6 +39,7 @@ export class TugOfWar implements MiniGame<TugOfWarState, TugOfWarInput> {
     return {
       team,
       pulls: new Map(ctx.players.map((id) => [id, 0])),
+      recent: new Map(ctx.players.map((id) => [id, []])),
       startedAt: ctx.now,
       endsAt: ctx.now + durationMs,
     }
@@ -47,6 +54,11 @@ export class TugOfWar implements MiniGame<TugOfWarState, TugOfWarInput> {
     if (input.kind !== 'pull') return state
     if (now < state.startedAt || now >= state.endsAt) return state
     if (!state.team.has(playerId)) return state
+    const recent = state.recent.get(playerId)
+    if (!recent) return state
+    while (recent.length > 0 && (recent[0] as number) <= now - RATE_WINDOW_MS) recent.shift()
+    if (recent.length >= MASHER_MAX_PRESSES_PER_SEC) return state
+    recent.push(now)
     state.pulls.set(playerId, (state.pulls.get(playerId) ?? 0) + 1)
     return state
   }

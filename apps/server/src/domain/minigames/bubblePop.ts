@@ -1,15 +1,18 @@
-import type { BubblePopInput, BubblePopSnapshot } from '@pp/shared'
+import {
+  BUBBLE,
+  type BubblePopInput,
+  type BubblePopSnapshot,
+  bubbleJammed,
+  bubbleNextShot,
+  bubbleShoot,
+} from '@pp/shared'
 import type { Random } from '../ports/Random'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
-const ROWS = 8
-const COLS = 7
+const { rows: ROWS, cols: COLS, colors: COLORS } = BUBBLE
 const CELLS = ROWS * COLS
-const COLORS = 4
 const QUEUE_LENGTH = 100
 const DEFAULT_DURATION_MS = 60_000
-
-const at = (row: number, col: number) => row * COLS + col
 
 function randomColor(random: Random): number {
   return Math.floor(random.next() * COLORS) + 1
@@ -18,11 +21,7 @@ function randomColor(random: Random): number {
 // Rows 0..3 (the top half, row 0 = ceiling) start filled with random colors; rows 4..7 stay empty.
 function buildStartBoard(random: Random): number[] {
   const board = new Array<number>(CELLS).fill(0)
-  for (let row = 0; row < 4; row++) {
-    for (let col = 0; col < COLS; col++) {
-      board[at(row, col)] = randomColor(random)
-    }
-  }
+  for (let i = 0; i < 4 * COLS; i++) board[i] = randomColor(random)
   return board
 }
 
@@ -30,92 +29,8 @@ function buildShotQueue(random: Random): number[] {
   return Array.from({ length: QUEUE_LENGTH }, () => randomColor(random))
 }
 
-// 4-directional flood fill from `start` over cells matching `matches`. Returns visited indices.
-function floodFill(
-  board: number[],
-  start: number,
-  matches: (index: number) => boolean,
-): Set<number> {
-  const visited = new Set<number>([start])
-  const stack = [start]
-  while (stack.length > 0) {
-    const index = stack.pop() as number
-    const row = Math.floor(index / COLS)
-    const col = index % COLS
-    const neighbors: number[] = []
-    if (row > 0) neighbors.push(at(row - 1, col))
-    if (row < ROWS - 1) neighbors.push(at(row + 1, col))
-    if (col > 0) neighbors.push(at(row, col - 1))
-    if (col < COLS - 1) neighbors.push(at(row, col + 1))
-    for (const n of neighbors) {
-      if (visited.has(n)) continue
-      if (!matches(n)) continue
-      visited.add(n)
-      stack.push(n)
-    }
-  }
-  return visited
-}
-
-// Walks the shared shot queue from `fromIndex` to the next color that's still present on `board` — a
-// shot in a color the player has already fully cleared could never be popped, softlocking their board.
-// Falls back to the raw slot if the board holds none of the queue's colors (i.e. it's already empty).
-function nextValidShot(
-  board: number[],
-  queue: number[],
-  fromIndex: number,
-): { index: number; color: number } {
-  const present = new Set(board.filter((c) => c !== 0))
-  for (let steps = 0; steps < queue.length; steps++) {
-    const index = fromIndex + steps
-    const color = queue[index % queue.length] as number
-    if (present.has(color)) return { index, color }
-  }
-  return { index: fromIndex, color: queue[fromIndex % queue.length] as number }
-}
-
-// Finds the landing row for a shot in `col`. The shot travels up from below the board and sticks under
-// the first bubble in its way — the lowest filled cell — or at the ceiling in an empty column. Returns -1
-// when the column's bottom cell is filled: nothing gets in.
-function landingRow(board: number[], col: number): number {
-  for (let row = ROWS - 1; row >= 0; row--) {
-    if (board[at(row, col)] !== 0) return row === ROWS - 1 ? -1 : row + 1
-  }
-  return 0
-}
-
-// Every column is blocked at the bottom: no shot can land anywhere, the board can't change any more.
-function isJammed(board: number[]): boolean {
-  for (let col = 0; col < COLS; col++) if (landingRow(board, col) !== -1) return false
-  return true
-}
-
-// Pops the connected same-color group at `placed` (size >= 3), then removes any bubble left floating
-// (not connected via any-color adjacency back up to row 0). Mutates `board` in place; returns the total
-// number of cells removed (pop + floating cleanup) for scoring.
-function resolvePlacement(board: number[], placed: number): number {
-  const color = board[placed]
-  if (!color) return 0
-  const group = floodFill(board, placed, (i) => board[i] === color)
-  let removed = 0
-  if (group.size >= 3) {
-    for (const i of group) board[i] = 0
-    removed += group.size
-  }
-  const attached = new Set<number>()
-  for (let col = 0; col < COLS; col++) {
-    const top = at(0, col)
-    if (board[top] !== 0 && !attached.has(top)) {
-      for (const i of floodFill(board, top, (n) => board[n] !== 0)) attached.add(i)
-    }
-  }
-  for (let i = 0; i < CELLS; i++) {
-    if (board[i] !== 0 && !attached.has(i)) {
-      board[i] = 0
-      removed++
-    }
-  }
-  return removed
+function nextValidShot(board: number[], queue: number[], from: number) {
+  return bubbleNextShot(board, (i) => queue[i % queue.length] as number, from, queue.length)
 }
 
 export interface BubblePopState {
@@ -125,6 +40,8 @@ export interface BubblePopState {
   endsAt: number
   boards: Map<PlayerId, number[]>
   shotIndex: Map<PlayerId, number>
+  // Shots taken from each player (acknowledged on the wire, so the client stops replaying them).
+  shots: Map<PlayerId, number>
   score: Map<PlayerId, number>
   // 0 = not finished; otherwise the server time the player fully cleared their board.
   doneAt: Map<PlayerId, number>
@@ -135,7 +52,8 @@ export interface BubblePopState {
 }
 
 // Self-paced FFA puzzle race, structurally like Sudoku Race: one seeded starting cluster and shot queue
-// shared by everyone, each player mutates their own copy. A simplified rectangular grid + "choose a
+// shared by everyone, each player mutates their own copy. The shot rules live in @pp/shared, so the
+// client predicts its own board with the same code. A simplified rectangular grid + "choose a
 // column" aim stand in for a true hex-grid bubble-shooter, but the pop/clear rules are the real thing.
 // Most bubbles popped wins; a full clear beats any score (the faster, the better). Let the stack reach
 // the bottom of every column and the board jams: you're out of shots for the round.
@@ -156,6 +74,7 @@ export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
       endsAt: ctx.now + durationMs,
       boards: new Map(ctx.players.map((pid) => [pid, [...startBoard]])),
       shotIndex: new Map(ctx.players.map((pid) => [pid, 0])),
+      shots: new Map(ctx.players.map((pid) => [pid, 0])),
       score: new Map(ctx.players.map((pid) => [pid, 0])),
       doneAt: new Map(ctx.players.map((pid) => [pid, 0])),
       jammed: new Set(),
@@ -169,9 +88,12 @@ export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
     input: BubblePopInput,
     now: number,
   ): BubblePopState {
-    if (input.kind !== 'shoot') return state
+    if (input?.kind !== 'shoot') return state
     const { col } = input
     if (!Number.isInteger(col) || col < 0 || col >= COLS) return state
+    const shots = state.shots.get(playerId)
+    if (shots === undefined) return state
+    state.shots.set(playerId, shots + 1)
     const doneAt = state.doneAt.get(playerId)
     if (doneAt === undefined || doneAt > 0 || state.jammed.has(playerId)) return state
     if (now >= state.endsAt) return state
@@ -180,16 +102,14 @@ export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
     if (!board || shotIndex === undefined) return state
     const { index, color } = nextValidShot(board, state.shotQueue, shotIndex)
     state.shotIndex.set(playerId, index + 1)
-    const row = landingRow(board, col)
-    if (row === -1) return state
-    const placed = at(row, col)
-    board[placed] = color
-    const removed = resolvePlacement(board, placed)
+    const shot = bubbleShoot(board, col, color)
+    if (shot.row === -1) return state
+    const removed = shot.popped.length + shot.dropped.length
     if (removed > 0) {
       state.score.set(playerId, (state.score.get(playerId) ?? 0) + removed)
     }
     if (board.every((c) => c === 0)) state.doneAt.set(playerId, now)
-    else if (isJammed(board)) state.jammed.add(playerId)
+    else if (bubbleJammed(board)) state.jammed.add(playerId)
     return state
   }
 
@@ -244,13 +164,12 @@ export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
     const boards: Record<string, BubblePopSnapshot['boards'][string]> = {}
     const scores: Record<string, number> = {}
     for (const pid of state.players) {
-      const shotIndex = state.shotIndex.get(pid) ?? 0
       const score = state.score.get(pid) ?? 0
-      const board = state.boards.get(pid) ?? []
       boards[pid] = {
-        grid: [...board],
+        grid: (state.boards.get(pid) ?? []).join(''),
         score,
-        nextColor: nextValidShot(board, state.shotQueue, shotIndex).color,
+        shot: state.shotIndex.get(pid) ?? 0,
+        shots: state.shots.get(pid) ?? 0,
         done: (state.doneAt.get(pid) ?? 0) > 0,
         jammed: state.jammed.has(pid),
       }
@@ -259,6 +178,7 @@ export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
     return {
       rows: ROWS,
       cols: COLS,
+      queue: state.shotQueue.join(''),
       boards,
       scores,
       remainingMs: Math.max(0, state.endsAt - now),

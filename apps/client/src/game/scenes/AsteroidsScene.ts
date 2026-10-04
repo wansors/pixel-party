@@ -1,4 +1,10 @@
-import { ASTEROIDS, type AsteroidsShip, type AsteroidsSnapshot, PALETTE } from '@pp/shared'
+import {
+  ASTEROIDS,
+  type AsteroidsShip,
+  type AsteroidsSnapshot,
+  PALETTE,
+  asteroidsFly,
+} from '@pp/shared'
 import Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, flash, floatText, ring, shake, showBanner } from '../fx'
@@ -11,12 +17,20 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 // avatar riding upright inside (a nose chevron on the rim shows the heading, a flame when thrusting, a
 // ring while shielded). Rocks
 // are lumpy pixel boulders in three sizes; bullets take their shooter's color. Everything is
-// extrapolated from the snapshot's velocities between updates; your own heading is predicted from
-// your held keys. A ship whose pilot hasn't touched the controls yet is a faded ghost (nothing hits it).
-// ←/→ (A/D) turn, ↑/W thrust, SPACE fires — or the four hold buttons.
+// extrapolated from the snapshot's velocities between updates. Your own ship is PREDICTED: it turns,
+// thrusts and drifts on your held keys with the server's own flight step (shared), easing onto the
+// server's view; the gun clicks and flashes at its nose the moment it fires. A ship whose pilot hasn't
+// touched the controls yet is a faded ghost (nothing hits it).
+// ←/→ (A/D) turn, ↑/W thrust, SPACE (also Z/J) fires — hold it for auto-fire — or the four hold
+// buttons.
 
 const W = ASTEROIDS.w
 const H = ASTEROIDS.h
+// Time constant of the ease from your predicted ship onto the server's (position and heading).
+const CORRECT_TAU_MS = 220
+// Shortest offset on a wrapping axis, and between two angles.
+const wrapDelta = (d: number, size: number): number => d - size * Math.round(d / size)
+const angleDelta = (d: number): number => d - Math.PI * 2 * Math.round(d / (Math.PI * 2))
 
 const wrap = (v: number, size: number): number => ((v % size) + size) % size
 
@@ -49,6 +63,8 @@ function rockRows(cells: number, size: number): string[] {
 
 interface ShipView {
   avatar: AvatarSprite
+  // The bubble pod (baked per color: drawing a dozen circles every frame is the costly part).
+  pod: Phaser.GameObjects.Image
   alive: boolean
   kills: number
   // Smiling after a kill until then (scene time).
@@ -61,6 +77,11 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
   private clip?: Phaser.Display.Masks.GeometryMask
   private sky?: Phaser.GameObjects.Graphics
   private g?: Phaser.GameObjects.Graphics
+  // Everything in the sky lives in ONE masked container (rocks, then bullets/chevrons, then pods, then
+  // pilots): a geometry mask per object costs a stencil pass each — dozens a frame.
+  private rockLayer?: Phaser.GameObjects.Container
+  private podLayer?: Phaser.GameObjects.Container
+  private pilotLayer?: Phaser.GameObjects.Container
   private rockKeys: string[] = []
   private rockImgs = new Map<number, Phaser.GameObjects.Image>()
   private ships = new Map<string, ShipView>()
@@ -78,12 +99,21 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
   private keys = { left: false, right: false, thrust: false, fire: false }
   // Controls go out only once the player has pressed something (an untouched ship stays parked).
   private touched = false
+  private syncedRot: -1 | 0 | 1 = 0
   private sent = ''
   private sentAt = 0
   private lastTick = -1
   private snapAt = 0
+  private lastFrameAt = 0
   private prev?: AsteroidsSnapshot
-
+  // Your ship, predicted; when your gun may fire next; until when its muzzle flash shows.
+  private pred?: { x: number; y: number; vx: number; vy: number; a: number }
+  private nextShotAt = 0
+  private muzzleUntil = 0
+  // Other ships blowing up are heard at most this often (a pile-up is one blast), and softer unless
+  // you shot them down.
+  private lastBlastAt = Number.NEGATIVE_INFINITY
+  private killedOne = false
   constructor(...deps: SceneDeps) {
     super('asteroids', ...deps)
   }
@@ -102,7 +132,12 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
     this.sentAt = 0
     this.lastTick = -1
     this.snapAt = 0
+    this.lastFrameAt = 0
     this.prev = undefined
+    this.pred = undefined
+    this.nextShotAt = 0
+    this.muzzleUntil = 0
+    this.lastBlastAt = Number.NEGATIVE_INFINITY
 
     const stripSize = this.compact ? 11 : 13
     this.strip = new PlayerStrip(this, width / 2, this.top + 8, width - 24, stripSize, 2)
@@ -167,7 +202,7 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
     bind(['LEFT', 'A'], 'left')
     bind(['RIGHT', 'D'], 'right')
     bind(['UP', 'W'], 'thrust')
-    bind(['SPACE'], 'fire')
+    bind(['SPACE', 'Z', 'J', 'ENTER'], 'fire')
     const release = (): void => {
       this.keys = { left: false, right: false, thrust: false, fire: false }
       for (const b of this.buttons) b.ptr = -1
@@ -177,7 +212,21 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
       this.game.events.off(Phaser.Core.Events.BLUR, release),
     )
 
-    const areaBottom = btnY - btnH / 2 - 10
+    let areaBottom = btnY - btnH / 2 - 10
+    // The keys, named once above the controls (phones get the buttons alone).
+    if (!this.compact) {
+      const hint = this.t('game.asteroids.hint')
+      const hintText = this.add
+        .text(
+          width / 2,
+          areaBottom,
+          hint,
+          headlineStyle(fitFontSize(hint, width - 32, 16), PALETTE.dim),
+        )
+        .setOrigin(0.5, 1)
+        .setDepth(600)
+      areaBottom = hintText.y - hintText.height - 8
+    }
     const scale = Math.min((width - 16) / W, (areaBottom - areaTop) / H)
     this.arena = {
       x: Math.round((width - W * scale) / 2),
@@ -190,7 +239,14 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
     this.clip = shape.createGeometryMask()
     this.sky = this.add.graphics().setDepth(1)
     this.paintSky()
-    this.g = this.add.graphics().setDepth(40).setMask(this.clip)
+    this.g = this.add.graphics()
+    this.rockLayer = this.add.container(0, 0)
+    this.podLayer = this.add.container(0, 0)
+    this.pilotLayer = this.add.container(0, 0)
+    this.add
+      .container(0, 0, [this.rockLayer, this.g, this.podLayer, this.pilotLayer])
+      .setDepth(40)
+      .setMask(this.clip)
     this.shipPx = avatarPx(Math.max(24, Math.round(ASTEROIDS.shipR * 2 * scale * 1.6)))
     this.marker = new YouMarker(this, this.compact ? 8 : 12, 60)
     for (let size = 1; size <= 3; size++) {
@@ -242,6 +298,7 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
         (b.act === 'F' && fire)
       if (b.img.texture.key !== (on ? b.down : b.up)) b.img.setTexture(on ? b.down : b.up)
     }
+    this.syncedRot = rot
     const key = `${rot}${thrust ? 1 : 0}${fire ? 1 : 0}`
     const flying = this.snap?.ships.some((s) => s.id === this.selfId) ?? false
     if (
@@ -258,6 +315,8 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
   }
 
   protected frame(snap: AsteroidsSnapshot | null, time: number): void {
+    const dt = this.lastFrameAt ? Math.min(100, time - this.lastFrameAt) : 0
+    this.lastFrameAt = time
     const controls = this.syncControls(time)
     if (!snap) return
     if (this.state.tick !== this.lastTick) {
@@ -266,11 +325,53 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
       this.onSnapshot(snap)
     }
     const since = Math.min(0.3, (time - this.snapAt) / 1000)
+    this.predict(snap, controls, since, time, dt)
     const g = this.g as Phaser.GameObjects.Graphics
     g.clear()
     this.paintRocks(snap, since, time)
     this.paintBullets(snap, since)
-    this.paintShips(snap, since, time, controls.rot)
+    this.paintShips(snap, since, time)
+  }
+
+  // Your ship: flown locally on the held keys with the server's own step, then eased onto where the
+  // server has it (its snapshot run on with ITS held controls) — so the ship answers at once and never
+  // drifts away from the truth. A respawn (or a big disagreement) snaps.
+  private predict(
+    snap: AsteroidsSnapshot,
+    controls: { rot: -1 | 0 | 1; thrust: boolean; fire: boolean },
+    since: number,
+    time: number,
+    dt: number,
+  ): void {
+    const me = snap.ships.find((s) => s.id === this.selfId)
+    if (!me?.alive || this.state.final) {
+      this.pred = undefined
+      return
+    }
+    const server = { x: me.x, y: me.y, vx: me.vx, vy: me.vy, a: me.a }
+    for (let left = since; left > 0; left -= 0.05)
+      asteroidsFly(server, me.rot, me.thrust, Math.min(0.05, left))
+    const p = this.pred
+    if (!p || Math.hypot(wrapDelta(server.x - p.x, W), wrapDelta(server.y - p.y, H)) > 0.2) {
+      this.pred = server
+      return
+    }
+    const live = !me.idle || controls.rot !== 0 || controls.thrust || controls.fire
+    if (live) asteroidsFly(p, controls.rot, controls.thrust, dt / 1000)
+    const k = 1 - Math.exp(-dt / CORRECT_TAU_MS)
+    p.x = wrap(p.x + wrapDelta(server.x - p.x, W) * k, W)
+    p.y = wrap(p.y + wrapDelta(server.y - p.y, H) * k, H)
+    p.vx += (server.vx - p.vx) * k
+    p.vy += (server.vy - p.vy) * k
+    p.a += angleDelta(server.a - p.a) * k
+    // The gun: fires at its cadence while held (the server checks the same 4-in-flight limit).
+    const idx = snap.ships.indexOf(me)
+    const flying = snap.bullets.filter((b) => b[4] === idx).length
+    if (controls.fire && time >= this.nextShotAt && flying < ASTEROIDS.maxBullets) {
+      this.nextShotAt = time + ASTEROIDS.fireMs
+      this.muzzleUntil = time + 70
+      this.sfx.shoot()
+    }
   }
 
   private paintRocks(snap: AsteroidsSnapshot, since: number, time: number): void {
@@ -280,7 +381,7 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
       let img = this.rockImgs.get(id)
       if (!img) {
         img = this.add.image(0, 0, this.rockKeys[size] ?? '').setDepth(20)
-        if (this.clip) img.setMask(this.clip)
+        this.rockLayer?.add(img)
         this.rockImgs.set(id, img)
       }
       const p = this.toScreen(wrap(x + vx * since, W), wrap(y + vy * since, H))
@@ -305,12 +406,13 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
     }
   }
 
-  private paintShips(snap: AsteroidsSnapshot, since: number, time: number, myRot: number): void {
+  private paintShips(snap: AsteroidsSnapshot, since: number, time: number): void {
     const g = this.g as Phaser.GameObjects.Graphics
     // A pilot who left the round is gone from the sky.
     for (const [id, view] of this.ships) {
       if (snap.ships.some((s) => s.id === id)) continue
       view.avatar.destroy()
+      view.pod.destroy()
       this.ships.delete(id)
       if (id === this.selfId) this.marker?.hide()
     }
@@ -324,20 +426,26 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
           this.shipPx,
         )
         avatar.image.setDepth(50)
-        if (this.clip) avatar.image.setMask(this.clip)
-        view = { avatar, alive: s.alive, kills: s.kills, cheerUntil: 0 }
+        const pod = this.add.image(0, 0, this.ensurePod(this.state.colorOf(s.id))).setDepth(45)
+        this.podLayer?.add(pod)
+        this.pilotLayer?.add(avatar.image)
+        view = { avatar, pod, alive: s.alive, kills: s.kills, cheerUntil: 0 }
         this.ships.set(s.id, view)
       }
       if (s.kills > view.kills) view.cheerUntil = time + 900
       view.kills = s.kills
       view.avatar.image.setVisible(s.alive)
+      view.pod.setVisible(s.alive)
       if (!s.alive) {
         if (s.id === this.selfId) this.marker?.hide()
         continue
       }
-      const rot = s.id === this.selfId ? myRot : s.rot
-      const a = s.a + rot * ASTEROIDS.turn * since
-      const p = this.toScreen(wrap(s.x + s.vx * since, W), wrap(s.y + s.vy * since, H))
+      const mine = s.id === this.selfId ? this.pred : undefined
+      const rot = s.id === this.selfId ? this.syncedRot : s.rot
+      const a = mine ? mine.a : s.a + rot * ASTEROIDS.turn * since
+      const p = mine
+        ? this.toScreen(mine.x, mine.y)
+        : this.toScreen(wrap(s.x + s.vx * since, W), wrap(s.y + s.vy * since, H))
       // The pilot rides upright in a bubble pod (leaning into turns); the nose chevron on the pod's
       // rim shows the heading.
       view.avatar.setExpression(time < view.cheerUntil ? 'happy' : 'idle').tick(time)
@@ -349,12 +457,7 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
       const r = this.shipPx * 0.62
       const cos = Math.cos(a)
       const sin = Math.sin(a)
-      g.fillStyle(0x0b0f1f, s.idle ? 0.25 : 0.6)
-      g.fillCircle(p.x, p.y, r)
-      g.lineStyle(2, color, s.idle ? 0.35 : 0.9)
-      g.strokeCircle(p.x, p.y, r)
-      g.fillStyle(0xffffff, 0.35)
-      g.fillCircle(p.x - r * 0.45, p.y - r * 0.45, Math.max(2, r * 0.14))
+      view.pod.setPosition(Math.round(p.x), Math.round(p.y)).setAlpha(s.idle ? 0.4 : 1)
       // Nose chevron.
       g.fillStyle(color, 1)
       g.fillTriangle(
@@ -365,7 +468,11 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
         p.x + cos * r + sin * 5,
         p.y + sin * r - cos * 5,
       )
-      if (s.thrust) {
+      if (mine && time < this.muzzleUntil) {
+        g.fillStyle(0xffffff, 1)
+        g.fillRect(Math.round(p.x + cos * (r + 8)) - 3, Math.round(p.y + sin * (r + 8)) - 3, 6, 6)
+      }
+      if (mine ? this.keys.thrust || this.held('T') : s.thrust) {
         g.fillStyle(Math.floor(time / 60) % 2 ? PALETTE.amber : PALETTE.orange, 1)
         const fl = r + 4 + (Math.floor(time / 60) % 2) * 4
         g.fillTriangle(
@@ -383,6 +490,25 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
       }
       if (s.id === this.selfId) this.marker?.place(p.x, p.y - r - 4, time)
     }
+  }
+
+  // A ship's bubble pod in a pilot's color: dark glass, colored rim, a glint.
+  private ensurePod(color: number): string {
+    const r = Math.round(this.shipPx * 0.62)
+    const key = `ast-pod-${color.toString(16)}-${r}`
+    if (this.textures.exists(key)) return key
+    const size = r * 2 + 4
+    const c = size / 2
+    const g = this.make.graphics({ x: 0, y: 0 }, false)
+    g.fillStyle(0x0b0f1f, 0.6)
+    g.fillCircle(c, c, r)
+    g.lineStyle(2, color, 0.9)
+    g.strokeCircle(c, c, r)
+    g.fillStyle(0xffffff, 0.35)
+    g.fillCircle(c - r * 0.45, c - r * 0.45, Math.max(2, r * 0.14))
+    g.generateTexture(key, size, size)
+    g.destroy()
+    return key
   }
 
   // Snapshot deltas: broken rocks, kills, deaths, respawns, scores.
@@ -409,6 +535,8 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
       burst(this, p.x, p.y, 0xa7aec0, 6 + size * 4, 120 + size * 40)
     }
     const prevById = new Map(prev.ships.map((s) => [s.id, s]))
+    const meBefore = prevById.get(this.selfId)
+    this.killedOne = !!me && !!meBefore && me.kills > meBefore.kills
     for (const s of snap.ships) {
       const before = prevById.get(s.id)
       if (!before) continue
@@ -416,6 +544,8 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
       if (!before.alive && s.alive) {
         const p = this.toScreen(s.x, s.y)
         ring(this, p.x, p.y, this.state.colorOf(s.id), this.shipPx)
+        // Back in the fight, shield up.
+        if (s.id === this.selfId) this.sfx.powerUp()
       }
       if (s.id === this.selfId && s.score > before.score) {
         const p = this.toScreen(s.x, s.y)
@@ -428,8 +558,9 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
           s.kills > before.kills ? PALETTE.lime : PALETTE.amber,
           12,
         )
+        // A ship you shot down blows up in boom() (this is the bounty); a rock you broke bursts here.
         if (s.kills > before.kills) this.sfx.coin()
-        else this.sfx.pop()
+        else this.sfx.explosion()
       }
     }
     if (this.state.final && me && this.banner && !this.banner.visible) {
@@ -449,7 +580,8 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
     burst(this, p.x, p.y, this.state.colorOf(s.id), 22, 240)
     ring(this, p.x, p.y, PALETTE.orange, this.shipPx * 1.4)
     if (mine) {
-      this.sfx.wrong()
+      this.sfx.explosion()
+      this.sfx.hurt()
       flash(this, PALETTE.red, 200, 0.28)
       shake(this, 0.01, 200)
       floatText(
@@ -460,6 +592,12 @@ export class AsteroidsScene extends MiniGameScene<AsteroidsSnapshot> {
         PALETTE.red,
         this.compact ? 12 : 16,
       )
-    } else this.sfx.pop()
+    } else if (this.killedOne) {
+      this.killedOne = false
+      this.sfx.explosion()
+    } else if (this.time.now - this.lastBlastAt >= 250) {
+      this.lastBlastAt = this.time.now
+      this.sfx.quiet(() => this.sfx.explosion(), 0.4)
+    }
   }
 }

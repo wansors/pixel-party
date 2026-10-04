@@ -40,6 +40,11 @@ export const config = {
     envInt(process.env.ROOM_MAX_PLAYERS, MAX_ROOM_PLAYERS),
   ),
   roomIdleTimeoutSec: envInt(process.env.ROOM_IDLE_TIMEOUT_SEC, 900),
+  // Party mode: the production client build this server serves on its own port (`bun run start`). In
+  // dev the folder may be missing or stale — the Angular dev server serves the client — so it's only
+  // served when SERVE_CLIENT isn't "false" and the build exists.
+  clientDir: process.env.CLIENT_DIR ?? `${import.meta.dir}/../../client/dist/client/browser`,
+  serveClient: (process.env.SERVE_CLIENT ?? (isDevelopment ? 'false' : 'true')) !== 'false',
   // Bounded scoring catch-up (Phase 3). Ships OFF; enable per deployment while tuning. The cap is an
   // integer percent (default 20 → up to +20% for the furthest-behind player).
   handicapEnabled: (process.env.HANDICAP_ENABLED ?? '').toLowerCase() === 'true',

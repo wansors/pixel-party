@@ -24,7 +24,8 @@ interface Chip {
 
 // Color Trap (Stroop) canvas. A translated color WORD is printed in a mismatched INK on a pixel
 // card; tap the colored tile matching the INK (+1; a wrong color costs a point). One answer per
-// prompt, tagged with the prompt index so the server can drop stale taps. The prompt's end is
+// prompt (click a tile or press its key, 1-4), tagged with the prompt index so the server can drop
+// stale taps. The prompt's end is
 // extrapolated on the local clock: the fuse drains smoothly and taps stop the moment it runs out, so
 // every local verdict is one the server scores (it still takes the previous prompt's answer for a
 // short grace period while the tap is in flight). A pip row tracks every prompt (right / wrong /
@@ -37,6 +38,8 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
   private pipsGfx?: Phaser.GameObjects.Graphics
   private banner?: Phaser.GameObjects.Text
   private buttons: Phaser.GameObjects.Image[] = []
+  // The PC key for each tile (1-4), printed on it (hidden on phones).
+  private keycaps: Phaser.GameObjects.Text[] = []
   private chips: Chip[] = []
   private pips: PipState[] = []
   private wordSize = 72
@@ -60,6 +63,7 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
   override create(): void {
     super.create()
     this.buttons = []
+    this.keycaps = []
     this.chips = []
     this.pips = []
     this.lastIndex = -1
@@ -84,8 +88,12 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
 
     // The word card.
     const cardTop = this.pipRow.y + this.pipRow.size + (compact ? 12 : 18)
-    const cardW = Math.round(Math.min(width * 0.9, 680))
-    const cardH = Math.round(Math.min((height - cardTop) * (portrait ? 0.3 : 0.36), 220))
+    // A big (1080p) screen gets a bigger card and tiles: it's read from across the room.
+    const big = !compact && height >= 900
+    const cardW = Math.round(Math.min(width * 0.9, big ? 880 : 680))
+    const cardH = Math.round(
+      Math.min((height - cardTop) * (portrait ? 0.3 : 0.36), big ? 270 : 220),
+    )
     const cardY = cardTop + cardH / 2
     const cardKey = ensureBevelPanel(this, cardW, cardH, PALETTE.panel, 4)
     this.card = this.add.image(cx, cardY, cardKey)
@@ -93,7 +101,7 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
       .rectangle(cx, cardY, cardW - 16, cardH - 16)
       .setStrokeStyle(2, PALETTE.frame)
       .setFillStyle(PALETTE.bg, 0.55)
-    this.wordSize = compact ? 48 : 72
+    this.wordSize = compact ? 48 : big ? 96 : 72
     this.wordMaxW = cardW - 40
     this.word = this.add
       .text(
@@ -128,7 +136,7 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
     const gap = compact ? 12 : 18
     const areaTop = cardY + cardH / 2 + (compact ? 60 : 70)
     const areaH = height - areaTop - (compact ? 14 : 24)
-    const bw = Math.round(Math.min(190, (width * 0.9 - gap * (cols - 1)) / cols))
+    const bw = Math.round(Math.min(big ? 230 : 190, (width * 0.9 - gap * (cols - 1)) / cols))
     const bh = Math.round(Math.max(48, Math.min(bw * 0.7, (areaH - gap * (rows - 1)) / rows)))
     const gridW = cols * bw + (cols - 1) * gap
     const gridH = rows * bh + (rows - 1) * gap
@@ -141,6 +149,19 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
       const img = this.add.image(x, y, key).setInteractive({ useHandCursor: true })
       img.on('pointerdown', () => this.answer(i))
       this.buttons.push(img)
+      // Its key, in a darker shade of the tile's own color (never a color word: that's the trap's job).
+      const keycap = this.add
+        .text(x, y, String(i + 1), headlineStyle(bh >= 96 ? 32 : 24, shade(c.hex, -0.62)))
+        .setOrigin(0.5)
+        .setDepth(2)
+        .setVisible(!compact)
+      this.keycaps.push(keycap)
+    })
+    // Keys 1-4 answer with the tile of that number (a held key never repeats the answer).
+    this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
+      if (e.repeat) return
+      const n = Number(e.key)
+      if (Number.isInteger(n) && n >= 1 && n <= COLOR_TRAP_COLORS.length) this.answer(n - 1)
     })
 
     this.banner = addBanner(this)
@@ -170,7 +191,9 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
     punch(this, btn, -0.1, 70)
     if (right) {
       this.streak++
-      this.sfx.correct()
+      // A streak of 3+ pays out as a combo arpeggio (longer the hotter it runs).
+      if (this.streak >= 3) this.sfx.lineClear(Math.min(4, this.streak - 2))
+      else this.sfx.correct()
       ring(this, btn.x, btn.y, PALETTE.lime, btn.displayWidth * 0.6)
       burst(this, btn.x, btn.y, COLOR_TRAP_COLORS[color]?.hex, 14, 200)
       floatText(this, btn.x, btn.y - btn.displayHeight / 2, '+1', PALETTE.lime, 20)
@@ -220,7 +243,7 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
     if (snap.word === null || snap.ink === null) {
       this.word?.setVisible(false)
       this.fuse?.clear()
-      for (const b of this.buttons) b.setAlpha(0.25)
+      this.setTilesAlpha(0.25)
       this.status?.setText('')
       if (this.banner) showBanner(this, this.banner, this.t('game.common.finished'), PALETTE.lime)
       return
@@ -235,12 +258,19 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
         .setColor(hexToCss(COLOR_TRAP_COLORS[snap.ink]?.hex ?? PALETTE.text))
       fitText(this.word, this.wordMaxW, this.wordSize)
       punch(this, this.word, 0.22, 90)
+      // A fresh card turned over (not when a relayout restart redraws the live one).
+      if (!this.firstSnapshot) this.sfx.flip()
     }
     this.renderFuse(this.open(snap) ? this.endsAt - this.time.now : 0)
 
     const locked = snap.answeredCurrent.includes(this.selfId) || this.answeredLocally(snap.index)
     this.status?.setText(this.t(locked ? 'game.colorTrap.locked' : 'game.colorTrap.instruction'))
-    for (const b of this.buttons) b.setAlpha(locked || !this.open(snap) ? 0.35 : 1)
+    this.setTilesAlpha(locked || !this.open(snap) ? 0.35 : 1)
+  }
+
+  private setTilesAlpha(alpha: number): void {
+    for (const b of this.buttons) b.setAlpha(alpha)
+    for (const k of this.keycaps) k.setAlpha(alpha)
   }
 
   // Anchors the live prompt's end to the local clock on each fresh snapshot, keeping the earliest

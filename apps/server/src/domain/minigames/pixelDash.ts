@@ -21,6 +21,9 @@ const SHOW_UNTIL_T = -0.35
 const FIRST_MS = 1500
 const GAP_MIN_MS = 700
 const GAP_JITTER_MS = 600
+// The track tightens over the round: by the end the random part of each gap is this much shorter
+// (gaps 700–1300 ms at the start, 700–1000 ms at the end — never shorter than a jump plus a landing).
+const JITTER_RAMP = 0.5
 const END_PAD_MS = 800
 
 interface Obstacle {
@@ -62,7 +65,8 @@ export class PixelDash implements MiniGame<PixelDashState, PixelDashInput> {
     let id = 0
     while (t < durationMs - END_PAD_MS) {
       obstacles.push({ id: id++, arriveAt: t })
-      t += GAP_MIN_MS + Math.floor(r.next() * GAP_JITTER_MS)
+      const ramp = 1 - JITTER_RAMP * (t / durationMs)
+      t += GAP_MIN_MS + Math.floor(r.next() * GAP_JITTER_MS * ramp)
     }
     return {
       players: [...ctx.players],

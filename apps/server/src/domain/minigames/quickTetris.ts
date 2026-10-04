@@ -1,16 +1,17 @@
 import type { TetrisSprintInput, TetrisSprintSnapshot } from '@pp/shared'
+import { tetrisFall } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 import {
   COLS,
   type PlayerBoardState,
   ROWS,
+  acknowledge,
+  applyInput,
+  boardView,
   createPlayerBoard,
   createQueue,
-  hardDrop,
-  renderBoard,
-  stepFall,
-  tryMove,
-  tryRotate,
+  isTetrisInput,
+  shapeAtOf,
 } from './tetrisCore'
 
 const DEFAULT_DURATION_MS = 45_000
@@ -66,13 +67,12 @@ export class QuickTetris implements MiniGame<QuickTetrisState, TetrisSprintInput
     input: TetrisSprintInput,
     now: number,
   ): QuickTetrisState {
-    if (now < state.startedAt || now >= state.endsAt) return state
     const p = state.boards.get(playerId)
-    if (!p || p.toppedOut) return state
-    if ((state.doneAt.get(playerId) ?? 0) > 0) return state
-    if (input.kind === 'move') tryMove(p, input.dir === 'left' ? -1 : 1)
-    else if (input.kind === 'drop') hardDrop(p, state.queue)
-    else if (input.kind === 'rotate') tryRotate(p)
+    if (!p || !isTetrisInput(input)) return state
+    if (now < state.startedAt || now >= state.endsAt) return state
+    // A finished board only acknowledges (the client stops replaying), it doesn't move any more.
+    if ((state.doneAt.get(playerId) ?? 0) > 0) acknowledge(p, input)
+    else applyInput(p, input, state.queue)
     this.markDoneIfReached(state, playerId, now)
     return state
   }
@@ -82,7 +82,7 @@ export class QuickTetris implements MiniGame<QuickTetrisState, TetrisSprintInput
       if ((state.doneAt.get(pid) ?? 0) > 0) continue
       const p = state.boards.get(pid)
       if (!p) continue
-      stepFall(p, dt, state.queue)
+      tetrisFall(p, dt, shapeAtOf(state.queue))
       this.markDoneIfReached(state, pid, now)
     }
     return state
@@ -147,12 +147,7 @@ export class QuickTetris implements MiniGame<QuickTetrisState, TetrisSprintInput
     for (const pid of state.players) {
       const p = state.boards.get(pid)
       if (!p) continue
-      boards[pid] = {
-        grid: renderBoard(p),
-        linesCleared: p.linesCleared,
-        toppedOut: p.toppedOut,
-        doneAt: state.doneAt.get(pid) ?? 0,
-      }
+      boards[pid] = { ...boardView(p, state.queue), doneAt: state.doneAt.get(pid) ?? 0 }
       progress[pid] = p.linesCleared
     }
     return {

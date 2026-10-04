@@ -53,20 +53,27 @@ export function roadDistanceField(
     const len2 = ex * ex + ey * ey || 1
     const tx0 = Math.floor(s.x / texel)
     const ty0 = Math.floor(s.y / texel)
+    // Squared distances in the hot loop (this runs millions of times when a course is first painted);
+    // the square roots are taken once at the end.
     for (let ty = Math.max(0, ty0 - rt); ty <= Math.min(texH - 1, ty0 + rt); ty++) {
+      const py = ty * texel + texel / 2 - s.y
+      const row = ty * texW
       for (let tx = Math.max(0, tx0 - rt); tx <= Math.min(texW - 1, tx0 + rt); tx++) {
         const px = tx * texel + texel / 2 - s.x
-        const py = ty * texel + texel / 2 - s.y
-        const u = Math.max(0, Math.min(1, (px * ex + py * ey) / len2))
-        const d = Math.hypot(px - ex * u, py - ey * u)
-        const k = ty * texW + tx
-        if (d < (dist[k] as number)) {
-          dist[k] = d
+        let u = (px * ex + py * ey) / len2
+        u = u < 0 ? 0 : u > 1 ? 1 : u
+        const dx = px - ex * u
+        const dy = py - ey * u
+        const d2 = dx * dx + dy * dy
+        const k = row + tx
+        if (d2 < (dist[k] as number)) {
+          dist[k] = d2
           idx[k] = i
         }
       }
     }
   }
+  for (let k = 0; k < dist.length; k++) dist[k] = Math.sqrt(dist[k] as number)
   return { dist, idx }
 }
 

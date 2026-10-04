@@ -1,4 +1,10 @@
-import { type FieldAthlete, type FieldEventSnapshot, PALETTE } from '@pp/shared'
+import {
+  ATHLETICS_STRIDE,
+  type FieldAthlete,
+  type FieldEventSnapshot,
+  PALETTE,
+  athleticsStrideGain,
+} from '@pp/shared'
 import type Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, flash, ring, shake, showBanner } from '../fx'
@@ -42,6 +48,8 @@ const CARRY = { x: 0.06, y: 0.34 }
 const SAND = 0xe3c98c
 const JAVELIN_M = 2.6
 const RELEASE_H_M = 1.9 // javelin release height
+// Footstep sounds at most this often (a frantic masher is a drum roll, not a buzz).
+const STEP_SFX_MS = 90
 
 export interface FieldEventLook {
   // Long jump: sand pit + 1 m marks; javelin: grass sector + 10 m lines and a flying javelin.
@@ -76,6 +84,8 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
     { img: Phaser.GameObjects.Image; label: Phaser.GameObjects.Text; best: number }
   >()
   private compact = false
+  // A tall desktop screen (1080p): bigger type and gauge.
+  private big = false
   private ppm = 40
   private spriteScale = 2
   private groundY = 0
@@ -89,6 +99,10 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
   private aimStart = -1
   private aimFrozen: number | null = null
   private lastFoot: 'L' | 'R' | null = null
+  private lastStrideAt = Number.NEGATIVE_INFINITY
+  private lastStepSfxAt = Number.NEGATIVE_INFINITY
+  // You let go this attempt: the launch was already heard (the server's flight must not replay it).
+  private launched = false
   private bannerHideAt = 0
   private lastFrameAt = 0
 
@@ -106,12 +120,16 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
     this.aimStart = -1
     this.aimFrozen = null
     this.lastFoot = null
+    this.lastStrideAt = Number.NEGATIVE_INFINITY
+    this.lastStepSfxAt = Number.NEGATIVE_INFINITY
+    this.launched = false
     this.bannerHideAt = 0
     this.lastFrameAt = 0
     this.camX = -4
 
     const { width, height } = this.scale
     this.compact = Math.min(width, height) < 520
+    this.big = !this.compact && height >= 900
     this.color = this.state.colorOf(this.selfId, PALETTE.cyan)
     this.pad = new StridePad(
       this,
@@ -120,17 +138,27 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
     )
     if (!this.compact) {
       this.add
-        .text(width / 2, height - 14, this.t(`${this.i18nNs}.hint`), bodyStyle(13, PALETTE.dim))
+        .text(
+          width / 2,
+          height - 14,
+          this.t(`${this.i18nNs}.hint`),
+          bodyStyle(height >= 900 ? 16 : 13, PALETTE.dim),
+        )
         .setOrigin(0.5)
     }
 
     // Info rows: own attempts, then everyone's best.
     const infoY = this.top + (this.compact ? 8 : 10)
     this.attemptsText = this.add
-      .text(width / 2, infoY, '', headlineStyle(this.compact ? 8 : 12, PALETTE.text))
+      .text(
+        width / 2,
+        infoY,
+        '',
+        headlineStyle(this.compact ? 8 : this.big ? 16 : 12, PALETTE.text),
+      )
       .setOrigin(0.5, 0)
-    const stripSize = this.compact ? 11 : 13
-    const stripY = infoY + (this.compact ? 20 : 26)
+    const stripSize = this.compact ? 11 : this.big ? 15 : 13
+    const stripY = infoY + (this.compact ? 20 : this.big ? 30 : 26)
     this.strip = new PlayerStrip(this, width / 2, stripY, width - 24, stripSize, 2)
     this.worldTop = stripY + PlayerStrip.rowH(stripSize) * 2
 
@@ -145,8 +173,11 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
     this.ppm = (this.spriteScale * ATHLETE_H) / SPRITE_M
 
     const infieldH = Math.round(Math.max(12, skyH * 0.2))
-    const standsTop = this.worldTop + (this.compact ? 4 : 8)
-    const standsH = Math.max(24, this.groundY - infieldH - 6 - standsTop)
+    // The stands sit on the infield; on a tall screen they stop at ~40 % of the sky, leaving open
+    // night sky above for the flight arcs (and a lot less to draw).
+    const room = this.groundY - infieldH - 6 - (this.worldTop + (this.compact ? 4 : 8))
+    const standsH = Math.max(24, Math.min(room, Math.round(Math.max(120, skyH * 0.4))))
+    const standsTop = this.groundY - infieldH - 6 - standsH
     this.crowd = this.add
       .tileSprite(0, standsTop, width, standsH, ensureCrowdTile(this, standsH))
       .setOrigin(0, 0)
@@ -178,7 +209,7 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
         0,
         0,
         '',
-        headlineStyle(this.compact ? 8 : 12, PALETTE.amber, {
+        headlineStyle(this.compact ? 8 : this.big ? 16 : 12, PALETTE.amber, {
           stroke: '#10121c',
           strokeThickness: 3,
         }),
@@ -202,7 +233,8 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
       .setVisible(false)
   }
 
-  // Static ground in world pixels (the container scrolls): grass, runway, the line, pit/sector, marks.
+  // Static ground in world pixels (the container scrolls): grass, runway, the line, pit/sector, marks —
+  // one Graphics (plus the distance labels), drawn once.
   private buildGround(groundH: number): void {
     const world = this.world
     if (!world) return
@@ -211,56 +243,35 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
     const px = (m: number): number => m * this.ppm
     const y = this.groundY
     const far = foulLine + this.look.markTo + 30
-    world.add(this.add.rectangle(px(-40), y, px(far + 40), groundH, GRASS).setOrigin(0, 0))
-    world.add(this.add.rectangle(px(-40), y, px(foulLine + 40), groundH, TARTAN).setOrigin(0, 0))
-    // Tartan speckle stripe + white runway edge lines.
-    world.add(
-      this.add.rectangle(px(-40), y + 2, px(foulLine + 40), 2, PALETTE.text).setOrigin(0, 0),
-    )
-    world.add(
-      this.add
-        .rectangle(px(-40), y + groundH - 4, px(foulLine + 40), 2, PALETTE.text)
-        .setOrigin(0, 0),
-    )
+    const g = this.add.graphics()
+    world.add(g)
+    g.fillStyle(GRASS, 1).fillRect(px(-40), y, px(far + 40), groundH)
+    g.fillStyle(TARTAN, 1).fillRect(px(-40), y, px(foulLine + 40), groundH)
+    // White runway edge lines.
+    g.fillStyle(PALETTE.text, 1)
+    g.fillRect(px(-40), y + 2, px(foulLine + 40), 2)
+    g.fillRect(px(-40), y + groundH - 4, px(foulLine + 40), 2)
     if (this.look.kind === 'jump') {
-      world.add(this.add.rectangle(px(foulLine + 1), y, px(10), groundH, SAND).setOrigin(0, 0))
+      g.fillStyle(SAND, 1).fillRect(px(foulLine + 1), y, px(10), groundH)
+      g.fillStyle(shade(SAND, -0.18), 1)
       for (let i = 0; i < 40; i++) {
         const sx = px(foulLine + 1) + ((i * 53) % Math.max(1, Math.round(px(10))))
         const sy = y + 3 + ((i * 29) % Math.max(1, groundH - 6))
-        world.add(this.add.rectangle(sx, sy, 2, 2, shade(SAND, -0.18)).setOrigin(0, 0))
+        g.fillRect(sx, sy, 2, 2)
       }
       // Take-off board with its plasticine foul strip.
-      world.add(
-        this.add
-          .rectangle(px(foulLine) - px(0.2), y, px(0.2), groundH, PALETTE.text)
-          .setOrigin(0, 0),
-      )
-      world.add(
-        this.add
-          .rectangle(px(foulLine), y, Math.max(2, px(0.1)), groundH, PALETTE.red)
-          .setOrigin(0, 0),
-      )
+      g.fillStyle(PALETTE.text, 1).fillRect(px(foulLine) - px(0.2), y, px(0.2), groundH)
+      g.fillStyle(PALETTE.red, 1).fillRect(px(foulLine), y, Math.max(2, px(0.1)), groundH)
     } else {
       // Throwing arc + sector lines.
-      world.add(
-        this.add
-          .rectangle(px(foulLine), y, Math.max(3, px(0.15)), groundH, PALETTE.text)
-          .setOrigin(0.5, 0),
-      )
-      world.add(
-        this.add
-          .rectangle(px(foulLine), y - 3, Math.max(3, px(0.15)), 3, PALETTE.red)
-          .setOrigin(0.5, 0),
-      )
+      const w = Math.max(3, px(0.15))
+      g.fillStyle(PALETTE.text, 1).fillRect(px(foulLine) - w / 2, y, w, groundH)
+      g.fillStyle(PALETTE.red, 1).fillRect(px(foulLine) - w / 2, y - 3, w, 3)
     }
+    g.fillStyle(PALETTE.text, 0.8)
     for (let m = this.look.markStep; m <= this.look.markTo; m += this.look.markStep) {
       const mx = px(foulLine + m)
-      world.add(
-        this.add
-          .rectangle(mx, y, 2, this.look.kind === 'jump' ? 6 : groundH, PALETTE.text)
-          .setOrigin(0.5, 0)
-          .setAlpha(0.8),
-      )
+      g.fillRect(mx - 1, y, 2, this.look.kind === 'jump' ? 6 : groundH)
       world.add(
         this.add
           .text(
@@ -304,11 +315,21 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
 
   private step(foot: 'L' | 'R'): void {
     const me = this.me()
-    if (me?.phase !== 'run' || this.aimStart >= 0)
-      if (!me || me.phase !== 'run' || this.aimStart >= 0) return
+    if (!me || me.phase !== 'run' || this.aimStart >= 0) return
     this.sendInput({ kind: 'step', foot })
-    this.sfx.click()
-    this.lastFoot = foot
+    // The server's stride rule, mirrored (the other foot, not faster than the cap): a counted stride
+    // speeds the run-up right away; the next snapshot confirms it.
+    const now = this.time.now
+    // Your footfall on the runway, the moment you press.
+    if (now - this.lastStepSfxAt >= STEP_SFX_MS) {
+      this.lastStepSfxAt = now
+      this.sfx.step(foot === 'L' ? 0 : 1)
+    }
+    if (foot !== this.lastFoot && now - this.lastStrideAt >= ATHLETICS_STRIDE.minMs) {
+      this.lastStrideAt = now
+      this.lastFoot = foot
+      this.tracker.nudge(me.id, athleticsStrideGain(this.tracker.v(me.id)), now)
+    }
     this.pad?.setNext(foot === 'L' ? 'R' : 'L')
   }
 
@@ -324,7 +345,15 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
     } else if (this.aimStart >= 0 && this.aimFrozen === null) {
       this.sendInput({ kind: 'jump', down: false })
       this.aimFrozen = this.localAngle(this.time.now)
+      this.launch()
     }
+  }
+
+  // Take-off / release: a leap for the jump, the javelin's rush of air for the throw.
+  private launch(): void {
+    this.launched = true
+    if (this.look.kind === 'jump') this.sfx.jump()
+    else this.sfx.whoosh()
   }
 
   private localAngle(now: number): number {
@@ -430,7 +459,7 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
 
     this.renderJavelin(snap, me, pose, ax, flightT, apex, range)
     this.renderGauge(snap, me, ax, now)
-    if (me.phase === 'run') this.pad?.setSpeed(me.v)
+    if (me.phase === 'run') this.pad?.setSpeed(this.tracker.v(me.id))
   }
 
   // The avatar stands in the athlete's box (SPRITE_M tall), at a crisp size.
@@ -507,7 +536,7 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
     this.gaugeText?.setVisible(showing)
     if (!showing) return
     const angle = aiming ? (this.aimFrozen ?? this.aimAngle(snap, me, now)) : me.angle
-    const r = this.compact ? 42 : 64
+    const r = this.compact ? 42 : this.big ? 80 : 64
     const cx = (ax - this.camX) * this.ppm + this.avatarSize() * 0.3 + 8
     const cy = this.groundY - this.avatarSize() * 0.55
     const rad = (d: number): number => (-d * Math.PI) / 180
@@ -575,6 +604,7 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
       this.aimStart = -1
       this.aimFrozen = null
       this.lastFoot = null
+      this.launched = false
       this.subline?.setVisible(false)
       this.sfx.tick()
       this.showEnd(
@@ -586,7 +616,8 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
       this.sfx.go()
       this.showEnd(this.t('game.athletics.go'), PALETTE.lime, 600)
     } else if (me.phase === 'flight') {
-      this.sfx.pad(5)
+      // Held to the angle cap: the server let go for you.
+      if (!this.launched) this.launch()
       this.aimStart = -1
     } else if (me.phase === 'mark') {
       this.aimStart = -1
@@ -613,17 +644,19 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
     burst(this, sx, this.groundY, this.look.kind === 'jump' ? SAND : GRASS, 18, 200)
     burst(this, sx, this.groundY, PALETTE.text, 8, 140)
     this.showEnd(`${mark.toFixed(2)}m`, PALETTE.lime, snap.markMs)
+    // Into the sand / the javelin sticks.
+    this.sfx.land()
     if (bestBefore === null || mark > bestBefore) {
       const leader = snap.athletes.every((a) => a.id === me.id || (this.bestOf(a) ?? -1) < mark)
-      if (leader) this.sfx.fanfare()
-      else this.sfx.coin()
+      if (leader) {
+        this.sfx.cheer()
+        this.sfx.fanfare()
+      } else this.sfx.coin()
       if (bestBefore !== null) {
         this.subline?.setText(this.t('game.athletics.newBest')).setColor('#ffcf4b').setVisible(true)
         this.time.delayedCall(snap.markMs, () => this.subline?.setVisible(false))
       }
       ring(this, sx, this.groundY - 10, this.color, 50)
-    } else {
-      this.sfx.correct()
     }
   }
 
@@ -748,7 +781,7 @@ export abstract class FieldEventSceneBase extends MiniGameScene<FieldEventSnapsh
         .setVisible(false)
       const label = this.add
         .text(0, 0, this.label(id), {
-          ...bodyStyle(this.compact ? 9 : 11, color, { fontStyle: 'bold' }),
+          ...bodyStyle(this.compact ? 9 : this.big ? 14 : 11, color, { fontStyle: 'bold' }),
           stroke: '#10121c',
           strokeThickness: 3,
         })

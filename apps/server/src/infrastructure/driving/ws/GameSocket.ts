@@ -18,6 +18,7 @@ import { reapIdleRooms } from '../../live/roomSweeper'
 import type { Logger } from '../../observability/logger'
 import type { Metrics } from '../../observability/metrics'
 import { handleHttp } from '../http/httpRoutes'
+import type { StaticSite } from '../http/staticSite'
 import { buildSimulationLoop } from './simulationLoop'
 import { isValidClientMsg } from './validate'
 
@@ -44,6 +45,18 @@ export interface GameSocketDeps {
   metrics: Metrics
   roomIdleTimeoutSec: number
   port?: number
+  // Party mode: the production client build, served from this same port (null/absent in dev, where
+  // the Angular dev server serves the client).
+  site?: StaticSite | null
+}
+
+// A page this server served (party mode) talks to its own origin: the WS Origin matches the Host.
+function isSameOrigin(req: Request, origin: string): boolean {
+  try {
+    return new URL(origin).host === req.headers.get('host')
+  } catch {
+    return false
+  }
 }
 
 type LobbyStateMsg = Extract<ServerMsg, { type: 'LOBBY_STATE' }>
@@ -482,9 +495,13 @@ export function startGameServer(deps: GameSocketDeps) {
 
       if (url.pathname === '/ws') {
         // Origin allowlist (fail-closed): reject cross-origin upgrades. A missing Origin is a non-browser
-        // client — exactly what the allowlist scrutinizes.
+        // client — exactly what the allowlist scrutinizes. In party mode the page we served is
+        // same-origin and always welcome.
         const origin = req.headers.get('origin')
-        if (origin === null || !config.allowedOrigins.includes(origin)) {
+        const allowed =
+          origin !== null &&
+          (config.allowedOrigins.includes(origin) || (!!deps.site && isSameOrigin(req, origin)))
+        if (!allowed) {
           return new Response('Forbidden origin', { status: 403 })
         }
         const code = (url.searchParams.get('room') ?? '').toUpperCase()
@@ -495,7 +512,7 @@ export function startGameServer(deps: GameSocketDeps) {
         return new Response('Upgrade failed', { status: 426 })
       }
 
-      return new Response('Not found', { status: 404 })
+      return deps.site?.serve(req) ?? new Response('Not found', { status: 404 })
     },
     websocket: {
       idleTimeout: config.wsIdleTimeoutSec,

@@ -4,7 +4,7 @@
 // $PP_SHOTS_DIR/<tag>/ (default ./shots/<tag>/).
 //
 // Usage: bun shoot.ts <tag> <width>x<height> <game-id>[,<game-id>...] [--join] [--lobby] [--me-host]
-//        [--lang=es] [--keys=ArrowRight,Space*800] [--more=3] [--bots=11]
+//        [--lang=es] [--keys=ArrowRight,Space*800] [--more=3] [--bots=11] [--perf]
 // Bots: a game with a strategy module in ./bots/<game-id>.ts is played for real by all three bots
 // (default export `(snapshot, myPlayerId) => input | input[] | null`, called every 150 ms); other games
 // get generic junk inputs.
@@ -12,6 +12,10 @@
 //         `Key` taps it, `Key*ms` holds it for ms. Key names are puppeteer's (ArrowLeft, KeyA, Space…).
 // --more: extra in-play shots (play3, play4…), one every 3 s, repeating the --keys sequence before each.
 // --bots: how many bots join (default 3, so a 4-player room with "Me"); 11 fills a 12-player room.
+// --perf: a frame-cost probe — at every shot, a JSON line (also appended to <tag>/perf.jsonl) with the
+//         frames since the previous shot: fps, p95/max frame gap, Phaser step cost (avg/p95/max ms),
+//         long tasks, JS heap, and the live scene's display objects / tweens plus the texture count
+//         (steady growth = a leak).
 // Env:   PP_CLIENT (http://localhost:4200)  PP_SERVER (http://localhost:3000)
 //        CHROME (auto-detected)  PP_SHOTS_DIR (./shots)
 import { existsSync } from 'node:fs'
@@ -95,7 +99,15 @@ for (const [name, color, avatar] of CREW.slice(0, Math.max(0, botCount - 1)))
 const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: true,
-  args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required', '--mute-audio'],
+  args: [
+    '--no-sandbox',
+    '--autoplay-policy=no-user-gesture-required',
+    '--mute-audio',
+    // --perf: WebGL like a real PC (software SwiftShader here) and exact heap numbers.
+    ...(flags.includes('--perf')
+      ? ['--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--enable-precise-memory-info']
+      : []),
+  ],
 })
 const page = await browser.newPage()
 await page.setViewport({ width: w, height: h, deviceScaleFactor: 1 })
@@ -105,6 +117,75 @@ const keysArg = flags.find((f) => f.startsWith('--keys='))?.slice('--keys='.leng
 const moreShots = Number(flags.find((f) => f.startsWith('--more='))?.slice('--more='.length) ?? 0)
 if (lang) {
   await page.evaluateOnNewDocument((l) => localStorage.setItem('pp_lang', l), lang)
+}
+const perf = flags.includes('--perf')
+if (perf) {
+  await page.evaluateOnNewDocument(() => {
+    localStorage.setItem('pp_perf', '1')
+    // biome-ignore lint/suspicious/noExplicitAny: browser-side probe over Phaser internals
+    const w = window as any
+    const gaps: number[] = []
+    const steps: number[] = []
+    let longTasks = 0
+    let last = 0
+    const raf = (t: number): void => {
+      if (last) gaps.push(t - last)
+      last = t
+      requestAnimationFrame(raf)
+    }
+    requestAnimationFrame(raf)
+    try {
+      new PerformanceObserver((l) => {
+        longTasks += l.getEntries().length
+      }).observe({ type: 'longtask', buffered: true })
+    } catch {}
+    let wrapped = false
+    const q = (xs: number[], p: number): number =>
+      [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))] ?? 0
+    const r1 = (n: number): number => Math.round(n * 10) / 10
+    w.__ppPerf = () => {
+      const g = w.__ppGame
+      if (g?.loop && !wrapped) {
+        const cb = g.loop.callback
+        g.loop.callback = (t: number, d: number) => {
+          const s = performance.now()
+          cb(t, d)
+          steps.push(performance.now() - s)
+        }
+        wrapped = true
+      }
+      // biome-ignore lint/suspicious/noExplicitAny: Phaser display list
+      const count = (list: any[]): number =>
+        list.reduce((n, o) => n + 1 + (Array.isArray(o.list) ? count(o.list) : 0), 0)
+      const scenes = g ? g.scene.getScenes(true) : []
+      const sum = (xs: number[]): number => xs.reduce((a, b) => a + b, 0)
+      const out = {
+        fps: gaps.length ? r1(1000 / (sum(gaps) / gaps.length)) : 0,
+        gapP95: r1(q(gaps, 0.95)),
+        gapMax: r1(Math.max(0, ...gaps)),
+        stepAvg: steps.length ? r1(sum(steps) / steps.length) : 0,
+        stepP95: r1(q(steps, 0.95)),
+        stepMax: r1(Math.max(0, ...steps)),
+        longTasks,
+        heapMB: r1(
+          (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory
+            ? (performance as unknown as { memory: { usedJSHeapSize: number } }).memory
+                .usedJSHeapSize / 1048576
+            : 0,
+        ),
+        // biome-ignore lint/suspicious/noExplicitAny: Phaser scene
+        objects: sum(scenes.map((s: any) => count(s.children.list))),
+        // biome-ignore lint/suspicious/noExplicitAny: Phaser scene
+        tweens: sum(scenes.map((s: any) => s.tweens.getTweens().length)),
+        textures: g ? Object.keys(g.textures.list).length : 0,
+        renderer: g ? (g.renderer.type === 2 ? 'webgl' : 'canvas') : '',
+      }
+      gaps.length = 0
+      steps.length = 0
+      longTasks = 0
+      return out
+    }
+  })
 }
 const warned = new Set<string>()
 page.on('console', async (m) => {
@@ -124,6 +205,19 @@ page.on('pageerror', (e) => console.log('[pageerror]', String(e)))
 let n = 0
 const shot = async (name: string): Promise<void> => {
   const file = `${dir}/${String(n++).padStart(3, '0')}-${name}.png`
+  if (perf) {
+    const stats = await page.evaluate(() =>
+      (window as unknown as { __ppPerf?: () => unknown }).__ppPerf?.(),
+    )
+    const line = JSON.stringify({ shot: name, ...(stats as object) })
+    console.log('perf', line)
+    await Bun.write(
+      `${dir}/perf.jsonl`,
+      `${await Bun.file(`${dir}/perf.jsonl`)
+        .text()
+        .catch(() => '')}${line}\n`,
+    )
+  }
   await page.screenshot({ path: file })
   console.log('shot', file)
 }

@@ -320,6 +320,24 @@ describe('MicroRace', () => {
     expect(game.isFinished(s, GO_DELAY_MS + 100)).toBe(true)
   })
 
+  test('snapshots carry every car velocity and the race clock (client prediction)', () => {
+    const game = new MicroRace()
+    let s = init(['a', 'b'])
+    expect(game.snapshot(s, 1000).raceMs).toBe(0)
+    s = game.onInput(s, 'a', { kind: 'drive', steer: 0, throttle: 1 }, 0)
+    for (let now = GO_DELAY_MS + 50; now <= GO_DELAY_MS + 1000; now += 50) s = game.tick(s, 50, now)
+    const snap = game.snapshot(s, GO_DELAY_MS + 1000)
+    expect(snap.raceMs).toBe(1000)
+    const a = nn(snap.cars.find((c) => c.id === 'a'))
+    const car = nn(s.cars.get('a'))
+    expect(Math.hypot(a.vx, a.vy)).toBeGreaterThan(100)
+    expect(a.vx).toBeCloseTo(car.vx, 0)
+    expect(a.vy).toBeCloseTo(car.vy, 0)
+    const b = nn(snap.cars.find((c) => c.id === 'b'))
+    expect(b.vx).toBe(0)
+    expect(b.vy).toBe(0)
+  })
+
   test('formats race times as m:ss.t', () => {
     expect(formatRaceTime(62_345)).toBe('1:02.3')
     expect(formatRaceTime(9_999)).toBe('0:09.9')

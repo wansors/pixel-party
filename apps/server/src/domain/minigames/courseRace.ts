@@ -1,10 +1,17 @@
 import {
+  COURSE_BOOST,
+  COURSE_BOOST_MS,
+  COURSE_CAR_R,
+  COURSE_GRAVEL_TUNING,
+  COURSE_PHYSICS,
   COURSE_SPACING,
   type CourseDef,
   type CourseKind,
   type CourseRaceInput,
   type CourseRaceSnapshot,
   type MicroRacePoint,
+  RACE_DRAFT_TUNING,
+  RACE_WALL_BOUNCE,
   RALLY_STAGES,
   SPEED_CIRCUITS,
   inStretch,
@@ -30,7 +37,7 @@ import {
 
 export const GO_DELAY_MS = 2400
 const SUB_STEPS = 4
-const WALL_BOUNCE = 0.4
+const WALL_BOUNCE = RACE_WALL_BOUNCE
 const ROAD = { windowBack: 6, windowAhead: 12, lostFactor: 2.4, lostMs: 1500 }
 
 interface CourseConfig {
@@ -46,60 +53,27 @@ interface CourseConfig {
   finishWindowMs: number
 }
 
-// Rally: a lively tarmac car that slides on gravel.
+// Rally: a lively tarmac car that slides on gravel (physics in @pp/shared, shared with the client's
+// own-car prediction).
 const STAGE: CourseConfig = {
   kind: 'stage',
   courses: RALLY_STAGES,
   defaultDurationMs: 70_000,
-  physics: {
-    maxSpeed: 270,
-    offMaxSpeed: 110,
-    accel: 300,
-    brake: 650,
-    reverseAccel: 240,
-    maxReverse: 90,
-    rollDrag: 0.35,
-    offDrag: 1.6,
-    offDecel: 520,
-    grip: 9,
-    offGrip: 4.5,
-    turnRate: 3.7,
-    turnFullSpeed: 70,
-    understeerFrom: 170,
-    highSpeedUndersteer: 0.3,
-  },
-  carR: 12,
+  physics: COURSE_PHYSICS.stage,
+  carR: COURSE_CAR_R.stage,
   contact: false,
   laps: 1,
   checkpoints: 3,
   finishWindowMs: 15_000,
 }
-const GRAVEL_GRIP = 4.2
-const GRAVEL_SPEED = 0.93
 
 // Circuit: faster, grippier, and racing each other for real.
 const CIRCUIT: CourseConfig = {
   kind: 'circuit',
   courses: SPEED_CIRCUITS,
   defaultDurationMs: 100_000,
-  physics: {
-    maxSpeed: 320,
-    offMaxSpeed: 130,
-    accel: 320,
-    brake: 700,
-    reverseAccel: 240,
-    maxReverse: 90,
-    rollDrag: 0.35,
-    offDrag: 1.6,
-    offDecel: 560,
-    grip: 10,
-    offGrip: 5,
-    turnRate: 3.4,
-    turnFullSpeed: 80,
-    understeerFrom: 220,
-    highSpeedUndersteer: 0.35,
-  },
-  carR: 13,
+  physics: COURSE_PHYSICS.circuit,
+  carR: COURSE_CAR_R.circuit,
   contact: true,
   laps: 2,
   checkpoints: 0,
@@ -110,10 +84,10 @@ const HIT_MIN_SPEED = 70
 // Slipstream: right behind another car (within range, in its wake, heading the same way).
 const DRAFT_RANGE = 140
 const DRAFT_CONE = 0.3
-const DRAFT = { maxSpeedScale: 1.1, accelScale: 1.15 }
+const DRAFT = RACE_DRAFT_TUNING
 // Boost pads.
-const BOOST_MS = 1200
-const BOOST = { maxSpeedScale: 1.25, accelScale: 1.6 }
+const BOOST_MS = COURSE_BOOST_MS
+const BOOST = COURSE_BOOST
 const GRID_FIRST_BACK = 24
 const GRID_ROW_GAP = 40
 const GRID_LATERAL = 0.42
@@ -304,7 +278,7 @@ class CourseRace implements MiniGame<CourseRaceState, CourseRaceInput> {
   private tuning(state: CourseRaceState, car: Car, now: number): CarTuning {
     if (!this.closed) {
       const gravel = inStretch(state.def.gravel, car.idx, state.samples.length)
-      return gravel ? { grip: GRAVEL_GRIP, maxSpeedScale: GRAVEL_SPEED } : {}
+      return gravel ? COURSE_GRAVEL_TUNING : {}
     }
     let maxSpeedScale = car.draft ? DRAFT.maxSpeedScale : 1
     let accelScale = car.draft ? DRAFT.accelScale : 1
@@ -379,6 +353,7 @@ class CourseRace implements MiniGame<CourseRaceState, CourseRaceInput> {
       laps: this.cfg.laps,
       checkpoints: this.cfg.checkpoints,
       goInMs: Math.max(0, state.goAt - now),
+      raceMs: Math.max(0, now - state.goAt),
       cars: order.map((id, i) => {
         const c = state.cars.get(id) as Car
         return {
@@ -398,6 +373,8 @@ class CourseRace implements MiniGame<CourseRaceState, CourseRaceInput> {
           draft: c.draft,
           boost: now < c.boostUntil,
           gone: c.gone,
+          vx: Math.round(c.vx * 10) / 10,
+          vy: Math.round(c.vy * 10) / 10,
         }
       }),
       remainingMs: Math.max(0, state.endsAt - now),

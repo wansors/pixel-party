@@ -1,15 +1,18 @@
 import {
+  MICRO_RACE_CAR_R,
+  MICRO_RACE_PHYSICS,
   MICRO_RACE_TRACKS,
   MICRO_RACE_WORLD,
   type MicroRaceInput,
   type MicroRacePoint,
   type MicroRaceSnapshot,
   type MicroRaceTrackDef,
+  RACE_DRAFT_TUNING,
+  RACE_WALL_BOUNCE,
   sampleMicroRaceTrack,
 } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 import {
-  type CarPhysics,
   type GridSlot,
   type RaceCar,
   clamp1,
@@ -34,34 +37,18 @@ export const FINISH_WINDOW_MS = 12_000
 const SAMPLE_SPACING = 8
 const SUB_STEPS = 4
 
-// Arcade car physics (world units, seconds) — the shared engine in raceCore, tuned for tiny tabletop cars.
-export const CAR_R = 11
-const PHYSICS: CarPhysics = {
-  maxSpeed: 250,
-  offMaxSpeed: 105,
-  accel: 300,
-  brake: 650,
-  reverseAccel: 240,
-  maxReverse: 90,
-  rollDrag: 0.35,
-  offDrag: 1.6,
-  offDecel: 520, // bleeds speed above offMaxSpeed while on the table surface
-  grip: 9,
-  offGrip: 5,
-  turnRate: 3.6,
-  turnFullSpeed: 70,
-  // Above this speed steering loosens (brake for hairpins).
-  understeerFrom: 160,
-  highSpeedUndersteer: 0.3,
-}
+// Arcade car physics (world units, seconds) — the shared integrator, tuned for tiny tabletop cars (the
+// numbers live in @pp/shared: the client predicts its own car with them).
+export const CAR_R = MICRO_RACE_CAR_R
+const PHYSICS = MICRO_RACE_PHYSICS
 const RESTITUTION = 1.1 // >1 gives bumps a punchy, Micro Machines feel
 // Slipstream: tucked in right behind another car (in range, in its wake, heading the same way) a car
 // gets a little more top speed and pull — the way back up from the back of the grid.
 const DRAFT_RANGE = 110
 const DRAFT_CONE = 0.3
-const DRAFT = { maxSpeedScale: 1.1, accelScale: 1.15 }
+const DRAFT = RACE_DRAFT_TUNING
 const HIT_MIN_SPEED = 60 // approach speed that counts as a bump for feedback
-const WALL_BOUNCE = 0.4
+const WALL_BOUNCE = RACE_WALL_BOUNCE
 // Progress tracking (see raceCore.followRoad): a car that strays lostFactor × halfWidth from its own
 // stretch of road for lostMs (a cut across the table, a wild spin) is put back where it left it.
 const ROAD = { windowBack: 6, windowAhead: 10, lostFactor: 2.2, lostMs: 1500 }
@@ -275,12 +262,15 @@ export class MicroRace implements MiniGame<MicroRaceState, MicroRaceInput> {
         resets: c.resets,
         draft: c.draft,
         gone: c.gone,
+        vx: Math.round(c.vx * 10) / 10,
+        vy: Math.round(c.vy * 10) / 10,
       }
     })
     return {
       track: state.track,
       laps: LAPS,
       goInMs: Math.max(0, state.goAt - now),
+      raceMs: Math.max(0, now - state.goAt),
       cars,
       remainingMs: Math.max(0, state.endsAt - now),
       closing: state.closing,

@@ -1,14 +1,20 @@
 // Sink the Fleet bot: on its turn, after a short think, fires next to an earlier hit (or anywhere new).
-type Shot = { cell: number; hit: boolean }
-type View = { opponentId: string | null; yourTurn: boolean; turnRemainingMs: number; shots: Shot[] }
+// Shots arrive packed as `cell * 2 + (hit ? 1 : 0)`.
+type View = {
+  opponentId: string | null
+  yourTurn: boolean
+  turnRemainingMs: number
+  shots: number[]
+}
 type Snap = { grid: number; players: Record<string, View> }
 
 export default function play(s: Snap, me: string): unknown {
   const v = s.players[me]
   if (!v?.opponentId || !v.yourTurn || v.turnRemainingMs > 4000) return null
   const n = s.grid
-  const fired = new Set(v.shots.map((x) => x.cell))
-  const near = v.shots
+  const shots = v.shots.map((x) => ({ cell: Math.floor(x / 2), hit: x % 2 === 1 }))
+  const fired = new Set(shots.map((x) => x.cell))
+  const near = shots
     .filter((x) => x.hit)
     .flatMap(({ cell }) => [
       cell - n,

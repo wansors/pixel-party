@@ -28,10 +28,11 @@ describe('TugOfWar', () => {
 
   test('a decisive per-capita lead ends the round before the timer', () => {
     const game = new TugOfWar()
-    let state = game.init(baseCtx())
-    // 30 pulls / 2 members = 15 per capita each... push past the 25 threshold.
-    for (let i = 0; i < 60; i++) state = game.onInput(state, 'a', { kind: 'pull' }, 10)
-    expect(game.isFinished(state, 10)).toBe(true) // well before endsAt = 1000
+    let state = game.init({ ...baseCtx(), config: { durationMs: 10_000 } })
+    // 60 pulls by one of two red members (one every 70 ms, under the rate cap) = 30 per capita, past
+    // the 25 threshold.
+    for (let i = 0; i < 60; i++) state = game.onInput(state, 'a', { kind: 'pull' }, 10 + i * 70)
+    expect(game.isFinished(state, 4200)).toBe(true) // well before endsAt = 10000
   })
 
   test('equal per-capita effort is a tie at the timer', () => {
@@ -46,6 +47,18 @@ describe('TugOfWar', () => {
     const result = game.getResult(state)
     expect(result.ranks?.red).toBe(0)
     expect(result.ranks?.blue).toBe(0)
+  })
+
+  test('pulls count up to the human mashing ceiling per second', () => {
+    const game = new TugOfWar()
+    let state = game.init({ ...baseCtx(), config: { durationMs: 10_000 } })
+    // An autoclicker: 50 pulls in the same instant count as 15.
+    for (let i = 0; i < 50; i++) state = game.onInput(state, 'a', { kind: 'pull' }, 10)
+    expect(game.snapshot(state, 10).avg.red).toBe(7.5)
+    // A teammate has their own allowance; a second later the window has rolled over.
+    state = game.onInput(state, 'b', { kind: 'pull' }, 20)
+    state = game.onInput(state, 'a', { kind: 'pull' }, 1010)
+    expect(game.snapshot(state, 1010).avg.red).toBe(8.5)
   })
 
   test('ignores pulls outside the round window and from non-members', () => {

@@ -23,7 +23,8 @@ domain changes (rooms / sessions / mini-games / scoring instead of an MMORPG wor
 | Wire validation | **Hand-written** discriminated-union types + shape validator — **no Zod** |
 | Client shell | **Angular 20** (standalone components, `@angular/build`) — all DOM/UI |
 | Game rendering | **Phaser 3** — mini-game canvas only, decoupled from Angular |
-| Shared contracts | `packages/shared` (`@pp/shared`): protocol + catalog data, consumed by both apps |
+| Shared contracts | `packages/shared` (`@pp/shared`): protocol + catalog data + the deterministic game rules the client predicts with, consumed by both apps |
+| Serving | **Party mode** (`bun run start`): one Bun process serves the production client build, `/api` and `/ws` on one port; `bun run dev` (Angular dev server + game server) for development only |
 | Persistence | **None, permanently** — everything in-memory/ephemeral by design (no `bun:sqlite`, ever) |
 | Lint/format | **Biome** (100 cols, single quotes, semicolons as-needed) |
 | Tests | **`bun test`** (server/shared) + **Karma/Jasmine** (client) |
@@ -63,6 +64,7 @@ application/
   ports/                    # Clock, IdGenerator, LiveRoomRegistry
 infrastructure/
   driving/ws/               # Bun.serve WS adapter + intent registry + shape validator
+  driving/http/             # /api routes + staticSite (party mode: serves the client build)
   driven/time/              # SystemClock
   driven/random/            # SeededRandom (mulberry32)
   driven/id/                # room code + id generation
@@ -91,7 +93,8 @@ game/                                     # Phaser, framework-agnostic
   hud.ts, fx.ts, pixelStyle.ts            # standard HUD strip, juice kit, pixel-art texture helpers
   avatarSprites.ts, avatars.ts            # lobby avatar grids (pure data, also used by the shell) +
                                           #   per-player Phaser textures
-  netcode/SnapshotInterpolator.ts         # client interpolation for real-time scenes
+  netcode/SnapshotInterpolator.ts         # client interpolation for real-time scenes (see §5)
+  netcode/ServerClock.ts                  # the server's round clock, estimated from snapshots
   scenes/MiniGameScene.ts                 # common scene base (snapshot guard, HUD, crash guard, relayout)
   scenes/index.ts                         # SCENES: the one id → scene map
   scenes/<Name>Scene.ts                   # one Phaser scene per mini-game
@@ -103,6 +106,8 @@ environments/
 index.ts        # re-exports protocol + catalog
 protocol.ts     # PROTOCOL_VERSION, ClientMsg, ServerMsg, all DTOs (discriminated unions)
 catalog/        # mini-game metadata (id, name, format, timing, rules blurbs), scoring config
+games/          # per-game wire types + the pure rules both sides run (Tetris engine, snakeStep,
+                #   sumoStep, the race car integrator, bomberStepDir, asteroidsFly…; see §5)
 ```
 
 ### Workspace wiring (same rules as utopia)
@@ -128,9 +133,9 @@ nothing about Bun, WebSocket, or SQLite.
 - **application/** — one **use case per intent** (plain class, constructor-injected ports, single
   `execute({...})` returning a typed discriminated-union result). Defines **ports** (interfaces) at real
   external boundaries only.
-- **infrastructure/** — adapters implementing ports: WS driving adapter, `SystemClock`,
-  `SeededRandom`, id/room-code generator, `LiveRooms` (in-memory authoritative store), optional Sqlite
-  repos.
+- **infrastructure/** — adapters implementing ports: WS + HTTP driving adapters (incl. the party-mode
+  static site), `SystemClock`, `SeededRandom`, id/room-code generator, `LiveRooms` (in-memory
+  authoritative store; no repositories — there is no database, D15).
 
 ### Ports (define only at real boundaries — KISS hexagonal)
 | Port | Adapter | Notes |
@@ -155,7 +160,9 @@ pub/sub: `ws.subscribe(topic)` / `server.publish(topic, data)`.
 
 - **Upgrade flow**: `fetch` handles `/api/*` (HTTP: create/join room, health) and upgrades WS
   connections. On upgrade, attach server-resolved identity (`playerId`, `roomCode`, `isHost`) to
-  `ws.data` — **never client-asserted**. Origin allowlist check (fail-closed).
+  `ws.data` — **never client-asserted**. Origin allowlist check (fail-closed); in party mode an upgrade
+  from the page this server served (Origin host = Host) is accepted too. Any other GET/HEAD falls
+  through to the static site in party mode; everything else is a 404.
 - **Topics**:
   - `room:<code>` — all lobby/round/scoreboard events for that room publish here.
   - `player:<id>` — targeted server-internal pushes (e.g., a result the tick loop emits).
@@ -223,8 +230,63 @@ decoupled and talk through one thin service.
   not per frame).
 - **Reconnect**: bounded exponential backoff `min(1000 * 2^attempts, 30_000)`, suppressed on
   intentional close or protocol mismatch. Rejoin restores the player's session scoreboard (FR-2.3).
-- **Build**: Angular 20 via `@angular/build` (`ng serve`/`ng build`); dev proxy `/api` + `/ws` →
-  `localhost:3000` so only the Angular dev port is exposed. WS URL derived from `location` at runtime.
+- **Build**: Angular 20 via `@angular/build` (`ng serve`/`ng build`). The WS URL is derived from
+  `location` at runtime, so a build talks to whichever server served it (see *Serving* below).
+- **Keys**: `MiniGameScene` captures Space/Enter/arrows while a scene runs (blurring a focused page
+  control first), and `onKey` ignores the OS auto-repeat unless a binding asks for it; held keys and
+  pointers are released on window blur.
+
+### Serving: development and party mode
+- **Development** (`bun run dev`): the Angular dev server (:4200) serves the client and proxies `/api` +
+  `/ws` to the game server (:3000). Angular runs in development mode — for working on the game, not
+  for playing it.
+- **Party mode** (`bun run start`, D30) — how the game is played: build the optimized client once, then
+  one Bun process serves it on its own port next to `/api` and `/ws`
+  (`infrastructure/driving/http/staticSite.ts`). The build is loaded at boot: text assets gzipped up
+  front, Angular's hashed bundles cached for good, `index.html` never cached, client routes
+  (`/room/ABCD`) falling back to `index.html`. Page and socket share an origin, so there is no
+  allowlist to configure; the server prints the LAN URL every device opens. `bun run start:server`
+  serves an existing build again; `SERVE_CLIENT` (on outside development) and `CLIENT_DIR` configure
+  it. Still one process and no database (D15–D17).
+
+### Client netcode (real-time games)
+Snapshots arrive every 150 ms (`TICK_HZ` 20, a snapshot every 3 ticks). Drawing them as they come
+stutters, and waiting for them made your own avatar, car, board or ship answer 150–300 ms late.
+Real-time scenes draw on three tools (D30):
+- **`netcode/SnapshotInterpolator`** — keeps the two latest snapshots and renders `renderDelayMs` in
+  the past, lerping between them. The default delay is **150 ms, the snapshot interval**: any shorter
+  and render time catches up with the newest snapshot, so motion plays as freeze-then-jump. Now used
+  only by Room Rush and Sumo ICE (every body; your push shows at once as an arrow at your feet).
+- **`netcode/ServerClock`** — estimates the server's round clock from snapshots' `remainingMs` (it keeps
+  the least-delayed snapshot seen, so a late packet never pulls the picture back). Anything that moves
+  as a pure function of time is extrapolated to the server's *present*, not drawn a snapshot behind:
+  falling fruit and blocks, Pixel Dash obstacles, Star Blaster's scripted enemies and bullets, the race
+  clock — and the base the predictions below step forward from.
+- **Prediction of your own entity** — the rules the client needs live in `@pp/shared` as pure,
+  deterministic functions that the server's domain calls too, so both sides run the same code. The
+  scene steps its own entity locally on input and reconciles with every snapshot. The server stays
+  authoritative: its snapshot always wins.
+  - *Boards* — Line Clear Sprint / Quick Tetris (the whole engine, `tetrisSprint`: 7-bag pieces,
+    rotation + kicks, gravity, locks) and Bubble Pop (`bubbleShoot`, `bubbleNextShot`): each input
+    applies to the local board at once and goes out with a `seq`. Each snapshot is the new base, and
+    the inputs it hasn't acknowledged (`ack`, `shots`) are replayed on it. Snake (`snakeStep`) works the
+    same way, stepping on the server's clock; a turn names the step it is for (`at`), so both sides turn
+    on the same cell.
+  - *Bodies* — Sumo (`sumoStep`, `sumoDash`), the racers (`integrateRaceCar` plus per-game physics,
+    moved out of `raceCore`; `scenes/raceNet.ts` `OwnCar`), Bomber (`bomberStepDir`), Asteroids
+    (`asteroidsFly`), Brawl (`BRAWL.moves` timings, so a refused press never swings), Pang (`PANG`),
+    Freeze Doll (`freezeDollMove`), Star Blaster's ship and the athletics strides
+    (`athleticsStrideGain`). On each snapshot the difference from the prediction is folded in and
+    faded out on screen (time constants of ~90–220 ms per game). It never snaps, except on a teleport:
+    a respawn, a rescue, a throw, or an error too big to be lag.
+  - *Everyone else* is dead-reckoned to the server's present from snapshot velocities (rival cars:
+    `RivalCars`, ships, rocks, balloons, fighters, runners; Sumo steps every wrestler with the shared
+    physics), walked a beat behind (Bomber, 120 ms), or interpolated (above). Pong's ball runs
+    forward from the snapshot's position + velocity with the server's wall/paddle rules, your paddle
+    as you hold it now.
+
+  Scenes send input on change only, never an idle heartbeat (D28); bodies carry `vx`/`vy` (or a walk
+  `dir`) on the wire for dead reckoning.
 
 ---
 
@@ -290,8 +352,19 @@ wire types in `@pp/shared`, one scene + its `SCENES` entry, one `MINIGAMES` cata
   a pure function of `(seed via Random, time via Clock)`.
 - **CI** (GitHub Actions): `bun install --frozen-lockfile` → determinism → lint → typecheck → test;
   separate browser job for client tests.
+- **Performance** (D30 budget: server tick p99 well under 1 ms at 12 players, snapshots ≤ ~4 KB, no
+  per-frame object churn, no leaks across a session):
+  - `scripts/bench-games.ts` runs every mini-game at N players (default 12) for its full duration at
+    20 Hz, driven by the playtest bots (generic inputs where a game has none), after a warm-up. It
+    reports the tick cost (avg / p99 / max), the snapshot size and the bandwidth per client
+    (`--players`, `--only`, `--json`).
+  - The playtest skill's `shoot.ts --perf` probe logs a JSON line per screenshot (also to
+    `perf.jsonl`): fps, frame gaps, Phaser step cost, long tasks, JS heap, and the live scene's display
+    objects / tweens / textures (steady growth = a leak). Headless Chrome runs WebGL through
+    SwiftShader for it. It reads the `__ppGame` hook, which `GameClient` exposes only when
+    `localStorage.pp_perf` is set.
 - **Naming**: PascalCase entities (no suffix), camelCase services/utilities, kebab feature dirs, ports
-  drop the `I` prefix, use cases keep `UseCase` suffix, adapters prefix by tech (`Sqlite…`, `Bun…`,
+  drop the `I` prefix, use cases keep `UseCase` suffix, adapters prefix by tech (`Bun…`,
   `System…`), UPPER_SNAKE constants, private mutable fields `_prefixed`, discriminated unions for wire
   variants, single object-parameter `execute({...})` methods.
 

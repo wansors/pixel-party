@@ -201,4 +201,18 @@ describe('Brawl', () => {
     expect(game.isFinished(s, 2000)).toBe(true)
     expect(game.getResult(s).placements[0]).toBe('a')
   })
+
+  test('turning is instant: a punch right after pressing the other way swings that way', () => {
+    const s = init(['a', 'b'])
+    // b stands just BEHIND a (a faces right, b is on its left).
+    Object.assign(fighter(s, 'a'), { x: 1, y: 0.2, face: 1 })
+    Object.assign(fighter(s, 'b'), { x: 0.93, y: 0.2, face: 1 })
+    game.onInput(s, 'a', { kind: 'move', dx: -1, dy: 0 }, 10)
+    expect(fighter(s, 'a').face).toBe(-1)
+    game.onInput(s, 'a', { kind: 'punch' }, 12)
+    expect(fighter(s, 'b').hp).toBeLessThan(BRAWL.hp)
+    // Mid-swing a direction doesn't turn you round.
+    game.onInput(s, 'a', { kind: 'move', dx: 1, dy: 0 }, 20)
+    expect(fighter(s, 'a').face).toBe(-1)
+  })
 })

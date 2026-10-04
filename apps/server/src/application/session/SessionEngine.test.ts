@@ -131,10 +131,11 @@ describe('SessionEngine', () => {
     const msgs = playSession(roomWith('a', 'b'))
     const final = msgs.find((m) => m.type === 'FINAL_RANKING')
     if (final?.type !== 'FINAL_RANKING') throw new Error('no final')
-    // A radar per player; the round winner scores 1.0 on the game's axis (button-masher → speed).
+    // A radar per player; the round winner stands above the middle on the game's axis
+    // (button-masher → speed): one won round of two players → (1 + 0.5) / 2.
     expect(final.radars?.length).toBe(2)
     const a = final.radars?.find((r) => r.playerId === 'a')
-    expect(a?.axes.speed).toBe(1)
+    expect(a?.axes.speed).toBe(0.75)
     // Summary reports the per-round winner and the most-wins leader.
     expect(final.summary?.perRound.length).toBe(1)
     expect(final.summary?.mostRoundWins).toEqual({ playerId: 'a', wins: 1 })
@@ -147,7 +148,7 @@ describe('SessionEngine', () => {
     // Only one round has been played at this point, so this already matches the final radar.
     expect(roundResult.result.radars?.length).toBe(2)
     const a = roundResult.result.radars?.find((r) => r.playerId === 'a')
-    expect(a?.axes.speed).toBe(1)
+    expect(a?.axes.speed).toBe(0.75)
   })
 
   test('plays a multi-game sequence with no repeats and finishes', () => {

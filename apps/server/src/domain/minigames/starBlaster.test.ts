@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test'
-import { STAR, STAR_ENEMY, buildStarScript, starBulletsAt, starEnemyAt } from '@pp/shared'
+import {
+  STAR,
+  STAR_ENEMY,
+  buildStarScript,
+  starBulletNear,
+  starBulletsAt,
+  starEnemyAt,
+} from '@pp/shared'
 import { SeededRandom } from '../../infrastructure/driven/random/SeededRandom'
 import { StarBlaster, type StarBlasterState } from './starBlaster'
 
@@ -179,11 +186,30 @@ describe('Star Blaster', () => {
     expect(game.snapshot(s, first.endAt + STAR.bulletLifeMs + 10).arenas[0]?.killed).toEqual([])
   })
 
-  test('steering is normalized; junk is ignored', () => {
+  test('steering: long vectors are full speed, short ones slower (a pointer easing in); junk ignored', () => {
     const s = init(['a'])
     game.onInput(s, 'a', { kind: 'move', dx: 3, dy: 4 }, 0)
     expect(arena(s, 'a').dx).toBeCloseTo(0.6)
     game.onInput(s, 'a', { kind: 'move', dx: Number.NaN, dy: 0 }, 0)
     expect(arena(s, 'a').dy).toBeCloseTo(0.8)
+    game.onInput(s, 'a', { kind: 'move', dx: 0.25, dy: 0 }, 0)
+    expect(arena(s, 'a').dx).toBeCloseTo(0.25)
+    const x0 = arena(s, 'a').x
+    game.tick(s, 200, 200)
+    expect(arena(s, 'a').x - x0).toBeCloseTo(0.25 * STAR.shipSpeed * 0.2, 4)
+  })
+
+  test('the bullet hit test matches the full bullet list', () => {
+    const s = buildStarScript(9, 50_000)
+    const killed = new Map<number, number>()
+    for (let t = 2000; t < 50_000; t += 700) {
+      const all = starBulletsAt(s, t, killed)
+      const b = all[Math.floor(all.length / 2)]
+      if (!b) continue
+      expect(starBulletNear(s, t, killed, undefined, b.x, b.y, 0.001)).toBe(
+        all.find((q) => Math.hypot(q.x - b.x, q.y - b.y) < 0.001)?.id ?? null,
+      )
+      expect(starBulletNear(s, t, killed, new Set([b.id]), b.x, b.y, 0.0001)).not.toBe(b.id)
+    }
   })
 })

@@ -12,7 +12,7 @@ import {
   shade,
 } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
-import { DuelWatch } from './duelWatch'
+import { DuelWatch, verdictKey } from './duelWatch'
 
 // Stepped sky bands, top to horizon: a tense dusk while waiting, a blazing sunset once the signal
 // fires.
@@ -86,10 +86,13 @@ function ensureWoodSign(
 
 // Quick Draw Duel canvas: a pixel-western standoff. You (left) and your opponent (right) face off
 // in your identity colors under a dusk sky; a wooden sign says WAIT… until the signal fires — the
-// sky blazes, the sign yells FIRE! — then tap anywhere (or Space) to draw. The sign then carries
-// the verdict and the line under it explains it (who was faster, who jumped the gun). A tap before
-// the signal is a false start. The bye (or a player who joined mid-round) watches another standoff
-// from the stands instead. Server-authoritative: the snapshot only ever says whether it has fired.
+// sky blazes, the sign yells FIRE! — then click / tap anywhere (or SPACE / ENTER) to draw. The sign
+// then carries the verdict and the line under it explains it (who was faster, who jumped the gun). A
+// draw before the signal is a false start: the sign says so (TOO EARLY!) and you lose. Each draw
+// reports its reaction time from the moment this screen showed FIRE! (the server bounds what it
+// credits). The bye (or a player who joined mid-round) watches another standoff from the stands
+// instead, and so does a duellist a few seconds after their own standoff is settled.
+// Server-authoritative: the snapshot only ever says whether it has fired.
 export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
   private sky?: Phaser.GameObjects.Graphics
   private sign?: Phaser.GameObjects.Image
@@ -110,6 +113,9 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
   private outcome?: Outcome
   // Our own valid draw is shown the moment we tap (the verdict still comes from the server).
   private firedLocally = false
+  // When this screen first showed FIRE! for our own standoff (scene time; -1 = not yet).
+  private fireSeenAt = -1
+  private instructionKey = 'game.quickDraw.instruction'
 
   constructor(...deps: SceneDeps) {
     super('quick-draw', ...deps)
@@ -126,9 +132,12 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
     this.wasFired = false
     this.outcome = undefined
     this.firedLocally = false
+    this.fireSeenAt = -1
     const { width, height } = this.scale
     const cx = width / 2
     const compact = Math.min(width, height) < 520
+    const big = Math.min(width, height) >= 900
+    this.instructionKey = compact ? 'game.quickDraw.instruction' : 'game.quickDraw.instructionPc'
     this.horizon = Math.round(height * 0.62)
 
     this.sky = this.add.graphics().setDepth(-10)
@@ -161,8 +170,8 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
     this.rollTumbleweed()
 
     // The signal sign: a wooden plank on two posts, centered up top.
-    const signW = Math.round(Math.min(width * 0.8, 480))
-    const signH = Math.round(compact ? 76 : 100)
+    const signW = Math.round(Math.min(width * 0.8, big ? 640 : 480))
+    const signH = Math.round(compact ? 76 : big ? 128 : 100)
     const signY = Math.round(height * 0.05 + signH / 2 + 8)
     const post = this.add.graphics().setDepth(1)
     post.fillStyle(shade(WOOD, -0.4), 1)
@@ -171,7 +180,7 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
     this.sign = this.add
       .image(cx, signY, ensureWoodSign(this, `pp-qd-sign-${signW}x${signH}`, signW, signH, WOOD, 5))
       .setDepth(2)
-    this.signSize = compact ? 32 : 48
+    this.signSize = compact ? 32 : big ? 64 : 48
     this.signMaxW = signW - 28
     this.signText = this.add
       .text(
@@ -187,7 +196,7 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
         cx,
         signY + signH / 2 + (compact ? 34 : 44),
         '',
-        bodyStyle(compact ? 15 : 20, PALETTE.text, {
+        bodyStyle(compact ? 15 : big ? 26 : 20, PALETTE.text, {
           align: 'center',
           stroke: '#10121c',
           strokeThickness: 4,
@@ -199,6 +208,7 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
 
     this.input.on('pointerdown', () => this.draw())
     this.onKey('SPACE', () => this.draw())
+    this.onKey('ENTER', () => this.draw())
     this.drawSky(DUSK)
     this.setSign(this.t('game.quickDraw.wait'), PALETTE.text)
   }
@@ -251,7 +261,7 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
         .setFlipX(flip)
         .setDepth(6)
         .setVisible(false)
-      const fontSize = size > 150 ? 16 : 8
+      const fontSize = size > 220 ? 24 : size > 150 ? 16 : 8
       const name = this.add
         .text(
           x,
@@ -285,14 +295,23 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
 
   private draw(): void {
     const me = this.snap?.players[this.selfId]
-    if (!me || me.done || me.youDrew || me.opponentId === null) return
-    this.sfx.click()
-    this.sendInput({ kind: 'draw' })
+    if (!me || me.done || me.youDrew || me.opponentId === null || this.viewId !== this.selfId)
+      return
+    if (this.firedLocally || this.me?.gun.visible) return // one draw per standoff
+    const ms = this.fireSeenAt >= 0 ? Math.round(this.time.now - this.fireSeenAt) : undefined
+    this.sendInput(ms === undefined ? { kind: 'draw' } : { kind: 'draw', ms })
+    if (!this.me) return
     // The signal has already fired, so this draw is valid: pull the gun now instead of a round trip
-    // later (the round can end on this very draw, before its outcome is ever rendered).
-    if (me.fired && this.me && !this.firedLocally) {
+    // later (the round can end on this very draw, before its outcome is ever rendered). Before the
+    // signal the gun still comes out at once — the sign then says whether that was too early.
+    if (me.fired) {
       this.firedLocally = true
       this.fireGun(this.me)
+    } else {
+      // Too soon: the hammer clicks on nothing.
+      this.sfx.click()
+      this.me.gun.setVisible(true)
+      punch(this, this.me.gun, 0.15, 60)
     }
   }
 
@@ -320,8 +339,8 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
   protected frame(snap: QuickDrawSnapshot | null, time: number): void {
     if (!snap) return
     const own = snap.players[this.selfId]
-    const playing = !!own && own.opponentId !== null
-    const viewId = playing ? this.selfId : this.watch.pick(snap.players, time)
+    const viewId = this.watch.follow(snap.players, this.selfId, time)
+    const playing = !!own && own.opponentId !== null && viewId === this.selfId
     if (viewId !== this.viewId) this.setView(viewId, snap)
     const view = viewId === null ? undefined : snap.players[viewId]
     if (!view?.opponentId) return
@@ -334,6 +353,7 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
     this.freshView = false
     if (view.fired && !this.wasFired) {
       this.wasFired = true
+      if (playing && !view.youDrew) this.fireSeenAt = this.time.now
       this.drawSky(BLAZE)
       if (!view.done && fx) {
         this.sfx.go()
@@ -350,7 +370,7 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
     )
     this.status?.setText(
       playing
-        ? this.t(view.fired ? 'game.quickDraw.tapNow' : 'game.quickDraw.instruction')
+        ? this.t(view.fired ? 'game.quickDraw.tapNow' : this.instructionKey)
         : this.watchLine(view),
     )
   }
@@ -373,20 +393,24 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
     this.outcome = undefined
     this.wasFired = false
     this.firedLocally = false
+    this.fireSeenAt = -1
     this.drawSky(DUSK)
     this.setSign(this.t('game.quickDraw.wait'), PALETTE.text)
     const view = viewId === null ? undefined : snap.players[viewId]
     if (viewId !== null && view) this.buildSlingers(viewId, view)
   }
 
-  // A spectator's line under the sign: the bye's consolation, then whose standoff this is.
+  // A spectator's line under the sign: the bye's consolation (or your own verdict, once you've moved
+  // on to watch), then whose standoff this is.
   private watchLine(view: QuickDrawPlayerView): string {
     const watching = this.t('game.common.duelWatch', {
       a: this.state.nameOf(this.viewId ?? ''),
       b: this.state.nameOf(view.opponentId ?? ''),
     })
-    const bye = this.snap?.players[this.selfId]?.opponentId === null
-    return bye ? `${this.t('game.quickDraw.bye')}\n${watching}` : watching
+    const own = this.snap?.players[this.selfId]
+    if (own?.opponentId === null) return `${this.t('game.quickDraw.bye')}\n${watching}`
+    if (own?.done) return `${this.t(verdictKey(own.won))}\n${watching}`
+    return watching
   }
 
   private outcomeOf(view: QuickDrawPlayerView, opp: QuickDrawPlayerView | undefined): Outcome {
@@ -413,8 +437,15 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
     const win = outcome === 'fastest' || outcome === 'oppJumped' || outcome === 'oppLeft'
     const mine = this.viewId === this.selfId
     if (mine) {
+      // A false start gets its own headline: the cause, not just the loss.
       this.setSign(
-        this.t(win ? 'game.common.youWin' : 'game.common.youLose'),
+        this.t(
+          win
+            ? 'game.common.youWin'
+            : outcome === 'jumped'
+              ? 'game.quickDraw.early'
+              : 'game.common.youLose',
+        ),
         win ? PALETTE.lime : PALETTE.red,
       )
       const line: Record<Outcome, string> = {
@@ -492,10 +523,20 @@ export class QuickDrawScene extends MiniGameScene<QuickDrawSnapshot> {
       duration: 380,
       delay: 80,
       ease: 'Quad.easeIn',
+      // The body hits the dust.
+      onComplete: () => this.standoff(() => this.sfx.land()),
     })
   }
 
+  // A standoff sound: full volume in your own duel, quieter for one you're only watching.
+  private standoff(sound: () => void): void {
+    if (this.viewId === this.selfId) sound()
+    else this.sfx.quiet(sound, 0.5)
+  }
+
+  // The shot: a sharp crack (the local draw fires it on the frame of the press).
   private fireGun(shooter: Slinger): void {
+    this.standoff(() => this.sfx.gunshot())
     shooter.gun.setVisible(true)
     punch(this, shooter.gun, 0.15, 60)
     const x = shooter.avatar.image.x + shooter.tipX

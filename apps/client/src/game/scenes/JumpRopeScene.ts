@@ -1,6 +1,6 @@
 import { JUMP_ROPE, type JumpRopePlayer, type JumpRopeSnapshot, PALETTE } from '@pp/shared'
 import type Phaser from 'phaser'
-import { AvatarSprite, avatarPx } from '../avatars'
+import { AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
 import {
   addBanner,
   burst,
@@ -11,21 +11,36 @@ import {
   showBanner,
   speechBubble,
 } from '../fx'
-import { ensureBevelPanel, ensurePixelGrid, fitFontSize, headlineStyle, shade } from '../pixelStyle'
-import { YouMarker, addShadow } from '../playerMarks'
+import {
+  ensureBevelPanel,
+  ensurePixelGrid,
+  fitFontSize,
+  headlineStyle,
+  hexToCss,
+  shade,
+} from '../pixelStyle'
+import { type Shadow, YouMarker, addShadow } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // Jump Rope: a schoolyard at dusk, two turners swinging a giant rope over everyone standing in a row.
 // The rope is a curve whose middle swings round (drawn behind the jumpers on the far side of its turn,
 // in front of them on the near side) and sweeps the ground under their feet on every pass. Everyone is
-// their lobby avatar; your own jump shows the instant you press. SPACE / ↑ / a tap jumps.
+// their lobby avatar; your own jump shows the instant you press. SPACE / ↑ / W / Enter, a click or a
+// tap jumps. A line on the ground names the keys (or heckles you once you're out).
+
+// The rope's sweep is heard this long before it passes under the feet (the whoosh swells into it),
+// once per pass and never closer together than WHOOSH_GAP_MS.
+const WHOOSH_LEAD_MS = 120
+const WHOOSH_GAP_MS = 250
+// Rivals' moments play at this fraction of the volume (yours stay full), so a full room stays readable.
+const RIVAL_LEVEL = 0.5
 
 const TURNER_ROWS = ['__HH__', '__HH__', '_TTTT_', 'TTTTTT', '_TTTT_', '__LL__', '_L__L_', 'L____L']
 
 interface View {
   avatar: AvatarSprite
-  shadow: Phaser.GameObjects.Ellipse
+  shadow: Shadow
   out: boolean
   // Wincing after a trip until then (scene time).
   hurtUntil: number
@@ -54,9 +69,15 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
   private jumpBtn?: Phaser.GameObjects.Image
   private jumpKeys = { up: '', down: '' }
   private localJumpAt = -1
+  private warmed = false
+  private prompt?: Phaser.GameObjects.Text
+  private promptText = ''
   private lastTick = -1
   private snapAt = 0
   private prev?: JumpRopeSnapshot
+  // The pass count whose sweep was last heard, and when.
+  private whooshedFor = -1
+  private whooshAt = Number.NEGATIVE_INFINITY
 
   constructor(...deps: SceneDeps) {
     super('jump-rope', ...deps)
@@ -69,9 +90,13 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
     this.views = new Map()
     this.slots = []
     this.localJumpAt = -1
+    this.warmed = false
+    this.promptText = ''
     this.lastTick = -1
     this.snapAt = 0
     this.prev = undefined
+    this.whooshedFor = -1
+    this.whooshAt = Number.NEGATIVE_INFINITY
 
     const stripSize = this.compact ? 11 : 13
     this.strip = new PlayerStrip(this, width / 2, this.top + 8, width - 24, stripSize, 2)
@@ -97,7 +122,7 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
       .setDepth(701)
     // Anywhere on the canvas jumps (a big target for thumbs).
     this.input.on('pointerdown', () => this.jump())
-    for (const k of ['SPACE', 'UP', 'W']) this.onKey(k, () => this.jump())
+    for (const k of ['SPACE', 'UP', 'W', 'ENTER']) this.onKey(k, () => this.jump())
 
     // The yard: dusk sky bands, a wall, the ground.
     const g = this.add.graphics().setDepth(1)
@@ -146,9 +171,23 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
     this.hands = { lx: margin + 10, rx: width - margin - 10, y: this.groundY - turnerH * 0.55 }
     this.turners = { lx: margin, rx: width - margin, y: this.groundY - turnerH - 4 }
     this.heckleUntil = 0
-    this.maxAvatar = this.compact ? 32 : 48
+    // Bigger jumpers on a big screen.
+    this.maxAvatar = this.compact ? 32 : height >= 900 ? 64 : 48
     this.avatarSize = this.maxAvatar
     this.ropeTop = this.groundY - this.maxAvatar * 2.6
+    // The keys (or a heckle once you're out), on the ground under the row.
+    this.prompt = this.add
+      .text(
+        width / 2,
+        this.groundY + (this.compact ? 20 : 28),
+        '',
+        headlineStyle(this.compact ? 12 : 16, PALETTE.text, {
+          stroke: '#10121c',
+          strokeThickness: 4,
+        }),
+      )
+      .setOrigin(0.5)
+      .setDepth(600)
     this.ropeBack = this.add.graphics().setDepth(40)
     this.ropeFront = this.add.graphics().setDepth(60)
     this.marker = new YouMarker(this, this.compact ? 8 : 12, 70)
@@ -162,7 +201,7 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
     if (this.localJumpAt >= 0 && now - this.localJumpAt < JUMP_ROPE.jumpMs) return
     this.localJumpAt = now
     this.sendInput({ kind: 'jump' })
-    this.sfx.click()
+    this.sfx.jump()
     if (this.jumpBtn) {
       this.jumpBtn.setTexture(this.jumpKeys.down)
       this.time.delayedCall(120, () => this.jumpBtn?.setTexture(this.jumpKeys.up))
@@ -171,6 +210,17 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
 
   protected frame(snap: JumpRopeSnapshot | null, time: number): void {
     if (!snap) return
+    if (!this.warmed) {
+      this.warmed = true
+      this.warmAvatars(
+        snap.players.map((p) => p.id),
+        [
+          ['front', 'happy', 0],
+          ['front', 'hurt', 0],
+          ['front', 'ko', 0],
+        ],
+      )
+    }
     if (this.slots.length !== snap.players.length) {
       const n = snap.players.length
       const room = this.hands.rx - this.hands.lx
@@ -190,9 +240,35 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
     // Rope angle: π/2 = sweeping the ground (a pass), -π/2 = over the heads.
     const toPass = Math.max(0, snap.nextPassMs - since)
     const angle = Math.PI / 2 - (Math.PI * 2 * toPass) / Math.max(1, snap.periodMs)
+    this.sweepSfx(snap, toPass, time)
     // After a pass the rope climbs behind everyone; over the heads it comes down in front of them.
     this.paintRope(angle, toPass < snap.periodMs / 2)
     this.paintJumpers(snap, since)
+    this.paintPrompt(snap)
+  }
+
+  // The rope swishing under the feet, timed on this screen's rope (not a snapshot later).
+  private sweepSfx(snap: JumpRopeSnapshot, toPass: number, time: number): void {
+    if (this.state.final || toPass > WHOOSH_LEAD_MS || this.whooshedFor === snap.passes) return
+    this.whooshedFor = snap.passes
+    if (time - this.whooshAt < WHOOSH_GAP_MS) return
+    this.whooshAt = time
+    this.sfx.whoosh()
+  }
+
+  private paintPrompt(snap: JumpRopeSnapshot): void {
+    const me = snap.players.find((p) => p.id === this.selfId)
+    const text = this.state.final
+      ? ''
+      : !me?.alive
+        ? this.quip('game.common.spectating', this.selfId)
+        : this.t(this.compact ? 'game.jumpRope.hintTouch' : 'game.jumpRope.hint')
+    if (!this.prompt || text === this.promptText) return
+    this.promptText = text
+    this.prompt
+      .setText(text)
+      .setColor(hexToCss(me?.alive ? PALETTE.text : PALETTE.dim))
+      .setFontSize(fitFontSize(text, this.scale.width - 24, this.compact ? 12 : 16))
   }
 
   private paintRope(angle: number, front: boolean): void {
@@ -284,7 +360,6 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
       })),
     )
     if (!prev || this.firstSnapshot) return
-    if (snap.passes > prev.passes) this.sfx.tick()
     const before = new Map(prev.players.map((p) => [p.id, p]))
     snap.players.forEach((p, i) => {
       const was = before.get(p.id)
@@ -292,7 +367,14 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
       const x = this.slots[i] ?? 0
       if (p.hearts < was.hearts) this.trip(p, x, was)
       else if (p.cleared > was.cleared && p.id === this.selfId) {
-        floatText(this, x, this.groundY - this.avatarSize - 16, '+1', PALETTE.lime, 12)
+        floatText(
+          this,
+          x,
+          this.groundY - this.avatarSize - 16,
+          '+1',
+          PALETTE.lime,
+          this.compact ? 12 : 16,
+        )
       }
     })
     if (this.state.final && me && this.banner && !this.banner.visible) {
@@ -337,7 +419,7 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
         this.quip('game.common.stamps', p.id),
         this.compact ? 12 : 16,
       )
-      this.sfx.eliminated()
+      this.sfx.quiet(() => this.sfx.eliminated(), self ? 1 : RIVAL_LEVEL)
       this.heckle(x, p.id)
       if (view) {
         view.out = true
@@ -355,10 +437,10 @@ export class JumpRopeScene extends MiniGameScene<JumpRopeSnapshot> {
       this.groundY - this.avatarSize - 16,
       this.t('game.jumpRope.trip'),
       PALETTE.red,
-      12,
+      this.compact ? 12 : 16,
     )
     if (self) {
-      this.sfx.wrong()
+      this.sfx.hurt()
       shake(this, 0.008, 160)
     }
     if (view) {

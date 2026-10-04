@@ -19,6 +19,8 @@ export interface BoardRect {
   readonly cy: number
   readonly size: number
   readonly compact: boolean
+  // A big screen (1080p and up): larger labels, so the boards read from the sofa.
+  readonly big: boolean
 }
 
 const ART = 12 // art pixels per cell side
@@ -208,12 +210,12 @@ interface Metrics {
   readonly below: number // health-pip row under the frame
 }
 
-function metrics(compact: boolean): Metrics {
-  const pad = compact ? 5 : 8
-  const coordSize = compact ? 10 : 12
-  const tagSize = compact ? 12 : 14
-  const titleSize = 16
-  const pipW = compact ? 14 : 18
+function metrics(compact: boolean, big: boolean): Metrics {
+  const pad = compact ? 5 : big ? 10 : 8
+  const coordSize = compact ? 10 : big ? 18 : 12
+  const tagSize = compact ? 12 : big ? 18 : 14
+  const titleSize = big ? 24 : 16
+  const pipW = compact ? 14 : big ? 24 : 18
   return {
     pad,
     coordSize,
@@ -235,16 +237,17 @@ export function layoutBoards(
   bottom: number,
 ): { target: BoardRect; own: BoardRect } {
   const compact = Math.min(width, height) < 520
-  const { above, below } = metrics(compact)
+  const big = Math.min(width, height) >= 900
+  const { above, below } = metrics(compact, big)
   const chrome = above + below
   const avail = bottom - top
   if (width > height * 1.1) {
-    const size = Math.min(avail - chrome, width * 0.38, 440)
+    const size = Math.min(avail - chrome, width * 0.38, 620)
     const gap = Math.max(56, width * 0.07)
     const cy = top + (avail - size - chrome) / 2 + above + size / 2
     return {
-      target: { cx: width / 2 - gap / 2 - size / 2, cy, size, compact },
-      own: { cx: width / 2 + gap / 2 + size / 2, cy, size, compact },
+      target: { cx: width / 2 - gap / 2 - size / 2, cy, size, compact, big },
+      own: { cx: width / 2 + gap / 2 + size / 2, cy, size, compact, big },
     }
   }
   const grids = avail - chrome * 2
@@ -253,12 +256,12 @@ export function layoutBoards(
   const tTop = top + (grids - tSize - oSize) / 2 + above
   const oTop = tTop + tSize + chrome
   return {
-    target: { cx: width / 2, cy: tTop + tSize / 2, size: tSize, compact },
-    own: { cx: width / 2, cy: oTop + oSize / 2, size: oSize, compact },
+    target: { cx: width / 2, cy: tTop + tSize / 2, size: tSize, compact, big },
+    own: { cx: width / 2, cy: oTop + oSize / 2, size: oSize, compact, big },
   }
 }
 
-// Draws a segmented draining bar (turn timers) into `g`.
+// Draws a segmented draining bar (turn timers) into `g` — only when the lit count or color changed.
 export function drawSegmentBar(
   g: Phaser.GameObjects.Graphics,
   x: number,
@@ -272,6 +275,9 @@ export function drawSegmentBar(
   const gap = 2
   const segW = (w - gap * (segments - 1)) / segments
   const lit = Math.ceil(Math.max(0, Math.min(1, frac)) * segments)
+  const key = `${x},${y},${w},${lit},${color}`
+  if (g.getData('bar') === key) return
+  g.setData('bar', key)
   g.clear()
   for (let i = 0; i < segments; i++) {
     g.fillStyle(i < lit ? color : PALETTE.panelAlt, 1)
@@ -279,8 +285,9 @@ export function drawSegmentBar(
   }
 }
 
-// One framed sea. `onFire` (target boards only) makes the grid tappable; it is called only for cells
-// not yet fired at while the board is aimable — the server still validates every shot.
+// One framed sea. `onFire` (target boards only) makes the grid tappable — and aimable from the keyboard
+// (moveCursor / fireCursor: arrows or WASD, then SPACE / ENTER); it is called only for cells not yet
+// fired at while the board is aimable — the server still validates every shot.
 export class NavalBoard {
   readonly cell: number
   readonly title: Phaser.GameObjects.Text
@@ -295,8 +302,10 @@ export class NavalBoard {
   private readonly tex: Textures
   private readonly water: Phaser.GameObjects.Image[] = []
   private readonly waterFrame: number[] = []
+  private readonly waterVariant: number[] = []
   private readonly marks: Phaser.GameObjects.Image[] = []
   private readonly mark: Mark[] = []
+  private readonly markFrame: number[] = []
   private readonly pips: Phaser.GameObjects.Image[] = []
   private readonly pipKeys: { ok: string; hit: string }
   private readonly pipCount: Phaser.GameObjects.Text
@@ -313,6 +322,11 @@ export class NavalBoard {
   private focus: Focus = 'idle'
   private activeColor: number = PALETTE.amber
   private hover = -1
+  // Keyboard aim: the cell the cursor keys sit on, shown instead of the hover while keys were last used.
+  private cursor = -1
+  private keyAim = false
+  private readonly onFire?: (cell: number) => void
+  private destroyed = false
   private pending = -1
   private lastShot = -1
   private lastShotAt = 0
@@ -330,7 +344,8 @@ export class NavalBoard {
     this.cell = rect.size / n
     this.left = rect.cx - rect.size / 2
     this.topY = rect.cy - rect.size / 2
-    const m = metrics(rect.compact)
+    this.onFire = onFire
+    const m = metrics(rect.compact, rect.big)
     this.pad = m.pad
     const ps = Math.max(1, Math.round(this.cell / ART))
     this.tex = ensureTextures(scene, ps)
@@ -364,7 +379,7 @@ export class NavalBoard {
       const img = scene.add
         .image(x, y, this.tex.water[variant]?.[0] ?? '')
         .setDisplaySize(this.cell, this.cell)
-      img.setData('variant', variant)
+      this.waterVariant.push(variant)
       this.water.push(img)
       this.waterFrame.push(0)
       const mark = scene.add
@@ -374,6 +389,7 @@ export class NavalBoard {
         .setDepth(2)
       this.marks.push(mark)
       this.mark.push('water')
+      this.markFrame.push(-1)
     }
     this.objects.push(...this.water, ...this.marks)
 
@@ -452,7 +468,12 @@ export class NavalBoard {
       this.pips.push(pip)
     }
     this.pipCount = scene.add
-      .text(pipX0 + rowW + 6, pipY, '', headlineStyle(rect.compact ? 8 : 16, PALETTE.dim))
+      .text(
+        pipX0 + rowW + 6,
+        pipY,
+        '',
+        headlineStyle(rect.compact ? 8 : rect.big ? 24 : 16, PALETTE.dim),
+      )
       .setOrigin(0, 0.5)
     this.objects.push(...this.pips, this.pipCount)
 
@@ -463,6 +484,9 @@ export class NavalBoard {
         .setInteractive({ useHandCursor: true })
       zone.on('pointermove', (p: Phaser.Input.Pointer) => {
         this.hover = this.cellAt(p.x, p.y)
+        // The mouse takes over the aim; the keys carry on from where it points.
+        this.keyAim = false
+        if (this.hover >= 0) this.cursor = this.hover
       })
       zone.on('pointerout', () => {
         this.hover = -1
@@ -473,6 +497,31 @@ export class NavalBoard {
       })
       this.objects.push(zone)
     }
+  }
+
+  // Keyboard aim: moves the cursor one cell (clamped to the sea), starting from the middle.
+  moveCursor(dx: number, dy: number): void {
+    const n = this.n
+    if (this.cursor < 0) this.cursor = Math.floor((n * n) / 2)
+    else {
+      const col = Math.max(0, Math.min(n - 1, (this.cursor % n) + dx))
+      const row = Math.max(0, Math.min(n - 1, Math.floor(this.cursor / n) + dy))
+      this.cursor = row * n + col
+    }
+    this.keyAim = true
+  }
+
+  // Fires at the keyboard cursor. False when there's nothing to fire at (not aimable, no cursor yet,
+  // or a cell already fired at).
+  fireCursor(): boolean {
+    if (!this.aimable || this.cursor < 0) {
+      if (this.aimable) this.moveCursor(0, 0)
+      return false
+    }
+    this.keyAim = true
+    if (this.known.has(this.cursor) || !this.onFire) return false
+    this.onFire(this.cursor)
+    return true
   }
 
   // Screen center of a cell.
@@ -590,32 +639,52 @@ export class NavalBoard {
       const f = Math.floor((time + i * 173) / 720) % 2
       if (f === this.waterFrame[i]) return
       this.waterFrame[i] = f
-      img.setTexture(this.tex.water[img.getData('variant') as number]?.[f] ?? '')
+      img.setTexture(this.tex.water[this.waterVariant[i] ?? 0]?.[f] ?? '')
     })
     this.marks.forEach((m, i) => {
-      if (this.mark[i] === 'hit')
-        m.setTexture(this.tex.hit[Math.floor((time + i * 97) / 150) % 2] ?? '')
+      if (this.mark[i] !== 'hit') return
+      const f = Math.floor((time + i * 97) / 150) % 2
+      if (f === this.markFrame[i]) return
+      this.markFrame[i] = f
+      m.setTexture(this.tex.hit[f] ?? '')
     })
 
+    // The frame in play pulses: drawn once per color, then only its alpha changes.
     const active = this.focus === 'active'
     this.glow.setVisible(active)
     if (active) {
-      this.glow.clear()
-      this.glow.lineStyle(3, this.activeColor, 0.55 + 0.45 * Math.abs(Math.sin(time / 260)))
-      const pad = this.pad
-      this.glow.strokeRect(
-        this.left - pad - 2,
-        this.topY - pad - 2,
-        this.size + pad * 2 + 4,
-        this.size + pad * 2 + 4,
-      )
+      if (this.glow.getData('color') !== this.activeColor) {
+        this.glow.setData('color', this.activeColor)
+        this.glow.clear()
+        this.glow.lineStyle(3, this.activeColor, 1)
+        const pad = this.pad
+        this.glow.strokeRect(
+          this.left - pad - 2,
+          this.topY - pad - 2,
+          this.size + pad * 2 + 4,
+          this.size + pad * 2 + 4,
+        )
+      }
+      this.glow.setAlpha(0.55 + 0.45 * Math.abs(Math.sin(time / 260)))
     }
 
-    const aim = this.pending >= 0 ? this.pending : this.aimable ? this.hover : -1
-    if (aim >= 0 && !this.known.has(aim)) {
+    const aim =
+      this.pending >= 0
+        ? this.pending
+        : this.aimable
+          ? this.keyAim
+            ? this.cursor
+            : this.hover
+          : -1
+    // The keyboard cursor stays visible on a cell already fired at (dimmed: it can't fire there).
+    const spent = aim >= 0 && this.known.has(aim)
+    if (aim >= 0 && (!spent || (this.keyAim && this.pending < 0))) {
       const { x, y } = this.cellXY(aim)
       const blink = this.pending >= 0 ? Math.floor(time / 90) % 2 === 0 : true
-      this.reticle.setPosition(x, y).setVisible(blink)
+      this.reticle
+        .setPosition(x, y)
+        .setVisible(blink)
+        .setAlpha(spent ? 0.35 : 1)
     } else {
       this.reticle.setVisible(false)
     }
@@ -629,7 +698,18 @@ export class NavalBoard {
     }
   }
 
+  // Removes every object of the board (a spectator moving on to another duel gets a fresh pair).
+  destroy(): void {
+    this.destroyed = true
+    for (const o of this.objects) {
+      this.scene.tweens.killTweensOf(o)
+      o.destroy()
+    }
+    this.objects.length = 0
+  }
+
   private setMark(cell: number, mark: Mark): void {
+    if (this.destroyed) return
     const img = this.marks[cell]
     if (!img) return
     this.mark[cell] = mark
@@ -643,6 +723,7 @@ export class NavalBoard {
             : ''
     img.setVisible(mark !== 'water')
     if (key) img.setTexture(key)
+    this.markFrame[cell] = mark === 'hit' ? 0 : -1
     // Wrecks sit on darker, churned water so the whole sunk fleet reads at a glance.
     this.water[cell]?.setTint(mark === 'sunk' ? 0x8a94b8 : 0xffffff)
   }
@@ -657,6 +738,7 @@ export class NavalBoard {
         return
       }
       this.scene.time.delayedCall(140 * i, () => {
+        if (this.destroyed) return
         this.setMark(cell, 'sunk')
         const { x, y } = this.cellXY(cell)
         burst(this.scene, x, y, 0x8a90a8, 10, 120)

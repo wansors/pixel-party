@@ -3,7 +3,14 @@ import Phaser from 'phaser'
 import { AvatarSprite } from '../avatars'
 import { addBanner, burst, flash, floatText, ring, shake, showBanner } from '../fx'
 import { ServerClock } from '../netcode/ServerClock'
-import { bodyStyle, ensurePixelGrid, fitFontSize, headlineStyle, shade } from '../pixelStyle'
+import {
+  bodyStyle,
+  ensurePixelGrid,
+  fitFontSize,
+  fitText,
+  headlineStyle,
+  shade,
+} from '../pixelStyle'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -17,7 +24,11 @@ const AVATAR_MIN_X = 0.12
 const AVATAR_MAX_X = 0.88
 const MAX_SPEED = 1.6
 const NEAR_MISS = 0.05 // a landing this much outside the hit zone earns a "NICE!"
-const KEY_SPEED = 1.3 // normalized widths per second with the arrow keys
+// A moving pointer's target is sent at most this often (keys send every press/release at once).
+const SEND_EVERY_MS = 33
+// Blocks landing this close to you (normalized x) thud on the street — at most every THUD_EVERY_MS.
+const THUD_NEAR = 0.3
+const THUD_EVERY_MS = 120
 
 // Block tint is cosmetic only (the server just sends ids): picked by id so everyone sees the same rain.
 const BLOCK_COLORS = [PALETTE.red, PALETTE.magenta, PALETTE.orange, 0xb06bff]
@@ -45,17 +56,24 @@ interface Drop {
 
 // Pixel Rain canvas (Phase 5). The server owns the falling stream + eliminations; this renders the
 // blocks on the server's clock (each falls linearly: the last snapshot is extrapolated, with a ground
-// "shadow" telegraphing where each one lands) and the player's own avatar locally (drag / ◀ ▶), sliding
-// at the server's speed cap so it stands where the server judges it. A strip under the HUD shows who is
-// still in.
+// "shadow" telegraphing where each one lands) and the player's own avatar locally, sliding at the
+// server's speed cap toward the same target the server has, so it stands where the server judges it.
+// Steering: the mouse (the avatar follows the pointer; on touch, drag), or ◀ ▶ / A D — a held key
+// heads for that kerb at full speed and letting go stops right there, so the keys move exactly as fast
+// as the mouse. Falling blocks are pooled. A strip under the HUD shows who is still in.
 export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
   // You: your lobby avatar, looking the way you slide, wobbling like jelly.
   private avatar?: AvatarSprite
   private banner?: Phaser.GameObjects.Text
   private subline?: Phaser.GameObjects.Text
   private readonly drops = new Map<number, Drop>()
+  private dropPool: Drop[] = []
   private readonly clock = new ServerClock()
-  private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
+  private steerKeys: { left: Phaser.Input.Keyboard.Key[]; right: Phaser.Input.Keyboard.Key[] } = {
+    left: [],
+    right: [],
+  }
+  private keySide = 0
   // Who is still in: avatar + name chips under the HUD (KO face once squashed).
   private strip?: PlayerStrip
   private rosterIds: string[] = []
@@ -65,7 +83,8 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
   private avatarX = 0.5
   private posX = 0.5
   private renderedX = 0.5
-  private lastSentX = -1
+  // The server starts every target at 0.5: nothing is sent until the player actually steers (D28).
+  private lastSentX = 0.5
   private lastSentAt = 0
   private movedAt = 0
   private alive = true
@@ -73,6 +92,7 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
   private spectating = false
   private started = false
   private lastStanding = false
+  private thudAt = Number.NEGATIVE_INFINITY
   private lastAlive: Record<string, boolean> = {}
   private selfColor = 0
   private compact = false
@@ -95,14 +115,18 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
     this.avatarX = 0.5
     this.posX = 0.5
     this.renderedX = 0.5
-    this.lastSentX = -1
+    this.lastSentX = 0.5
     this.alive = true
     this.spectating = false
     this.started = false
     this.lastStanding = false
+    this.thudAt = Number.NEGATIVE_INFINITY
     this.lastAlive = {}
     for (const d of this.drops.values()) this.destroyDrop(d)
     this.drops.clear()
+    this.dropPool = []
+    this.keySide = 0
+    this.lastSentAt = 0
     this.rosterIds = []
 
     const { width, height } = this.scale
@@ -127,7 +151,7 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
     for (let x = 14, i = 0; x < width; x += 46 + ((i * 17) % 30), i++) {
       puddles.fillRect(x, this.groundY + 8 + (i % 2) * 5, 18 + (i % 3) * 8, 3)
     }
-    this.add
+    const hint = this.add
       .text(
         width / 2,
         height - groundH / 2,
@@ -136,6 +160,7 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
       )
       .setOrigin(0.5)
       .setAlpha(0.75)
+    fitText(hint, width - 16, this.compact ? 11 : 13)
 
     // The avatar: exactly as wide as the server's hit zone minus one block (see AVATAR_HALF above).
     // Its size follows the hit zone, not the crisp avatar steps: the hit contract wins.
@@ -180,10 +205,17 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
       .setDepth(950)
       .setVisible(false)
 
-    this.cursors = this.input.keyboard?.createCursorKeys()
+    const kb = this.input.keyboard
+    if (kb) {
+      this.steerKeys = {
+        left: [kb.addKey('LEFT'), kb.addKey('A')],
+        right: [kb.addKey('RIGHT'), kb.addKey('D')],
+      }
+    }
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.aim(p.x))
+    // A mouse steers by just moving over the street; a finger by dragging.
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (p.isDown) this.aim(p.x)
+      if (p.isDown || !p.wasTouch) this.aim(p.x)
     })
   }
 
@@ -228,12 +260,25 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
     this.avatarX = Phaser.Math.Clamp(px / this.scale.width, AVATAR_MIN_X, AVATAR_MAX_X)
   }
 
-  private maybeSend(now: number): void {
-    // Throttle move intents; only send on a meaningful change.
-    if (now - this.lastSentAt < 60 || Math.abs(this.avatarX - this.lastSentX) < 0.01) return
+  // ◀ ▶ / A D: a held side steers for that kerb (the avatar slides at the speed cap, like the server's);
+  // letting go stops on the spot. Sent the moment it changes.
+  private steerKeysFrame(now: number): void {
+    const down = (keys: Phaser.Input.Keyboard.Key[]): number => (keys.some((k) => k.isDown) ? 1 : 0)
+    const side = down(this.steerKeys.right) - down(this.steerKeys.left)
+    if (side === this.keySide) return
+    this.keySide = side
+    this.avatarX = side < 0 ? AVATAR_MIN_X : side > 0 ? AVATAR_MAX_X : this.posX
+    this.maybeSend(now, true)
+  }
+
+  // Sends the steering target when it changed: key presses at once, a moving pointer at most every
+  // SEND_EVERY_MS (its last position always goes out).
+  private maybeSend(now: number, force = false): void {
+    if (Math.abs(this.avatarX - this.lastSentX) < 0.002) return
+    if (!force && now - this.lastSentAt < SEND_EVERY_MS) return
     this.lastSentAt = now
     this.lastSentX = this.avatarX
-    this.sendInput({ kind: 'move', x: this.avatarX })
+    this.sendInput({ kind: 'move', x: Math.round(this.avatarX * 1e4) / 1e4 })
   }
 
   private screenY(y: number): number {
@@ -248,10 +293,8 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
       this.onSnapshot(snap)
     }
 
-    if (this.alive && !this.spectating) {
-      if (this.cursors?.left.isDown) this.avatarX -= (KEY_SPEED * delta) / 1000
-      if (this.cursors?.right.isDown) this.avatarX += (KEY_SPEED * delta) / 1000
-      this.avatarX = Phaser.Math.Clamp(this.avatarX, AVATAR_MIN_X, AVATAR_MAX_X)
+    if (this.alive && !this.spectating && !this.state.final) {
+      this.steerKeysFrame(now)
       this.maybeSend(now)
       const reach = (MAX_SPEED * delta) / 1000
       this.posX += Phaser.Math.Clamp(this.avatarX - this.posX, -reach, reach)
@@ -305,16 +348,25 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
       return
     }
 
+    let rivalOut = false
+    let selfOut = false
     for (const id of ids) {
       if (this.lastAlive[id] === false || snap.alive[id] !== false) continue
-      if (id === this.selfId) this.becomeOut(true)
-      else this.markOut(id, true)
+      if (id === this.selfId) {
+        selfOut = true
+        this.becomeOut(true)
+      } else {
+        rivalOut = true
+        this.markOut(id, true)
+      }
     }
     this.lastAlive = { ...snap.alive }
+    // One sting per snapshot, however many got squashed (your own out has its own).
+    if (rivalOut && !selfOut) this.sfx.eliminated()
 
     if (meAlive && !this.lastStanding && ids.length > 1 && survivors === 1) {
       this.lastStanding = true
-      this.sfx.coin()
+      this.sfx.cheer()
       const text = this.t('game.pixelRain.lastStanding')
       const half = text.length * 8 + 4
       const width = this.scale.width
@@ -327,7 +379,6 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
   private markOut(id: string, withFx: boolean): void {
     if (!withFx || id === this.selfId) return
     const at = this.strip?.positionOf(this.rosterIds.indexOf(id))
-    this.sfx.pop()
     if (!at) return
     burst(this, at.x, at.y, this.state.colorOf(id), 8, 120)
     floatText(this, at.x, at.y + 20, this.t('game.common.out'), PALETTE.red, 16)
@@ -345,7 +396,9 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
     }
     if (withFx && avatar) {
       const cy = avatar.y - avatar.displayHeight / 2
-      this.sfx.wrong()
+      // Flattened by a block.
+      this.sfx.crash()
+      this.sfx.eliminated()
       burst(this, avatar.x, cy, this.selfColor, 26, 300)
       burst(this, avatar.x, cy, PALETTE.text, 10, 200)
       shake(this, 0.012, 260)
@@ -400,29 +453,48 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
     }
   }
 
+  // A block from the pool (or a new one), dressed for `id`.
+  private acquireDrop(id: number, nx: number, ny: number): Drop {
+    const color = BLOCK_COLORS[id % BLOCK_COLORS.length] ?? PALETTE.red
+    const key = this.blockKeys[id % this.blockKeys.length] ?? ''
+    const size = this.blockSize
+    const drop = this.dropPool.pop() ?? {
+      block: this.add.image(0, 0, key).setDisplaySize(size, size).setDepth(20),
+      ghost: this.add
+        .image(0, 0, key)
+        .setDisplaySize(size * 0.7, size * 0.7)
+        .setAlpha(0.2)
+        .setDepth(19),
+      shadow: this.add
+        .rectangle(0, this.groundY + 3, size, 4, color)
+        .setOrigin(0.5, 0)
+        .setDepth(5),
+      color,
+      x: nx,
+      y: ny,
+    }
+    this.tweens.killTweensOf(drop.block)
+    drop.block.setTexture(key).setDisplaySize(size, size).setVisible(true)
+    drop.ghost
+      .setTexture(key)
+      .setDisplaySize(size * 0.7, size * 0.7)
+      .setVisible(true)
+    drop.shadow.setFillStyle(color).setVisible(true)
+    drop.color = color
+    return drop
+  }
+
+  private releaseDrop(drop: Drop): void {
+    drop.block.setVisible(false)
+    drop.ghost.setVisible(false)
+    drop.shadow.setVisible(false)
+    this.dropPool.push(drop)
+  }
+
   private drawDrop(id: number, nx: number, ny: number, width: number): void {
     let drop = this.drops.get(id)
     if (!drop) {
-      const color = BLOCK_COLORS[id % BLOCK_COLORS.length] ?? PALETTE.red
-      const size = this.blockSize
-      drop = {
-        block: this.add
-          .image(0, 0, this.blockKeys[id % this.blockKeys.length] ?? '')
-          .setDisplaySize(size, size)
-          .setDepth(20),
-        ghost: this.add
-          .image(0, 0, this.blockKeys[id % this.blockKeys.length] ?? '')
-          .setDisplaySize(size * 0.7, size * 0.7)
-          .setAlpha(0.2)
-          .setDepth(19),
-        shadow: this.add
-          .rectangle(0, this.groundY + 3, size, 4, color)
-          .setOrigin(0.5, 0)
-          .setDepth(5),
-        color,
-        x: nx,
-        y: ny,
-      }
+      drop = this.acquireDrop(id, nx, ny)
       this.drops.set(id, drop)
     }
     drop.x = nx
@@ -442,18 +514,24 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
 
   // A block left the snapshot: it fell past the avatar line. Finish its fall locally and shatter it.
   private landDrop(drop: Drop, width: number): void {
-    drop.shadow.destroy()
-    drop.ghost.destroy()
+    drop.shadow.setVisible(false)
+    drop.ghost.setVisible(false)
     if (drop.y < HIT_Y - 0.12) {
-      drop.block.destroy()
+      this.releaseDrop(drop)
       return
     }
     const x = drop.x * width
+    // A block that lands beside you (not on you: that's the server's call) thuds on the street.
+    let thud = false
     if (this.alive && !this.spectating) {
       const dx = Math.abs(drop.x - this.posX)
       if (dx > AVATAR_HALF && dx <= AVATAR_HALF + NEAR_MISS) {
+        // It whizzed right past.
+        this.sfx.whoosh()
         floatText(this, x, this.y90 - 10, this.t('game.common.nice'), PALETTE.lime, 16)
         ring(this, x, this.groundY, PALETTE.lime, this.blockSize)
+      } else if (dx > AVATAR_HALF && dx <= THUD_NEAR) {
+        thud = true
       }
     }
     this.tweens.add({
@@ -462,7 +540,11 @@ export class PixelRainScene extends MiniGameScene<PixelRainSnapshot> {
       duration: 90,
       onComplete: () => {
         burst(this, x, this.groundY - 4, drop.color, 7, 150)
-        drop.block.destroy()
+        this.releaseDrop(drop)
+        if (thud && this.time.now - this.thudAt >= THUD_EVERY_MS) {
+          this.thudAt = this.time.now
+          this.sfx.land()
+        }
       },
     })
   }

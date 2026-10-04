@@ -221,4 +221,43 @@ describe('BomberExpress', () => {
     game.onInput(s, 'a', { kind: 'move', dir: 'sideways' as 'up' }, 400)
     expect(player(s, 'a').dir).toBe('right')
   })
+
+  test('a step starts the moment the move arrives, not on the next tick', () => {
+    const s = init(['a'])
+    bare(s)
+    place(s, 'a', 1, 1)
+    game.onInput(s, 'a', { kind: 'move', dir: 'right' }, 1010)
+    const a = player(s, 'a')
+    expect([a.tx, a.ty]).toEqual([2, 1])
+    expect(a.stepStart).toBe(1010)
+    expect(a.stepEnd).toBe(1010 + (BOMBER.stepMs[1] ?? 0))
+  })
+
+  test('an early turn press keeps going the old way until the turn opens (alt)', () => {
+    const s = init(['a'])
+    bare(s)
+    // Row 1 is open; under (2, 1) stands the pillar (2, 2), under (3, 1) the floor is open.
+    place(s, 'a', 1, 1)
+    game.onInput(s, 'a', { kind: 'move', dir: 'right' }, 0)
+    run(s, 0, 100)
+    // Mid-step to (2, 1): press DOWN while still holding RIGHT. Below (2, 1) is a pillar.
+    game.onInput(s, 'a', { kind: 'move', dir: 'down', alt: 'right' }, 100)
+    const t = run(s, 100, 400)
+    const a = player(s, 'a')
+    // It didn't stop on the pillar column: it carried on right to (3, 1) and turned down there.
+    expect(a.x).toBe(3)
+    expect(a.ty).toBeGreaterThanOrEqual(2)
+    // Without an alt, the same early press stops dead in front of the pillar.
+    const s2 = init(['a'])
+    bare(s2)
+    place(s2, 'a', 1, 1)
+    game.onInput(s2, 'a', { kind: 'move', dir: 'right' }, 0)
+    run(s2, 0, 100)
+    game.onInput(s2, 'a', { kind: 'move', dir: 'down' }, 100)
+    run(s2, 100, t)
+    expect([player(s2, 'a').x, player(s2, 'a').y]).toEqual([2, 1])
+    // A junk alt is ignored.
+    game.onInput(s2, 'a', { kind: 'move', dir: 'up', alt: 'sideways' as 'up' }, t)
+    expect(player(s2, 'a').alt).toBeNull()
+  })
 })

@@ -762,3 +762,103 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   - Team rounds are still worth the team's position points whatever the headcount (by design).
   - An AFK fighter in Brawl can still be KO'd for credit; the idle demotion only ranks them last.
 
+
+### D30 — PC launch bar: party mode, client prediction, a perf budget — DONE
+
+- **Date**: 2026-10-04. **Context**: before launch, every game was audited for performance and for
+  gameplay on PC, and everything below the bar was fixed (`pc-launch-audit.md`).
+- **Party mode is how the game is played.** `bun run start` builds the client once and the game server
+  serves it on its own port, next to `/api` and `/ws` (gzipped, hashed bundles cached for good, client
+  routes fall back to `index.html`). The page and its socket share an origin, so a same-origin WS
+  upgrade is accepted without an allowlist. The server prints the LAN URL.
+  - `bun run dev` stays for development, but it ran Angular in development mode on every player's
+    device.
+  - Still one process, still no database (D15–D17).
+- **Your own input is predicted on the client.** At ~6.7 snapshots/s, waiting for the server made
+  your own avatar, car, board or ship react 150–300 ms late.
+  - Rules the client needs are moved to `@pp/shared` as pure functions: the Tetris engine, the car
+    integrator, `snakeStep`, `sumoStep`, `bomberStepDir`, `asteroidsFly`, and the Freeze Doll and
+    Brawl timings.
+  - The client steps its own entity on input and eases into each snapshot; it snaps only on
+    teleports. The server stays authoritative and deterministic.
+  - Rivals are interpolated (150 ms, the snapshot interval) or dead-reckoned. Items that move as a pure
+    function of time render from `ServerClock`.
+- **Performance budget** (checked with `scripts/bench-games.ts` and the playtest `--perf` probe):
+  - server tick p99 well under 1 ms at 12 players (measured ≤ 0.3 ms);
+  - snapshots ≤ ~4 KB;
+  - no per-frame object churn: redraw on change, pool sprites, one masked layer rather than one
+    mask per object, textures baked or pre-generated (`MiniGameScene.warmAvatars`);
+  - no leaks across a session (live objects stable within a round; textures are keyed caches).
+- **PC controls bar**: every action has a key, and movement takes arrows *and* WASD. The hint line
+  and the intro card's `catalog.minigame.<id>.controls` line name the keys. Held keys release on blur.
+  The scene base captures Space/Enter/arrows so a focused page control can't react. Scenes never send
+  an input without a human action (D28).
+- **Kept on purpose**:
+  - Honeycomb Cut has no keyboard path: tracing is the game.
+  - Number Rush and Odd One Out stay mouse-first: the hunt is spatial.
+  - Button Masher takes only Space and the mouse, so keyboard rolls can't reach the cap.
+
+### D31 — The skill radar shows standing against the room, as an area — DONE
+
+- **Date**: 2026-10-04. **Context**: the post-match radar (Phase 4, 7 axes) "looks more like spikes
+  than a geometric area". A simulation reproduced it: 200 sessions per row, 8 players with hidden
+  per-axis skills, random line-ups.
+  - Axes not played yet were drawn as 0, so their vertices fell to the centre: 52 % of all vertices
+    after 3 rounds, 27 % after 6, still 5 % after 20.
+  - Each round was scored as points ÷ the winner's points. The award table is steep (10/7/5/4/3…),
+    so a single round pinned an axis near the rim or the centre.
+- **What a value means now**: the player's standing on that axis against this room.
+  - **Per round**, the player's place as a share of the field (`placementShares`): 1 = won, 0 = last,
+    linear in between, ties averaged. A room of one is neutral.
+  - **Per axis**, the average of those shares, shrunk toward 0.5 with one round's worth of prior
+    (`RADAR_NEUTRAL`, `RADAR_PRIOR_ROUNDS`). One won round reads 0.75 and four read 0.9, so one
+    lucky round can't define a player.
+- **How it's drawn** (`SkillRadarComponent`):
+  - Unmeasured axes (`value: null`) sit at the neutral middle with a dimmed label.
+  - A 0 keeps a minimum radius (`FLOOR`), so the data is always an area.
+  - Measured vertices get a dot.
+  - With `average`, the 0.5 ring is dashed: inside means below the room's middle, outside means
+    above. A one-line caption under the radar says so.
+  - The lobby's line-up coverage radar keeps its own meaning, with the same floor and no reference
+    ring.
+- **Result** (same simulation): 0 % of vertices at the centre at every session length, and the
+  values track the hidden skills slightly better: r 0.62 / 0.65 / 0.76 vs 0.58 / 0.61 / 0.72 at 3 / 6
+  / 20 rounds.
+- **Kept on purpose**: purely presentational, as before. It never feeds scoring, and the axes are
+  still the catalog's tags.
+
+### D32 — Audio for a whole party: a noise voice, specific SFX, music by mood — DONE
+
+- **Date**: 2026-10-04. **Context**: an audio audit at the user's request.
+  - **SFX**: 16 synthesized sounds, all pure oscillator tones with no noise channel, so explosions,
+    punches, crashes and splashes all sounded like beeps. Most games used only generic
+    click/correct/wrong/coin/pop for very different events: a Brawl punch, a car crash and a quiz
+    answer sounded alike.
+  - **Music**: one mp3, the theme "Pixel Party Panic" (~4 min, 5.6 MB), looped for the whole party
+    (lobby, every round, results, final). Over a 20-round session that's repetitive. It is the same
+    for a calm quiz and a frantic race, and it plays over games whose own sound is the game.
+- **SFX**: `Sfx` gained a filtered-noise voice (the NES "noise" channel) and a palette:
+  - impacts and motion: `hit`, `crash`, `explosion`, `shoot`, `jump`, `land`, `whoosh`, `splash`,
+    `step`;
+  - events: `lock`, `lineClear`, `powerUp`, `hurt`, `cheer`, `fuse`, `flip`, `bounce`, `urgent`;
+  - `boom` now has a real blast.
+
+  Every game's events were remapped to fitting sounds. Your own actions sound on the input frame;
+  other players' frequent events are muted or thinned for 12-player rooms.
+- **Music** (`AudioService` as director):
+  - The theme mp3 stays the party's identity: join screen, lobby and final podium. It resumes where it
+    paused and crossfades in and out.
+  - Rounds play synthesized chiptune loops (`game/chipMusic.ts`: square lead and arpeggio, triangle
+    bass, noise drums; a song is a few 16-step patterns over a chord progression, scheduled with
+    lookahead). They are picked by the game's mood (`game/musicMoods.ts`):
+    - action: 2 songs;
+    - think: 2 songs;
+    - tension: 1 song;
+    - results: 1 song.
+
+    Songs rotate by round so back-to-back rounds differ. Pixel Beat, Freeze Doll and Simon play no
+    music, because their own sound is the game.
+  - Zero audio files added (CSP-safe, nothing to download). Chip music sits under the theme's level
+    at the same slider position.
+- **Kept open**: more produced songs (like the theme) would beat synthesized loops if the user makes
+  them. That would take a per-mood mp3 list next to the chip songs in the director.

@@ -24,6 +24,15 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 const GROWTH_PUMPS = 9
 const MIN_FRAC = 0.32
 const COIN_COUNT = 16
+// A pump shown before the server confirmed it is dropped if the server still hasn't counted it after
+// this long (it never should; the balloon then shrinks back to the server's count).
+const PUMP_CONFIRM_MS = 900
+// After CASH OUT, inputs wait for the server's verdict (the next balloon) at most this long.
+const CASH_WAIT_MS = 700
+// Sound throttles: a pump's rush of air at most this often (a fast pumper layers them otherwise), and a
+// rival's balloon popping at most this often (a full room can pop several at once).
+const PUMP_SOUND_EVERY_MS = 110
+const RIVAL_POP_EVERY_MS = 600
 const PPP = BALLOON_CHICKEN.pointsPerPump
 const BALLOONS = BALLOON_CHICKEN.balloons
 
@@ -118,14 +127,17 @@ interface Token {
 interface Button {
   img: Phaser.GameObjects.Image
   label: Phaser.GameObjects.Text
+  // The PC key for it ("SPACE" / "ENTER"), under the label (hidden on phones).
+  key: Phaser.GameObjects.Text
   up: string
   down: string
 }
 
 // Balloon Chicken ("nerve") canvas. Everybody gets the same three balloons in a row, each with its own
-// hidden burst point. Yours, in your color, is tied to a hand pump: PUMP (tap or Space) inflates it for
-// points, CASH OUT banks them; either way the next balloon comes up, and one still in hand at the
-// buzzer pops. It visibly swells and wobbles harder the more it has been pumped — purely from the pump
+// hidden burst point. Yours, in your color, is tied to a hand pump: PUMP (click or Space) inflates it
+// for points, CASH OUT (click or Enter) banks them; either way the next balloon comes up, and one still
+// in hand at the buzzer pops. A pump shows at once (the pump strokes, the balloon grows) and the server
+// confirms it a snapshot later; a burst or a cash-out is the server's word. It visibly swells and wobbles harder the more it has been pumped — purely from the pump
 // count, since the threshold is hidden server-side. A pop explodes into rubber shreds; a cash-out floats
 // the balloon away under a coin shower. A row of pips under the rivals tracks your three balloons.
 // Rivals ride along the top (two rows in a crowd) showing status only — balloon in hand, banked
@@ -150,11 +162,23 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
   private knot = { x: 0, y: 0 }
   private size = { min: 0, max: 0 }
   private handleY = 0
-  private lastPumps = 0
+  private hint?: Phaser.GameObjects.Text
+  // Pumps the balloon on screen shows: the server's count, or more while a pump is on its way.
+  private shownPumps = 0
+  // Optimistic pumps: the balloon they were made on (its index = outcomes so far), how many, and when
+  // the last one was pressed.
+  private localBalloon = -1
+  private localPumps = 0
+  private lastPumpAt = 0
+  // CASH OUT pressed, awaiting the server's verdict (the next balloon) — inputs wait for it.
+  private cashingAt = -1
+  private wasAlive = true
   private lastOutcomes = 0
   private lastBanked = 0
   // Out of balloons, or out of time: the total is up.
   private over = false
+  private pumpSoundAt = Number.NEGATIVE_INFINITY
+  private rivalPopAt = Number.NEGATIVE_INFINITY
 
   constructor(...deps: SceneDeps) {
     super('balloon-chicken', ...deps)
@@ -164,10 +188,17 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
     super.create()
     this.tokens = []
     this.ownPips = []
-    this.lastPumps = 0
+    this.shownPumps = 0
+    this.localBalloon = -1
+    this.localPumps = 0
+    this.lastPumpAt = 0
+    this.cashingAt = -1
+    this.wasAlive = true
     this.lastOutcomes = 0
     this.lastBanked = 0
     this.over = false
+    this.pumpSoundAt = Number.NEGATIVE_INFINITY
+    this.rivalPopAt = Number.NEGATIVE_INFINITY
     const { width, height } = this.scale
     const cx = width / 2
     const compact = Math.min(width, height) < 520
@@ -175,8 +206,10 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
 
     // Buttons along the bottom.
     const gap = compact ? 12 : 20
-    const bw = Math.round(Math.min(260, (width * 0.9 - gap) / 2))
-    const bh = compact ? 64 : 80
+    // A big (1080p) screen gets bigger buttons: they're read from across the room.
+    const big = !compact && height >= 900
+    const bw = Math.round(Math.min(big ? 320 : 260, (width * 0.9 - gap) / 2))
+    const bh = compact ? 64 : big ? 96 : 80
     const by = height - bh / 2 - (compact ? 14 : 22)
     this.pump = this.makeButton(
       cx - bw / 2 - gap / 2,
@@ -185,6 +218,7 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
       bh,
       PALETTE.lime,
       'game.balloon.pump',
+      'game.balloon.pumpKey',
       () => this.act('pump'),
     )
     this.cash = this.makeButton(
@@ -194,6 +228,7 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
       bh,
       PALETTE.amber,
       'game.balloon.cashOut',
+      'game.balloon.cashKey',
       () => this.act('cashout'),
     )
 
@@ -232,7 +267,7 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
     // own balloon pips, then the play area.
     const rivals = Math.max(1, Object.keys(this.state.names).length - 1)
     this.tokenRows = rivals * (compact ? 64 : 96) > width * 0.94 ? 2 : 1
-    this.tokenH = compact ? 70 : 88
+    this.tokenH = compact ? 70 : big ? 100 : 88
     const pipY = this.top + this.tokenRows * this.tokenH + (compact ? 14 : 18)
     this.pipH = compact ? 22 : 28
     for (let i = 0; i < BALLOONS; i++) {
@@ -241,7 +276,12 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
         .setDisplaySize(this.pipH * (14 / 17), this.pipH)
       this.ownPips.push(pip)
     }
-    const areaTop = pipY + this.pipH / 2 + 8
+    // What to do, under your balloon pips (the buttons name their keys).
+    const hintY = pipY + this.pipH / 2 + (compact ? 6 : 10)
+    this.hint = this.add
+      .text(cx, hintY, this.t('game.balloon.hint'), bodyStyle(compact ? 13 : 16, PALETTE.dim))
+      .setOrigin(0.5, 0)
+    const areaTop = hintY + this.hint.height + 8
     const stringLen = compact ? 36 : 50
     this.knot = { x: cx, y: this.handleY - pumpH * 0.5 - stringLen }
     const string = this.add.graphics().setDepth(1)
@@ -292,6 +332,7 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
       .setDepth(951)
 
     this.onKey('SPACE', () => this.act('pump'))
+    this.onKey('ENTER', () => this.act('cashout'))
   }
 
   private makeButton(
@@ -301,6 +342,7 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
     h: number,
     color: number,
     labelKey: string,
+    keyKey: string,
     onPress: () => void,
   ): Button {
     const compact = Math.min(this.scale.width, this.scale.height) < 520
@@ -308,24 +350,60 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
     const down = ensureBevelPanel(this, w, h, shade(color, -0.3), 6)
     const img = this.add.image(x, y, up).setInteractive({ useHandCursor: true })
     const label = this.add
-      .text(x, y, this.t(labelKey), headlineStyle(compact ? 16 : 24, PALETTE.bg))
+      .text(
+        x,
+        compact ? y : y - h * 0.12,
+        this.t(labelKey),
+        headlineStyle(compact ? 16 : 24, PALETTE.bg),
+      )
       .setOrigin(0.5)
     fitText(label, w - 16, compact ? 16 : 24)
+    const key = this.add
+      .text(x, y + h * 0.26, this.t(keyKey), headlineStyle(16, shade(color, -0.65)))
+      .setOrigin(0.5)
+      .setVisible(!compact)
     img.on('pointerdown', onPress)
-    return { img, label, up, down }
+    return { img, label, key, up, down }
   }
 
   private act(kind: 'pump' | 'cashout'): void {
     const snap = this.snap
     const self = snap?.players[this.selfId]
     if (!snap || !self || isDone(self) || snap.remainingMs <= 0) return
-    this.sfx.click()
-    this.sendInput({ kind })
+    // A cash-out is on its way: the next input belongs to the next balloon, which isn't up yet.
+    if (this.cashingAt >= 0) return
     const btn = kind === 'pump' ? this.pump : this.cash
-    if (!btn) return
-    btn.img.setTexture(btn.down)
-    punch(this, btn.img, -0.06, 60)
-    this.time.delayedCall(80, () => btn.img.setTexture(btn.up))
+    if (btn) {
+      btn.img.setTexture(btn.down)
+      punch(this, btn.img, -0.06, 60)
+      this.time.delayedCall(80, () => btn.img.setTexture(btn.up))
+    }
+    if (kind === 'cashout') {
+      // Nothing in it yet: the server would ignore it, so don't pretend.
+      if (this.shownPumps === 0) {
+        this.sfx.tick()
+        return
+      }
+      this.sfx.click()
+      this.cashingAt = this.time.now
+      this.sendInput({ kind })
+      return
+    }
+    // A stroke of the pump: a rush of air into the balloon.
+    if (this.time.now - this.pumpSoundAt >= PUMP_SOUND_EVERY_MS) {
+      this.pumpSoundAt = this.time.now
+      this.sfx.whoosh()
+    }
+    this.sendInput({ kind })
+    // Shown at once: the pump strokes and the balloon grows; the server confirms it (or pops it).
+    if (this.localBalloon !== self.outcomes.length) {
+      this.localBalloon = self.outcomes.length
+      this.localPumps = self.pumps
+    }
+    this.localPumps = Math.max(this.localPumps, this.shownPumps) + 1
+    this.lastPumpAt = this.time.now
+    this.shownPumps = this.localPumps
+    this.onPumped(this.shownPumps, true)
   }
 
   // Resizes the balloon for `pumps` and re-fits its points label (only on change: re-sizing text
@@ -360,28 +438,44 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
     if (self.outcomes.length !== this.lastOutcomes) {
       this.onOutcome(self, quiet)
       this.lastOutcomes = self.outcomes.length
-      this.lastPumps = 0
+      this.shownPumps = 0
+      this.localBalloon = self.outcomes.length
+      this.localPumps = 0
+      this.cashingAt = -1
     }
-    if (self.pumps !== this.lastPumps) {
-      if (quiet) this.setBalloonSize(self.pumps)
-      else this.onPumped(self.pumps)
+    // A cash-out the server never answered (it should always): inputs open again.
+    if (this.cashingAt >= 0 && this.time.now - this.cashingAt > CASH_WAIT_MS) this.cashingAt = -1
+    // Optimistic pumps on the balloon in hand, until the server's count catches up with them.
+    const mine = this.localBalloon === self.outcomes.length
+    if (mine && self.pumps < this.localPumps && this.time.now - this.lastPumpAt > PUMP_CONFIRM_MS)
+      this.localPumps = self.pumps
+    const pumps = Math.max(self.pumps, mine ? this.localPumps : 0)
+    if (pumps !== this.shownPumps) {
+      if (quiet) this.setBalloonSize(pumps)
+      else this.onPumped(pumps, pumps > this.shownPumps)
+      this.shownPumps = pumps
     }
-    this.lastPumps = self.pumps
     this.lastBanked = self.banked
     this.renderOwnPips(self, time)
 
     const alive = !isDone(self) && snap.remainingMs > 0
     if (!alive && !this.over) this.showOver(self)
     this.pumper?.setExpression(this.pumperFace(self, alive)).tick(time)
-    for (const b of [this.pump, this.cash]) b?.img.setAlpha(alive ? 1 : 0.3)
-    if (alive) this.wobble(self.pumps, time)
+    if (alive !== this.wasAlive) {
+      this.wasAlive = alive
+      for (const b of [this.pump, this.cash]) {
+        for (const o of b ? [b.img, b.label, b.key] : []) o.setAlpha(alive ? 1 : 0.3)
+      }
+      this.hint?.setVisible(alive)
+    }
+    if (alive) this.wobble(this.shownPumps, time)
   }
 
   // Sweating over a big balloon, wincing at a pop, grinning at a cash-out (until the next pump).
   private pumperFace(self: BalloonPlayer, alive: boolean): AvatarExpression {
     if (!alive) return self.banked > 0 ? 'happy' : 'ko'
-    if (self.pumps >= 10) return 'hurt'
-    if (self.pumps > 0) return 'idle'
+    if (this.shownPumps >= 10) return 'hurt'
+    if (this.shownPumps > 0) return 'idle'
     const last = self.outcomes[self.outcomes.length - 1]
     return last === 'burst' ? 'hurt' : last === 'cashed' ? 'happy' : 'idle'
   }
@@ -415,8 +509,8 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
     this.value.setPosition(this.knot.x + Math.sin(rad) * r, this.knot.y - Math.cos(rad) * r)
   }
 
-  private onPumped(pumps: number): void {
-    const grew = pumps > this.lastPumps
+  // The balloon shows `pumps`; `grew`: a new pump (stroke, lean, +10), else a quiet shrink back.
+  private onPumped(pumps: number, grew: boolean): void {
     this.setBalloonSize(pumps)
     if (!this.balloon || !grew) return
     punch(this, this.balloon, 0.08, 80)
@@ -461,6 +555,8 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
       if (outcome === 'burst') {
         const color = this.state.colorOf(this.selfId, PALETTE.red)
         this.sfx.pop()
+        // A rival popping in the same beat doesn't bang twice.
+        this.rivalPopAt = this.time.now
         burst(this, this.knot.x, cy, color, 40, 420)
         burst(this, this.knot.x, cy, PALETTE.text, 12, 260)
         shake(this, 0.02, 320)
@@ -561,9 +657,10 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
     const perRow = Math.ceil(ids.length / this.tokenRows)
-    const tokenW = Math.min(compact ? 100 : 140, (width * 0.94) / perRow)
-    const bSize = compact ? 26 : 34
-    const nameSize = compact ? 11 : 13
+    const big = !compact && height >= 900
+    const tokenW = Math.min(compact ? 100 : big ? 150 : 140, (width * 0.94) / perRow)
+    const bSize = compact ? 26 : big ? 40 : 34
+    const nameSize = compact ? 11 : big ? 16 : 14
     // Names are cut to what fits beside the avatar, so neighbors never overlap.
     const maxChars = Math.max(3, Math.floor((tokenW - 24) / (nameSize * 0.62)))
     ids.forEach((id, i) => {
@@ -593,9 +690,9 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
         .setOrigin(1, 0.5)
       const valueY = name.y + name.height + 2
       const value = this.add
-        .text(x, valueY, '', headlineStyle(compact ? 8 : 13, PALETTE.text))
+        .text(x, valueY, '', headlineStyle(compact ? 8 : 16, PALETTE.text))
         .setOrigin(0.5, 0)
-      const pipY = valueY + (compact ? 13 : 18)
+      const pipY = valueY + (compact ? 13 : 22)
       const pips = Array.from({ length: BALLOONS }, (_, k) =>
         this.add.rectangle(x + (k - (BALLOONS - 1) / 2) * 9, pipY, 6, 6, PALETTE.panelAlt),
       )
@@ -617,8 +714,14 @@ export class BalloonChickenScene extends MiniGameScene<BalloonChickenSnapshot> {
       // A balloon just ended: shreds in their color, or a coin pop on the points.
       if (p.outcomes.length > tok.outcomes && !this.firstSnapshot) {
         const { x, y } = tok.balloon
-        if (last === 'burst') burst(this, x, y - tok.balloon.displayHeight / 2, color, 14, 160)
-        else {
+        if (last === 'burst') {
+          burst(this, x, y - tok.balloon.displayHeight / 2, color, 14, 160)
+          // A rival's bang is part of the tension — but one at a time.
+          if (this.time.now - this.rivalPopAt >= RIVAL_POP_EVERY_MS) {
+            this.rivalPopAt = this.time.now
+            this.sfx.pop()
+          }
+        } else {
           burst(this, tok.value.x, tok.value.y, PALETTE.amber, 10, 140)
           punch(this, tok.value, 0.4, 110)
         }

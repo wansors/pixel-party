@@ -7,6 +7,10 @@ const BOMB_CHANCE = 0.22
 const CATCH_Y = 0.9
 // Half-width of the basket's catch zone in normalized x.
 const BASKET_HALF = 0.12
+// The basket slides toward where its player steers at most this fast (widths per second): the mouse
+// can't teleport it, so mouse and keys play the same game — and the client, sliding at the same cap
+// toward the same spot, shows the basket where the server judges it.
+export const BASKET_SPEED = 1.8
 const SPAWN_MIN_MS = 420
 const SPAWN_JITTER_MS = 360
 const FALL_MIN_MS = 2200
@@ -32,7 +36,9 @@ export interface FruitCatchState {
   // Tiebreaks for equal scores: fewer bombs caught, then the longer best combo.
   bombs: Map<PlayerId, number>
   bestCombos: Map<PlayerId, number>
+  // Where each basket is, and where its player is steering it (it slides there at BASKET_SPEED).
   baskets: Map<PlayerId, number>
+  targets: Map<PlayerId, number>
   // playerId → item ids already resolved (caught or missed) so each item scores at most once per player.
   resolved: Map<PlayerId, Set<number>>
 }
@@ -72,6 +78,7 @@ export class FruitCatch implements MiniGame<FruitCatchState, FruitCatchInput> {
       bombs: new Map(ctx.players.map((pid) => [pid, 0])),
       bestCombos: new Map(ctx.players.map((pid) => [pid, 0])),
       baskets: new Map(ctx.players.map((pid) => [pid, 0.5])),
+      targets: new Map(ctx.players.map((pid) => [pid, 0.5])),
       resolved: new Map(ctx.players.map((pid) => [pid, new Set<number>()])),
     }
   }
@@ -89,15 +96,19 @@ export class FruitCatch implements MiniGame<FruitCatchState, FruitCatchInput> {
     if (input.kind !== 'move' || typeof input.x !== 'number' || !Number.isFinite(input.x)) {
       return state
     }
-    if (!state.baskets.has(playerId)) return state
-    state.baskets.set(playerId, Math.max(0, Math.min(1, input.x)))
+    if (!state.targets.has(playerId)) return state
+    state.targets.set(playerId, Math.max(0, Math.min(1, input.x)))
     return state
   }
 
-  tick(state: FruitCatchState, _dt: number, now: number): FruitCatchState {
+  tick(state: FruitCatchState, dt: number, now: number): FruitCatchState {
+    const reach = (BASKET_SPEED * dt) / 1000
     for (const pid of state.players) {
       const resolved = state.resolved.get(pid)
-      const basket = state.baskets.get(pid) ?? 0.5
+      const from = state.baskets.get(pid) ?? 0.5
+      const to = state.targets.get(pid) ?? from
+      const basket = from + Math.max(-reach, Math.min(reach, to - from))
+      state.baskets.set(pid, basket)
       if (!resolved) continue
       for (const item of state.items) {
         if (resolved.has(item.id)) continue

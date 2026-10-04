@@ -5,17 +5,14 @@ import {
   type FreezeDollMode,
   type FreezeDollSnapshot,
   type FreezeDollStatus,
+  freezeDollMove,
+  freezeDollSpeed,
   freezeDollSweepAt,
 } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 50_000
-// Field lengths per second. RUN is ~1.6× WALK but slides ~400 ms when released (WALK: ~150 ms).
-const WALK = 0.048
-const RUN = 0.077
-const ACCEL = 0.5 // field lengths / s² — full RUN in ~150 ms
-const WALK_GLIDE_MS = 150
-const RUN_GLIDE_MS = 400
+// Runner physics (walk/run speeds, acceleration, glides) live in @pp/shared (FREEZE_DOLL).
 const HEARTS = 2
 const STUN_MS = 1000
 const KNOCKBACK = 0.15
@@ -66,12 +63,6 @@ export interface FreezeDollState {
 
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t
 const MODES: readonly FreezeDollMode[] = ['stop', 'walk', 'run']
-const speedOf = (mode: FreezeDollMode): number =>
-  mode === 'run' ? RUN : mode === 'walk' ? WALK : 0
-const glideMs = (v: number): number =>
-  v <= WALK
-    ? WALK_GLIDE_MS
-    : lerp(WALK_GLIDE_MS, RUN_GLIDE_MS, Math.min(1, (v - WALK) / (RUN - WALK)))
 
 // Real-time FFA "Red Light, Green Light". Deterministic: lanes and the whole doll timeline (chant
 // tempos, fake-outs, sudden spins, RED lengths, where each sweep starts and which way it runs) are
@@ -182,16 +173,8 @@ export class FreezeDoll implements MiniGame<FreezeDollState, FreezeDollInput> {
       if (r.status === 'finished' || r.status === 'out') continue
       if (seg.light === 'green') r.immune = false
       if (r.status === 'stunned' && now >= r.stunUntil) r.status = 'racing'
-      const target = r.status === 'racing' && seg.light !== 'ready' ? speedOf(r.mode) : 0
-      if (r.v < target) {
-        r.v = Math.min(target, r.v + ACCEL * step)
-        r.brake = 0
-      } else if (r.v > target) {
-        if (r.brake === 0) r.brake = r.v / (glideMs(r.v) / 1000)
-        r.v = Math.max(target, r.v - r.brake * step)
-        if (r.v === target) r.brake = 0
-      }
-      r.x += r.v * step
+      const target = r.status === 'racing' && seg.light !== 'ready' ? freezeDollSpeed(r.mode) : 0
+      freezeDollMove(r, target, step)
       if (r.x >= 1) {
         r.x = 1
         r.v = 0

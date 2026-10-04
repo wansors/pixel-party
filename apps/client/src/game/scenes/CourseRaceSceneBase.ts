@@ -1,81 +1,117 @@
 import {
+  COURSE_BOOST,
+  COURSE_CAR_R,
+  COURSE_GRAVEL_TUNING,
+  COURSE_PHYSICS,
   type CourseCar,
   type CourseDef,
   type CourseKind,
   type CourseRaceSnapshot,
   type MicroRacePoint,
   PALETTE,
+  RACE_DRAFT_TUNING,
+  type RaceCarTuning,
   courseDef,
+  inStretch,
   sampleCourse,
 } from '@pp/shared'
-import type Phaser from 'phaser'
+import Phaser from 'phaser'
 import { ensureAvatarTexture } from '../avatars'
-import { addBanner, burst, floatText, showBanner } from '../fx'
-import { ensurePixelGrid, headlineStyle, hexToCss, shade } from '../pixelStyle'
-import { PlayerStrip } from '../playerStrip'
+import { addBanner, burst, flash, floatText, ring, shake, showBanner } from '../fx'
+import { ServerClock } from '../netcode/ServerClock'
+import { bodyStyle, ensurePixelGrid, headlineStyle, hexToCss, shade } from '../pixelStyle'
+import { YouMarker, nameTagStyle } from '../playerMarks'
 import type { SceneDeps } from './MiniGameScene'
 import { MiniGameScene } from './MiniGameScene'
 import { COURSE_TEXEL, paintCourse } from './courseArt'
 import { CAR_ROWS } from './microRaceArt'
+import { DriveControls, LabelDeclutter, RaceMinimap, RaceStandings } from './raceKit'
+import { type CarPose, OwnCar, RivalCars, RoadIndex, raceClock } from './raceNet'
 
 // Shared scene for the course racers (Rally Stage, Speed Circuit). The course is bigger than the
 // screen, so the world (the painted course, every car, the dust and boost trails) lives in one
 // container that is moved and scaled each frame to follow your car — a chase camera that leaves the
-// HUD, the start lights, the minimap and the standings strip fixed on top. Cars are Micro Race's
-// top-down racer in the player's color with their lobby avatar at the wheel. Arrows/WASD drive, or hold
-// the pointer where you want to go. Subclasses supply the per-game HUD line and finish wording.
+// HUD, the start countdown, the race clock, the minimap and the standings column fixed on top. Cars are
+// Micro Race's top-down racer in the player's color with their lobby avatar at the wheel and a name
+// tag. Your own car is predicted locally with the server's integrator (it reacts the frame you press
+// a key), rivals are dead-reckoned to the server's present. Arrows/WASD drive (SPACE brakes), or hold
+// the pointer where you want to go. Subclasses supply the HUD line.
 
 const VIEW_WORLD_W = 900 // world units across the view on a wide screen (zoom follows)
-const SEND_EVERY_MS = 60
+const CAR_LEN = 34 // world units (16 × 10 sprite cells)
+const CAR_WID = 22
+const LOOK = 90
+const BANNER_MS = 1400
+// The circuit's bump (Speed Circuit has contact): restitution and the approach speed of a hit.
+const RESTITUTION = 1
+const HIT_MIN_SPEED = 70
+// A wall hit: the world edge flipped a velocity component at least this fast (world units/s).
+const WALL_HIT_SPEED = 80
+// Other cars crossing the line get the crowd at most this often (a pack finishing together is one roar).
+const CHEER_GAP_MS = 1500
+// Rivals' moments play at this fraction of the volume (yours stay full), and their bumps at most this
+// often — a pile-up into the first corner is one crunch.
+const RIVAL_LEVEL = 0.4
+const RIVAL_BUMP_MS = 400
+const NO_TUNING: RaceCarTuning = {}
 
 interface CarView {
   body: Phaser.GameObjects.Image
   pilot: Phaser.GameObjects.Image
+  label: Phaser.GameObjects.Text
+  color: number
   x: number
   y: number
   a: number
-}
-
-function wrapAngle(a: number): number {
-  let r = a
-  while (r > Math.PI) r -= Math.PI * 2
-  while (r < -Math.PI) r += Math.PI * 2
-  return r
 }
 
 export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapshot> {
   protected compact = false
   protected def?: CourseDef
   private samples: MicroRacePoint[] = []
+  private road?: RoadIndex
   private world?: Phaser.GameObjects.Container
   private view = { x: 0, y: 0, w: 0, h: 0 }
   private zoom = 1
-  private cam = { x: 0, y: 0 }
+  private cam = { x: 0, y: 0, ready: false }
   private views = new Map<string, CarView>()
   private trails?: Phaser.GameObjects.Graphics
-  private minimap?: {
-    g: Phaser.GameObjects.Graphics
-    dots: Phaser.GameObjects.Graphics
-    x: number
-    y: number
-    s: number
-  }
+  private minimap?: RaceMinimap
+  private mmBox = { x: 0, y: 0, w: 0 }
+  private standings?: RaceStandings
   private countdown?: Phaser.GameObjects.Text
-  private strip?: PlayerStrip
+  private clockText?: Phaser.GameObjects.Text
+  private marker?: YouMarker
   protected banner?: Phaser.GameObjects.Text
+  private subline?: Phaser.GameObjects.Text
   private bannerUntil = 0
-  private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
-  private wasd?: Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>
-  private aim?: { x: number; y: number }
-  private aimPointer = -1
-  // The last drive sent (the server starts every car parked).
-  private sent = { steer: 0, throttle: 0 }
-  private lastSentAt = 0
-  private lastTick = -1
+  private controls?: DriveControls
+  private readonly tags = new LabelDeclutter()
+  private readonly clock = new ServerClock()
+  private readonly rivals = new RivalCars()
+  private readonly own = new OwnCar()
+  private ownActive = false
+  private ownResets = 0
+  private lastLocalBump = 0
+  private lastWallAt = 0
+  // Your car on a boost pad as of the last frame, and when it last hit one (the server's echo of the
+  // boost a snapshot later must not play the sound twice).
+  private onPad = false
+  private lastPadAt = Number.NEGATIVE_INFINITY
+  private lastDraftAt = Number.NEGATIVE_INFINITY
+  private lastCheerAt = Number.NEGATIVE_INFINITY
+  private lastRivalBumpAt = Number.NEGATIVE_INFINITY
   private snapAt = 0
+  private lastTick = -1
   private prev?: CourseRaceSnapshot
   private announcedGo = false
+  private sawCountdown = false
+  private goHideAt = 0
   private finished = false
+  private timeUpShown = false
+  private wrongWay = false
+  private progressMs = 0
+  private lastDustAt = 0
 
   constructor(
     key: string,
@@ -85,38 +121,96 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
     super(key, ...deps)
   }
 
-  // One HUD line for the player's own state ("LAP 1/2 · P3", "SPLIT 2/3 · 0:12.3").
+  // One HUD line for the player's own state ("LAP 1/2 · P3", "SPLIT 2/3 · 45%").
   protected abstract statusOf(me: CourseCar, snap: CourseRaceSnapshot): string
-  // A short pop for progress events (a lap, a split) and the finish banner.
-  protected abstract progressPop(prev: CourseCar, me: CourseCar): string | null
 
   override create(): void {
     super.create()
     const { width, height } = this.scale
     this.compact = Math.min(width, height) < 520
+    const big = !this.compact && height >= 900
     this.def = undefined
     this.samples = []
+    this.road = undefined
+    this.world = undefined
     this.views = new Map()
-    this.aim = undefined
-    this.aimPointer = -1
-    this.sent = { steer: 0, throttle: 0 }
-    this.lastSentAt = 0
-    this.lastTick = -1
+    this.cam = { x: 0, y: 0, ready: false }
+    this.clock.reset()
+    this.rivals.reset()
+    this.ownActive = false
+    this.ownResets = 0
+    this.lastLocalBump = 0
+    this.lastWallAt = 0
+    this.onPad = false
+    this.lastPadAt = Number.NEGATIVE_INFINITY
+    this.lastDraftAt = Number.NEGATIVE_INFINITY
+    this.lastCheerAt = Number.NEGATIVE_INFINITY
+    this.lastRivalBumpAt = Number.NEGATIVE_INFINITY
     this.snapAt = 0
+    this.lastTick = -1
     this.prev = undefined
     this.announcedGo = false
+    this.sawCountdown = false
+    this.goHideAt = 0
     this.finished = false
+    this.timeUpShown = false
+    this.wrongWay = false
+    this.progressMs = 0
+    this.lastDustAt = 0
     this.bannerUntil = 0
 
-    const stripSize = this.compact ? 11 : 13
-    this.strip = new PlayerStrip(this, width / 2, this.top + 8, width - 24, stripSize, 2)
-    const viewTop = this.top + 8 + PlayerStrip.rowH(stripSize) * 2
-    this.view = { x: 8, y: viewTop, w: width - 16, h: height - viewTop - 10 }
+    const hintH = this.compact ? 22 : 30
+    this.view = { x: 0, y: this.top, w: width, h: height - this.top - hintH }
     this.zoom = Math.max(0.45, Math.min(1.6, this.view.w / (this.compact ? 620 : VIEW_WORLD_W)))
+    // Opaque strips over the scrolling world: the HUD and the hint line.
+    this.add.rectangle(0, 0, width, this.top, PALETTE.bg).setOrigin(0, 0).setDepth(700)
+    this.add
+      .rectangle(0, height - hintH, width, hintH, PALETTE.bg)
+      .setOrigin(0, 0)
+      .setDepth(700)
+    this.add.rectangle(0, this.top, width, 2, PALETTE.frame).setOrigin(0, 0).setDepth(701)
+    this.add
+      .text(
+        width / 2,
+        height - hintH / 2,
+        this.t(this.compact ? 'game.microRace.hintTouch' : 'game.microRace.hint'),
+        bodyStyle(this.compact ? 11 : big ? 16 : 14, PALETTE.dim),
+      )
+      .setOrigin(0.5)
+      .setDepth(701)
+
+    const pad = this.compact ? 6 : 10
+    this.mmBox = {
+      x: 0,
+      y: this.top + pad + 6,
+      w: this.compact ? 110 : Math.round(Math.max(200, Math.min(320, width * 0.15))),
+    }
+    this.mmBox.x = width - this.mmBox.w - pad - 6
+    this.standings = new RaceStandings(
+      this,
+      pad,
+      this.top + pad,
+      this.compact ? 4 : 12,
+      this.compact ? 11 : big ? 16 : 14,
+      710,
+    )
+    this.clockText = this.add
+      .text(
+        width / 2,
+        this.top + pad,
+        '',
+        headlineStyle(this.compact ? 12 : big ? 24 : 16, PALETTE.amber, {
+          stroke: '#10121c',
+          strokeThickness: 4,
+        }),
+      )
+      .setOrigin(0.5, 0)
+      .setDepth(712)
+      .setVisible(false)
     this.countdown = this.add
       .text(
         width / 2,
-        viewTop + this.view.h * 0.3,
+        this.top + this.view.h * 0.3,
         '',
         headlineStyle(this.compact ? 32 : 48, PALETTE.red, {
           stroke: '#10121c',
@@ -125,23 +219,24 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
       )
       .setOrigin(0.5)
       .setDepth(900)
+    this.marker = new YouMarker(this, this.compact ? 12 : 16, 640)
     this.banner = addBanner(this)
-    this.cursors = this.input.keyboard?.createCursorKeys()
-    const kb = this.input.keyboard
-    if (kb)
-      this.wasd = { W: kb.addKey('W'), A: kb.addKey('A'), S: kb.addKey('S'), D: kb.addKey('D') }
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      this.aimPointer = p.id
-      this.aim = { x: p.x, y: p.y }
-    })
-    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (p.id === this.aimPointer && p.isDown) this.aim = { x: p.x, y: p.y }
-    })
-    this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
-      if (p.id !== this.aimPointer) return
-      this.aimPointer = -1
-      this.aim = undefined
-    })
+    this.subline = this.add
+      .text(
+        width / 2,
+        0,
+        '',
+        headlineStyle(this.compact ? 12 : 16, PALETTE.text, {
+          stroke: '#10121c',
+          strokeThickness: 4,
+          align: 'center',
+        }),
+      )
+      .setOrigin(0.5)
+      .setLineSpacing(8)
+      .setDepth(950)
+      .setVisible(false)
+    this.controls = new DriveControls(this)
   }
 
   // The course is known from the first snapshot: paint it once into a texture, build the world.
@@ -149,6 +244,7 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
     const def = courseDef(this.kind, snap.course)
     this.def = def
     this.samples = sampleCourse(def)
+    this.road = new RoadIndex(this.samples, def.kind === 'circuit')
     const key = `course-${this.kind}-${snap.course}`
     if (!this.textures.exists(key)) {
       const { rgba, w, h } = paintCourse(def)
@@ -165,26 +261,25 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
     world.add(this.add.image(0, 0, key).setOrigin(0, 0).setScale(COURSE_TEXEL))
     this.trails = this.add.graphics()
     world.add(this.trails)
-    const shape = this.make.graphics({ x: 0, y: 0 }, false)
-    shape.fillStyle(0xffffff, 1)
-    shape.fillRect(this.view.x, this.view.y, this.view.w, this.view.h)
-    world.setMask(shape.createGeometryMask())
+    // No mask: the course always fills the view (the camera stays inside it) and the opaque HUD and
+    // hint strips cover whatever spills over — one full-screen pass instead of three. For the same
+    // reason the arcade backdrop under it never shows: skip drawing it.
+    for (const o of this.children.list) {
+      if (o instanceof Phaser.GameObjects.TileSprite && o.depth === -1000) o.setVisible(false)
+    }
     this.world = world
-    // Minimap: the whole course, top-right of the view.
-    const mmW = this.compact ? 110 : 180
-    const s = mmW / def.world.w
-    const mx = this.view.x + this.view.w - mmW - 8
-    const my = this.view.y + 8
-    const g = this.add.graphics().setDepth(710)
-    g.fillStyle(0x10121c, 0.75).fillRect(mx - 4, my - 4, mmW + 8, def.world.h * s + 8)
-    g.lineStyle(Math.max(2, def.halfWidth * 2 * s), 0x9aa3b8, 1)
-    g.beginPath()
-    this.samples.forEach((p, i) =>
-      i === 0 ? g.moveTo(mx + p.x * s, my + p.y * s) : g.lineTo(mx + p.x * s, my + p.y * s),
+    this.minimap = new RaceMinimap(
+      this,
+      this.mmBox.x,
+      this.mmBox.y,
+      this.mmBox.w,
+      def.world,
+      this.samples,
+      def.halfWidth,
+      def.kind === 'circuit',
+      this.compact,
+      711,
     )
-    if (def.kind === 'circuit') g.closePath()
-    g.strokePath()
-    this.minimap = { g, dots: this.add.graphics().setDepth(711), x: mx, y: my, s }
   }
 
   private carView(c: CourseCar): CarView {
@@ -206,15 +301,21 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
       },
       pixelSize: 2,
     })
-    // 16 × 10 sprite cells → about 2.6 × 1.6 car radii long/wide in world units.
-    const body = this.add.image(c.x, c.y, key).setDisplaySize(34, 22)
+    const body = this.add.image(c.x, c.y, key).setDisplaySize(CAR_LEN, CAR_WID)
     const pilot = this.add
       .image(c.x, c.y, ensureAvatarTexture(this, this.state.avatarOf(c.id), color, 2))
       .setDisplaySize(12, 12)
     this.world?.add([body, pilot])
-    // Your car draws over the ghosts / the pack.
-    if (c.id === this.selfId) this.world?.bringToTop(body).bringToTop(pilot)
-    v = { body, pilot, x: c.x, y: c.y, a: c.a }
+    // Your car draws over the ghosts / the pack (whichever order the cars were met in).
+    const own = c.id === this.selfId ? { body, pilot } : this.views.get(this.selfId)
+    if (own) this.world?.bringToTop(own.body).bringToTop(own.pilot)
+    // Name tags ride on the fixed layer (crisp text at any zoom); yours is the ▼ marker instead.
+    const label = this.add
+      .text(0, 0, this.label(c.id), nameTagStyle(this.compact ? 8 : 12, color))
+      .setOrigin(0.5, 1)
+      .setDepth(630)
+      .setVisible(false)
+    v = { body, pilot, label, color, x: c.x, y: c.y, a: c.a }
     this.views.set(c.id, v)
     return v
   }
@@ -222,51 +323,179 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
   protected frame(snap: CourseRaceSnapshot | null, time: number, delta: number): void {
     if (!snap) return
     if (!this.world) this.buildWorld(snap)
+    const now = this.time.now
+    let fresh = false
     if (this.state.tick !== this.lastTick) {
       this.lastTick = this.state.tick
-      this.snapAt = time
-      this.onSnapshot(snap)
+      this.clock.sync(snap.remainingMs, now)
+      this.snapAt = now - this.clock.since(snap.remainingMs, now)
+      this.rivals.push(snap.cars, this.snapAt, now)
+      this.onSnapshot(snap, now)
+      fresh = true
     }
+    if (this.state.final) this.timeUp(snap)
+    this.drive(snap, now, fresh)
     this.paintCars(snap, time, delta)
     this.follow(snap, delta)
-    this.paintLights(snap)
-    this.steer(time, snap)
-    if (this.bannerUntil > 0 && time > this.bannerUntil && !this.state.final) {
+    this.paintLights(snap, now)
+    this.paintClock(snap, now)
+    if (this.bannerUntil > 0 && now > this.bannerUntil) {
       this.bannerUntil = 0
       this.banner?.setVisible(false)
+      if (!this.finished && !this.timeUpShown) this.subline?.setVisible(false)
     }
   }
 
+  // Your controls → the server (on change only), and your car's local prediction.
+  private drive(snap: CourseRaceSnapshot, now: number, fresh: boolean): void {
+    const me = snap.cars.find((c) => c.id === this.selfId)
+    const def = this.def
+    const racing = !!me && !me.gone && me.finishMs === null && !this.state.final && !this.finished
+    if (!me || !def || !racing) {
+      if (this.ownActive && me) this.rivals.adopt(me.id, this.own.pose(), now)
+      this.ownActive = false
+      return
+    }
+    const shown = this.views.get(me.id)
+    const at = shown ? this.toScreen(shown.x, shown.y) : null
+    const read = this.controls?.read(at && shown ? { x: at.x, y: at.y, a: shown.a } : null)
+    const held = read
+      ? (this.controls?.sync(read, now, (d) => this.sendInput({ kind: 'drive', ...d })) ??
+        read.drive)
+      : { steer: 0, throttle: 0 }
+    if (!this.ownActive) {
+      this.own.snapTo(me)
+      this.ownResets = me.resets
+      this.ownActive = true
+    }
+    const body = this.own.body
+    body.steer = held.steer
+    body.throttle = held.throttle
+    body.finishMs = null
+    if (snap.goInMs - this.clock.since(snap.remainingMs, now) > 0) {
+      // On the line until the countdown ends.
+      if (fresh) this.own.snapTo(me)
+      this.own.hold(now)
+      return
+    }
+    this.road?.update(body.x, body.y)
+    body.off = (this.road?.dist ?? 0) > def.halfWidth
+    // Rolling onto a boost pad (the server's own rule: a pad stretch, on the road) — the kick is heard
+    // the frame it happens.
+    const pad =
+      this.kind === 'circuit' &&
+      !body.off &&
+      inStretch(def.boosts, this.road?.idx ?? -1, this.samples.length)
+    if (pad && !this.onPad) {
+      this.lastPadAt = now
+      this.sfx.powerUp()
+    }
+    this.onPad = pad
+    const vx0 = body.vx
+    const vy0 = body.vy
+    this.own.step(now, {
+      physics: COURSE_PHYSICS[this.kind],
+      tuning: this.tuning(me),
+      world: def.world,
+      carR: COURSE_CAR_R[this.kind],
+    })
+    this.wallHit(vx0, vy0, def, now)
+    if (fresh) {
+      if (me.resets > this.ownResets) this.own.snapTo(me)
+      else this.own.reconcile(me, this.snapAt)
+    }
+    this.ownResets = me.resets
+    if (this.kind !== 'circuit') return
+    // Wheel-to-wheel: bumps happen on your screen right away (the server's verdict follows).
+    for (const c of snap.cars) {
+      if (c.id === me.id || c.gone) continue
+      const other = this.rivals.state(c.id, now)
+      if (!other) continue
+      const hit = this.own.contact(other, COURSE_CAR_R.circuit, RESTITUTION)
+      if (hit >= HIT_MIN_SPEED && now - this.lastLocalBump > 250) {
+        this.lastLocalBump = now
+        const p = this.own.pose()
+        this.bumpFx(this.toScreen(p.x, p.y))
+      }
+    }
+  }
+
+  // The same per-step tweaks the server applies: rally gravel; the circuit's slipstream and boost
+  // (as the latest snapshot has them).
+  private tuning(me: CourseCar): RaceCarTuning {
+    if (this.kind === 'stage') {
+      const def = this.def
+      const idx = this.road?.idx ?? -1
+      return def && idx >= 0 && inStretch(def.gravel, idx, this.samples.length)
+        ? COURSE_GRAVEL_TUNING
+        : NO_TUNING
+    }
+    if (!me.draft && !me.boost) return NO_TUNING
+    const draft = me.draft ? RACE_DRAFT_TUNING : { maxSpeedScale: 1, accelScale: 1 }
+    const boost = me.boost ? COURSE_BOOST : { maxSpeedScale: 1, accelScale: 1 }
+    return {
+      maxSpeedScale: draft.maxSpeedScale * boost.maxSpeedScale,
+      accelScale: draft.accelScale * boost.accelScale,
+    }
+  }
+
+  private bumpFx(at: { x: number; y: number }): void {
+    burst(this, at.x, at.y, PALETTE.amber, 8, 150)
+    shake(this, 0.005, 110)
+    this.sfx.crash()
+  }
+
+  // Your car slamming into the edge of the world: the step's wall bounce flipped a fast velocity
+  // component with the car pressed against that edge.
+  private wallHit(vx0: number, vy0: number, def: CourseDef, now: number): void {
+    const b = this.own.body
+    const r = COURSE_CAR_R[this.kind] + 1
+    const { w, h } = def.world
+    const hitX = vx0 * b.vx < 0 && Math.abs(vx0) >= WALL_HIT_SPEED && (b.x <= r || b.x >= w - r)
+    const hitY = vy0 * b.vy < 0 && Math.abs(vy0) >= WALL_HIT_SPEED && (b.y <= r || b.y >= h - r)
+    if (!(hitX || hitY) || now - this.lastWallAt < 400) return
+    this.lastWallAt = now
+    this.sfx.crash()
+    shake(this, 0.005, 110)
+  }
+
   private paintCars(snap: CourseRaceSnapshot, time: number, delta: number): void {
-    const k = Math.min(1, delta / 70)
-    const trails = this.trails as Phaser.GameObjects.Graphics
+    const trails = this.trails
+    if (!trails) return
     trails.clear()
+    const now = this.time.now
+    const freeze = this.state.final
     for (const c of snap.cars) {
       const v = this.carView(c)
-      // Ease toward the snapshot (snapshots arrive a few times a second).
-      v.x += (c.x - v.x) * k
-      v.y += (c.y - v.y) * k
-      v.a += wrapAngle(c.a - v.a) * k
+      const mine = c.id === this.selfId
+      const pose: CarPose | null =
+        mine && this.ownActive ? this.own.pose() : this.rivals.pose(c.id, now, delta, freeze)
+      if (pose) {
+        v.x = pose.x
+        v.y = pose.y
+        v.a = pose.a
+      }
       v.body.setPosition(v.x, v.y).setRotation(v.a)
       v.pilot
         .setPosition(v.x - Math.cos(v.a) * 2, v.y - Math.sin(v.a) * 2)
         .setRotation(v.a + Math.PI / 2)
       // Stage rivals are ghosts; a driver who left fades out further (no contact any more).
-      const alpha = c.gone ? 0.3 : this.kind === 'stage' && c.id !== this.selfId ? 0.55 : 1
+      const alpha = c.gone ? 0.3 : this.kind === 'stage' && !mine ? 0.55 : 1
       v.body.setAlpha(alpha)
       v.pilot.setAlpha(alpha)
-      // Trails: dust off-road / on gravel, wind lines in a slipstream, a flame on boost.
+      // Trails: dust off-road, wind lines in a slipstream, a flame on boost.
       const bx = v.x - Math.cos(v.a) * 18
       const by = v.y - Math.sin(v.a) * 18
-      if (c.off) {
+      const off = mine && this.ownActive ? this.own.body.off : c.off
+      if (off) {
         trails.fillStyle(0xc2a578, 0.6)
         trails.fillCircle(bx + Math.sin(time / 50) * 3, by + Math.cos(time / 60) * 3, 5)
       }
       if (c.draft) {
         trails.lineStyle(2, 0xffffff, 0.5)
-        for (const off of [-8, 8]) {
-          const px = -Math.sin(v.a) * off
-          const py = Math.cos(v.a) * off
+        for (const o of [-8, 8]) {
+          const px = -Math.sin(v.a) * o
+          const py = Math.cos(v.a) * o
           trails.lineBetween(
             bx + px,
             by + py,
@@ -286,22 +515,30 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
           by - Math.cos(v.a) * 7,
         )
       }
+      if (mine && off && !this.compact && time - this.lastDustAt > 160 && this.own.speed > 60) {
+        this.lastDustAt = time
+        const s = this.toScreen(bx, by)
+        burst(this, s.x, s.y, 0xc2a578, 3, 50)
+      }
     }
   }
 
-  // Chase camera: the world container is placed so your car sits a little below the view's centre.
+  // Chase camera: the world container is placed so your car sits a little behind the view's centre.
   private follow(snap: CourseRaceSnapshot, delta: number): void {
     const world = this.world
     const def = this.def
     if (!world || !def) return
     const me = this.views.get(this.selfId) ?? this.views.get(snap.cars[0]?.id ?? '')
-    if (!me) return
-    const look = 90
-    const target = { x: me.x + Math.cos(me.a) * look, y: me.y + Math.sin(me.a) * look }
-    const k = Math.min(1, delta / 160)
-    this.cam.x += (target.x - this.cam.x) * k
-    this.cam.y += (target.y - this.cam.y) * k
-    if (this.cam.x === 0 && this.cam.y === 0) this.cam = { ...target }
+    if (me) {
+      const target = { x: me.x + Math.cos(me.a) * LOOK, y: me.y + Math.sin(me.a) * LOOK }
+      if (!this.cam.ready) {
+        this.cam = { ...target, ready: true }
+      } else {
+        const k = 1 - Math.exp(-delta / 160)
+        this.cam.x += (target.x - this.cam.x) * k
+        this.cam.y += (target.y - this.cam.y) * k
+      }
+    }
     const halfW = this.view.w / 2 / this.zoom
     const halfH = this.view.h / 2 / this.zoom
     const cx = Math.max(halfW, Math.min(def.world.w - halfW, this.cam.x))
@@ -311,17 +548,59 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
       this.view.x + this.view.w / 2 - cx * this.zoom,
       this.view.y + this.view.h / 2 - cy * this.zoom,
     )
-    // Minimap dots.
+    // Name tags over the rivals (on screen, under the HUD; one that would overlap another stays hidden
+    // while the pack is bunched), the ▼ over yours; the minimap.
+    const labelUp = (CAR_LEN / 2 + 2) * this.zoom
     const mm = this.minimap
-    if (!mm) return
-    mm.dots.clear()
-    for (const c of snap.cars) {
-      const mine = c.id === this.selfId
-      mm.dots.fillStyle(this.state.colorOf(c.id), 1)
-      mm.dots.fillCircle(mm.x + c.x * mm.s, mm.y + c.y * mm.s, mine ? 4 : 2.5)
-      if (mine)
-        mm.dots.lineStyle(1, 0xffffff, 1).strokeCircle(mm.x + c.x * mm.s, mm.y + c.y * mm.s, 5)
+    mm?.clear()
+    const now = this.time.now
+    const tags = this.tags
+    tags.reset()
+    const own = this.views.get(this.selfId)
+    if (own) {
+      const s = this.toScreen(own.x, own.y)
+      tags.reserve(s.x, s.y - labelUp, 24, 28)
     }
+    for (const c of snap.cars) {
+      const v = this.views.get(c.id)
+      if (!v) continue
+      const s = this.toScreen(v.x, v.y)
+      const inView =
+        s.x > this.view.x &&
+        s.x < this.view.x + this.view.w &&
+        s.y > this.view.y + 16 &&
+        s.y < this.view.y + this.view.h
+      if (c.id === this.selfId) {
+        v.label.setVisible(false)
+        if (inView) this.marker?.place(s.x, s.y - labelUp, now)
+        else this.marker?.hide()
+        continue
+      }
+      const x = Math.round(s.x)
+      const y = Math.round(s.y - labelUp)
+      const shown = inView && tags.place(x, y, v.label.width, v.label.height)
+      v.label
+        .setPosition(x, y)
+        .setAlpha(c.gone ? 0.35 : this.kind === 'stage' ? 0.75 : 1)
+        .setVisible(shown)
+      mm?.car(v.x, v.y, v.color, c.gone)
+    }
+    const mine = this.views.get(this.selfId)
+    if (mine) mm?.self(mine.x, mine.y, mine.color)
+    this.wrongWayCheck(snap, now)
+  }
+
+  // Wrong way: heading against the course direction at the nearest sample while moving.
+  private wrongWayCheck(snap: CourseRaceSnapshot, now: number): void {
+    const mine = this.views.get(this.selfId)
+    if (!mine || !this.road || !this.ownActive || this.finished || snap.goInMs > 0) return
+    const wrong = this.road.along(mine.a) < -0.5 && this.own.speed > 30
+    if (wrong && !this.wrongWay) {
+      this.sfx.wrong()
+      this.say(this.t('game.microRace.wrongWay'), PALETTE.red, BANNER_MS)
+    }
+    if (wrong && this.bannerUntil > 0) this.bannerUntil = Math.max(this.bannerUntil, now + 300)
+    this.wrongWay = wrong
   }
 
   // World point → screen (for fx that live on the fixed layer).
@@ -332,10 +611,15 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
   }
 
   // Start countdown 3 · 2 · 1 · GO!
-  private paintLights(snap: CourseRaceSnapshot): void {
+  private paintLights(snap: CourseRaceSnapshot, now: number): void {
     const lights = this.countdown
     if (!lights) return
+    if (this.goHideAt > 0 && now >= this.goHideAt) {
+      this.goHideAt = 0
+      lights.setVisible(false)
+    }
     if (snap.goInMs > 0) {
+      this.sawCountdown = true
       const n = String(Math.ceil(snap.goInMs / 800))
       if (lights.text !== n) {
         lights.setText(n).setColor(hexToCss(PALETTE.red)).setVisible(true)
@@ -345,102 +629,190 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
     }
     if (!this.announcedGo) {
       this.announcedGo = true
-      if (!this.firstSnapshot) this.sfx.go()
-      lights.setText(this.t('game.courseRace.go')).setColor(hexToCss(PALETTE.lime))
-      this.time.delayedCall(700, () => lights.setVisible(false))
-    }
-  }
-
-  private steer(time: number, snap: CourseRaceSnapshot): void {
-    if (this.finished || this.state.final) return
-    const left = this.cursors?.left.isDown || this.wasd?.A.isDown
-    const right = this.cursors?.right.isDown || this.wasd?.D.isDown
-    const up = this.cursors?.up.isDown || this.wasd?.W.isDown
-    const down = this.cursors?.down.isDown || this.wasd?.S.isDown
-    const me = this.views.get(this.selfId)
-    let drive = { steer: 0, throttle: 0 }
-    if (left || right || up || down) {
-      drive = { steer: (right ? 1 : 0) - (left ? 1 : 0), throttle: (up ? 1 : 0) - (down ? 1 : 0) }
-    } else if (this.aim && me) {
-      // Steer toward the held point, measured from the car's nose (screen space).
-      const at = this.toScreen(me.x, me.y)
-      const diff = wrapAngle(Math.atan2(this.aim.y - at.y, this.aim.x - at.x) - me.a)
-      const dist = Math.hypot(this.aim.x - at.x, this.aim.y - at.y)
-      drive = {
-        steer: Math.max(-1, Math.min(1, diff / 0.5)),
-        throttle: Math.abs(diff) > 2.3 ? 0.45 : dist < 30 ? 0.3 : 1,
+      // Joined (or relaid out) mid-race: no GO! to replay.
+      if (!this.sawCountdown) {
+        lights.setVisible(false)
+        return
       }
-    }
-    // The server holds the last drive: send changes only (rate-limited), never an idle heartbeat.
-    const changed = drive.steer !== this.sent.steer || drive.throttle !== this.sent.throttle
-    if (
-      changed &&
-      time - this.lastSentAt > SEND_EVERY_MS &&
-      snap.cars.some((c) => c.id === this.selfId)
-    ) {
-      this.sent = drive
-      this.lastSentAt = time
-      this.sendInput({ kind: 'drive', ...drive })
+      this.sfx.go()
+      lights.setText(this.t('game.courseRace.go')).setColor(hexToCss(PALETTE.lime)).setVisible(true)
+      this.goHideAt = now + 700
     }
   }
 
-  private onSnapshot(snap: CourseRaceSnapshot): void {
+  // The race clock (since the green light), extrapolated between snapshots; yours stops at the flag.
+  private paintClock(snap: CourseRaceSnapshot, now: number): void {
+    const text = this.clockText
+    if (!text) return
+    const racing = snap.goInMs <= 0 && this.goHideAt === 0
+    text.setVisible(racing)
+    if (!racing) return
+    const me = snap.cars.find((c) => c.id === this.selfId)
+    const ms =
+      me?.finishMs ?? snap.raceMs + (this.state.final ? 0 : this.clock.since(snap.remainingMs, now))
+    text.setText(raceClock(ms))
+  }
+
+  private onSnapshot(snap: CourseRaceSnapshot, now: number): void {
     const prev = this.prev
     this.prev = snap
     const me = snap.cars.find((c) => c.id === this.selfId)
     if (me) this.hud?.setScore(this.statusOf(me, snap))
-    this.strip?.set(
+    this.standings?.set(
       snap.cars.map((c) => ({
-        text: `${c.pos}. ${this.label(c.id)}${c.finishMs !== null ? ' ✓' : ''}`,
+        id: c.id,
+        pos: c.pos,
+        name: this.label(c.id),
+        color: this.state.colorOf(c.id, PALETTE.text),
         avatar: this.state.avatarOf(c.id),
-        color: this.state.colorOf(c.id),
-        dim: c.gone,
+        mine: c.id === this.selfId,
+        done: c.finishMs !== null,
+        gone: c.gone,
       })),
     )
     if (!prev || this.firstSnapshot) {
-      if (me?.finishMs != null) this.finished = true
+      this.progressMs = snap.raceMs
+      if (me?.finishMs != null) this.onFinished(me, false)
       return
     }
     const before = new Map(prev.cars.map((c) => [c.id, c]))
     for (const c of snap.cars) {
       const was = before.get(c.id)
       if (!was) continue
-      const at = this.toScreen(c.x, c.y)
-      if (c.hits > was.hits && c.id === this.selfId) {
-        burst(this, at.x, at.y, PALETTE.amber, 8, 150)
-        this.sfx.pop()
+      if (c.id !== this.selfId) {
+        // Rivals trading paint (yours sounded when it happened on your screen): a softer crunch.
+        const bumped = c.hits > was.hits && now - this.lastLocalBump > 400
+        if (bumped && now - this.lastRivalBumpAt >= RIVAL_BUMP_MS) {
+          this.lastRivalBumpAt = now
+          this.sfx.quiet(() => this.sfx.crash(), RIVAL_LEVEL * 0.75)
+        }
+        // Someone else takes the flag: the crowd roars (yours plays with your own finish).
+        const done = c.finishMs !== null && was.finishMs === null && !c.gone
+        if (done && now - this.lastCheerAt >= CHEER_GAP_MS) {
+          this.lastCheerAt = now
+          this.sfx.quiet(() => this.sfx.cheer(), RIVAL_LEVEL)
+        }
+        continue
       }
-      if (c.resets > was.resets && c.id === this.selfId) {
-        floatText(this, at.x, at.y - 20, this.t('game.courseRace.rescued'), PALETTE.amber, 12)
-        this.sfx.wrong()
-      }
-      if (c.boost && !was.boost && c.id === this.selfId) this.sfx.coin()
-      if (c.id !== this.selfId) continue
-      const pop = this.progressPop(was, c)
-      if (pop) {
-        floatText(this, at.x, at.y - 24, pop, PALETTE.lime, this.compact ? 12 : 16)
-        this.sfx.correct()
-      }
-      if (c.finishMs !== null && was.finishMs === null) {
-        this.finished = true
-        this.sfx.win()
-        showBanner(
+      const v = this.views.get(c.id)
+      const at = this.toScreen(v?.x ?? c.x, v?.y ?? c.y)
+      if (c.hits > was.hits && now - this.lastLocalBump > 400) this.bumpFx(at)
+      if (c.resets > was.resets) {
+        const q = this.toScreen(c.x, c.y)
+        ring(this, q.x, q.y, v?.color ?? PALETTE.amber, 40 * this.zoom)
+        flash(this, PALETTE.red, 160, 0.25)
+        floatText(
           this,
-          this.banner as Phaser.GameObjects.Text,
-          this.t('game.courseRace.finished', { pos: c.pos }),
-          PALETTE.lime,
+          q.x,
+          q.y - 24,
+          this.t('game.courseRace.rescued'),
+          PALETTE.amber,
+          this.compact ? 12 : 16,
         )
-        this.bannerUntil = this.time.now + 2200
+        this.sfx.wrong()
+        this.cam.ready = false
       }
+      if (c.boost && !was.boost) {
+        // Already heard the frame your car rolled onto the pad (unless the prediction missed it).
+        if (now - this.lastPadAt > 600) this.sfx.powerUp()
+        burst(this, at.x, at.y, PALETTE.cyan, 8, 160)
+      }
+      // Tucked into a slipstream: a rush of air as the tow kicks in (not again for one that flickers).
+      if (c.draft && !was.draft && c.finishMs === null && now - this.lastDraftAt > 2000) {
+        this.lastDraftAt = now
+        this.sfx.whoosh()
+      }
+      this.progress(was, c, snap)
+      if (c.finishMs !== null && was.finishMs === null) this.onFinished(c, true)
     }
     if (me && snap.closing && !prev.closing && me.finishMs === null) {
+      this.sfx.tick()
+      this.say(this.t('game.courseRace.hurry'), PALETTE.amber, BANNER_MS)
+    }
+  }
+
+  // A lap (circuit) or a checkpoint (stage) just went by: a pop with the lap / split time.
+  private progress(was: CourseCar, me: CourseCar, snap: CourseRaceSnapshot): void {
+    if (me.finishMs !== null) return
+    if (this.kind === 'circuit' && me.lap > was.lap) {
+      const lapTime = raceClock(snap.raceMs - this.progressMs)
+      this.progressMs = snap.raceMs
+      const last = me.lap === snap.laps
+      this.sfx.correct()
+      this.say(
+        last ? this.t('game.microRace.finalLap') : this.t('game.courseRace.lap', { lap: me.lap }),
+        last ? PALETTE.amber : PALETTE.cyan,
+        BANNER_MS,
+        lapTime,
+      )
+    } else if (this.kind === 'stage' && me.checkpoint > was.checkpoint && me.splitMs !== null) {
+      this.sfx.correct()
+      this.say(
+        this.t('game.courseRace.split', { time: raceClock(me.splitMs) }),
+        PALETTE.cyan,
+        BANNER_MS,
+        `${me.checkpoint}/${snap.checkpoints}`,
+      )
+    }
+  }
+
+  private onFinished(me: CourseCar, withFx: boolean): void {
+    this.finished = true
+    this.wrongWay = false
+    const win = me.pos === 1
+    this.placeBanner()
+    if (this.banner)
       showBanner(
         this,
-        this.banner as Phaser.GameObjects.Text,
-        this.t('game.courseRace.hurry'),
-        PALETTE.amber,
+        this.banner,
+        win ? this.t('game.common.youWin') : this.t('game.courseRace.finished', { pos: me.pos }),
+        win ? PALETTE.lime : PALETTE.amber,
       )
-      this.bannerUntil = this.time.now + 1600
-    }
+    this.bannerUntil = 0
+    this.subline
+      ?.setText(
+        `${this.t('game.microRace.time', { time: raceClock(me.finishMs ?? 0) })}\n${this.t('game.common.waiting')}`,
+      )
+      .setVisible(true)
+    if (!withFx) return
+    this.lastCheerAt = this.time.now
+    this.sfx.cheer()
+    if (win) this.sfx.win()
+    const x = this.scale.width / 2
+    const y = this.banner?.y ?? this.scale.height / 2
+    burst(this, x, y, PALETTE.amber, 24, 260)
+    burst(this, x, y, this.state.colorOf(this.selfId, PALETTE.lime), 18, 220)
+  }
+
+  // The flag fell before your car made it home: say so, with where it ended up.
+  private timeUp(snap: CourseRaceSnapshot): void {
+    const me = snap.cars.find((c) => c.id === this.selfId)
+    if (!me || me.finishMs !== null || this.finished || this.timeUpShown) return
+    this.timeUpShown = true
+    this.wrongWay = false
+    this.placeBanner()
+    if (this.banner) showBanner(this, this.banner, this.t('game.microRace.outOfTime'), PALETTE.red)
+    this.bannerUntil = 0
+    this.subline?.setText(this.statusOf(me, snap)).setVisible(true)
+  }
+
+  // Transient banner (a lap, a split, hurry, wrong way) with an optional small line; the finish and
+  // out-of-time banners are sticky.
+  private say(text: string, color: number, ms: number, sub = ''): void {
+    if (!this.banner || this.finished || this.timeUpShown) return
+    this.placeBanner()
+    showBanner(this, this.banner, text, color)
+    this.subline?.setText(sub).setVisible(sub !== '')
+    this.bannerUntil = this.time.now + ms
+  }
+
+  // Banners go in the half of the view your car isn't in.
+  private placeBanner(): void {
+    const me = this.views.get(this.selfId)
+    const carY = me ? this.toScreen(me.x, me.y).y : this.top + this.view.h / 2
+    const low = carY < this.top + this.view.h * 0.5
+    const y = this.top + this.view.h * (low ? 0.68 : 0.3)
+    this.banner?.setY(y)
+    this.subline?.setY(y + (this.compact ? 34 : 50))
   }
 }

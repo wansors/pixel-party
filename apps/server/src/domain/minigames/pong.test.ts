@@ -81,6 +81,9 @@ describe('Pong', () => {
     expect(snap.players.b?.ballX).toBeCloseTo(0.7) // right player: mirrored
     expect(snap.players.a?.side).toBe('left')
     expect(snap.players.b?.side).toBe('right')
+    // The velocity is mirrored the same way: toward b's paddle is "toward me" on b's screen.
+    expect(snap.players.a?.vx).toBeCloseTo(0.55)
+    expect(snap.players.b?.vx).toBeCloseTo(-0.55)
   })
 
   test('wins rank by point difference across duels', () => {

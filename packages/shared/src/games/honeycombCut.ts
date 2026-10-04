@@ -104,9 +104,27 @@ export function honeycombOutline(shape: HoneycombShape): { x: number; y: number 
   }
 }
 
+// The cut mask on the wire: hex, four segments per digit (segment 4k + j is bit j of digit k) — 40
+// characters for the 160 segments instead of 160.
+export function honeycombCutHex(cut: readonly boolean[]): string {
+  let hex = ''
+  for (let k = 0; k < cut.length; k += 4) {
+    const nibble =
+      (cut[k] ? 1 : 0) | (cut[k + 1] ? 2 : 0) | (cut[k + 2] ? 4 : 0) | (cut[k + 3] ? 8 : 0)
+    hex += nibble.toString(16)
+  }
+  return hex
+}
+
+// Whether segment i is cut in a hex mask from honeycombCutHex.
+export function honeycombIsCut(hex: string, i: number): boolean {
+  const nibble = Number.parseInt(hex[i >> 2] ?? '0', 16)
+  return ((nibble >> (i & 3)) & 1) === 1
+}
+
 export interface HoneycombPlayer {
   id: string
-  // Cut mask over the outline segments, '1' = cut.
+  // Cut mask over the outline segments (honeycombCutHex / honeycombIsCut).
   cut: string
   progress: number
   cracks: number

@@ -1,12 +1,13 @@
 import { type MazeSprintSnapshot, PALETTE } from '@pp/shared'
 import type Phaser from 'phaser'
-import { AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
+import { AvatarSprite, type AvatarWarmSpec, avatarPx, ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, flash, floatText, punch, showBanner } from '../fx'
 import {
   bodyStyle,
   ensurePixelBlock,
   ensurePixelGrid,
   fitFontSize,
+  fitText,
   headlineStyle,
   hexToCss,
   shade,
@@ -26,12 +27,29 @@ const DIR_STEP: Record<Dir, { dx: number; dy: number }> = {
 }
 const GLYPH: Record<Dir, string> = { up: '▲', down: '▼', left: '◀', right: '▶' }
 const MOVE_MS = 90
-// After our last key press, snapshots may not include that move yet: keep the local guess meanwhile.
-const PREDICT_HOLD_MS = 150
+// After our last step, snapshots may not include it yet: keep the local position meanwhile (then the
+// server's word wins, should the two ever disagree).
+const PREDICT_HOLD_MS = 300
+const DIRS: readonly Dir[] = ['up', 'down', 'left', 'right']
+// Every frame of a token's walk (and its idle blink / finish smile), generated before they're needed.
+const WALK_WARM: readonly AvatarWarmSpec[] = [
+  ['side', 'idle', 1],
+  ['front', 'idle', 1],
+  ['front', 'idle', 2],
+  ['back', 'idle', 0],
+  ['back', 'idle', 1],
+  ['back', 'idle', 2],
+  ['side', 'idle', 0],
+  ['side', 'blink', 0],
+  ['front', 'blink', 0],
+  ['front', 'happy', 0],
+]
 // Walking pace, the same on every machine: a held key or pad button steps every STEP_MS after a first
 // HOLD_DELAY_MS (the OS key repeat is ignored), and a press faster than that waits its turn. The server
 // drops steps under 90 ms apart, so this pace never loses one.
 const STEP_MS = 100
+// Walking into a wall with the key held bumps every step; the bump is heard at most this often.
+const BUMP_EVERY_MS = 220
 const HOLD_DELAY_MS = 220
 // Rival progress bars: row height bounds (two columns when one doesn't fit a full room).
 const BAR_ROW_MAX = 24
@@ -76,9 +94,8 @@ interface BarRow {
 // beveled walls) with your lobby avatar in it, the finish flag in the exit cell and a breadcrumb trail
 // of where you have been. Rivals show as progress bars (steps left to the exit) beside the maze — their
 // spots would give the path away — and step into the maze once you finish. Movement is
-// server-validated: keys and the arcade D-pad just send an intent, at a fixed pace. A wall bump is
-// predicted locally from the same wall data for instant feedback; the token itself only moves when the
-// snapshot says so.
+// server-validated, at a fixed pace, but predicted from the same wall data: your token steps (or bumps
+// a wall) on the frame you press, and the snapshot only corrects it if the server ever disagrees.
 export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
   private built = false
   private trail?: Phaser.GameObjects.Graphics
@@ -103,6 +120,9 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
   private visited = new Set<number>()
   private predicted = 0
   private lastMoveAt = Number.NEGATIVE_INFINITY
+  // Footfalls alternate feet; wall bumps are throttled.
+  private foot = 0
+  private bumpAt = Number.NEGATIVE_INFINITY
   // Pacing: the direction held (key or pad), a press waiting for the next step slot, and the slots.
   private heldDir?: Dir
   private padHeld?: Dir
@@ -135,6 +155,8 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
     this.visited = new Set()
     this.predicted = 0
     this.lastMoveAt = Number.NEGATIVE_INFINITY
+    this.foot = 0
+    this.bumpAt = Number.NEGATIVE_INFINITY
     this.heldDir = undefined
     this.padHeld = undefined
     this.queuedDir = undefined
@@ -180,7 +202,7 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
     this.buildPad(dpadX, dpadY, btn, gap)
     this.barsGfx = this.add.graphics()
 
-    this.add
+    const hint = this.add
       .text(
         width / 2,
         height - hintH / 2,
@@ -188,6 +210,7 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
         bodyStyle(this.compact ? 11 : 14, PALETTE.dim),
       )
       .setOrigin(0.5)
+    fitText(hint, width - 16, this.compact ? 11 : 14)
 
     this.banner = addBanner(this)
     this.banner.setY(this.area.y + this.area.size / 2)
@@ -278,11 +301,17 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
     else this.queuedDir = dir
   }
 
-  // Paced steps: a press that came early, then the held direction's repeats.
+  private isHeld(dir: Dir): boolean {
+    return this.padHeld === dir || this.keys.get(dir)?.some((k) => k.isDown) === true
+  }
+
+  // Paced steps: a press that came early, then the held direction's repeats (letting go of one key
+  // while still holding another walks on that way).
   private pace(now: number): void {
     const held = this.heldDir
-    if (held && this.padHeld !== held && !this.keys.get(held)?.some((k) => k.isDown)) {
-      this.heldDir = undefined
+    if (held && !this.isHeld(held)) {
+      this.heldDir = DIRS.find((d) => this.isHeld(d))
+      this.repeatAt = now
     }
     if (now < this.nextStepAt) return
     if (this.queuedDir) {
@@ -302,14 +331,34 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
       return
     }
     const next = this.neighbor(this.predicted, dir)
-    this.lastMoveAt = this.time.now
+    const now = this.time.now
+    this.lastMoveAt = now
     if (next === null) {
-      this.sfx.tick()
+      if (now - this.bumpAt >= BUMP_EVERY_MS) {
+        this.bumpAt = now
+        this.sfx.bounce(0)
+      }
       this.bump(dir)
       return
     }
-    this.sfx.click()
+    this.sfx.step(this.foot++)
     this.predicted = next
+    this.stepToken(this.selfId, next)
+  }
+
+  // Walks a token to `cell` (facing the way it goes); the own token leaves breadcrumbs.
+  private stepToken(id: string, cell: number): void {
+    const token = this.tokens.get(id)
+    if (!token || token.cell === cell) return
+    const from = this.cellCenter(token.cell)
+    const to = this.cellCenter(cell)
+    token.avatar.faceMotion(to.x - from.x, to.y - from.y, 0)
+    token.movedAt = this.time.now
+    token.cell = cell
+    const { x, y } = this.tokenPos(cell, token.slot)
+    this.tweens.killTweensOf(token.img)
+    this.tweens.add({ targets: token.img, x, y, duration: MOVE_MS, ease: 'Quad.easeOut' })
+    if (id === this.selfId) this.markVisited(cell)
   }
 
   // The cell one step from `from` in `dir`, or null if a wall (or the maze edge) blocks it.
@@ -439,6 +488,9 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
     if (this.state.tick === this.lastTick) return
     this.lastTick = this.state.tick
     if (!this.synced) {
+      // The walk cycle's textures, yours first (rivals only appear once you finish).
+      const others = Object.keys(snap.pos).filter((id) => id !== this.selfId)
+      this.warmAvatars(this.selfId in snap.pos ? [this.selfId, ...others] : others, WALK_WARM)
       // Watching a race you're not in: there's nothing to hide.
       this.spectating = !(this.selfId in snap.pos)
       this.revealed = this.spectating
@@ -448,7 +500,7 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
       }
     }
     if (!this.spectating) {
-      this.hud?.setScore(this.t('game.mazeSprint.steps', { n: snap.progress[this.selfId] ?? 0 }))
+      this.hud?.setScore(this.t('game.mazeSprint.steps', { n: snap.steps[this.selfId] ?? 0 }))
     }
     this.trackFinishes(snap)
     this.syncTokens(snap)
@@ -463,8 +515,8 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
     const others = Object.keys(snap.pos).filter((id) => id !== this.selfId)
     const ids = this.selfId in snap.pos ? [...others, this.selfId] : others
     ids.forEach((id, i) => {
-      const cell = snap.pos[id] ?? 0
       const mine = id === this.selfId
+      const cell = mine ? this.predicted : (snap.pos[id] ?? 0)
       // While you race, rivals stay off the maze (their spots would show you the way).
       if (!mine && !this.revealed) return
       const slot = mine ? 0 : (i % 4) + 1
@@ -482,16 +534,7 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
         if (mine) this.markVisited(cell)
         return
       }
-      if (token.cell === cell) return
-      const from = this.cellCenter(token.cell)
-      const to = this.cellCenter(cell)
-      token.avatar.faceMotion(to.x - from.x, to.y - from.y, 0)
-      token.movedAt = this.time.now
-      token.cell = cell
-      const { x, y } = this.tokenPos(cell, slot)
-      this.tweens.killTweensOf(token.img)
-      this.tweens.add({ targets: token.img, x, y, duration: MOVE_MS, ease: 'Quad.easeOut' })
-      if (mine) this.markVisited(cell)
+      this.stepToken(id, cell)
     })
   }
 
@@ -512,18 +555,23 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
       .sort((a, b) => a[1] - b[1])
     const first = !this.synced
     this.synced = true
+    let rivalIn = false
+    let selfIn = false
     finishers.forEach(([id], i) => {
       if (this.finished.has(id)) return
       this.finished.add(id)
       if (id === this.selfId) {
         this.done = true
         this.revealed = true
+        selfIn = !first
         this.onFinish(i + 1, !first)
       } else if (!first) {
-        this.sfx.pop()
+        rivalIn = true
         burst(this, exit.x, exit.y, this.state.colorOf(id), 12, 160)
       }
     })
+    // Someone else made it out: a distant crowd (once per snapshot, and not over your own finish).
+    if (rivalIn && !selfIn) this.sfx.quiet(() => this.sfx.cheer(), 0.5)
   }
 
   // Everyone's progress as bars (steps done out of the start's distance to the exit), finishers first,
@@ -601,6 +649,7 @@ export class MazeSprintScene extends MiniGameScene<MazeSprintSnapshot> {
   private onFinish(place: number, withFx: boolean): void {
     const exit = this.cellCenter(this.exitIndex)
     if (withFx) {
+      this.sfx.cheer()
       this.sfx.coin()
       burst(this, exit.x, exit.y, PALETTE.amber, 24, 280)
       burst(this, exit.x, exit.y, this.selfColor, 18, 220)

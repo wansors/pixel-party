@@ -3,7 +3,7 @@ import { CourseRaceSceneBase } from './CourseRaceSceneBase'
 import type { SceneDeps } from './MiniGameScene'
 
 // Rally Stage: a point-to-point time trial on gravel and tarmac — everyone drives the same stage at
-// once, rivals shown as ghosts. Split times pop at each checkpoint.
+// once, rivals shown as ghosts. Split times pop at each checkpoint; the stage clock runs on top.
 export class RallyStageScene extends CourseRaceSceneBase {
   constructor(...deps: SceneDeps) {
     super('rally-stage', 'stage', ...deps)
@@ -16,14 +16,4 @@ export class RallyStageScene extends CourseRaceSceneBase {
       pct: Math.floor(me.progress * 100),
     })
   }
-
-  protected progressPop(prev: CourseCar, me: CourseCar): string | null {
-    if (me.checkpoint <= prev.checkpoint || me.splitMs === null) return null
-    return this.t('game.courseRace.split', { time: formatSplit(me.splitMs) })
-  }
-}
-
-function formatSplit(ms: number): string {
-  const tenths = Math.floor(ms / 100)
-  return `${Math.floor(tenths / 600)}:${String(Math.floor((tenths % 600) / 10)).padStart(2, '0')}.${tenths % 10}`
 }

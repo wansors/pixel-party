@@ -1,6 +1,7 @@
 import type { BombRelayInput, BombRelaySnapshot, TeamId } from '@pp/shared'
 import type { Random } from '../ports/Random'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
+import { MASHER_MAX_PRESSES_PER_SEC } from './buttonMasher'
 
 const DEFAULT_DURATION_MS = 25_000
 const LEG_TAPS = 12 // mashes to fill a leg and pass the bomb on
@@ -10,6 +11,9 @@ const FUSE_MAX_MS = 5000
 // skipped: the bomb moves on with a fresh fuse and no relay credit, so an AFK-but-connected teammate
 // costs the team this much time per lap instead of a whole fuse.
 const IDLE_PASS_MS = 1800
+// Mashes counted per player per rolling second — the Button Masher's human ceiling, so an autoclicker
+// can't pass the bomb on in an instant.
+const RATE_WINDOW_MS = 1000
 
 interface TeamBomb {
   members: PlayerId[]
@@ -24,6 +28,8 @@ interface TeamBomb {
 export interface BombRelayState {
   teams: Map<TeamId, TeamBomb>
   playerTeam: Map<PlayerId, TeamId>
+  // playerId -> times of the mashes counted in the last RATE_WINDOW_MS (oldest first).
+  recent: Map<PlayerId, number[]>
   random: Random
   startedAt: number
   endsAt: number
@@ -68,6 +74,7 @@ export class BombRelay implements MiniGame<BombRelayState, BombRelayInput> {
     return {
       teams,
       playerTeam,
+      recent: new Map([...playerTeam.keys()].map((id) => [id, []])),
       random: ctx.random,
       startedAt: ctx.now,
       endsAt: ctx.now + durationMs,
@@ -86,6 +93,11 @@ export class BombRelay implements MiniGame<BombRelayState, BombRelayInput> {
     const bomb = team ? state.teams.get(team) : undefined
     if (!bomb) return state
     if (bomb.members[bomb.holderIdx] !== playerId) return state // only the current holder mashes
+    const recent = state.recent.get(playerId)
+    if (!recent) return state
+    while (recent.length > 0 && (recent[0] as number) <= now - RATE_WINDOW_MS) recent.shift()
+    if (recent.length >= MASHER_MAX_PRESSES_PER_SEC) return state
+    recent.push(now)
     bomb.legProgress++
     bomb.lastActionAt = now
     if (bomb.legProgress >= LEG_TAPS) {

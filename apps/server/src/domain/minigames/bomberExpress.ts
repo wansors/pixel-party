@@ -1,4 +1,11 @@
-import { BOMBER, type BomberDir, type BomberInput, type BomberSnapshot } from '@pp/shared'
+import {
+  BOMBER,
+  BOMBER_DIRS,
+  type BomberDir,
+  type BomberInput,
+  type BomberSnapshot,
+  bomberStepDir,
+} from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 60_000
@@ -23,12 +30,8 @@ const SPAWNS: readonly (readonly [number, number])[] = [
 ]
 const CRATE_DENSITY = 0.6
 const DROP_CHANCE = 0.32
-const DIRS: Readonly<Record<BomberDir, readonly [number, number]>> = {
-  up: [0, -1],
-  down: [0, 1],
-  left: [-1, 0],
-  right: [1, 0],
-}
+const DIRS = BOMBER_DIRS
+const isDir = (d: unknown): d is BomberDir => typeof d === 'string' && d in DIRS
 
 interface Player {
   id: PlayerId
@@ -40,6 +43,8 @@ interface Player {
   stepStart: number
   stepEnd: number
   dir: BomberDir | null
+  // The direction held before `dir`: taken when `dir` is blocked (an early turn press keeps you going).
+  alt: BomberDir | null
   alive: boolean
   range: number
   maxBombs: number
@@ -127,6 +132,7 @@ export class BomberExpress implements MiniGame<BomberState, BomberInput> {
           stepStart: 0,
           stepEnd: 0,
           dir: null,
+          alt: null,
           alive: true,
           range: BOMBER.startRange,
           maxBombs: BOMBER.startBombs,
@@ -149,8 +155,12 @@ export class BomberExpress implements MiniGame<BomberState, BomberInput> {
     const p = state.players.find((x) => x.id === playerId)
     if (!p?.alive) return state
     if (input.kind === 'move') {
-      if (input.dir === null || (typeof input.dir === 'string' && input.dir in DIRS))
-        p.dir = input.dir
+      if (input.dir !== null && !isDir(input.dir)) return state
+      p.dir = input.dir
+      p.alt = isDir(input.alt) && input.alt !== input.dir ? input.alt : null
+      // A step starts the moment the key does, not on the next tick (the client predicts from the
+      // press, so this keeps the two within a network hop of each other).
+      this.walk(state, p, now)
     } else if (input.kind === 'bomb') {
       const [x, y] = this.tileOf(p, now)
       const mine = state.bombs.filter((b) => b.owner === p.idx).length
@@ -207,11 +217,11 @@ export class BomberExpress implements MiniGame<BomberState, BomberInput> {
       else if (c === 's') p.speed = Math.min(BOMBER.stepMs.length - 1, p.speed + 1)
       if (isPower(c)) state.cells[i] = '.'
     }
-    if (!p.dir) return
-    const [dx, dy] = DIRS[p.dir]
+    const go = bomberStepDir(p.dir, p.alt, (dx, dy) => this.walkable(state, p.x + dx, p.y + dy))
+    if (!go) return
+    const [dx, dy] = DIRS[go]
     const nx = p.x + dx
     const ny = p.y + dy
-    if (!this.walkable(state, nx, ny)) return
     // A held direction keeps the stride going from the exact arrival time (no tick-rate stutter).
     const start = Math.max(readyAt, now - 50)
     p.tx = nx
@@ -262,6 +272,7 @@ export class BomberExpress implements MiniGame<BomberState, BomberInput> {
     p.alive = false
     p.left = true
     p.dir = null
+    p.alt = null
     p.outAt = now
     return state
   }

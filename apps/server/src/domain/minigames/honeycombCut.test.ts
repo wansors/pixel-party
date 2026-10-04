@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { HONEYCOMB, HONEYCOMB_SHAPES, honeycombOutline } from '@pp/shared'
+import {
+  HONEYCOMB,
+  HONEYCOMB_SHAPES,
+  honeycombCutHex,
+  honeycombIsCut,
+  honeycombOutline,
+} from '@pp/shared'
 import { SeededRandom } from '../../infrastructure/driven/random/SeededRandom'
 import { HoneycombCut, type HoneycombState } from './honeycombCut'
 
@@ -49,6 +55,15 @@ describe('honeycomb outlines', () => {
   })
 })
 
+describe('honeycomb cut mask', () => {
+  test('the hex mask round-trips every segment in a quarter of the characters', () => {
+    const cut = Array.from({ length: HONEYCOMB.segments }, (_, i) => i % 3 === 0 || i > 150)
+    const hex = honeycombCutHex(cut)
+    expect(hex).toHaveLength(HONEYCOMB.segments / 4)
+    expect(cut.every((b, i) => honeycombIsCut(hex, i) === b)).toBe(true)
+  })
+})
+
 describe('HoneycombCut', () => {
   test('tracing the whole outline calmly cuts the shape out', () => {
     const s = init(['a', 'b'])
@@ -88,6 +103,18 @@ describe('HoneycombCut', () => {
     const p = s.outline[0] as { x: number; y: number }
     game.onInput(s, 'a', { kind: 'needle', x: p.x, y: p.y, down: true }, 1700)
     expect(carver(s, 'a').cut.some(Boolean)).toBe(false)
+  })
+
+  test('a needle pressed outside the candy (on the tin) neither cuts nor cracks', () => {
+    const s = init(['a'])
+    game.onInput(s, 'a', { kind: 'needle', x: 0.02, y: 0.5, down: true }, 100)
+    game.onInput(s, 'a', { kind: 'needle', x: 0.98, y: 0.98, down: true }, 140)
+    expect(carver(s, 'a').cracks).toBe(0)
+    expect(carver(s, 'a').cut.some(Boolean)).toBe(false)
+    // Dragged in from the tin onto the line, it starts cutting.
+    const p = s.outline[0] as { x: number; y: number }
+    game.onInput(s, 'a', { kind: 'needle', x: p.x, y: p.y, down: true }, 180)
+    expect(carver(s, 'a').cut.some(Boolean)).toBe(true)
   })
 
   test('rushing the needle along the line cracks it', () => {

@@ -6,11 +6,18 @@ import {
   roomRushSlotAngle,
 } from '@pp/shared'
 import type Phaser from 'phaser'
-import { AvatarSprite, avatarPx } from '../avatars'
+import { AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
 import { addBanner, eliminate, flash, floatText, ring, shake, showBanner } from '../fx'
 import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
-import { ensureBevelPanel, fitFontSize, headlineStyle, hexToCss, shade } from '../pixelStyle'
-import { YouMarker, addShadow } from '../playerMarks'
+import {
+  ensureBevelPanel,
+  ensurePixelGrid,
+  fitFontSize,
+  headlineStyle,
+  hexToCss,
+  shade,
+} from '../pixelStyle'
+import { type Shadow, YouMarker, addShadow } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -19,27 +26,41 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 // called, some doors open and each open room shows a live "count/N" counter. The moment a room holds
 // exactly N its door slams shut (safe!); at the buzzer everyone else is ELIMINATED — unless nobody made
 // it, then the call is replayed. Steer with the arrows/WASD or by holding the pointer where you want to
-// go; SPACE / the DASH button shoves.
+// go; SPACE / SHIFT / the DASH button shoves. Bodies are interpolated a full snapshot interval behind
+// (no pause-and-hop); your own push shows at once as an arrow at your feet, a dash as a ring.
 
 const SPIN = 0.45 // carousel rad/s (mirrors the server, to extrapolate the wedges between snapshots)
+// Snapshots arrive every ~150 ms: interpolating a full interval behind keeps bodies gliding.
+const RENDER_DELAY_MS = 150
+const ARROW_ROWS = ['__W___', '__WW__', 'WWWWW_', 'WWWWWW', 'WWWWW_', '__WW__', '__W___']
 const WEDGES = 8
 const WEDGE_COLORS = [PALETTE.magenta, PALETTE.amber, PALETTE.cyan, PALETTE.lime]
+// Rivals' moments play at this fraction of the volume (yours stay full), so a full room stays readable.
+const RIVAL_LEVEL = 0.5
 
 interface View {
   avatar: AvatarSprite
-  shadow: Phaser.GameObjects.Ellipse
+  shadow: Shadow
   gone: boolean
   x: number
   y: number
 }
 
 export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
-  private readonly interp = new SnapshotInterpolator<RoomRushSnapshot>(100)
+  private readonly interp = new SnapshotInterpolator<RoomRushSnapshot>(RENDER_DELAY_MS)
   private compact = false
   private arena = { cx: 0, cy: 0, size: 0 }
   private floor?: Phaser.GameObjects.Graphics
-  private carousel?: Phaser.GameObjects.Graphics
+  // The carousel is baked once and just rotated; its rim and the rooms redraw only when they change
+  // (the open doors' glow pulses by alpha, not by redrawing).
+  private carousel?: Phaser.GameObjects.Image
+  private rim?: Phaser.GameObjects.Graphics
   private rooms?: Phaser.GameObjects.Graphics
+  private doors?: Phaser.GameObjects.Graphics
+  private roomsKey = ''
+  private rimKey = ''
+  private chromeRef: unknown = null
+  private warmed = false
   private counters: Phaser.GameObjects.Text[] = []
   private callBar?: Phaser.GameObjects.Graphics
   private callBox = { x: 0, y: 0, w: 0, h: 0 }
@@ -51,6 +72,7 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
   private dashBtn?: Phaser.GameObjects.Image
   private dashText?: Phaser.GameObjects.Text
   private dashKeys = { up: '', down: '' }
+  private arrow?: Phaser.GameObjects.Image
   private views = new Map<string, View>()
   private avatarPx = 0
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
@@ -68,6 +90,8 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
   private lastPhase = ''
   private lastCall = 0
   private lockedSeen = new Set<number>()
+  // You were already safe inside a locked room as of the last snapshot.
+  private wasSafe = false
   private bannerUntil = 0
 
   constructor(...deps: SceneDeps) {
@@ -90,8 +114,13 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
     this.lastTick = -1
     this.snapAt = 0
     this.lastPhase = ''
+    this.roomsKey = ''
+    this.rimKey = ''
+    this.chromeRef = null
+    this.warmed = false
     this.lastCall = 0
     this.lockedSeen = new Set()
+    this.wasSafe = false
     this.bannerUntil = 0
     this.promptText = ''
 
@@ -107,22 +136,30 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
     this.callBox = { x: width / 2 - barW / 2, y: promptY + promptSize / 2 + 8, w: barW, h: 6 }
     this.callBar = this.add.graphics().setDepth(600)
 
-    // Dash button (bottom), the arena fills the space in between.
+    // Dash button: under the arena, or — on a wide screen, where the square arena is height-bound —
+    // beside it, so the arena gets the full height.
     const btnH = this.compact ? 72 : 56
-    const btnW = Math.min(width - 32, this.compact ? 260 : 300)
-    const btnY = height - (this.compact ? 14 : 16) - btnH / 2
+    const areaTop = this.callBox.y + this.callBox.h + 10
+    const hintH = this.compact ? 0 : 28
+    const sideSize = Math.floor(Math.min(width - 16, height - 16 - hintH - areaTop))
+    const margin = (width - sideSize) / 2
+    const side = !this.compact && margin - 40 >= 180
+    const btnW = side
+      ? Math.min(300, Math.floor(margin - 40))
+      : Math.min(width - 32, this.compact ? 260 : 300)
+    const btnX = side ? width - margin / 2 : width / 2
+    const btnY = side
+      ? areaTop + (height - 16 - hintH - areaTop) / 2
+      : height - (this.compact ? 14 : 16) - btnH / 2
     this.dashKeys = {
       up: ensureBevelPanel(this, btnW, btnH, PALETTE.orange, 5, true),
       down: ensureBevelPanel(this, btnW, btnH, shade(PALETTE.orange, -0.45), 5, true),
     }
-    this.dashBtn = this.add
-      .image(width / 2, btnY, this.dashKeys.up)
-      .setDepth(700)
-      .setInteractive()
+    this.dashBtn = this.add.image(btnX, btnY, this.dashKeys.up).setDepth(700).setInteractive()
     const dashLabel = this.t('game.roomRush.dash')
     this.dashText = this.add
       .text(
-        width / 2,
+        btnX,
         btnY,
         dashLabel,
         headlineStyle(fitFontSize(dashLabel, btnW - 20, this.compact ? 16 : 24), PALETTE.text, {
@@ -134,14 +171,30 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
       .setDepth(701)
     this.dashBtn.on('pointerdown', () => this.dash())
 
-    const areaTop = this.callBox.y + this.callBox.h + 10
-    const areaBottom = btnY - btnH / 2 - 10
+    let areaBottom = side ? height - 10 : btnY - btnH / 2 - 10
+    // The keys, named once above the DASH button (phones steer by touch).
+    if (!this.compact) {
+      const hint = this.t('game.roomRush.hint')
+      const hintText = this.add
+        .text(
+          width / 2,
+          areaBottom,
+          hint,
+          headlineStyle(fitFontSize(hint, width - 32, 16), PALETTE.dim),
+        )
+        .setOrigin(0.5, 1)
+        .setDepth(600)
+      areaBottom = hintText.y - hintText.height - 8
+    }
     const size = Math.floor(Math.min(width - 16, areaBottom - areaTop))
     this.arena = { cx: width / 2, cy: areaTop + (areaBottom - areaTop) / 2, size }
     this.avatarPx = avatarPx(Math.round(ROOM_RUSH.playerR * 2 * size * 1.25))
     this.floor = this.add.graphics().setDepth(1)
-    this.carousel = this.add.graphics().setDepth(2)
+    const hub = this.toScreen(0.5, 0.5)
+    this.carousel = this.add.image(hub.x, hub.y, this.ensureWheel()).setDepth(2)
+    this.rim = this.add.graphics().setDepth(2)
     this.rooms = this.add.graphics().setDepth(3)
+    this.doors = this.add.graphics().setDepth(3)
     this.paintFloor()
     for (let slot = 0; slot < ROOM_RUSH.slots; slot++) {
       const a = roomRushSlotAngle(slot)
@@ -164,8 +217,15 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
     }
     this.marker = new YouMarker(this, this.compact ? 8 : 12, 75)
     this.banner = addBanner(this)
+    const arrowKey = ensurePixelGrid(this, {
+      key: 'rr-steer',
+      rows: ARROW_ROWS,
+      legend: { W: PALETTE.amber },
+      pixelSize: this.compact ? 2 : 3,
+    })
+    this.arrow = this.add.image(0, 0, arrowKey).setDepth(58).setAlpha(0.85).setVisible(false)
 
-    // Controls: arrows / WASD, or hold the pointer where you want to go; SPACE dashes.
+    // Controls: arrows / WASD, or hold the pointer where you want to go; SPACE / SHIFT dash.
     this.cursors = this.input.keyboard?.createCursorKeys()
     const kb = this.input.keyboard
     if (kb) {
@@ -176,7 +236,7 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
         D: kb.addKey('D'),
       }
     }
-    this.onKey('SPACE', () => this.dash())
+    for (const k of ['SPACE', 'SHIFT', 'ENTER']) this.onKey(k, () => this.dash())
     this.input.on(
       'pointerdown',
       (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
@@ -239,7 +299,10 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
     const me = snap?.players.find((p) => p.id === this.selfId)
     if (!snap || !me?.alive || me.dashMs > 0 || snap.phase === 'reveal' || this.state.final) return
     this.sendInput({ kind: 'dash' })
-    this.sfx.click()
+    this.sfx.whoosh()
+    // The burst shows at once (your body follows the server a beat later).
+    const v = this.views.get(this.selfId)
+    if (v && !Number.isNaN(v.x)) ring(this, v.x, v.y, PALETTE.orange, this.avatarPx * 1.1)
     if (this.dashBtn) {
       this.dashBtn.setTexture(this.dashKeys.down)
       this.time.delayedCall(120, () => this.dashBtn?.setTexture(this.dashKeys.up))
@@ -248,6 +311,18 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
 
   protected frame(snap: RoomRushSnapshot | null, time: number): void {
     if (!snap) return
+    if (!this.warmed) {
+      this.warmed = true
+      this.warmAvatars(
+        snap.players.map((p) => p.id),
+        [
+          ['front', 'happy', 0],
+          ['front', 'ko', 0],
+          ['back', 'idle', 0],
+          ['side', 'idle', 0],
+        ],
+      )
+    }
     if (this.state.tick !== this.lastTick) {
       this.lastTick = this.state.tick
       this.snapAt = time
@@ -255,14 +330,44 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
       this.onSnapshot(snap)
     }
     this.steer(snap, time)
-    this.paintCarousel(snap, time - this.snapAt)
-    this.paintRooms(snap, time)
+    this.carousel?.setRotation(snap.carouselAngle + (SPIN * (time - this.snapAt)) / 1000)
+    this.paintRooms(snap)
+    this.doors?.setAlpha(0.5 + 0.5 * Math.sin(time / 120))
     this.paintPlayers(time)
-    this.paintChrome(snap, time)
+    if (snap !== this.chromeRef) {
+      this.chromeRef = snap
+      this.paintChrome(snap)
+    }
+    this.paintCallBar(snap, time - this.snapAt)
+    if (this.banner?.visible && time > this.bannerUntil && !this.state.final)
+      this.banner.setVisible(false)
+  }
+
+  // The carousel's wedges and hub, drawn once into a texture (the image rotates).
+  private ensureWheel(): string {
+    const r = Math.round(ROOM_RUSH.carouselR * this.arena.size)
+    const key = `rr-wheel-${r}`
+    if (this.textures.exists(key)) return key
+    const g = this.make.graphics({ x: 0, y: 0 }, false)
+    for (let i = 0; i < WEDGES; i++) {
+      const a0 = (i * Math.PI * 2) / WEDGES
+      const a1 = a0 + (Math.PI * 2) / WEDGES
+      g.fillStyle(shade(WEDGE_COLORS[i % WEDGE_COLORS.length] ?? PALETTE.magenta, -0.45), 1)
+      g.slice(r, r, r, a0, a1, false)
+      g.fillPath()
+    }
+    g.fillStyle(PALETTE.amber, 1)
+    g.fillCircle(r, r, Math.max(4, r * 0.12))
+    g.generateTexture(key, r * 2, r * 2)
+    g.destroy()
+    return key
   }
 
   private steer(snap: RoomRushSnapshot, time: number): void {
-    if (!snap.players.some((p) => p.id === this.selfId && p.alive)) return
+    if (!snap.players.some((p) => p.id === this.selfId && p.alive) || this.state.final) {
+      this.dir = { dx: 0, dy: 0 }
+      return
+    }
     const keys = this.cursors
     const w = this.wasd
     const kx =
@@ -320,6 +425,7 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
     // The eliminated stay on the floor through the reveal (for their stamp); anyone out otherwise (a
     // player who left mid-call) just fades.
     if (snap.phase !== 'reveal') for (const p of snap.players) if (!p.alive) this.fadeOut(p.id)
+    let slammed = false
     for (const room of snap.rooms) {
       if (!room.locked || this.lockedSeen.has(room.slot)) continue
       this.lockedSeen.add(room.slot)
@@ -327,9 +433,16 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
       const c = this.roomPoint(room.slot, 0, 0)
       ring(this, c.x, c.y, PALETTE.lime, this.arena.size * ROOM_RUSH.half * 1.4)
       shake(this, 0.003, 90)
-      if (me?.safe) this.sfx.correct()
-      else this.sfx.click()
+      slammed = true
     }
+    // A door slams shut (one slam per snapshot): the one that shuts you in safe slams loud and chimes,
+    // the others' doors softer.
+    const mine = slammed && !!me?.safe && !this.wasSafe
+    if (mine) {
+      this.sfx.lock()
+      this.sfx.correct()
+    } else if (slammed) this.sfx.quiet(() => this.sfx.lock(), RIVAL_LEVEL)
+    this.wasSafe = !!me?.safe
   }
 
   private onBuzzer(snap: RoomRushSnapshot, me: RoomRushPlayer | undefined): void {
@@ -346,7 +459,10 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
       this.bannerUntil = this.time.now + 1200
       return
     }
-    if (snap.outThisCall.length > 0) this.sfx.eliminated()
+    // One sting for the whole batch: full if it took you, softer if it only took rivals.
+    const tookMe = !!me && snap.outThisCall.includes(me.id)
+    if (snap.outThisCall.length > 0)
+      this.sfx.quiet(() => this.sfx.eliminated(), tookMe ? 1 : RIVAL_LEVEL)
     for (const id of snap.outThisCall) {
       const p = snap.players.find((q) => q.id === id)
       if (!p) continue
@@ -374,28 +490,24 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
       this.tweens.add({ targets: img, alpha: 0, scale: img.scale * 0.5, delay: 350, duration: 500 })
   }
 
-  private paintCarousel(snap: RoomRushSnapshot, since: number): void {
-    const g = this.carousel as Phaser.GameObjects.Graphics
-    g.clear()
-    const c = this.toScreen(0.5, 0.5)
-    const r = ROOM_RUSH.carouselR * this.arena.size
-    const angle = snap.carouselAngle + (SPIN * since) / 1000
-    for (let i = 0; i < WEDGES; i++) {
-      const a0 = angle + (i * Math.PI * 2) / WEDGES
-      const a1 = a0 + (Math.PI * 2) / WEDGES
-      g.fillStyle(shade(WEDGE_COLORS[i % WEDGE_COLORS.length] ?? PALETTE.magenta, -0.45), 1)
-      g.slice(c.x, c.y, r, a0, a1, false)
-      g.fillPath()
+  // Rooms (walls, fills, shut doors, counters) and the carousel's rim: redrawn only when they change.
+  private paintRooms(snap: RoomRushSnapshot): void {
+    const rimKey = snap.phase
+    if (rimKey !== this.rimKey && this.rim) {
+      this.rimKey = rimKey
+      const c = this.toScreen(0.5, 0.5)
+      this.rim
+        .clear()
+        .lineStyle(4, PALETTE.amber, snap.phase === 'music' ? 1 : 0.6)
+        .strokeCircle(c.x, c.y, ROOM_RUSH.carouselR * this.arena.size)
     }
-    g.lineStyle(4, PALETTE.amber, snap.phase === 'music' ? 1 : 0.6)
-    g.strokeCircle(c.x, c.y, r)
-    g.fillStyle(PALETTE.amber, 1)
-    g.fillCircle(c.x, c.y, Math.max(4, r * 0.12))
-  }
-
-  private paintRooms(snap: RoomRushSnapshot, time: number): void {
+    const key = `${snap.phase}:${snap.n}:${snap.rooms.map((r) => `${r.slot},${r.count},${r.locked}`).join(';')}`
+    if (key === this.roomsKey) return
+    this.roomsKey = key
     const g = this.rooms as Phaser.GameObjects.Graphics
+    const doors = this.doors as Phaser.GameObjects.Graphics
     g.clear()
+    doors.clear()
     const wallW = Math.max(3, Math.round(this.arena.size / 140))
     const d = ROOM_RUSH.door / ROOM_RUSH.half
     for (let slot = 0; slot < ROOM_RUSH.slots; slot++) {
@@ -423,14 +535,16 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
       line(pts[3] as { x: number; y: number }, pts[2] as { x: number; y: number })
       line(this.roomPoint(slot, -1, -1), this.roomPoint(slot, -1, -d))
       line(this.roomPoint(slot, -1, d), this.roomPoint(slot, -1, 1))
-      // The door: shut (inactive rooms, the music, a locked room) or open (a glowing threshold).
+      // The door: shut (inactive rooms, the music, a locked room) or open (a glowing threshold, its
+      // pulse is the doors layer's alpha).
       const open = room && !room.locked && snap.phase === 'call'
-      if (open) {
-        g.lineStyle(wallW, PALETTE.amber, 0.35 + 0.35 * Math.sin(time / 120))
-      } else {
+      const a = this.roomPoint(slot, -1, -d)
+      const b = this.roomPoint(slot, -1, d)
+      if (open) doors.lineStyle(wallW, PALETTE.amber, 0.7).lineBetween(a.x, a.y, b.x, b.y)
+      else {
         g.lineStyle(wallW + 1, room?.locked ? PALETTE.lime : shade(PALETTE.orange, -0.35), 1)
+        line(a, b)
       }
-      line(this.roomPoint(slot, -1, -d), this.roomPoint(slot, -1, d))
       // Live counter.
       const label = this.counters[slot]
       if (!label) continue
@@ -471,22 +585,50 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
       const x = jump ? p.x : lerp(from.x, p.x, sample.t)
       const y = jump ? p.y : lerp(from.y, p.y, sample.t)
       const s = this.toScreen(x, y)
-      // Faces where it walks (top-down: back going up, front going down, side going across).
-      if (!Number.isNaN(view.x) && !jump) view.avatar.faceMotion(s.x - view.x, s.y - view.y)
+      // Faces where it walks (top-down: back going up, front going down, side going across) — you:
+      // where you push, at once.
+      const self = p.id === this.selfId
+      const pushing = self && (this.dir.dx !== 0 || this.dir.dy !== 0)
+      if (pushing) view.avatar.faceMotion(this.dir.dx, this.dir.dy, 0.1)
+      else if (!Number.isNaN(view.x) && !jump) view.avatar.faceMotion(s.x - view.x, s.y - view.y)
       view.x = s.x
       view.y = s.y
       if (!view.gone) view.avatar.setExpression(p.safe ? 'happy' : 'idle')
       view.avatar.tick(time)
       view.avatar.image.setPosition(Math.round(s.x), Math.round(s.y))
       view.shadow.setPosition(Math.round(s.x), Math.round(s.y + this.avatarPx * 0.42))
-      if (p.id === this.selfId) {
+      if (self) {
         if (view.gone) this.marker?.hide()
         else this.marker?.place(s.x, s.y - this.avatarPx * 0.45, time)
+        // Your push, at your feet, the moment you press.
+        const mag = Math.hypot(this.dir.dx, this.dir.dy)
+        this.arrow?.setVisible(pushing && !view.gone && mag > 0)
+        if (pushing && mag > 0)
+          this.arrow
+            ?.setPosition(
+              Math.round(s.x + (this.dir.dx / mag) * this.avatarPx * 0.75),
+              Math.round(s.y + (this.dir.dy / mag) * this.avatarPx * 0.75),
+            )
+            .setRotation(Math.atan2(this.dir.dy, this.dir.dx))
       }
     }
   }
 
-  private paintChrome(snap: RoomRushSnapshot, time: number): void {
+  // Call timer: how long the doors stay open (run on between snapshots).
+  private paintCallBar(snap: RoomRushSnapshot, since: number): void {
+    const g = this.callBar as Phaser.GameObjects.Graphics
+    g.clear()
+    if (snap.phase !== 'call' || snap.phaseTotalMs <= 0 || this.state.final) return
+    const { x, y, w, h } = this.callBox
+    const frac = Math.max(0, Math.min(1, (snap.phaseMs - since) / snap.phaseTotalMs))
+    g.fillStyle(PALETTE.panelAlt, 1)
+    g.fillRect(x, y, w, h)
+    g.fillStyle(frac < 0.3 ? PALETTE.red : PALETTE.amber, 1)
+    g.fillRect(x, y, Math.round(w * frac), h)
+  }
+
+  // Strip, HUD, prompt and the DASH button: once per snapshot.
+  private paintChrome(snap: RoomRushSnapshot): void {
     const me = snap.players.find((p) => p.id === this.selfId)
     const alive = snap.players.filter((p) => p.alive).length
     this.hud?.setCenter(
@@ -502,19 +644,6 @@ export class RoomRushScene extends MiniGameScene<RoomRushSnapshot> {
         dim: !p.alive,
       })),
     )
-    if (this.banner?.visible && time > this.bannerUntil && !this.state.final)
-      this.banner.setVisible(false)
-    // Call timer: how long the doors stay open.
-    const g = this.callBar as Phaser.GameObjects.Graphics
-    g.clear()
-    if (snap.phase === 'call' && snap.phaseTotalMs > 0) {
-      const { x, y, w, h } = this.callBox
-      const frac = Math.max(0, Math.min(1, snap.phaseMs / snap.phaseTotalMs))
-      g.fillStyle(PALETTE.panelAlt, 1)
-      g.fillRect(x, y, w, h)
-      g.fillStyle(frac < 0.3 ? PALETTE.red : PALETTE.amber, 1)
-      g.fillRect(x, y, Math.round(w * frac), h)
-    }
     // Dash readiness.
     const ready = !!me?.alive && me.dashMs <= 0 && snap.phase !== 'reveal'
     this.dashBtn?.setAlpha(ready ? 1 : 0.45)

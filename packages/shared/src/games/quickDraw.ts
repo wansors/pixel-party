@@ -10,7 +10,7 @@ export interface QuickDrawPlayerView {
   youDrew: boolean // you have tapped this duel
   done: boolean
   won: boolean | null // null = undecided, or a bye
-  reactionMs: number | null // your valid reaction time, once you have drawn after the signal
+  reactionMs: number | null // your credited reaction time, once you have drawn after the signal
   oppLeft: boolean // you won because your opponent left the game
 }
 
@@ -21,7 +21,10 @@ export interface QuickDrawSnapshot {
 }
 
 // One input = draw (tap). Before the signal fires it is a false start; after, the first valid draw
-// wins the duel.
+// wins the duel. `ms`: the client's own reaction time, from the moment its sign said FIRE! to the tap
+// (absent for a tap made before that). It keeps the snapshot cadence and the network out of the time;
+// the server credits it only within a bounded window of its own measurement.
 export interface QuickDrawInput {
   kind: 'draw'
+  ms?: number
 }

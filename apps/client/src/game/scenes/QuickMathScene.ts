@@ -12,8 +12,12 @@ const PRESS_PX = 4
 const COMBO_EVERY = 3
 // Every player gets a chip; rooms bigger than this get an extra strip row.
 const CHIPS_PER_ROW = 6
+// The chip strip is rebuilt at most this often.
+const STRIP_EVERY_MS = 250
 // An answer the server never took (it should always take a live one) unlocks the sum after this long.
 const ANSWER_RETRY_MS = 1500
+// A typed number that matches no answer flashes red on the LCD this long, then clears.
+const REJECT_MS = 260
 
 interface Button {
   shadow: Phaser.GameObjects.Image
@@ -25,7 +29,11 @@ interface Button {
 }
 
 // Quick Math canvas. This player's current sum sits on a green LCD board above four chunky answer
-// buttons (tap or keys 1-4); answering advances to the next sum at once. The correct answer never rides
+// buttons. Click one, or (on a PC) just type the result: digits fill the "= ?" on the LCD, buttons that
+// can't match fade, and the answer goes as soon as it's unambiguous (Enter for a number that is also the
+// start of another, like 1 vs 12; Backspace to fix). A number no button shows just flashes red —
+// no penalty. Slot keys 1-4 are gone on purpose: next to number answers they read as the answer "1".
+// Answering advances to the next sum at once. The correct answer never rides
 // the live snapshot, so the verdict is inferred when the question advances: a score bump = right
 // (+1, ring, combo pops every 3 in a row), no bump = wrong (buzz + shake). A wrong answer also costs a
 // short server-side cooldown: the buttons grey out behind a draining red bar until it runs out. One
@@ -42,6 +50,16 @@ export class QuickMathScene extends MiniGameScene<QuickMathSnapshot> {
   private banner?: Phaser.GameObjects.Text
   private equationSize = 0
   private equationMaxW = 0
+  // The sum on the LCD (without "= ?") and the digits typed for it.
+  private sumText = ''
+  private typed = ''
+  private rejectedAt = -1
+  private hint?: Phaser.GameObjects.Text
+  // What the buttons last showed (cooling / typed filter): restyled only when it changes.
+  private buttonsKey = ''
+  private barShown = false
+  private chipsKey = ''
+  private chipsAt = Number.NEGATIVE_INFINITY
   private lastScore = 0
   private lastIndex = -1
   private lastChoice = -1
@@ -72,13 +90,22 @@ export class QuickMathScene extends MiniGameScene<QuickMathSnapshot> {
     this.cooldownEndsAt = 0
     this.cooldownTotal = 1
     this.lastCooldownMs = 0
+    this.sumText = ''
+    this.typed = ''
+    this.rejectedAt = -1
+    this.buttonsKey = ''
+    this.barShown = false
+    this.chipsKey = ''
+    this.chipsAt = Number.NEGATIVE_INFINITY
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
     const cx = width / 2
-    const contentW = Math.round(Math.min(width - (compact ? 32 : 64), 760))
+    // A big (1080p) screen gets a bigger board and buttons: it's read from across the room.
+    const big = !compact && height >= 900
+    const contentW = Math.round(Math.min(width - (compact ? 32 : 64), big ? 1000 : 760))
 
     const boardTop = this.top + (compact ? 8 : 12)
-    const boardH = Math.round(Math.min(compact ? 180 : 200, height * 0.24))
+    const boardH = Math.round(Math.min(compact ? 180 : big ? 240 : 200, height * 0.24))
     this.board = this.add.image(
       cx,
       boardTop + boardH / 2,
@@ -90,7 +117,7 @@ export class QuickMathScene extends MiniGameScene<QuickMathSnapshot> {
     for (let y = boardTop + 10; y < boardTop + boardH - 10; y += 4) {
       lines.fillRect(cx - contentW / 2 + 10, y, contentW - 20, 1)
     }
-    this.equationSize = compact ? 40 : 64
+    this.equationSize = compact ? 40 : big ? 80 : 64
     this.equationMaxW = contentW - 40
     this.equation = this.add
       .text(cx, boardTop + boardH / 2, '', headlineStyle(this.equationSize, PALETTE.lime))
@@ -108,7 +135,7 @@ export class QuickMathScene extends MiniGameScene<QuickMathSnapshot> {
     this.barBox = { x: cx - barW / 2, y: comboY + (compact ? 11 : 14), w: barW, h: barH }
     this.cooldownBar = this.add.graphics().setDepth(6)
 
-    const chipSize = compact ? 11 : 13
+    const chipSize = compact ? 11 : height >= 900 ? 16 : 13
     const roster = Object.keys(this.state.names).length
     const stripRows = (width < 600 ? 2 : 1) + (roster > CHIPS_PER_ROW ? 1 : 0)
     const stripTop = height - (compact ? 12 : 18) - stripRows * PlayerStrip.rowH(chipSize)
@@ -123,12 +150,13 @@ export class QuickMathScene extends MiniGameScene<QuickMathSnapshot> {
 
     const gap = compact ? 12 : 18
     const areaTop = boardTop + boardH + (compact ? 42 : 52)
-    const areaH = stripTop - 12 - areaTop
+    const hintH = compact ? 22 : 30
+    const areaH = stripTop - 12 - hintH - areaTop
     const bw = Math.round((contentW - gap) / 2)
-    const bh = Math.round(Math.min(compact ? 128 : 130, (areaH - gap) / 2))
+    const bh = Math.round(Math.min(compact ? 128 : big ? 170 : 130, (areaH - gap) / 2))
     const blockTop = areaTop + Math.min(24, Math.max(0, (areaH - bh * 2 - gap) / 3))
     const shadowKey = ensureBevelPanel(this, bw, bh, shade(PALETTE.bg, -0.5), 0, true)
-    const size = compact ? 32 : 40
+    const size = compact ? 32 : big ? 56 : 40
     for (let i = 0; i < 4; i++) {
       const x = cx + (i % 2 === 0 ? -1 : 1) * (bw / 2 + gap / 2)
       const y = blockTop + bh / 2 + Math.floor(i / 2) * (bh + gap)
@@ -148,13 +176,77 @@ export class QuickMathScene extends MiniGameScene<QuickMathSnapshot> {
         .setOrigin(0.5)
       this.buttons.push({ shadow, face, label, y, maxW: bw - 24, size })
     }
+    this.hint = this.add
+      .text(
+        cx,
+        blockTop + bh * 2 + gap + PRESS_PX + hintH / 2 + 4,
+        this.t('game.quickMath.hint'),
+        bodyStyle(compact ? 13 : 16, PALETTE.dim),
+      )
+      .setOrigin(0.5)
 
     this.banner = addBanner(this).setFontSize(compact ? 24 : 32)
     this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
-      if (e.repeat) return // a held digit would answer every following sum with it
-      const n = Number(e.key)
-      if (Number.isInteger(n) && n >= 1 && n <= 4) this.answer(n - 1)
+      // A held digit would answer every following sum with it.
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return
+      if (e.key >= '0' && e.key <= '9' && e.key.length === 1) this.typeDigit(e.key)
+      else if (e.key === 'Enter') this.typeEnter()
+      else if (e.key === 'Backspace') this.setTyped(this.typed.slice(0, -1))
     })
+  }
+
+  // Whether this player can answer the sum on screen right now (and which one it is).
+  private livePrompt(): QuickMathSnapshot['prompts'][string] {
+    const prompt = this.snap?.prompts[this.selfId]
+    if (!prompt || this.snap?.remainingMs === 0 || this.coolingDown()) return null
+    const pending = prompt.index === this.answeredIndex
+    return pending && this.time.now - this.answeredAt < ANSWER_RETRY_MS ? null : prompt
+  }
+
+  // A typed digit: answer as soon as exactly one button reads the number typed and no other one
+  // starts with it; wait while it's still a prefix; flash it red if no button can match.
+  private typeDigit(d: string): void {
+    const prompt = this.livePrompt()
+    if (!prompt) return
+    const buf = `${this.typed}${d}`
+    const values = prompt.choices.map(String)
+    const exact = values.indexOf(buf)
+    const longer = values.some((v) => v.length > buf.length && v.startsWith(buf))
+    if (exact < 0 && !longer) {
+      this.rejectTyped(buf)
+      return
+    }
+    this.setTyped(buf)
+    if (exact >= 0 && !longer) this.answer(exact)
+    // A digit that only narrows the choices: a keypad click (an answering one locks in instead).
+    else this.sfx.click()
+  }
+
+  private typeEnter(): void {
+    const prompt = this.livePrompt()
+    const exact = prompt ? prompt.choices.map(String).indexOf(this.typed) : -1
+    if (exact >= 0) this.answer(exact)
+  }
+
+  private rejectTyped(buf: string): void {
+    this.sfx.tick()
+    this.rejectedAt = this.time.now
+    this.typed = ''
+    this.equation?.setText(`${this.sumText} = ${buf}`).setColor(hexToCss(PALETTE.red))
+    if (this.board) punch(this, this.board, -0.02, 60)
+    this.buttonsKey = ''
+  }
+
+  // The LCD shows the digits typed so far in place of the "?".
+  private setTyped(buf: string): void {
+    this.typed = buf
+    this.rejectedAt = -1
+    if (this.sumText) {
+      this.equation
+        ?.setText(`${this.sumText} = ${buf === '' ? '?' : buf}`)
+        .setColor(hexToCss(PALETTE.lime))
+    }
+    this.buttonsKey = ''
   }
 
   private coolingDown(): boolean {
@@ -171,7 +263,8 @@ export class QuickMathScene extends MiniGameScene<QuickMathSnapshot> {
     if (prompt.index === this.answeredIndex && now - this.answeredAt < ANSWER_RETRY_MS) return
     this.answeredIndex = prompt.index
     this.answeredAt = now
-    this.sfx.click()
+    // Locked in on the press; the verdict arrives with the next sum.
+    this.sfx.lock()
     this.lastChoice = choice
     this.press(choice)
     this.sendInput({ kind: 'answer', index: prompt.index, choice })
@@ -201,9 +294,17 @@ export class QuickMathScene extends MiniGameScene<QuickMathSnapshot> {
       this.showPrompt(prompt)
     }
     this.lastScore = score
+    if (this.rejectedAt >= 0 && this.time.now - this.rejectedAt > REJECT_MS) this.setTyped('')
     this.trackCooldown(snap.cooldowns[me] ?? 0)
-    this.renderCooldown(prompt !== null)
+    this.renderCooldown(prompt)
 
+    // The chips change only with someone's score, and are rebuilt at most every STRIP_EVERY_MS
+    // (every rebuild re-creates a dozen chips).
+    if (this.time.now - this.chipsAt < STRIP_EVERY_MS) return
+    const chipsKey = Object.values(snap.scores).join(',')
+    if (chipsKey === this.chipsKey) return
+    this.chipsKey = chipsKey
+    this.chipsAt = this.time.now
     const chips = Object.entries(snap.scores)
       .sort((a, b) => b[1] - a[1])
       .map(([id, n]) => ({
@@ -223,18 +324,27 @@ export class QuickMathScene extends MiniGameScene<QuickMathSnapshot> {
     this.lastCooldownMs = ms
   }
 
-  // Cooling down: every button greys out and a red bar drains until answers count again.
-  private renderCooldown(live: boolean): void {
-    const cooling = live && this.coolingDown()
-    for (const b of this.buttons) {
-      for (const o of [b.shadow, b.face, b.label]) o.setAlpha(cooling ? 0.35 : 1)
-      if (cooling) b.face.setTint(0x9a9a9a)
-      else b.face.clearTint()
+  // Cooling down: every button greys out and a red bar drains until answers count again. While digits
+  // are typed, the buttons that can't match them fade.
+  private renderCooldown(prompt: QuickMathSnapshot['prompts'][string]): void {
+    const cooling = prompt !== null && this.coolingDown()
+    const key = `${cooling}:${prompt?.index}:${this.typed}`
+    if (key !== this.buttonsKey) {
+      this.buttonsKey = key
+      this.buttons.forEach((b, i) => {
+        const value = String(prompt?.choices[i] ?? '')
+        const match = this.typed === '' || value.startsWith(this.typed)
+        const alpha = cooling ? 0.35 : match ? 1 : 0.3
+        for (const o of [b.shadow, b.face, b.label]) o.setAlpha(alpha)
+        if (cooling) b.face.setTint(0x9a9a9a)
+        else b.face.clearTint()
+      })
+      this.comboText?.setVisible(!cooling)
     }
-    this.comboText?.setVisible(!cooling)
     const g = this.cooldownBar
-    if (!g) return
+    if (!g || (!cooling && !this.barShown)) return
     g.clear()
+    this.barShown = cooling
     if (!cooling) {
       this.cooldownLabel?.setText('')
       return
@@ -254,6 +364,9 @@ export class QuickMathScene extends MiniGameScene<QuickMathSnapshot> {
     const eq = this.equation
     if (!eq) return
     if (!prompt) {
+      this.sumText = ''
+      this.typed = ''
+      this.hint?.setVisible(false)
       eq.setText('')
       for (const b of this.buttons) for (const o of [b.shadow, b.face, b.label]) o.setVisible(false)
       if (this.banner) showBanner(this, this.banner, this.t('game.common.finished'), PALETTE.lime)
@@ -261,8 +374,13 @@ export class QuickMathScene extends MiniGameScene<QuickMathSnapshot> {
       return
     }
     // The server writes minus as U+2212, which Press Start 2P lacks: show the font's own hyphen.
-    eq.setText(`${prompt.text.replace(/\u2212/g, '-')} = ?`)
+    this.sumText = prompt.text.replace(/\u2212/g, '-')
+    // Sized once for the longest answer it can show, so typing never resizes it.
+    eq.setText(
+      `${this.sumText} = ${'8'.repeat(Math.max(2, ...prompt.choices.map((c) => String(c).length)))}`,
+    )
     fitText(eq, this.equationMaxW, this.equationSize)
+    this.setTyped('')
     if (this.board) punch(this, this.board, 0.03, 70)
     this.buttons.forEach((b, i) => {
       const has = i < prompt.choices.length
@@ -279,7 +397,10 @@ export class QuickMathScene extends MiniGameScene<QuickMathSnapshot> {
     const y = b ? b.y : this.scale.height / 2
     if (right) {
       this.streak++
-      this.sfx.correct()
+      // Every COMBO_EVERY in a row pays out as a combo arpeggio, longer the hotter the streak.
+      if (this.streak % COMBO_EVERY === 0)
+        this.sfx.lineClear(Math.min(4, this.streak / COMBO_EVERY))
+      else this.sfx.correct()
       floatText(this, x, y - 30, '+1', PALETTE.lime, 24)
       ring(this, x, y, PALETTE.lime, 60)
       if (this.streak % COMBO_EVERY === 0) {

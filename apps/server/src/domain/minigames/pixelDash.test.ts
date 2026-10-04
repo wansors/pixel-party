@@ -133,3 +133,13 @@ describe('PixelDash', () => {
     expect(later.stumbles.p).toBe(1)
   })
 })
+
+describe('PixelDash track ramp', () => {
+  test('obstacles come closer together late in the round, never closer than a jump and a landing', () => {
+    const game = new PixelDash()
+    const s = game.init({ players: ['p'], seed: 1, random: { next: () => 0.99 }, now: 0 })
+    const gaps = s.obstacles.slice(1).map((o, i) => o.arriveAt - (s.obstacles[i]?.arriveAt ?? 0))
+    expect(gaps.at(-1) ?? 0).toBeLessThan(gaps[0] ?? 0)
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(700)
+  })
+})

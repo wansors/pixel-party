@@ -119,6 +119,39 @@ describe('QuickDraw', () => {
     expect(result.waiting).toEqual([nn(d3.b)])
   })
 
+  test('a standoff nobody draws ends a few seconds after its signal, both losing', () => {
+    const game = new QuickDraw()
+    let st = init(['p1', 'p2', 'p3', 'p4'])
+    const [first, second] = st.duels.map(nn)
+    if (!first || !second) throw new Error('two duels expected')
+    st = game.onInput(st, first.a, { kind: 'draw' }, first.fireAt + 300)
+    // The frozen standoff alone holds the round open — but not until the bell.
+    st = game.tick(st, 50, second.fireAt + 3999)
+    expect(game.isFinished(st, second.fireAt + 3999)).toBe(false)
+    st = game.tick(st, 50, second.fireAt + 4000)
+    expect(nn(st.duels[1]).done).toBe(true)
+    expect(nn(st.duels[1]).winner).toBeNull()
+    expect(game.isFinished(st, second.fireAt + 4000)).toBe(true)
+    expect(game.snapshot(st, second.fireAt + 4000).players[second.a]?.won).toBe(false)
+  })
+
+  test("a draw's reaction time is the client's own, within a bounded window of the server's", () => {
+    const game = new QuickDraw()
+    const timeOf = (ms: number | undefined, after: number): number | null => {
+      let st = init(['p1', 'p2'])
+      const duel = nn(st.duels[0])
+      st = game.onInput(st, duel.a, { kind: 'draw', ms }, duel.fireAt + after)
+      return nn(game.snapshot(st, duel.fireAt + after).players[duel.a]).reactionMs
+    }
+    // Saw FIRE! 120 ms late (snapshot cadence + LAN): an honest 230 ms reaction arrives at 350 ms.
+    expect(timeOf(230, 350)).toBe(230)
+    // At most 200 ms is credited back, never below a human floor, never worse than the server saw.
+    expect(timeOf(50, 500)).toBe(300)
+    expect(timeOf(20, 150)).toBe(100)
+    expect(timeOf(900, 400)).toBe(400)
+    expect(timeOf(undefined, 400)).toBe(400)
+  })
+
   test('a player who leaves forfeits the standoff', () => {
     const game = new QuickDraw()
     let st = init(['p1', 'p2'])

@@ -34,8 +34,9 @@ const RUSH_MS = 900
 const SPIN_DEG_PER_S = 900
 // Minimum settle time once the value is known; the actual time stretches so the wheel keeps its speed.
 const SETTLE_MS = 2000
-// Standings rows at most: the leaders, always including you (you take the last row when further back).
-const MAX_ROWS = 8
+// Standings rows at most (a full room), as many as fit: the leaders, always including you (you take the
+// last row when further back).
+const MAX_ROWS = 12
 // Pointer pixel art (drawn at 1.5x the wheel's cell size).
 const POINTER_ART = [
   '_ooooooooo_',
@@ -75,6 +76,12 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
   private rowIcons: Phaser.GameObjects.Image[] = []
   private waitText?: Phaser.GameObjects.Text
   private banner?: Phaser.GameObjects.Text
+  // The keys, named under SPIN on keyboard-sized screens (gone once spun).
+  private keyHint?: Phaser.GameObjects.Text
+  // What the standings were last built from, so they're rebuilt only when it changes.
+  private standingsSnap?: RouletteSnapshot
+  private standingsLanded = false
+  private bulbsKey = ''
   private cellPx = 4
   private wheelR = 0
   private phase: Phase = 'idle'
@@ -103,6 +110,10 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
     this.landedAt = 0
     this.myValue = 0
     this.primed = false
+    this.keyHint = undefined
+    this.standingsSnap = undefined
+    this.standingsLanded = false
+    this.bulbsKey = ''
 
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
@@ -112,7 +123,7 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
 
     // Landscape: wheel on the left, hint + number + SPIN + standings on the right. Portrait: stacked.
     const size = wide
-      ? Math.min(width * 0.5, height - top - 90, 460)
+      ? Math.min(width * 0.5, height - top - 90, 600)
       : Math.min(width - 56, (height - top) * 0.44, 420)
     this.cellPx = Math.max(2, Math.floor(size / WHEEL_CELLS))
     this.wheelR = (WHEEL_CELLS * this.cellPx) / 2
@@ -157,9 +168,14 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
     this.spinImg.on('pointerup', () => this.spinImg?.setTexture(up))
     this.onKey('SPACE', () => this.spin())
     this.onKey('ENTER', () => this.spin())
+    if (!compact) {
+      this.keyHint = this.add
+        .text(colX, y + btnH / 2 + 10, this.t('game.roulette.keys'), bodyStyle(16))
+        .setOrigin(0.5, 0)
+    }
 
     // Standings: everyone's revealed number (unspun = "?"), best first.
-    y += btnH / 2 + (compact ? 20 : 34)
+    y += btnH / 2 + (compact ? 20 : 56)
     this.spunText = this.add
       .text(colX, y, '', bodyStyle(compact ? 13 : 15, PALETTE.dim))
       .setOrigin(0.5)
@@ -278,10 +294,11 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
     if (this.phase !== 'idle' || !snap || !(this.selfId in snap.spun)) return
     if (snap.values[this.selfId] !== undefined) return
     this.phase = 'spinning'
-    this.sfx.go()
+    // A hard yank sends the wheel whirring.
+    this.sfx.whoosh()
     this.sendInput({ kind: 'spin' })
     this.spinImg?.disableInteractive()
-    for (const o of [this.spinImg, this.spinText]) {
+    for (const o of [this.spinImg, this.spinText, this.keyHint]) {
       if (o) this.tweens.add({ targets: o, alpha: 0, duration: 150 })
     }
   }
@@ -317,6 +334,7 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
     this.phase = 'landed'
     this.spinImg?.setVisible(false)
     this.spinText?.setVisible(false)
+    this.keyHint?.setVisible(false)
     const seg = Math.min(SEGMENTS - 1, Math.floor((value - 1) / 10))
     this.valueText
       ?.setText(String(value))
@@ -334,6 +352,7 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
       else if (!(this.selfId in snap.spun)) {
         this.spinImg?.setVisible(false)
         this.spinText?.setVisible(false)
+        this.keyHint?.setVisible(false)
         this.waitText?.setText(this.t('game.common.waiting'))
       }
     }
@@ -343,6 +362,7 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
       this.phase = 'spinning'
       this.spinImg?.setVisible(false)
       this.spinText?.setVisible(false)
+      this.keyHint?.setVisible(false)
     }
     if (this.phase === 'spinning') {
       this.rot += (SPIN_DEG_PER_S * delta) / 1000
@@ -381,6 +401,10 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
     const landedFlash = this.phase === 'landed' && now - this.landedAt < 1200
     const speed = this.phase === 'idle' || this.phase === 'landed' ? 260 : 70
     const step = Math.floor(now / speed)
+    // Repaint only when the pattern moves on (a few times a second), not every frame.
+    const key = landedFlash ? `f${Math.floor(now / 120) % 2}` : `c${step % 3}`
+    if (key === this.bulbsKey) return
+    this.bulbsKey = key
     this.bulbs.forEach((b, i) => {
       const on = landedFlash ? Math.floor(now / 120) % 2 === 0 : (i + step) % 3 === 0
       b.setFillStyle(on ? PALETTE.amber : shade(PALETTE.amber, -0.6))
@@ -394,7 +418,8 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
     const value = this.myValue
     const seg = Math.min(SEGMENTS - 1, Math.floor((value - 1) / 10))
     const color = SEG_COLORS[seg] ?? PALETTE.amber
-    this.sfx.coin()
+    // The wheel clunks to a stop on the number.
+    this.sfx.lock()
     if (this.valueText) {
       this.valueText.setText(String(value)).setColor(hexToCss(shade(color, 0.2)))
       punch(this, this.valueText, 0.5, 140)
@@ -412,9 +437,16 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
           : value >= 30
             ? [this.t('game.common.good'), PALETTE.text]
             : [this.t('game.roulette.ouch'), PALETTE.red]
+    // The number's verdict: a roaring jackpot, a coin for a great one, an "ouch" for a low one (a
+    // middling one is just the clunk).
     if (value >= 90) {
-      this.sfx.correct()
+      this.sfx.cheer()
+      this.sfx.coin()
       flash(this, PALETTE.amber, 160)
+    } else if (value >= 60) {
+      this.sfx.coin()
+    } else if (value < 30) {
+      this.sfx.hurt()
     }
     if (this.banner) {
       const banner = this.banner
@@ -425,6 +457,11 @@ export class RouletteScene extends MiniGameScene<RouletteSnapshot> {
   }
 
   private renderStandings(snap: RouletteSnapshot): void {
+    // Only a new snapshot or your own wheel landing changes what the list shows.
+    const landed = this.phase === 'landed'
+    if (snap === this.standingsSnap && landed === this.standingsLanded) return
+    this.standingsSnap = snap
+    this.standingsLanded = landed
     const ids = Object.keys(snap.spun)
     const spun = ids.filter((id) => snap.spun[id]).length
     this.spunText?.setText(this.t('game.roulette.spun', { n: spun, total: ids.length }))

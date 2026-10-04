@@ -18,9 +18,41 @@ export const ASTEROIDS = {
   bulletLifeMs: 850,
   respawnMs: 2000,
   shieldMs: 2000,
-  // Rotation speed (rad/s), used by the client to predict its own ship.
+  // Ship handling, shared so the client predicts its own ship with the server's physics: rotation
+  // (rad/s), thrust (units/s²), drag (fraction of speed lost per second), top speed, the gun's cadence
+  // and how many of your bullets may fly at once.
   turn: 3.8,
+  thrust: 0.95,
+  drag: 0.35,
+  maxSpeed: 0.75,
+  fireMs: 220,
+  maxBullets: 4,
 } as const
+
+// One step of a ship's flight (the server's tick and the client's prediction share it): turn, thrust,
+// drag, the speed cap, then move (wrapping round the arena).
+export function asteroidsFly(
+  s: { x: number; y: number; vx: number; vy: number; a: number },
+  rot: number,
+  thrust: boolean,
+  step: number,
+): void {
+  s.a += rot * ASTEROIDS.turn * step
+  if (thrust) {
+    s.vx += Math.cos(s.a) * ASTEROIDS.thrust * step
+    s.vy += Math.sin(s.a) * ASTEROIDS.thrust * step
+  }
+  const drag = Math.max(0, 1 - ASTEROIDS.drag * step)
+  s.vx *= drag
+  s.vy *= drag
+  const sp = Math.hypot(s.vx, s.vy)
+  if (sp > ASTEROIDS.maxSpeed) {
+    s.vx = (s.vx / sp) * ASTEROIDS.maxSpeed
+    s.vy = (s.vy / sp) * ASTEROIDS.maxSpeed
+  }
+  s.x = (((s.x + s.vx * step) % ASTEROIDS.w) + ASTEROIDS.w) % ASTEROIDS.w
+  s.y = (((s.y + s.vy * step) % ASTEROIDS.h) + ASTEROIDS.h) % ASTEROIDS.h
+}
 
 export interface AsteroidsShip {
   id: string

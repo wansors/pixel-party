@@ -191,14 +191,14 @@ export class RoomStore {
   readonly resultTeams = computed<TeamRoundResult[]>(() => this.roundResult()?.result.teams ?? [])
   readonly winningTeam = computed(() => this.resultTeams().find((t) => t.rank === 0) ?? null)
 
-  // The viewing player's skill radar over ALL axes in the shared order (unplayed axes show as 0 — a
-  // radar needs every axis as a vertex to read as a proper shape).
+  // The viewing player's skill radar over ALL axes in the shared order: a radar needs every axis as a
+  // vertex to read as a shape. Axes not played yet are null — drawn neutral and dimmed, not as a 0.
   readonly myRadar = computed<RadarAxis[]>(() => {
     const mine = this.radars().find((r) => r.playerId === this.selfId())
     if (!mine) return []
     return SKILL_AXES.map((axis) => ({
       label: this.catalog.axisLabel(axis),
-      value: mine.axes[axis] ?? 0,
+      value: mine.axes[axis] ?? null,
     }))
   })
   readonly hasProfile = computed(() => {
@@ -269,7 +269,10 @@ export class RoomStore {
         // Keyed off the server's phase (not the current view): a LOBBY_STATE broadcast during an active
         // round (e.g. another player reconnecting) always carries that round's phase, so it never snaps
         // an in-round client back to the lobby — only a genuine lobby phase does (incl. PLAY_AGAIN).
-        if (msg.phase === 'lobby') this.view.set('lobby')
+        if (msg.phase === 'lobby') {
+          this.view.set('lobby')
+          this.audio.playTheme()
+        }
         break
       case 'ROUND_INTRO':
         this.intro.set({
@@ -280,6 +283,7 @@ export class RoomStore {
         })
         this.startCountdown(msg.startsInMs)
         this.view.set('intro')
+        this.audio.playRound(msg.minigameId, msg.round)
         // Fresh round: drop the previous round's live metric so the board doesn't show stale values.
         this.liveMetric.set(null)
         this.game?.handle(msg)
@@ -292,6 +296,7 @@ export class RoomStore {
         this.radars.set(msg.result.radars ?? [])
         this.roundCallouts.set(this.buildCallouts(msg.result, msg.round))
         this.view.set('round-result')
+        this.audio.playResults()
         if (this.isRoundWinner(msg.result)) this.audio.sfx.win()
         else this.audio.sfx.coin()
         this.game?.handle(msg)
@@ -306,6 +311,7 @@ export class RoomStore {
         this.radars.set(msg.radars ?? [])
         this.summary.set(msg.summary ?? null)
         this.view.set('final')
+        this.audio.playTheme()
         this.audio.sfx.fanfare()
         this.game?.destroy()
         this.game = undefined

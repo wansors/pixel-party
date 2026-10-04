@@ -6,9 +6,12 @@ const SIZE = 9
 const CELLS = SIZE * SIZE
 const EXIT_INDEX = CELLS - 1
 const DEFAULT_DURATION_MS = 45_000
-// Steps faster than this apart are dropped: a held key walks at the same pace on every machine, whatever
-// its OS key-repeat rate (the client paces itself a little slower, so it never loses a step).
+// At most one step per MIN_STEP_MS on average: a held key walks at the same pace on every machine,
+// whatever its OS key-repeat rate (the client paces itself a little slower). Two steps may arrive up to
+// STEP_JITTER_MS closer than that — the network bunching two evenly-sent steps — without one being
+// lost; a key-repeat burst still is.
 export const MIN_STEP_MS = 90
+const STEP_JITTER_MS = MIN_STEP_MS / 2
 
 // Wall bit per side; a cell's mask records which of its 4 sides are still walled.
 const NORTH = 1
@@ -103,7 +106,8 @@ export interface MazeSprintState {
   endsAt: number
   pos: Map<PlayerId, number>
   steps: Map<PlayerId, number>
-  lastStepAt: Map<PlayerId, number>
+  // When each player's next step is due at the steady pace (a step may come STEP_JITTER_MS early).
+  stepDueAt: Map<PlayerId, number>
   // 0 = not finished; otherwise the server time the player reached the exit.
   doneAt: Map<PlayerId, number>
   // Players gone mid-round: the race doesn't wait for them to finish.
@@ -132,7 +136,7 @@ export class MazeSprint implements MiniGame<MazeSprintState, MazeSprintInput> {
       endsAt: ctx.now + durationMs,
       pos: new Map(ctx.players.map((pid) => [pid, 0])),
       steps: new Map(ctx.players.map((pid) => [pid, 0])),
-      lastStepAt: new Map(),
+      stepDueAt: new Map(),
       doneAt: new Map(ctx.players.map((pid) => [pid, 0])),
       left: new Set(),
     }
@@ -152,8 +156,8 @@ export class MazeSprint implements MiniGame<MazeSprintState, MazeSprintInput> {
     if (doneAt === undefined || doneAt > 0) return state
     const pos = state.pos.get(playerId)
     if (pos === undefined) return state
-    if (now - (state.lastStepAt.get(playerId) ?? Number.NEGATIVE_INFINITY) < MIN_STEP_MS)
-      return state
+    const due = state.stepDueAt.get(playerId) ?? Number.NEGATIVE_INFINITY
+    if (now < due - STEP_JITTER_MS) return state
     const mask = state.walls[pos] as number
     if (mask & bit) return state // wall blocks this move
     const row = Math.floor(pos / state.size)
@@ -168,7 +172,7 @@ export class MazeSprint implements MiniGame<MazeSprintState, MazeSprintInput> {
     const next = nextRow * state.size + nextCol
     state.pos.set(playerId, next)
     state.steps.set(playerId, (state.steps.get(playerId) ?? 0) + 1)
-    state.lastStepAt.set(playerId, now)
+    state.stepDueAt.set(playerId, Math.max(now, due) + MIN_STEP_MS)
     if (next === state.exitIndex) state.doneAt.set(playerId, now)
     return state
   }
@@ -229,7 +233,10 @@ export class MazeSprint implements MiniGame<MazeSprintState, MazeSprintInput> {
       pos: Object.fromEntries(state.pos),
       dist: Object.fromEntries(state.players.map((pid) => [pid, this.distOf(state, pid)])),
       startDist: state.exitDist[0] ?? 0,
-      progress: Object.fromEntries(state.steps),
+      steps: Object.fromEntries(state.steps),
+      progress: Object.fromEntries(
+        state.players.map((pid) => [pid, (state.exitDist[0] ?? 0) - this.distOf(state, pid)]),
+      ),
       doneAt: Object.fromEntries(state.doneAt),
       remainingMs: Math.max(0, state.endsAt - now),
     }

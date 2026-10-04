@@ -1,4 +1,10 @@
-import { PALETTE, type PixelWeightObject, type PixelWeightSnapshot } from '@pp/shared'
+import {
+  PALETTE,
+  type PixelCell,
+  type PixelWeightObject,
+  type PixelWeightSnapshot,
+  unpackCells,
+} from '@pp/shared'
 import Phaser from 'phaser'
 import { addBanner, burst, floatText, punch, ring, showBanner } from '../fx'
 import {
@@ -33,9 +39,20 @@ const MAX_POINTS = 10
 const REVEAL_MS = 900
 const REPEAT_DELAY_MS = 350
 const REPEAT_MS = 55
+// ↑ ↓ (W S) step the guess by this much; ← → (A D) by one.
+const BIG_STEP = 10
+// Digits typed within this long of each other build one number ("8", "7" -> 87); a pause starts over.
+const TYPE_GAP_MS = 1500
+// The dial's tick plays at most this often (a fast drag across the track would buzz otherwise).
+const DIAL_TICK_EVERY_MS = 45
 // A create() within this long of the scene's own shutdown is a relayout restart mid-round (a new round
 // only starts seconds after the previous one stopped) — the one case where a memo may carry over.
 const RELAYOUT_GAP_MS = 1000
+
+// The everyone strip (PlayerStrip) rebuilds every chip from scratch on any change — new Text objects,
+// each measuring its font again — which cost a frame per snapshot once a full room was scoring. It
+// follows the scores at most twice a second; your own score in the HUD stays immediate.
+const STRIP_EVERY_MS = 500
 
 interface Button {
   img: Phaser.GameObjects.Image
@@ -45,12 +62,15 @@ interface Button {
 }
 
 // Pixel Weight canvas. A pixel-art object sits on a weighing scale for flashMs (a draining bar shows
-// how long), then hides; dial in how many pixels it had — drag the slider, tap/hold − +, or ← → keys —
-// and press GUESS (Enter). The scale's LED shows the guess; after a guess it briefly shows the real
-// count while the score delta rates the estimate. The server owns the true counts and scoring.
+// how long), then hides; dial in how many pixels it had — type the number, drag the slider, tap/hold
+// − +, or ← → (±1) / ↑ ↓ (±10) — and press GUESS (Enter / Space). The scale's LED shows the guess; after
+// a guess it briefly shows the real count while the score delta rates the estimate. The server owns
+// the true counts and scoring.
 export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
   private prompt?: Phaser.GameObjects.Text
   private pixels: Phaser.GameObjects.Image[] = []
+  // Spare pixel images (hidden), reused by the next object.
+  private pool: Phaser.GameObjects.Image[] = []
   private question?: Phaser.GameObjects.Text
   private flashBar?: Phaser.GameObjects.Rectangle
   private led?: Phaser.GameObjects.Text
@@ -63,6 +83,8 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
   private banner?: Phaser.GameObjects.Text
   // Everyone's score at a glance (avatar + name + points) under the HUD.
   private strip?: PlayerStrip
+  // The keyboard path, named on screen (hidden on touch-sized screens).
+  private hint?: Phaser.GameObjects.Text
   private controls: (Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Visible)[] = []
   private repeat?: Phaser.Time.TimerEvent
   private plateY = 0
@@ -82,6 +104,18 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
   private revealUntil = 0
   private controlsOn = false
   private finished = false
+  // Digits typed so far for this object, and when the last one landed.
+  private typed = ''
+  private typedAt = 0
+  private dialTickAt = Number.NEGATIVE_INFINITY
+  // What's drawn, so per-frame work only happens on a change.
+  private drawnTrack = ''
+  private shownFlash: boolean | null = null
+  private stripSnap?: PixelWeightSnapshot
+  private scoreSnap?: PixelWeightSnapshot
+  private stripAt = 0
+  // The cells of the object on screen (unpacked once per object).
+  private cells: PixelCell[] = []
   // The flash window of the object on screen, kept across a relayout restart (create() clears it only
   // for a fresh round): an orientation flip or window resize mid-object resumes it instead of showing
   // the object again — rotating the phone must not hand the player a second look.
@@ -101,6 +135,7 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
       this.stoppedAt = this.game.getTime()
     })
     this.pixels = []
+    this.pool = []
     this.controls = []
     this.repeat = undefined
     this.drawnIndex = -1
@@ -111,10 +146,21 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
     this.guess = 0
     this.controlsOn = false
     this.finished = false
+    this.typed = ''
+    this.typedAt = 0
+    this.dialTickAt = Number.NEGATIVE_INFINITY
+    this.drawnTrack = ''
+    this.shownFlash = null
+    this.stripSnap = undefined
+    this.scoreSnap = undefined
+    this.stripAt = 0
+    this.cells = []
+    this.hint = undefined
 
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
-    const stripSize = compact ? 11 : 13
+    // Everyone's chips read from the couch on a big (1080p) canvas.
+    const stripSize = compact ? 11 : width >= 1400 && height >= 860 ? 16 : 13
     const stripRows = width < 600 ? 3 : 2
     const stripH = PlayerStrip.rowH(stripSize)
     this.strip = new PlayerStrip(
@@ -132,10 +178,17 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
       .text(cx, promptY, '', headlineStyle(compact ? 16 : 24, PALETTE.text, { align: 'center' }))
       .setOrigin(0.5)
 
-    // Bottom-up: GUESS button, slider row, the scale (LED + plate), the object above the plate.
+    // Bottom-up: the keys hint (keyboard screens only), GUESS button, slider row, the scale (LED +
+    // plate), the object above the plate.
+    const hintH = compact ? 0 : 26
+    if (!compact) {
+      this.hint = this.add
+        .text(cx, height - 8, this.t('game.pixelWeight.keys'), bodyStyle(16, PALETTE.dim))
+        .setOrigin(0.5, 1)
+    }
     const btnH = compact ? 56 : 64
     const btnW = Math.round(Math.min(width * 0.6, 300))
-    const btnY = height - (compact ? 20 : 28) - btnH / 2
+    const btnY = height - (compact ? 20 : 28) - hintH - btnH / 2
     this.submitBtn = this.makeButton(
       cx,
       btnY,
@@ -205,7 +258,12 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
     const baseTop = this.trackY - side / 2 - (compact ? 26 : 34) - ledH - 12
     this.objArea = Math.max(
       100,
-      Math.min(width * (compact ? 0.78 : 0.42), baseTop - (promptY + 40) - 30, 340),
+      // A big canvas (1080p) gets a bigger object; laptops and phones keep the old cap.
+      Math.min(
+        width * (compact ? 0.78 : 0.42),
+        baseTop - (promptY + 40) - 30,
+        width >= 1400 && height >= 860 ? 480 : 340,
+      ),
     )
     this.plateW = Math.round(this.objArea + (compact ? 24 : 40))
     this.plateY = baseTop - (compact ? 22 : 28)
@@ -246,10 +304,25 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
     // The kit's 34px banner overflows a phone on longer words ("¡TERMINADO!").
     if (compact) this.banner.setFontSize(24)
 
-    this.onKey('LEFT', () => this.nudge(-1), { repeat: true })
-    this.onKey('RIGHT', () => this.nudge(1), { repeat: true })
+    for (const [keys, d] of [
+      [['LEFT', 'A'], -1],
+      [['RIGHT', 'D'], 1],
+      [['DOWN', 'S'], -BIG_STEP],
+      [['UP', 'W'], BIG_STEP],
+    ] as const) {
+      for (const k of keys) this.onKey(k, () => this.nudge(d), { repeat: true })
+    }
     this.onKey('ENTER', () => this.submit())
-    this.input.on('pointerup', () => this.stopRepeat())
+    this.onKey('SPACE', () => this.submit())
+    this.input.keyboard?.on('keydown', (e: KeyboardEvent) => this.typeKey(e))
+    // A held − / + stops repeating when the button is released anywhere — or the window loses focus.
+    const stop = (): void => this.stopRepeat()
+    this.input.on('pointerup', stop)
+    this.input.on('pointerupoutside', stop)
+    this.game.events.on(Phaser.Core.Events.BLUR, stop)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
+      this.game.events.off(Phaser.Core.Events.BLUR, stop),
+    )
     this.controlsOn = true
     this.setControls(false)
   }
@@ -340,8 +413,10 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
     )
   }
 
-  private currentObject(): PixelWeightObject | null {
-    return this.snap?.objects[this.selfId] ?? null
+  private currentObject(snap: PixelWeightSnapshot | null = this.snap): PixelWeightObject | null {
+    const at = snap?.at[this.selfId]
+    if (!snap || at === null || at === undefined) return null
+    return snap.objects.find((o) => o.index === at) ?? null
   }
 
   private canGuess(): boolean {
@@ -355,25 +430,54 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
     const next = Math.round(t * this.maxGuess)
     if (next !== this.guess) {
       this.guess = next
-      this.sfx.tick()
+      this.dialTick()
     }
+  }
+
+  // The guess moved: a throttled dial tick.
+  private dialTick(): void {
+    if (this.time.now - this.dialTickAt < DIAL_TICK_EVERY_MS) return
+    this.dialTickAt = this.time.now
+    this.sfx.tick()
   }
 
   private nudge(d: number): void {
     if (!this.canGuess()) return
+    this.typed = ''
     const next = Phaser.Math.Clamp(this.guess + d, 0, this.maxGuess)
     if (next === this.guess) return
     this.guess = next
+    this.dialTick()
+  }
+
+  // Typing the count: digits (top row or numpad) build the number, Backspace takes one back.
+  private typeKey(e: KeyboardEvent): void {
+    if (e.repeat || !this.canGuess()) return
+    const now = this.time.now
+    if (e.key === 'Backspace') {
+      this.typed = this.typed.slice(0, -1)
+    } else if (/^[0-9]$/.test(e.key)) {
+      const fresh = now - this.typedAt > TYPE_GAP_MS || this.typed.length >= 3
+      this.typed = (fresh ? '' : this.typed) + e.key
+    } else {
+      return
+    }
+    this.typedAt = now
+    this.guess = Phaser.Math.Clamp(Number(this.typed || '0'), 0, this.maxGuess)
     this.sfx.tick()
+    if (this.led) punch(this, this.led, 0.12, 60)
   }
 
   private submit(): void {
     const obj = this.currentObject()
     if (!obj || !this.canGuess()) return
     this.stopRepeat()
-    this.sfx.click()
+    // The guess locks in on the press; the rating follows the score.
+    this.sfx.lock()
     this.sendInput({ kind: 'guess', index: obj.index, value: this.guess })
     this.guess = 0
+    this.typed = ''
+    if (this.submitBtn) punch(this, this.submitBtn.img, -0.06, 60)
   }
 
   private objectName(obj: PixelWeightObject): string {
@@ -383,27 +487,36 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
   }
 
   private drawObject(obj: PixelWeightObject): void {
-    for (const p of this.pixels) p.destroy()
+    // The last object's images are reused (hidden spares wait in the pool), not destroyed and rebuilt.
+    this.pool.push(...this.pixels)
     this.pixels = []
+    this.shownFlash = null
+    this.cells = unpackCells(obj.cols, obj.rows, obj.bits)
     const cx = this.scale.width / 2
     const size = Math.floor(this.objArea / Math.max(obj.cols, obj.rows))
     const color = OBJECT_COLORS[obj.name] ?? PALETTE.lime
     const key = ensurePixelBlock(this, `pp-weight-px-${color.toString(16)}`, 16, color, 2)
     // Centred on its filled pixels (the shared art is padded off-centre), bottom row on the plate.
-    const xs = obj.pixels.map((p) => p.x)
-    const minX = Math.min(...xs)
-    const maxX = Math.max(...xs)
-    const maxY = Math.max(...obj.pixels.map((p) => p.y))
+    let minX = obj.cols
+    let maxX = 0
+    let maxY = 0
+    for (const p of this.cells) {
+      minX = Math.min(minX, p.x)
+      maxX = Math.max(maxX, p.x)
+      maxY = Math.max(maxY, p.y)
+    }
     const x0 = cx - ((maxX + minX + 1) * size) / 2 + size / 2
     const y0 = this.plateY - (maxY + 1) * size + size / 2
-    for (const px of obj.pixels) {
+    for (const px of this.cells) {
+      const img = this.pool.pop() ?? this.add.image(0, 0, key).setDepth(1)
       this.pixels.push(
-        this.add
-          .image(x0 + px.x * size, y0 + px.y * size, key)
-          .setDisplaySize(size, size)
-          .setDepth(1),
+        img
+          .setTexture(key)
+          .setPosition(x0 + px.x * size, y0 + px.y * size)
+          .setDisplaySize(size, size),
       )
     }
+    for (const img of this.pool) img.setVisible(false)
     this.drawnIndex = obj.index
     this.flashMs = Math.max(1, obj.flashMs)
     const memo = this.flashMemo
@@ -412,10 +525,13 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
     } else {
       this.flashUntil = this.time.now + obj.flashMs
       this.flashMemo = { round: this.state.round, index: obj.index, until: this.flashUntil }
+      // A fresh object thuds onto the scale's plate (not when a relayout restart redraws it).
+      this.sfx.land()
     }
     this.maxGuess = obj.maxGuess
-    this.lastCount = obj.pixels.length
+    this.lastCount = this.cells.length
     this.guess = 0
+    this.typed = ''
     this.question?.setY(this.plateY - Math.min((maxY + 1) * size, this.objArea) / 2)
   }
 
@@ -461,45 +577,57 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
 
   protected frame(snap: PixelWeightSnapshot | null): void {
     if (!snap) return
-    this.strip?.set(
-      Object.keys(snap.scores).map((id) => ({
-        text: `${this.label(id)} ${snap.scores[id] ?? 0}`,
-        avatar: this.state.avatarOf(id),
-        color: this.state.colorOf(id),
-      })),
-    )
-    const obj = snap.objects[this.selfId] ?? null
+    // Scores change only with a snapshot: the HUD chip follows each one, the strip is throttled.
+    if (snap !== this.scoreSnap) {
+      this.scoreSnap = snap
+      this.hud?.setScore(this.t('game.common.pts', { n: snap.scores[this.selfId] ?? 0 }))
+    }
+    if (snap !== this.stripSnap && (this.time.now >= this.stripAt || this.state.final)) {
+      this.stripSnap = snap
+      this.stripAt = this.time.now + STRIP_EVERY_MS
+      this.strip?.set(
+        Object.keys(snap.scores).map((id) => ({
+          text: `${this.label(id)} ${snap.scores[id] ?? 0}`,
+          avatar: this.state.avatarOf(id),
+          color: this.state.colorOf(id),
+        })),
+      )
+    }
+    const obj = this.currentObject(snap)
     const myScore = snap.scores[this.selfId] ?? 0
-    this.hud?.setScore(this.t('game.common.pts', { n: myScore }))
     const advanced = obj ? obj.index !== this.drawnIndex : this.drawnIndex >= 0 && !this.finished
     if (advanced && this.drawnIndex >= 0) this.rate(myScore - this.lastScore, this.lastCount)
     this.lastScore = myScore
 
     if (!obj) {
       // Out of objects — or a spectator, not in this round at all.
-      this.showFinished(!(this.selfId in snap.objects))
+      this.showFinished(!(this.selfId in snap.at))
       return
     }
     if (obj.index !== this.drawnIndex) this.drawObject(obj)
 
     const now = this.time.now
     const flashing = now < this.flashUntil
-    for (const p of this.pixels) p.setVisible(flashing)
-    this.question?.setVisible(!flashing)
-    this.flashBar
-      ?.setVisible(flashing)
-      .setSize(
+    if (flashing !== this.shownFlash) {
+      this.shownFlash = flashing
+      for (const p of this.pixels) p.setVisible(flashing)
+      this.question?.setVisible(!flashing)
+      this.flashBar?.setVisible(flashing)
+      this.setControls(!flashing)
+      this.prompt
+        ?.setText(
+          flashing
+            ? this.t('game.pixelWeight.weigh', { object: this.objectName(obj) })
+            : this.t('game.pixelWeight.howMany'),
+        )
+        .setColor(hexToCss(flashing ? PALETTE.text : PALETTE.amber))
+    }
+    if (flashing) {
+      this.flashBar?.setSize(
         Math.max(0, ((this.flashUntil - now) / this.flashMs) * this.barW),
         this.flashBar.height,
       )
-    this.setControls(!flashing)
-    this.prompt
-      ?.setText(
-        flashing
-          ? this.t('game.pixelWeight.weigh', { object: this.objectName(obj) })
-          : this.t('game.pixelWeight.howMany'),
-      )
-      .setColor(hexToCss(flashing ? PALETTE.text : PALETTE.amber))
+    }
 
     if (now >= this.revealUntil) {
       this.led?.setText(flashing ? '--' : String(this.guess)).setColor(hexToCss(PALETTE.lime))
@@ -507,10 +635,13 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
     this.drawTrack()
   }
 
-  // Groove with a tick every 10 units, amber fill up to the knob.
+  // Groove with a tick every 10 units, amber fill up to the knob (redrawn only when the guess moves).
   private drawTrack(): void {
     const g = this.trackGfx
     if (!g || !this.controlsOn) return
+    const key = `${this.guess}/${this.maxGuess}`
+    if (key === this.drawnTrack) return
+    this.drawnTrack = key
     const t = this.maxGuess > 0 ? this.guess / this.maxGuess : 0
     const kx = this.trackX0 + t * (this.trackX1 - this.trackX0)
     this.knob?.setX(kx)
@@ -533,6 +664,7 @@ export class PixelWeightScene extends MiniGameScene<PixelWeightSnapshot> {
     this.flashBar?.setVisible(false)
     this.setControls(false)
     this.prompt?.setVisible(false)
+    this.hint?.setVisible(false)
     if (this.time.now >= this.revealUntil) this.led?.setText('--')
     if (this.finished) return
     this.finished = true

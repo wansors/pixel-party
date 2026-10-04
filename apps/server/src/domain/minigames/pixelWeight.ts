@@ -3,6 +3,7 @@ import {
   type PixelWeightInput,
   type PixelWeightObject,
   type PixelWeightSnapshot,
+  packCells,
   pixelVariant,
 } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
@@ -56,7 +57,7 @@ export class PixelWeight implements MiniGame<PixelWeightState, PixelWeightInput>
           name: src.name,
           cols: src.cols,
           rows: src.rows,
-          pixels: src.cells,
+          bits: packCells(src.cols, src.rows, src.cells),
           flashMs: Math.max(2200 - level * 120, 900),
           maxGuess: src.cols * src.rows,
         },
@@ -132,14 +133,19 @@ export class PixelWeight implements MiniGame<PixelWeightState, PixelWeightInput>
     return { placements: sorted, ranks, stats }
   }
 
+  // Each object in play goes on the wire once, however many players are on it (it's static per level).
   snapshot(state: PixelWeightState, now: number): PixelWeightSnapshot {
-    const objects: Record<PlayerId, PixelWeightObject | null> = {}
+    const at: Record<PlayerId, number | null> = {}
+    const objects: PixelWeightObject[] = []
     for (const id of state.players) {
       const ptr = state.pointer.get(id) ?? 0
-      objects[id] = state.puzzles[ptr]?.object ?? null
+      const object = state.puzzles[ptr]?.object
+      at[id] = object ? object.index : null
+      if (object && !objects.includes(object)) objects.push(object)
     }
     return {
-      objects,
+      objects: objects.sort((a, b) => a.index - b.index),
+      at,
       scores: Object.fromEntries(state.score),
       remainingMs: Math.max(0, state.endsAt - now),
     }

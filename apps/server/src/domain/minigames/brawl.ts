@@ -8,16 +8,16 @@ import {
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 75_000
-const PUNCH = { dmg: 8, reach: 0.095, cooldownMs: 280, ms: 180 }
+const PUNCH = { dmg: 8, reach: 0.095, ...BRAWL.moves.punch }
 const COMBO_WINDOW_MS = 650
 const FINISHER_DMG = 14 // the third punch in a row (knocks down)
-const KICK = { dmg: 12, reach: 0.125, cooldownMs: 600, ms: 320, shove: 0.08 }
-const GRAB = { dmg: 16, reach: 0.075, cooldownMs: 1400, ms: 450, toss: 0.25 }
+const KICK = { dmg: 12, reach: 0.125, shove: 0.08, ...BRAWL.moves.kick }
+const GRAB = { dmg: 16, reach: 0.075, toss: 0.25, ...BRAWL.moves.grab }
 const PIPE = { dmg: 14, reach: 0.135, uses: 6 }
 const BOTTLE_DMG = 22
 const CHICKEN_HEAL = 30
-const HURT_MS = 260
-const DOWN_MS = 900
+const HURT_MS = BRAWL.hurtMs
+const DOWN_MS = BRAWL.downMs
 const GUARD_MS = 600
 const HURT_SHOVE = 0.025
 const ITEM_FIRST_MS = 5000
@@ -145,6 +145,8 @@ export class Brawl implements MiniGame<BrawlState, BrawlInput> {
       const mag = Math.hypot(input.dx, input.dy)
       f.dx = mag < 0.001 ? 0 : input.dx / mag
       f.dy = mag < 0.001 ? 0 : input.dy / mag
+      // Turning is instant: ← then PUNCH swings left even if no tick has moved you yet.
+      if (f.dx !== 0 && !busy(f, now)) f.face = f.dx > 0 ? 1 : -1
       return state
     }
     if (busy(f, now) || now < f.nextAttackAt) return state

@@ -28,6 +28,7 @@ session-wide ranking.
 | [`docs/minigame-ideas.md`](docs/minigame-ideas.md) | ~30 mini-game ideas ranked by priority (fun, healthy competition, effort, latency). |
 | [`docs/scoring-system.md`](docs/scoring-system.md) | Scoring across mini-games, session ranking, tiebreakers, and handicap. |
 | [`docs/player-fit-audit.md`](docs/player-fit-audit.md) | Per-game player range (min/max/recommended) and the balance & correctness audit of all 55 games. |
+| [`docs/pc-launch-audit.md`](docs/pc-launch-audit.md) | PC performance & gameplay audit of all 55 games (controls, prediction, frame cost, snapshot size) and its fixes. |
 | [`docs/technical-architecture.md`](docs/technical-architecture.md) | Stack & architecture — mirrors the `utopia-offline` reference project. |
 | [`docs/art-direction.md`](docs/art-direction.md) | Retro classic-arcade pixel-art visual identity (web, HUD, scoreboards). |
 | [`docs/backlog.md`](docs/backlog.md) | Phased roadmap: minimal MVP first, then incremental epics. |
@@ -47,6 +48,19 @@ Requires [Bun](https://bun.sh) (1.3+). Install once from the repo root:
 ```bash
 bun install
 ```
+
+### Party mode (for actually playing)
+
+```bash
+bun run start         # builds the optimized client, then one server on :3000 serves it + /api + /ws
+```
+
+It prints the address everyone opens, e.g. `▶ Pixel Party is on — open http://192.168.1.20:3000 on
+every device`. It is one process on one port, with no allowed-origins setup to do: the page and its
+socket share an origin. Assets are gzipped, and the hashed bundles are cached by the browsers. Use
+`bun run start:server` to serve an existing build again without rebuilding.
+
+### Development
 
 Start everything with one command:
 
@@ -69,8 +83,8 @@ Then open `http://localhost:4200`:
    round opens with a how-to-play card and a countdown, then the mini-game, then the round result +
    standings, and finally the podium.
 
-To play across devices on your LAN, serve the client with `--host` (`bun run --filter client start -- --host 0.0.0.0`)
-and open the shown LAN URL.
+The dev client runs Angular in development mode (unoptimized, with extra runtime checks). Use it to
+work on the game, and use party mode to play.
 
 ### Checks
 
@@ -80,6 +94,7 @@ bun run lint:determinism # domain purity gate (no Math.random / Date.now in doma
 bun run typecheck       # tsc --noEmit across server, shared, client
 bun run test            # server + shared (bun test)
 bun run build:client    # production Angular build
+bun scripts/bench-games.ts  # server perf: tick cost + snapshot size of every game at 12 players
 ```
 
 ### Claude Code skills

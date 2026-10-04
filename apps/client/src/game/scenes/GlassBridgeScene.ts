@@ -33,13 +33,17 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 // one LEFT and one RIGHT glass panel per row. The server owns the bridge; this scene draws every player
 // as their lobby avatar (queue on the start platform, the active runner on the glass, survivors at the
 // goal), animates jumps, shattering falls and auto-walks, lights the lightning glint and shows everyone's
-// heckle arrows. LEFT/RIGHT (keys, the two big buttons or a tap on a panel) jumps when it's your turn
-// and points the way when it isn't. ★ is the score: a blind step pops "+1★", a jump on a glint you saw
-// is called out as peeking (no ★).
+// heckle arrows. LEFT/RIGHT (←/→ or A/D, the two big buttons or a click/tap on a panel) jumps when
+// it's your turn — the hop starts the moment you press — and points the way when it isn't. ★ is the
+// score: a blind step pops "+1★", a jump on a glint you saw is called out as peeking (no ★). The bridge
+// grows with the screen: panels widen into the free width, avatars up to 64 px.
 
 const JUMP_ANIM_MS = 420
 const FALL_ANIM_MS = 950
 const SPARKLE_MS = 200
+// The runner on the bridge is everyone's focus, but rivals' leaps, landings, falls and crossings still
+// play softer than your own (this fraction of the volume).
+const RIVAL_LEVEL = 0.6
 
 interface Spot {
   x: number
@@ -102,6 +106,8 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
   private areaTop = 0
   private areaBottom = 0
   private platW = 0
+  // Width kept free on each side for the corner buttons (wide screens).
+  private sideReserve = 0
   private prompt?: Phaser.GameObjects.Text
   private strip?: PlayerStrip
   private stripY = 0
@@ -134,7 +140,10 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
   private hiddenFor = new Set<string>()
   private lastLanding = ''
   private lastPrompt = ''
-
+  // The row you already jumped at (one press per turn; the hop shows before the server's echo).
+  private jumpedAt = -1
+  // The snapshot the chrome (strip, prompt, buttons) was last painted from.
+  private chromeRef: unknown = null
   constructor(...deps: SceneDeps) {
     super('glass-bridge', ...deps)
   }
@@ -159,6 +168,8 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     this.arrowKey = ''
     this.lastLanding = ''
     this.lastPrompt = ''
+    this.jumpedAt = -1
+    this.chromeRef = null
 
     const promptSize = this.compact ? 12 : 16
     this.prompt = this.add
@@ -170,11 +181,14 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     this.strip = new PlayerStrip(this, width / 2, this.stripY, width - 24, stripSize, 2)
     this.areaTop = this.stripY + PlayerStrip.rowH(stripSize) * 2
 
-    // Bottom controls: two big LEFT / RIGHT buttons (jump on your turn, point otherwise).
+    // Two big LEFT / RIGHT buttons (jump on your turn, point otherwise): side by side under the bridge,
+    // or — on a wide screen, where the tall bridge is what limits the size — in the bottom corners,
+    // LEFT on the left and RIGHT on the right, so the bridge gets the full height.
     const btnH = this.compact ? 84 : 68
     const gap = this.compact ? 10 : 16
+    const corners = !this.compact && width >= 1000
     const padW = Math.min(width - 16, 620)
-    const btnW = (padW - gap) / 2
+    const btnW = corners ? Math.min(260, Math.floor(width * 0.2)) : (padW - gap) / 2
     const btnY = height - (this.compact ? 12 : 20) - btnH / 2
     this.buttonKeys = {
       up: ensureBevelPanel(this, btnW, btnH, PALETTE.frameLit, 5, true),
@@ -182,7 +196,11 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
       jumpUp: ensureBevelPanel(this, btnW, btnH, PALETTE.orange, 5, true),
     }
     for (const side of ['L', 'R'] as const) {
-      const x = width / 2 + (side === 'L' ? -1 : 1) * (btnW / 2 + gap / 2)
+      const x = corners
+        ? side === 'L'
+          ? 16 + btnW / 2
+          : width - 16 - btnW / 2
+        : width / 2 + (side === 'L' ? -1 : 1) * (btnW / 2 + gap / 2)
       const img = this.add.image(x, btnY, this.buttonKeys.up).setDepth(700).setInteractive()
       const text = this.add
         .text(
@@ -199,11 +217,10 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
       img.on('pointerdown', () => this.act(side))
       this.buttons.push({ side, img, text })
     }
-    this.areaBottom = btnY - btnH / 2 - (this.compact ? 10 : 14)
-    this.onKey('LEFT', () => this.act('L'))
-    this.onKey('A', () => this.act('L'))
-    this.onKey('RIGHT', () => this.act('R'))
-    this.onKey('D', () => this.act('R'))
+    this.areaBottom = corners ? height - 16 : btnY - btnH / 2 - (this.compact ? 10 : 14)
+    this.sideReserve = corners ? btnW + 32 : 0
+    for (const k of ['LEFT', 'A']) this.onKey(k, () => this.act('L'))
+    for (const k of ['RIGHT', 'D']) this.onKey(k, () => this.act('R'))
 
     this.banner = addBanner(this)
   }
@@ -213,16 +230,28 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     const { width } = this.scale
     this.rows = rows
     const areaH = this.areaBottom - this.areaTop
-    this.slotH = Math.min(this.compact ? 60 : 64, Math.floor(areaH / (rows + 2)))
+    this.slotH = Math.min(this.compact ? 60 : 80, Math.floor(areaH / (rows + 2)))
     this.panelH = Math.max(18, Math.round(this.slotH * 0.78))
-    this.panelW = Math.min(Math.round(this.panelH * 1.5), Math.floor((width - 40) / 2) - 12)
-    this.avatarSize = avatarPx(Math.max(24, Math.min(48, Math.round(this.slotH * 0.85))))
+    // The rows are what limit a tall bridge; the panels widen into the free width (a big screen gets
+    // a big bridge), up to ~3× their height.
+    this.panelW = Math.min(
+      Math.round(this.panelH * (this.compact ? 1.5 : 3)),
+      Math.floor((width - 40) / 2) - 12,
+      240,
+    )
+    this.avatarSize = avatarPx(
+      Math.max(24, Math.min(this.compact ? 48 : 64, Math.round(this.slotH * 1.15))),
+    )
     this.railW = Math.max(4, Math.round(this.panelW * 0.12))
     this.cx = width / 2
     // Center the whole stack vertically in the area when there is slack.
     const used = this.slotH * (rows + 2)
     this.areaBottom -= Math.max(0, Math.floor((areaH - used) / 2))
-    this.platW = Math.min(width - 16, Math.max(this.panelW * 4, 10 * this.avatarSize * 1.1))
+    // Wide enough for the whole queue side by side (rows = players + 2), clear of corner buttons.
+    this.platW = Math.min(
+      width - 16 - this.sideReserve * 2,
+      Math.max(this.panelW * 4, (rows - 1) * this.avatarSize * 1.1),
+    )
 
     const g = this.add.graphics().setDepth(10)
     const bottomY = this.slotY(0) + this.slotH / 2
@@ -292,7 +321,7 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     this.marker = new YouMarker(this, this.compact ? 12 : 16, 62)
     this.spotlight = this.add.graphics().setDepth(59)
     this.nameTag = this.add
-      .text(0, 0, '', bodyStyle(this.compact ? 11 : 13, PALETTE.text, { fontStyle: 'bold' }))
+      .text(0, 0, '', bodyStyle(this.compact ? 11 : 16, PALETTE.text, { fontStyle: 'bold' }))
       .setOrigin(0, 0.5)
       .setDepth(62)
       .setVisible(false)
@@ -344,14 +373,32 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
       })
     }
     if (snap.active === this.selfId) {
-      if (snap.phase !== 'decide') return
-      this.sfx.click()
+      if (snap.phase !== 'decide' || snap.target === null || this.jumpedAt === snap.target) return
+      this.jumpedAt = snap.target
+      this.sfx.jump()
       this.sendInput({ kind: 'jump', side })
+      // The hop starts now; the server's verdict lands with the next snapshot.
+      const r = this.runners.get(this.selfId)
+      if (r) this.jumpAnim = this.hop(this.selfId, { x: r.x, y: r.y }, snap.target, side)
       return
     }
     const mine = snap.pointers.find((p) => p.id === this.selfId)?.side ?? null
     this.sfx.click()
     this.sendInput({ kind: 'point', side: mine === side ? null : side })
+  }
+
+  private hop(
+    id: string,
+    from: Spot,
+    target: number,
+    side: GlassSide,
+  ): { id: string; from: Spot; to: Spot; at: number } {
+    return {
+      id,
+      from,
+      to: { x: this.panelX(side), y: this.slotY(target + 1) - this.avatarSize * 0.18 },
+      at: this.time.now,
+    }
   }
 
   protected frame(snap: GlassBridgeSnapshot | null, time: number, delta: number): void {
@@ -370,7 +417,11 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     this.paintArrows(snap)
     this.detectEvents(snap, time)
     this.placeRunners(snap, time, delta)
-    this.paintChrome(snap)
+    // Strip, prompt and buttons only change with the snapshot.
+    if (snap !== this.chromeRef) {
+      this.chromeRef = snap
+      this.paintChrome(snap)
+    }
   }
 
   private paintRows(snap: GlassBridgeSnapshot): void {
@@ -467,16 +518,16 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     if (phaseKey !== this.lastPhaseKey) {
       if (snap.phase === 'jump' && snap.active && snap.target !== null && snap.jumpSide) {
         const r = this.runners.get(snap.active)
-        if (r) {
-          this.jumpAnim = {
-            id: snap.active,
-            from: { x: r.x, y: r.y },
-            to: {
-              x: this.panelX(snap.jumpSide),
-              y: this.slotY(snap.target + 1) - this.avatarSize * 0.18,
-            },
-            at: time,
-          }
+        const to = this.hop(snap.active, { x: 0, y: 0 }, snap.target, snap.jumpSide).to
+        // Your own hop already started when you pressed (unless the timer forced the other side).
+        const already =
+          this.jumpAnim?.id === snap.active &&
+          this.jumpAnim.to.x === to.x &&
+          this.jumpAnim.to.y === to.y
+        if (r && !already) {
+          this.jumpAnim = this.hop(snap.active, { x: r.x, y: r.y }, snap.target, snap.jumpSide)
+          // One jumper at a time, so everyone hears the leap (a rival's a little softer).
+          if (!this.firstSnapshot) this.sfx.quiet(() => this.sfx.jump(), RIVAL_LEVEL)
         }
       }
       if (snap.phase === 'decide' && snap.active === this.selfId && !this.firstSnapshot) {
@@ -520,10 +571,13 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
           const x = this.panelX(side)
           const y = this.slotY(landed + 1)
           ring(this, x, y, PALETTE.lime, this.panelW * 0.7)
-          if (snap.active === this.selfId) this.sfx.correct()
-          else this.sfx.click()
           const size = this.compact ? 12 : 16
           const n = gained.get(snap.active)
+          // Feet on solid glass; your own blind step also pays out.
+          if (snap.active === this.selfId) {
+            this.sfx.land()
+            if (n) this.sfx.coin()
+          } else this.sfx.quiet(() => this.sfx.land(), RIVAL_LEVEL)
           const text = n
             ? this.t('game.glassBridge.blind', { n })
             : this.t('game.glassBridge.peeked')
@@ -579,8 +633,14 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
       this.quip('game.common.stamps', p.id),
       this.compact ? 12 : 16,
     )
-    this.sfx.pop()
-    this.sfx.eliminated()
+    // The pane shatters under them, then the long drop.
+    this.sfx.quiet(
+      () => {
+        this.sfx.shatter()
+        this.sfx.eliminated()
+      },
+      p.id === this.selfId ? 1 : RIVAL_LEVEL,
+    )
     // The crowd still waiting on the start platform has an opinion.
     this.time.delayedCall(650, () =>
       speechBubble(
@@ -624,6 +684,7 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
   private onCross(p: GlassBridgePlayer): void {
     const goal = { x: this.cx, y: this.slotY(this.rows + 1) }
     burst(this, goal.x, goal.y, this.state.colorOf(p.id), 18, 200)
+    this.sfx.quiet(() => this.sfx.cheer(), p.id === this.selfId ? 1 : RIVAL_LEVEL)
     if (p.id === this.selfId) {
       this.sfx.win()
       floatText(
@@ -634,8 +695,6 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
         PALETTE.lime,
         this.compact ? 16 : 24,
       )
-    } else {
-      this.sfx.coin()
     }
   }
 
@@ -674,7 +733,10 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
             start.x,
             start.y,
             `${p.vest}`,
-            headlineStyle(8, PALETTE.text, { stroke: '#10121c', strokeThickness: 3 }),
+            headlineStyle(this.compact ? 8 : 12, PALETTE.text, {
+              stroke: '#10121c',
+              strokeThickness: 3,
+            }),
           )
           .setOrigin(0.5, 1)
           .setDepth(61)
@@ -718,7 +780,7 @@ export class GlassBridgeScene extends MiniGameScene<GlassBridgeSnapshot> {
     // You: the standard ▼ over your own avatar (above your vest number).
     const mine = this.runners.get(this.selfId)
     if (mine && snap.phase !== 'done' && !this.hiddenFor.has(this.selfId))
-      this.marker?.place(mine.x, mine.y - this.avatarSize * 0.85 - 12, time)
+      this.marker?.place(mine.x, mine.y - this.avatarSize * 0.85 - (this.compact ? 12 : 16), time)
     else this.marker?.hide()
     // The active runner's spotlight, plus their name beside the bridge while they are on the glass.
     const activeId = snap.active ?? ''

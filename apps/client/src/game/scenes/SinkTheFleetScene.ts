@@ -1,9 +1,14 @@
-import { PALETTE, type SinkTheFleetDuelView, type SinkTheFleetSnapshot } from '@pp/shared'
+import {
+  PALETTE,
+  type SinkTheFleetDuelView,
+  type SinkTheFleetSnapshot,
+  decodeShot,
+} from '@pp/shared'
 import type Phaser from 'phaser'
 import { burst, floatText, punch, shake } from '../fx'
 import { bodyStyle, headlineStyle } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
-import { DuelWatch } from './duelWatch'
+import { DuelWatch, verdictKey } from './duelWatch'
 import {
   NavalBoard,
   NavalEndCard,
@@ -19,12 +24,14 @@ const END_CARD_DELAY_MS = 1100
 // How long the bye's "no rival" card stays up before it starts watching a duel.
 const BYE_CARD_MS = 3000
 
-// Sink the Fleet (Battleship duel) canvas. Two pixel seas: ENEMY WATERS (tap a cell to fire, on your
-// turn only; a hit shoots again) and YOUR FLEET (the rival's shots at you). The snapshot never carries
-// ship positions — only shot results — so every splash, fire and wreck here is exactly what the server
-// resolved. A turn banner + draining turn bar and a glowing frame on the board in play make
-// whose-shot-it-is obvious. The bye (or a player who joined mid-round) watches another duel instead:
-// the same two seas, named after the two admirals, read-only.
+// Sink the Fleet (Battleship duel) canvas. Two pixel seas: ENEMY WATERS (click a cell — or aim with the
+// arrows / WASD and fire with SPACE / ENTER — on your turn only; a hit shoots again) and YOUR FLEET (the
+// rival's shots at you). The snapshot never carries ship positions — only shot results — so every
+// splash, fire and wreck here is exactly what the server resolved. A turn banner + draining turn bar
+// and a glowing frame on the board in play make whose-shot-it-is obvious. The bye (or a player who
+// joined mid-round) watches another duel instead: the same two seas, named after the two admirals,
+// read-only — and so does a duellist a few seconds after their own duel is over, their verdict kept in
+// the HUD.
 export class SinkTheFleetScene extends MiniGameScene<SinkTheFleetSnapshot> {
   private target?: NavalBoard
   private own?: NavalBoard
@@ -38,6 +45,8 @@ export class SinkTheFleetScene extends MiniGameScene<SinkTheFleetSnapshot> {
   private turnSizes: number[] = []
   private turnMax = 0
   private wasMyTurn: boolean | null = null
+  // The turn bar is in its last stretch on your shot (its warning beep plays once).
+  private urgentTurn = false
   private endedAt = -1
   private boardsHidden = false
   private readonly watch = new DuelWatch()
@@ -45,6 +54,7 @@ export class SinkTheFleetScene extends MiniGameScene<SinkTheFleetSnapshot> {
   private viewId: string | null = null
   private playing = false
   private byeCardUntil = -1
+  private syncedTick = -1
 
   constructor(...deps: SceneDeps) {
     super('sink-the-fleet', ...deps)
@@ -56,18 +66,21 @@ export class SinkTheFleetScene extends MiniGameScene<SinkTheFleetSnapshot> {
     this.own = undefined
     this.turnMax = 0
     this.wasMyTurn = null
+    this.urgentTurn = false
     this.endedAt = -1
     this.boardsHidden = false
     this.watch.reset()
     this.viewId = null
     this.playing = false
     this.byeCardUntil = -1
+    this.syncedTick = -1
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
     const cx = width / 2
 
-    const turnSize = compact ? 16 : 24
-    this.turnSizes = compact ? [16, 12, 8] : [24, 16]
+    const big = Math.min(width, height) >= 900
+    const turnSize = compact ? 16 : big ? 32 : 24
+    this.turnSizes = compact ? [16, 12, 8] : big ? [32, 24, 16] : [24, 16]
     this.turnText = this.add
       .text(cx, this.top + turnSize / 2 + 4, '', headlineStyle(turnSize, PALETTE.amber))
       .setOrigin(0.5)
@@ -81,26 +94,51 @@ export class SinkTheFleetScene extends MiniGameScene<SinkTheFleetSnapshot> {
     this.turnBar = this.add.graphics()
     this.boardsTop = this.bar.y + this.bar.h + (compact ? 6 : 10)
 
-    const hintSize = compact ? 11 : 14
+    const hintSize = compact ? 11 : big ? 16 : 14
     this.hint = this.add
       .text(
         cx,
         height - 8,
-        this.t('game.sinkTheFleet.hint'),
+        this.t(compact ? 'game.sinkTheFleet.hint' : 'game.sinkTheFleet.hintPc'),
         bodyStyle(hintSize, PALETTE.dim, { align: 'center', wordWrap: { width: width * 0.92 } }),
       )
       .setOrigin(0.5, 1)
     this.boardsBottom = height - hintSize * (compact ? 2.6 : 1.8) - 8
     this.card = new NavalEndCard(this)
+
+    // Keyboard aim on your own turn (the mouse works too): the cursor walks the enemy sea.
+    const aim = (dx: number, dy: number) => () => {
+      if (this.canFire()) this.target?.moveCursor(dx, dy)
+    }
+    for (const [keys, dx, dy] of [
+      [['LEFT', 'A'], -1, 0],
+      [['RIGHT', 'D'], 1, 0],
+      [['UP', 'W'], 0, -1],
+      [['DOWN', 'S'], 0, 1],
+    ] as const) {
+      for (const key of keys) this.onKey(key, aim(dx, dy), { repeat: true })
+    }
+    const fire = (): void => {
+      if (this.canFire() && this.target?.fireCursor() === false) this.sfx.tick()
+    }
+    this.onKey('SPACE', fire)
+    this.onKey('ENTER', fire)
+  }
+
+  // Your own duel, your turn, still running.
+  private canFire(): boolean {
+    const me = this.snap?.players[this.selfId]
+    return this.playing && !!me && !me.done && me.yourTurn && me.opponentId !== null
   }
 
   // Both boards are built once the first snapshot says how big the sea is — and again, fresh, for each
-  // duel a spectator moves on to (the old pair is hidden). Only your own duel's sea takes shots.
+  // duel a spectator moves on to (the old pair is destroyed). Only your own duel's sea takes shots.
   private build(snap: SinkTheFleetSnapshot, fleetCells: number): void {
     const { width, height } = this.scale
     const rects = layoutBoards(width, height, this.boardsTop, this.boardsBottom)
-    this.target?.setVisible(false)
-    this.own?.setVisible(false)
+    this.target?.destroy()
+    this.own?.destroy()
+    this.card?.hide()
     const onFire = this.playing ? (cell: number) => this.fire(cell) : undefined
     this.target = new NavalBoard(this, rects.target, snap.grid, fleetCells, onFire)
     this.own = new NavalBoard(this, rects.own, snap.grid, fleetCells)
@@ -108,6 +146,7 @@ export class SinkTheFleetScene extends MiniGameScene<SinkTheFleetSnapshot> {
     this.wasMyTurn = null
     this.turnMax = 0
     this.endedAt = -1
+    this.syncedTick = -1
   }
 
   protected override remainingMs(snap: SinkTheFleetSnapshot): number {
@@ -117,8 +156,8 @@ export class SinkTheFleetScene extends MiniGameScene<SinkTheFleetSnapshot> {
   private fire(cell: number): void {
     const me = this.snap?.players[this.selfId]
     if (!me || me.done || !me.yourTurn || me.opponentId === null) return
-    if (me.shots.some((s) => s.cell === cell)) return
-    this.sfx.click()
+    if (me.shots.some((s) => decodeShot(s).cell === cell)) return
+    this.sfx.shoot()
     this.sendInput({ kind: 'fire', cell })
     this.target?.setPending(cell)
   }
@@ -127,8 +166,8 @@ export class SinkTheFleetScene extends MiniGameScene<SinkTheFleetSnapshot> {
     if (!snap) return
     const seat = snap.players[this.selfId]
     const bye = seat?.opponentId === null
-    this.playing = !!seat && !bye
-    const viewId = this.playing ? this.selfId : this.watch.pick(snap.players, time)
+    const viewId = this.watch.follow(snap.players, this.selfId, time)
+    this.playing = !!seat && !bye && viewId === this.selfId
     const me = viewId === null ? undefined : snap.players[viewId]
     if (!me?.opponentId) {
       this.hint?.setVisible(false)
@@ -173,7 +212,14 @@ export class SinkTheFleetScene extends MiniGameScene<SinkTheFleetSnapshot> {
       own.setLabels(this.t('game.sinkTheFleet.yourFleet'), selfColor)
     } else {
       const viewed = viewId ?? ''
-      this.hud?.setScore(bye ? this.t('game.common.duelBye') : '')
+      // A duellist watching after their own duel keeps their verdict in the HUD.
+      this.hud?.setScore(
+        bye
+          ? this.t('game.common.duelBye')
+          : seat?.opponentId && seat.done
+            ? this.t(verdictKey(seat.won))
+            : '',
+      )
       const watching = this.t('game.common.duelWatch', {
         a: this.state.nameOf(viewed),
         b: this.state.nameOf(me.opponentId),
@@ -184,13 +230,24 @@ export class SinkTheFleetScene extends MiniGameScene<SinkTheFleetSnapshot> {
       own.setLabels(this.state.nameOf(viewed), this.state.colorOf(viewed, PALETTE.cyan))
     }
 
-    // Shots: the viewed player's land on the rival's sea, the rival's (from the public snapshot) on
-    // theirs.
-    const incoming: readonly NavalShot[] =
-      snap.players[me.opponentId]?.shots ?? me.damage.map((cell) => ({ cell, hit: true }))
-    const rivalSunk = me.hitsOnOpponent >= me.fleetCells
-    for (const s of target.sync(me.shots, rivalSunk)) this.onMyShot(s, rivalSunk)
-    for (const s of own.sync(incoming, me.hitsOnYou >= me.fleetCells)) this.onIncoming(s)
+    // Shots (on each new snapshot): the viewed player's land on the rival's sea, the rival's (from the
+    // public snapshot) on theirs.
+    if (this.state.tick !== this.syncedTick) {
+      this.syncedTick = this.state.tick
+      const incoming: readonly NavalShot[] = (snap.players[me.opponentId]?.shots ?? []).map(
+        decodeShot,
+      )
+      const rivalSunk = me.hitsOnOpponent >= me.fleetCells
+      const ownSunk = me.hitsOnYou >= me.fleetCells
+      const mine = target.sync(me.shots.map(decodeShot), rivalSunk)
+      for (const s of mine) this.onMyShot(s, rivalSunk)
+      const theirs = own.sync(incoming, ownSunk)
+      for (const s of theirs) this.onIncoming(s)
+      // The finishing hit sends the whole fleet under: the wrecks go down with a splash.
+      if ((rivalSunk && mine.some((s) => s.hit)) || (ownSunk && theirs.some((s) => s.hit))) {
+        this.time.delayedCall(320, () => this.battle(() => this.sfx.splash()))
+      }
+    }
 
     this.updateTurn(me, rivalColor)
     // A bye first hears that it scores a draw, then watches.
@@ -213,7 +270,7 @@ export class SinkTheFleetScene extends MiniGameScene<SinkTheFleetSnapshot> {
       own.setFocus('idle')
       target.setAimable(false)
       this.turnText?.setText('')
-      this.turnBar?.clear()
+      this.turnBar?.clear().setData('bar', '')
       return
     }
     const mine = me.yourTurn
@@ -243,6 +300,9 @@ export class SinkTheFleetScene extends MiniGameScene<SinkTheFleetSnapshot> {
     this.turnMax = Math.max(this.turnMax, me.turnRemainingMs)
     const frac = this.turnMax > 0 ? me.turnRemainingMs / this.turnMax : 0
     const urgent = mine && this.playing && me.turnRemainingMs < 1500
+    // Your shot is about to time out: one warning beep as the bar turns red.
+    if (urgent && !this.urgentTurn) this.sfx.urgent()
+    this.urgentTurn = urgent
     const color = mine ? (urgent ? PALETTE.red : PALETTE.amber) : PALETTE.frameLit
     if (this.turnBar) {
       const { x, y, w, h } = this.bar
@@ -266,6 +326,7 @@ export class SinkTheFleetScene extends MiniGameScene<SinkTheFleetSnapshot> {
       if (!this.playing) {
         this.sfx.tick()
       } else if (me.won === true) {
+        this.sfx.cheer()
         this.sfx.coin()
         if (c) {
           burst(this, c.x, c.y, PALETTE.amber, 28, 320)
@@ -318,8 +379,7 @@ export class SinkTheFleetScene extends MiniGameScene<SinkTheFleetSnapshot> {
     target.shotFx(s, true)
     const { x, y } = target.cellXY(s.cell)
     if (s.hit) {
-      if (this.playing) this.sfx.correct()
-      else this.sfx.pop()
+      this.battle(() => this.sfx.explosion())
       shake(this, 0.006, 140)
       floatText(this, x, y - target.cell * 0.4, this.t('game.sinkTheFleet.hit'), PALETTE.orange)
       if (!sunk) {
@@ -333,7 +393,7 @@ export class SinkTheFleetScene extends MiniGameScene<SinkTheFleetSnapshot> {
         )
       }
     } else {
-      this.sfx.pop()
+      this.battle(() => this.sfx.splash())
       floatText(
         this,
         x,
@@ -351,22 +411,29 @@ export class SinkTheFleetScene extends MiniGameScene<SinkTheFleetSnapshot> {
     own.shotFx(s, s.hit)
     const { x, y } = own.cellXY(s.cell)
     if (s.hit) {
-      if (this.playing) this.sfx.wrong()
-      else this.sfx.pop()
+      this.battle(() => this.sfx.explosion())
+      if (this.playing) this.sfx.hurt()
       shake(this, 0.012, 220)
       own.pulse(PALETTE.red)
       floatText(this, x, y - own.cell * 0.4, this.t('game.sinkTheFleet.hit'), PALETTE.red)
     } else {
-      this.sfx.pop()
+      this.battle(() => this.sfx.splash())
       floatText(this, x, y - own.cell * 0.4, this.t('game.sinkTheFleet.splash'), PALETTE.dim, 14)
     }
   }
 
+  // A shot's sound: full volume in your own duel, quieter for a duel you're only watching.
+  private battle(sound: () => void): void {
+    if (this.playing) sound()
+    else this.sfx.quiet(sound, 0.5)
+  }
+
   private hideBoards(): void {
+    if (this.boardsHidden) return
     this.boardsHidden = true
     this.target?.setVisible(false)
     this.own?.setVisible(false)
     this.turnText?.setText('')
-    this.turnBar?.clear()
+    this.turnBar?.clear().setData('bar', '')
   }
 }

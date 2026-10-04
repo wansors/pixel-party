@@ -15,10 +15,12 @@ import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // Pang (Buster Bros): your own arena — a night skyline, a brick floor and the same seeded waves of
-// bouncing balloons everyone else gets. Walk with ←/→ (A/D) and fire the harpoon with SPACE/↑ (or the
-// three buttons); a hit splits a balloon into two smaller ones. Between snapshots the scene runs the
-// same balloon physics as the server (shared PANG constants), so they fly smoothly. On wide screens
-// everyone else's arena shows as a live thumbnail on the right.
+// bouncing balloons everyone else gets. Walk with ←/→ (A/D) and fire the harpoon with SPACE/↑ (also
+// W/Z/J, or the three buttons); a hit splits a balloon into two smaller ones. Between snapshots the
+// scene runs the same balloon physics as the server (shared PANG constants), so they fly smoothly.
+// You are predicted: you walk the moment you press (easing onto the server's position) and your
+// harpoon leaves the moment you fire (a press just before the last one is done is kept for it). On
+// wide screens everyone else's arena shows as a live thumbnail on the right.
 
 interface SimBalloon {
   x: number
@@ -29,6 +31,12 @@ interface SimBalloon {
 }
 
 const BALLOON_COLORS = [0, PALETTE.lime, PALETTE.amber, PALETTE.orange, PALETTE.red]
+// Time constant of the ease from your predicted position onto the server's.
+const CORRECT_TAU_MS = 200
+// A harpoon you fired shows at once; this long without the server's echo and it's dropped.
+const SHOT_GRACE_MS = 300
+// Rivals' moments play at this fraction of the volume (yours stay full), so a full room stays readable.
+const RIVAL_LEVEL = 0.5
 
 // Advances balloons with the server's rules (gravity, walls, a fixed bounce height per size).
 function stepBalloons(balloons: SimBalloon[], dt: number): void {
@@ -87,8 +95,13 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
   private lastFrameAt = 0
   private held = { left: false, right: false, leftPtr: -1, rightPtr: -1 }
   private sentDir = 0
+  private minisTick = -1
   private mine?: PangArena
-
+  // Your position, predicted; the harpoon you just fired (until the server's snapshot shows it).
+  private predX?: number
+  private shot?: { x: number; at: number }
+  // Players already out (a rival going out is announced once).
+  private readonly outSeen = new Set<string>()
   constructor(...deps: SceneDeps) {
     super('pang', ...deps)
   }
@@ -113,7 +126,11 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
     this.lastFrameAt = 0
     this.held = { left: false, right: false, leftPtr: -1, rightPtr: -1 }
     this.sentDir = 0
+    this.minisTick = -1
     this.mine = undefined
+    this.predX = undefined
+    this.shot = undefined
+    this.outSeen.clear()
     this.bannerUntil = 0
 
     // Controls: ◀ FIRE ▶ along the bottom.
@@ -171,7 +188,7 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
         this.held[side] = false
       })
     }
-    for (const k of ['SPACE', 'UP', 'W']) this.onKey(k, () => this.fire())
+    for (const k of ['SPACE', 'UP', 'W', 'Z', 'J', 'ENTER']) this.onKey(k, () => this.fire())
     // Losing focus drops held keys (their key-up would never arrive).
     const release = (): void => {
       this.held = { left: false, right: false, leftPtr: -1, rightPtr: -1 }
@@ -267,11 +284,32 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
     g.strokeRect(x, y, w, h)
   }
 
+  // Fire goes out on every press (the server keeps one pressed just before the gun is free); the
+  // harpoon shows at once when the gun is free as far as we can tell.
   private fire(): void {
-    if (!this.snap || this.state.final || !this.mine || this.mine.out || this.mine.harpoon !== null)
-      return
+    const mine = this.mine
+    if (!this.snap || this.state.final || !mine || mine.out) return
     this.sendInput({ kind: 'fire' })
-    this.sfx.click()
+    const now = this.time.now
+    if (this.flyingTip(now) !== null) return
+    this.shot = { x: this.predX ?? mine.x, at: now }
+    this.sfx.shoot()
+  }
+
+  // The harpoon in the air right now: the server's (run on since its snapshot), else the one you just
+  // fired. Null when the gun is free.
+  private flyingTip(time: number): { x: number; tip: number } | null {
+    const mine = this.mine
+    if (mine?.harpoon != null && mine.harpoonX !== null) {
+      const tip = mine.harpoon - (PANG.harpoonSpeed * (time - this.snapAt)) / 1000
+      if (tip > 0) return { x: mine.harpoonX, tip }
+    }
+    const shot = this.shot
+    if (shot && time - shot.at < SHOT_GRACE_MS) {
+      const tip = PANG.h - (PANG.harpoonSpeed * (time - shot.at)) / 1000
+      if (tip > 0) return { x: shot.x, tip }
+    }
+    return null
   }
 
   private syncDir(): void {
@@ -296,18 +334,43 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
       this.lastTick = this.state.tick
       this.snapAt = time
       this.onSnapshot(snap)
-    } else for (const sim of this.sims.values()) stepBalloons(sim, dt)
+    } else {
+      // Only your own arena moves between snapshots (the thumbnails redraw per snapshot).
+      const own = this.sims.get(this.selfId)
+      if (own) stepBalloons(own, dt)
+    }
     this.syncDir()
+    this.predict(time, dt)
     this.paintOwn(time)
     this.paintMinis(snap)
     if (this.banner?.visible && time > this.bannerUntil && !this.state.final)
       this.banner.setVisible(false)
   }
 
+  // You walk on your held keys at once, easing onto the server's position (run on with its direction).
+  private predict(time: number, dt: number): void {
+    const mine = this.mine
+    if (!mine || mine.out || this.state.final) {
+      this.predX = mine?.x
+      return
+    }
+    const clamp = (x: number): number =>
+      Math.max(PANG.playerHalfW, Math.min(PANG.w - PANG.playerHalfW, x))
+    const server = clamp(mine.x + (mine.dir * PANG.walk * (time - this.snapAt)) / 1000)
+    if (this.predX === undefined) {
+      this.predX = server
+      return
+    }
+    const x = clamp(this.predX + this.sentDir * PANG.walk * dt)
+    this.predX = x + (server - x) * (1 - Math.exp((-dt * 1000) / CORRECT_TAU_MS))
+  }
+
   private onSnapshot(snap: PangSnapshot): void {
     const prev = this.mine
     const mine = snap.arenas.find((a) => a.id === this.selfId)
     this.mine = mine
+    // The server has our harpoon now (or it already struck): stop showing the local one.
+    if (mine && (mine.harpoon !== null || (prev && mine.pops > prev.pops))) this.shot = undefined
     for (const a of snap.arenas) {
       this.sims.set(
         a.id,
@@ -318,6 +381,13 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
       this.hud?.setScore(this.t('game.pang.pops', { n: mine.pops }))
       this.hud?.setCenter(this.t('game.pang.wave', { n: mine.wave + 1 }))
       if (prev && !this.firstSnapshot) this.react(prev, mine)
+    }
+    // A rival popped for good: the elimination sting (yours plays in react()).
+    for (const a of snap.arenas) {
+      if (!a.out || this.outSeen.has(a.id)) continue
+      this.outSeen.add(a.id)
+      if (a.id !== this.selfId && !this.firstSnapshot)
+        this.sfx.quiet(() => this.sfx.eliminated(), RIVAL_LEVEL)
     }
     const prompt =
       !mine || mine.out
@@ -375,7 +445,7 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
         this.sfx.eliminated()
       } else {
         floatText(this, p.x, p.y - 10, '-♥', PALETTE.red, size)
-        this.sfx.wrong()
+        this.sfx.hurt()
       }
       flash(this, PALETTE.red, 200, 0.28)
       shake(this, 0.008, 160)
@@ -410,14 +480,8 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
     for (let i = sim.length; i < this.balloonImgs.length; i++)
       this.balloonImgs[i]?.setVisible(false)
     if (!mine) return
-    // The player: dead-reckoned along the floor with the held direction.
-    const since = (time - this.snapAt) / 1000
-    const x = mine.out
-      ? mine.x
-      : Math.max(
-          PANG.playerHalfW,
-          Math.min(PANG.w - PANG.playerHalfW, mine.x + this.sentDir * PANG.walk * since),
-        )
+    // The player: predicted along the floor (see predict()).
+    const x = mine.out ? mine.x : (this.predX ?? mine.x)
     const floor = this.toScreen(x, PANG.h)
     if (!this.avatar) {
       const size = avatarPx(Math.max(24, Math.round(PANG.playerH * this.arena.scale * 1.25)))
@@ -446,10 +510,10 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
     // The harpoon: a zigzag wire from the floor up to the arrowhead.
     const g = this.harpoonG as Phaser.GameObjects.Graphics
     g.clear()
-    if (mine.harpoon !== null && mine.harpoonX !== null) {
-      const tipY = Math.max(0, mine.harpoon - PANG.harpoonSpeed * since)
-      const base = this.toScreen(mine.harpoonX, PANG.h)
-      const tip = this.toScreen(mine.harpoonX, tipY)
+    const flying = mine.out ? null : this.flyingTip(time)
+    if (flying) {
+      const base = this.toScreen(flying.x, PANG.h)
+      const tip = this.toScreen(flying.x, flying.tip)
       g.lineStyle(2, 0xd8dce8, 1)
       g.beginPath()
       g.moveTo(base.x, base.y)
@@ -461,10 +525,12 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
     }
   }
 
-  // Everyone else's arena, live, as thumbnails (wide screens only).
+  // Everyone else's arena, as thumbnails (wide screens only) — redrawn once per snapshot (~7 Hz is
+  // plenty for a glance), balloons as squares (cheap to fill, the same at that size).
   private paintMinis(snap: PangSnapshot): void {
     const g = this.minis
-    if (!g || !this.wide) return
+    if (!g || !this.wide || this.minisTick === this.lastTick) return
+    this.minisTick = this.lastTick
     const others = snap.arenas.filter((a) => a.id !== this.selfId)
     const { width } = this.scale
     if (this.miniBoxes.length !== others.length) {
@@ -494,7 +560,12 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
       for (const a of this.miniAvatars) a.destroy()
       this.miniLabels = this.miniBoxes.map((b) =>
         this.add
-          .text(b.x, b.y + b.h + 2, '', bodyStyle(11, PALETTE.text, { fontStyle: 'bold' }))
+          .text(
+            b.x,
+            b.y + b.h + 2,
+            '',
+            bodyStyle(width >= 1600 ? 13 : 11, PALETTE.text, { fontStyle: 'bold' }),
+          )
           .setDepth(6),
       )
       this.miniLabelW = boxW + 6
@@ -519,11 +590,13 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
       g.lineStyle(2, this.state.colorOf(a.id), a.out ? 0.4 : 1)
       g.strokeRect(box.x, box.y, box.w, box.h)
       for (const b of this.sims.get(a.id) ?? []) {
+        const r = Math.max(1.5, (PANG.radius[b.size] ?? 0.03) * s)
         g.fillStyle(BALLOON_COLORS[b.size] ?? PALETTE.red, 1)
-        g.fillCircle(
-          box.x + b.x * s,
-          box.y + b.y * s,
-          Math.max(1.5, (PANG.radius[b.size] ?? 0.03) * s),
+        g.fillRect(
+          Math.round(box.x + b.x * s - r),
+          Math.round(box.y + b.y * s - r),
+          Math.round(r * 2),
+          Math.round(r * 2),
         )
       }
       // Each rival is their avatar (KO face once out) walking the thumbnail's floor.

@@ -12,13 +12,18 @@ import {
   shade,
 } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
-import { type DuelSeat, DuelWatch } from './duelWatch'
+import { type DuelSeat, DuelWatch, verdictKey } from './duelWatch'
 
 // Marbles Duel (odd or even): your rival across the table at the top, you at the bottom, each with your
 // lobby avatar and your pouch of marbles. When you HIDE, pick how many go in your fist (− / +, then
 // HIDE); when you GUESS, pick a bet (− / +) and call ODD or EVEN. Both choose at once; the reveal opens
-// the fist and rolls the marbles to the winner. Keys: ←/→ change the number, SPACE hides, O / E call.
-// The bye (or a player who joined mid-round) watches another duel from the same seat, read-only.
+// the fist and rolls the marbles to the winner. Keys: type the number (1–9, 0 = 10, two digits for
+// more) or nudge it with ←/→ ↑/↓ (A/D W/S); SPACE / ENTER hides; O or N calls odd (nones), E or P
+// even (pares). The bye (or a player who joined mid-round) watches another duel from the same seat,
+// read-only — and so does a duellist a few seconds after their own duel is over.
+
+// A second digit typed this soon after the first makes a two-digit number ("1", "5" = 15).
+const DIGIT_CHAIN_MS = 900
 
 const MARBLE_COLORS = [
   PALETTE.cyan,
@@ -61,6 +66,12 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
   // Whose seat the table is drawn from: yours while you play, else the duellist being watched.
   private viewId: string | null | undefined = undefined
   private playing = false
+  private hint?: Phaser.GameObjects.Text
+  private big = false
+  // The turn we already committed a choice for (the controls go at once, before the snapshot says so).
+  private committedTurn = -1
+  private lastDigit = { d: -1, at: 0 }
+  private pouchKey = ''
 
   constructor(...deps: SceneDeps) {
     super('marbles-duel', ...deps)
@@ -74,9 +85,13 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
     super.create()
     const { width, height } = this.scale
     this.compact = Math.min(width, height) < 520
+    this.big = Math.min(width, height) >= 900
     this.pick = 1
     this.ui = []
     this.layoutKey = ''
+    this.committedTurn = -1
+    this.lastDigit = { d: -1, at: 0 }
+    this.pouchKey = ''
     this.lastView = undefined
     this.myAvatar = undefined
     this.rivalAvatar = undefined
@@ -84,8 +99,21 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
     this.watch.reset()
     this.viewId = undefined
     this.playing = false
+    // The key hint sits under the controls (not on phones: no keyboard there).
+    const hintSize = this.big ? 16 : 14
+    this.hint = this.compact
+      ? undefined
+      : this.add
+          .text(
+            width / 2,
+            height - 8,
+            this.t('game.marbles.keys'),
+            bodyStyle(hintSize, PALETTE.dim),
+          )
+          .setOrigin(0.5, 1)
+          .setDepth(10)
     const top = this.top + 10
-    const bottom = height - 12
+    const bottom = height - 12 - (this.hint ? hintSize + 8 : 0)
     const h = bottom - top
     this.rows = {
       theirs: top + h * 0.1,
@@ -100,7 +128,7 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
       .fillRoundedRect(22, top + h * 0.22 + 6, width - 44, h * 0.38 - 12, 10)
     this.pouches = this.add.graphics().setDepth(5)
     this.timer = this.add.graphics().setDepth(6)
-    const size = this.compact ? 12 : 16
+    const size = this.compact ? 12 : this.big ? 24 : 16
     this.theirsText = this.add
       .text(width / 2, this.rows.theirs, '', headlineStyle(size, PALETTE.text))
       .setOrigin(0.5)
@@ -108,7 +136,7 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
     this.mineText = this.add
       .text(
         width / 2,
-        this.rows.mine + (this.compact ? 34 : 40),
+        this.rows.mine + (this.compact ? 34 : this.big ? 52 : 40),
         '',
         headlineStyle(size, PALETTE.amber),
       )
@@ -128,7 +156,7 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
         width / 2,
         this.rows.centre + (this.compact ? 40 : 52),
         '',
-        bodyStyle(this.compact ? 12 : 14, PALETTE.dim, {
+        bodyStyle(this.compact ? 12 : this.big ? 20 : 14, PALETTE.dim, {
           align: 'center',
           wordWrap: { width: width * 0.9 },
         }),
@@ -136,11 +164,45 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
       .setOrigin(0.5)
       .setDepth(10)
     this.banner = addBanner(this)
-    this.onKey('LEFT', () => this.step(-1), { repeat: true })
-    this.onKey('RIGHT', () => this.step(1), { repeat: true })
+    for (const key of ['LEFT', 'DOWN', 'A', 'S'])
+      this.onKey(key, () => this.step(-1), { repeat: true })
+    for (const key of ['RIGHT', 'UP', 'D', 'W'])
+      this.onKey(key, () => this.step(1), { repeat: true })
     this.onKey('SPACE', () => this.commit('hide'))
-    this.onKey('O', () => this.commit('odd'))
-    this.onKey('E', () => this.commit('even'))
+    this.onKey('ENTER', () => this.commit('hide'))
+    // Odd / even in both languages' initials: O·N (odd, nones), E·P (even, pares).
+    for (const key of ['O', 'N']) this.onKey(key, () => this.commit('odd'))
+    for (const key of ['E', 'P']) this.onKey(key, () => this.commit('even'))
+    this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
+      if (!e.repeat && /^[0-9]$/.test(e.key)) this.typeDigit(Number(e.key))
+    })
+  }
+
+  // A typed number: one digit (0 = 10), or two typed in quick succession.
+  private typeDigit(d: number): void {
+    const v = this.view()
+    if (!this.canChoose(v)) return
+    const now = this.time.now
+    const chained = this.lastDigit.d * 10 + d
+    const n =
+      this.lastDigit.d > 0 && now - this.lastDigit.at < DIGIT_CHAIN_MS && chained <= v.mine
+        ? chained
+        : d === 0
+          ? 10
+          : d
+    this.lastDigit = { d, at: now }
+    this.setPick(n, v.mine)
+  }
+
+  private canChoose(v: MarblesPlayerView | undefined): v is MarblesPlayerView {
+    return (
+      this.playing &&
+      !!v?.opponentId &&
+      v.phase === 'choose' &&
+      !v.youChose &&
+      this.committedTurn !== v.turn &&
+      !this.state.final
+    )
   }
 
   private view(): MarblesPlayerView | undefined {
@@ -149,8 +211,13 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
 
   private step(d: number): void {
     const v = this.view()
-    if (!v?.opponentId || v.phase !== 'choose' || v.youChose) return
-    this.pick = Math.max(1, Math.min(v.mine, this.pick + d))
+    if (!this.canChoose(v)) return
+    this.lastDigit = { d: -1, at: 0 }
+    this.setPick(this.pick + d, v.mine)
+  }
+
+  private setPick(n: number, max: number): void {
+    this.pick = Math.max(1, Math.min(max, n))
     this.pickText?.setText(String(this.pick))
     if (this.pickText) punch(this, this.pickText, 0.15, 60)
     this.sfx.click()
@@ -158,26 +225,33 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
 
   private commit(what: 'hide' | 'odd' | 'even'): void {
     const v = this.view()
-    if (!v?.opponentId || v.phase !== 'choose' || v.youChose || this.state.final) return
+    if (!this.canChoose(v)) return
     if (what === 'hide' && v.role === 'hide') this.sendInput({ kind: 'hide', count: this.pick })
     else if (what !== 'hide' && v.role === 'guess')
       this.sendInput({ kind: 'guess', bet: this.pick, odd: what === 'odd' })
     else return
-    this.sfx.correct()
+    // The fist closes on the pick (or the bet goes down): locked in.
+    this.sfx.lock()
+    // Locked in: the controls go now and the line says who we wait for (the snapshot catches up).
+    this.committedTurn = v.turn
+    this.buildControls(v)
+    if (v.opponentId) {
+      this.status?.setText(this.t('game.marbles.waiting', { name: this.label(v.opponentId) }))
+    }
   }
 
   // Rebuilds the controls for the current role (hide: − n + HIDE · guess: − n + ODD EVEN).
   private buildControls(v: MarblesPlayerView): void {
     for (const o of this.ui) o.destroy()
     this.ui = []
-    if (!this.playing || v.phase !== 'choose' || v.youChose) {
+    if (!this.canChoose(v)) {
       this.pickText = undefined
       return
     }
     const { width } = this.scale
     const y = this.rows.controls
-    const bh = this.compact ? 56 : 52
-    const small = this.compact ? 56 : 52
+    const bh = this.compact ? 56 : this.big ? 64 : 52
+    const small = this.compact ? 56 : this.big ? 64 : 52
     const mk = (x: number, w: number, label: string, color: number, onTap: () => void): void => {
       const img = this.add
         .image(x, y, ensureBevelPanel(this, w, bh, color, 5, true))
@@ -199,21 +273,21 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
       this.ui.push(img, text)
     }
     this.pick = Math.max(1, Math.min(v.mine, this.pick))
-    const left = width / 2 - (this.compact ? 150 : 230)
+    const left = width / 2 - (this.compact ? 150 : this.big ? 300 : 230)
     mk(left, small, '−', PALETTE.frameLit, () => this.step(-1))
     this.pickText = this.add
       .text(
         left + small + 14,
         y,
         String(this.pick),
-        headlineStyle(this.compact ? 24 : 32, PALETTE.amber),
+        headlineStyle(this.compact ? 24 : this.big ? 40 : 32, PALETTE.amber),
       )
       .setOrigin(0.5)
       .setDepth(701)
     this.ui.push(this.pickText)
     mk(left + small * 2 + 28, small, '+', PALETTE.frameLit, () => this.step(1))
     const restX = left + small * 2.5 + 40
-    const restW = width - 16 - restX
+    const restW = Math.min(width - 16 - restX, this.big ? 520 : Number.POSITIVE_INFINITY)
     if (v.role === 'hide') {
       mk(restX + restW / 2, restW, this.t('game.marbles.hide'), PALETTE.orange, () =>
         this.commit('hide'),
@@ -230,9 +304,9 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
   protected frame(snap: MarblesSnapshot | null, time: number): void {
     if (!snap) return
     const own = snap.players[this.selfId]
-    this.playing = !!own?.opponentId
-    const viewId = this.playing ? this.selfId : this.watch.pick(seats(snap), time)
-    if (viewId !== this.viewId) this.setView(viewId, own?.opponentId === null)
+    const viewId = this.watch.follow(seats(snap), this.selfId, time)
+    this.playing = !!own?.opponentId && viewId === this.selfId
+    if (viewId !== this.viewId) this.setView(viewId, own)
     const v = viewId === null ? undefined : snap.players[viewId]
     if (!v) return
     const key = `${v.turn}:${v.phase}:${v.role}:${v.youChose}`
@@ -247,10 +321,13 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
     this.lastView = v
   }
 
-  // A new seat at the table: yours on the first snapshot, or the next duel a spectator watches.
-  private setView(viewId: string | null, bye: boolean): void {
+  // A new seat at the table: yours on the first snapshot, or the next duel a spectator watches (a
+  // duellist whose duel is over keeps their verdict in the HUD).
+  private setView(viewId: string | null, own: MarblesPlayerView | undefined): void {
+    const bye = own?.opponentId === null
     this.viewId = viewId
     this.layoutKey = ''
+    this.pouchKey = ''
     this.lastView = undefined
     this.revealShown = 0
     this.myAvatar?.image.destroy()
@@ -258,14 +335,23 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
     this.myAvatar = undefined
     this.rivalAvatar = undefined
     this.banner?.setVisible(false)
-    if (!this.playing) this.hud?.setScore(bye ? this.t('game.common.duelBye') : '')
+    this.hint?.setVisible(this.playing)
+    if (!this.playing) {
+      this.hud?.setScore(
+        bye
+          ? this.t('game.common.duelBye')
+          : own?.phase === 'done'
+            ? this.t(verdictKey(own.won))
+            : '',
+      )
+    }
   }
 
   // The two players at the ends of the table, reacting to every reveal and to the result.
   private paintAvatars(v: MarblesPlayerView, time: number): void {
     const viewId = this.viewId
     if (!viewId) return
-    const px = avatarPx(this.compact ? 32 : 48)
+    const px = avatarPx(this.compact ? 32 : this.big ? 64 : 48)
     const make = (id: string, y: number): AvatarSprite => {
       const a = new AvatarSprite(this, this.state.avatarOf(id), this.state.colorOf(id), px)
       a.image.setPosition(28 + px / 2, y).setDepth(10)
@@ -289,14 +375,17 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
     this.rivalAvatar?.setExpression(theirs).tick(time)
   }
 
-  // Your pouch and theirs: a row of marbles (capped) with the count.
+  // Your pouch and theirs: a row of marbles (capped) with the count — redrawn only when it changes.
   private paintPouches(v: MarblesPlayerView): void {
+    const key = `${this.viewId}:${v.mine}:${v.theirs}:${v.opponentId}`
+    if (key === this.pouchKey) return
+    this.pouchKey = key
     const g = this.pouches as Phaser.GameObjects.Graphics
     const { width } = this.scale
     g.clear()
     const row = (n: number, y: number): void => {
       const shown = Math.min(n, 20)
-      const r = this.compact ? 6 : 8
+      const r = this.compact ? 6 : this.big ? 11 : 8
       const span = shown * r * 2.4
       for (let i = 0; i < shown; i++) {
         g.fillStyle(MARBLE_COLORS[i % MARBLE_COLORS.length] ?? PALETTE.cyan, 1)
@@ -317,7 +406,7 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
     )
     this.mineText?.setColor(hexToCss(this.state.colorOf(viewId, PALETTE.amber)))
     if (v.opponentId) this.theirsText?.setColor(hexToCss(this.state.colorOf(v.opponentId)))
-    row(v.theirs, this.rows.theirs + (this.compact ? 22 : 28))
+    row(v.theirs, this.rows.theirs + (this.compact ? 22 : this.big ? 40 : 28))
     row(v.mine, this.rows.mine)
   }
 
@@ -392,9 +481,8 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
           : this.t(iWon ? 'game.marbles.youTake' : 'game.marbles.theyTake', { n: last.moved }),
       )
       this.revealFist(last.hidden, iWon)
-      if (watching) this.sfx.pop()
-      else if (iWon) this.sfx.coin()
-      else this.sfx.wrong()
+      // Your take (or your loss) rings out once the marbles have clattered onto the table.
+      if (!watching) this.time.delayedCall(340, () => (iWon ? this.sfx.coin() : this.sfx.hurt()))
     }
     if (v.phase === 'done' && this.banner) {
       if (watching) {
@@ -426,6 +514,9 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
         status.setText(this.t('game.common.duelOppLeft', { name: this.state.nameOf(opponentId) }))
       }
       if (v.won) this.sfx.win()
+      // Out of marbles: out of the game.
+      else if (v.won === false) this.sfx.eliminated()
+      else this.sfx.tick()
     }
   }
 
@@ -438,7 +529,7 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
   // The fist opens on the table showing the hidden marbles, which then roll to the winner.
   private revealFist(n: number, iWon: boolean): void {
     const { width } = this.scale
-    const r = this.compact ? 9 : 12
+    const r = this.compact ? 9 : this.big ? 16 : 12
     const y = this.rows.centre
     for (let i = 0; i < Math.min(n, 20); i++) {
       const key = ensurePixelOrb(
@@ -471,5 +562,13 @@ export class MarblesDuelScene extends MiniGameScene<MarblesSnapshot> {
     }
     burst(this, width / 2, y, shade(PALETTE.amber, 0.2), 8, 120)
     floatText(this, width / 2, y - 30, String(n), PALETTE.amber, this.compact ? 16 : 24)
+    // The marbles clatter onto the table as they pop out (a few clicks, however many there are),
+    // then roll off to the winner — quieter at a table you're only watching.
+    const level = this.playing ? 1 : 0.5
+    for (let i = 0; i < Math.min(n, 5); i++) {
+      const pitch = 0.55 + ((i * 3) % 5) * 0.1
+      this.time.delayedCall(i * 60, () => this.sfx.quiet(() => this.sfx.bounce(pitch), level))
+    }
+    this.time.delayedCall(860, () => this.sfx.quiet(() => this.sfx.whoosh(), level))
   }
 }

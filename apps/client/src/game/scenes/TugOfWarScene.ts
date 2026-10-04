@@ -3,7 +3,7 @@ import Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, floatText, punch, ring, showBanner } from '../fx'
 import { bodyStyle, ensurePixelGrid, headlineStyle, shade, teamColor } from '../pixelStyle'
-import { YouMarker, addShadow } from '../playerMarks'
+import { type Shadow, YouMarker, addShadow } from '../playerMarks'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 const ROPE = 0xc9a36b
@@ -47,7 +47,7 @@ interface Puller {
   id: string
   team: TeamId
   avatar: AvatarSprite
-  shadow: Phaser.GameObjects.Ellipse
+  shadow: Shadow
   heaveUntil: number
 }
 
@@ -56,7 +56,7 @@ interface Puller {
 // springs toward the server's offset so every change in balance lurches visibly; the team that drags
 // the knot to its own post wins. The plates show each team's pulls PER HEAD — the average is what
 // moves the rope, so a smaller team isn't behind on raw totals. A member who left is greyed out.
-// Tap / SPACE = one pull (team members only).
+// Click / tap / SPACE / ENTER = one pull (team members only; holding a key doesn't repeat).
 export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
   private rope?: Phaser.GameObjects.Graphics
   private pennant?: Phaser.GameObjects.Image
@@ -88,6 +88,7 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
   private lastDust: Record<TeamId, number> = { red: 0, blue: 0 }
   private ended = false
   private pulls = 0
+  private ropeKey = ''
 
   constructor(...deps: SceneDeps) {
     super('tug-of-war', ...deps)
@@ -109,21 +110,24 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
     this.danger = null
     this.ended = false
     this.pulls = 0
+    this.ropeKey = ''
 
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
+    const big = Math.min(width, height) >= 900
     const top = this.top
     const avail = height - top
     this.cx = width / 2
     this.reach = width * (compact ? 0.24 : 0.2)
-    this.ps = compact ? 5 : 7
+    // Pixel size of the field art: bigger pullers on a 1080p screen, as long as four a side fit.
+    this.ps = compact ? 5 : big ? Math.max(7, Math.min(10, Math.floor(width / 170))) : 7
     this.spacing = 9 * this.ps * (compact ? 1.05 : 1.2)
     this.gapFromKnot = 9 * this.ps * 0.9
     this.groundY = Math.round(top + avail * (compact ? 0.5 : 0.56))
     this.pullerPx = avatarPx(12 * this.ps)
     this.ropeY = this.groundY - Math.round(this.pullerPx * HAND_HEIGHT)
 
-    this.drawPlates(compact)
+    this.drawPlates(compact, big)
     this.drawField(width, compact)
 
     this.rope = this.add.graphics().setDepth(10)
@@ -145,7 +149,7 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
         this.cx,
         below + (height - below) * 0.36,
         '',
-        headlineStyle(compact ? 32 : 40, PALETTE.text, {
+        headlineStyle(compact ? 32 : big ? 48 : 40, PALETTE.text, {
           align: 'center',
           wordWrap: { width: width * 0.9 },
         }),
@@ -155,8 +159,8 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
       .text(
         this.cx,
         height - 10,
-        this.t('game.tugOfWar.hint'),
-        bodyStyle(compact ? 12 : 15, PALETTE.dim, {
+        this.t(compact ? 'game.tugOfWar.hint' : 'game.tugOfWar.hintPc'),
+        bodyStyle(compact ? 12 : big ? 16 : 15, PALETTE.dim, {
           align: 'center',
           wordWrap: { width: width * 0.92 },
         }),
@@ -171,14 +175,15 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
 
     this.input.on('pointerdown', () => this.pull())
     this.onKey('SPACE', () => this.pull())
+    this.onKey('ENTER', () => this.pull())
   }
 
   // Team plates: name over a "per head" caption + the team's average pulls per member, red top-left,
   // blue top-right.
-  private drawPlates(compact: boolean): void {
+  private drawPlates(compact: boolean, big: boolean): void {
     const { width } = this.scale
-    const w = Math.min(width * 0.4, 240)
-    const h = compact ? 48 : 64
+    const w = Math.min(width * 0.4, big ? 320 : 240)
+    const h = compact ? 48 : big ? 84 : 64
     const y = this.top + (compact ? 6 : 12)
     const margin = compact ? 10 : 24
     for (const team of ['red', 'blue'] as const) {
@@ -194,14 +199,19 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
       const align = team === 'red' ? 0 : 1
       const tx = team === 'red' ? x + 12 : x + w - 12
       this.add
-        .text(tx, y + h * 0.36, this.t(`team.${team}`).toUpperCase(), headlineStyle(16, color))
+        .text(
+          tx,
+          y + h * 0.36,
+          this.t(`team.${team}`).toUpperCase(),
+          headlineStyle(big ? 24 : 16, color),
+        )
         .setOrigin(align, 0.5)
       this.add
         .text(
           tx,
-          y + h * 0.36 + (compact ? 12 : 16),
+          y + h * 0.36 + (compact ? 12 : big ? 20 : 16),
           this.t('game.tugOfWar.perHead'),
-          bodyStyle(compact ? 11 : 13, PALETTE.dim),
+          bodyStyle(compact ? 11 : big ? 16 : 13, PALETTE.dim),
         )
         .setOrigin(align, 0)
       this.avgs[team] = this.add
@@ -209,7 +219,7 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
           team === 'red' ? x + w - 12 : x + 12,
           y + h / 2,
           '0.0',
-          headlineStyle(compact ? 16 : 24, PALETTE.text),
+          headlineStyle(compact ? 16 : big ? 32 : 24, PALETTE.text),
         )
         .setOrigin(1 - align, 0.5)
     }
@@ -293,7 +303,12 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
       }
       if (ids.length > maxShown) {
         this.extra[team] = this.add
-          .text(0, this.groundY - 12 * this.ps - 4, `+${ids.length - maxShown}`, bodyStyle(14))
+          .text(
+            0,
+            this.groundY - 12 * this.ps - 4,
+            `+${ids.length - maxShown}`,
+            bodyStyle(this.ps >= 9 ? 20 : 14),
+          )
           .setOrigin(0.5, 1)
           .setDepth(8)
       }
@@ -307,12 +322,13 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
   private pull(): void {
     const snap = this.snap
     if (!snap || snap.done || snap.remainingMs <= 0 || !this.myTeam()) return
-    this.sfx.click()
     this.sendInput({ kind: 'pull' })
+    // Heels digging in, left-right, on every heave.
+    this.sfx.step(++this.pulls)
     const me = this.pullers.find((p) => p.id === this.selfId)
     if (me) {
       me.heaveUntil = this.time.now + 120
-      if (++this.pulls % 3 === 0) burst(this, me.avatar.image.x, this.groundY, 0x8a7a5a, 4, 70)
+      if (this.pulls % 3 === 0) burst(this, me.avatar.image.x, this.groundY, 0x8a7a5a, 4, 70)
     }
     if (this.prompt) punch(this, this.prompt, 0.08, 60)
   }
@@ -370,13 +386,12 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
     const change = snap.offset - this.lastOffset
     if (Math.abs(change) > 0.03) {
       this.wobble = Math.min(10, this.wobble + Math.abs(change) * 70)
-      // The side being dragged kicks up dust.
+      // The side being dragged kicks up dust (one puff under its front puller).
       const dragged: TeamId = change < 0 ? 'blue' : 'red'
-      if (time - this.lastDust[dragged] > 260) {
+      const front = this.pullers.find((p) => p.team === dragged)
+      if (front && time - this.lastDust[dragged] > 260) {
         this.lastDust[dragged] = time
-        for (const p of this.pullers) {
-          if (p.team === dragged) burst(this, p.avatar.image.x, this.groundY, 0x8a7a5a, 5, 90)
-        }
+        burst(this, front.avatar.image.x, this.groundY, 0x8a7a5a, 8, 90)
       }
     }
     this.lastOffset = snap.offset
@@ -393,13 +408,16 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
         teamColor(leader),
         16,
       )
+      // Your side takes the lead with a surge; losing it, the rope whips away from you.
       if (team) {
-        if (leader === team) this.sfx.correct()
-        else this.sfx.tick()
+        if (leader === team) this.sfx.powerUp()
+        else this.sfx.whoosh()
       }
     }
+    if (leader !== this.leader || this.firstSnapshot) {
+      this.pennant?.setTexture(this.pennantKeys[leader ?? 'even'])
+    }
     this.leader = leader
-    this.pennant?.setTexture(this.pennantKeys[leader ?? 'even'])
 
     const danger: TeamId | null =
       snap.offset <= -DANGER ? 'red' : snap.offset >= DANGER ? 'blue' : null
@@ -416,12 +434,13 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
           16,
         )
       }
-      this.sfx.tick()
+      this.sfx.urgent()
     }
     this.danger = danger
     for (const t of ['red', 'blue'] as const) {
+      const alpha = this.danger === t ? 0.55 + 0.45 * Math.abs(Math.sin(time / 90)) : 1
       const post = this.posts[t]
-      post?.setAlpha(this.danger === t ? 0.55 + 0.45 * Math.abs(Math.sin(time / 90)) : 1)
+      if (post && post.alpha !== alpha) post.setAlpha(alpha)
     }
 
     if (snap.done && !this.ended) this.finish(snap, team)
@@ -442,15 +461,19 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
       burst(this, post.x, this.ropeY, color, 28, 300)
       burst(this, post.x, this.ropeY, PALETTE.amber, 16, 240)
     }
+    // The losers hit the dirt; the crowd roars for the winners.
     if (!team) {
       const name = this.t(`team.${winner}`).toUpperCase()
       showBanner(this, this.banner, this.t('game.tugOfWar.teamWins', { team: name }), color)
-      this.sfx.coin()
+      this.sfx.land()
+      this.sfx.cheer()
     } else if (team === winner) {
       showBanner(this, this.banner, this.t('game.common.youWin'), PALETTE.lime)
+      this.sfx.cheer()
       this.sfx.coin()
     } else {
       showBanner(this, this.banner, this.t('game.common.youLose'), PALETTE.red)
+      this.sfx.land()
       this.sfx.wrong()
     }
   }
@@ -459,6 +482,10 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
   private drawRope(knotX: number, time: number): void {
     const g = this.rope
     if (!g) return
+    // A still, settled rope doesn't need redrawing every frame.
+    const key = this.wobble < 0.05 ? `${Math.round(knotX)}` : ''
+    if (key !== '' && key === this.ropeKey) return
+    this.ropeKey = key
     g.clear()
     const { width } = this.scale
     const seg = this.ps * 2

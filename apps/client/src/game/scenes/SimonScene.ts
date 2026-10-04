@@ -17,10 +17,21 @@ const TAP_LIT_MS = 200
 // The device is drawn on a DEVICE_CELLS-wide pixel grid (each cell = one chunky art pixel).
 const DEVICE_CELLS = 48
 const HALO_CELLS = 3
-const MAX_RIVALS = 8
+// The bottom strip's slots: everyone in a full room on a wide screen, the leaders (+ you) otherwise.
+const MAX_RIVALS = 12
+// Keys per pad (top-left, top-right, bottom-left, bottom-right): the Q W / A S block mirrors the
+// device, and 1-4 (top row or numpad) read in the same order. The letter is printed on the pad.
+const PAD_KEYS: readonly (readonly string[])[] = [
+  ['Q', 'ONE', 'NUMPAD_ONE'],
+  ['W', 'TWO', 'NUMPAD_TWO'],
+  ['A', 'THREE', 'NUMPAD_THREE'],
+  ['S', 'FOUR', 'NUMPAD_FOUR'],
+]
 // A create() within this long of the scene's own shutdown is a relayout restart mid-round (a new round
 // only starts seconds after the previous one stopped) — the one case where a memo may carry over.
 const RELAYOUT_GAP_MS = 1000
+// A rival going out (or clearing the lot) sounds at most this often — and never over your playback.
+const RIVAL_SOUND_EVERY_MS = 500
 
 interface PlaySlot {
   pad: number
@@ -43,11 +54,43 @@ function buildPlaySlots(seq: number[]): PlaySlot[] {
 
 type PadLook = 'off' | 'on' | 'halo'
 
+// Paints an n x n grid of `cellPx` cells into a texture: `at` gives each cell's color + alpha (null =
+// transparent). Runs of identical cells along a row become one rectangle, so a device texture is a few
+// hundred canvas fills instead of a few thousand.
+function paintCells(
+  scene: Phaser.Scene,
+  key: string,
+  n: number,
+  cellPx: number,
+  at: (x: number, y: number) => readonly [number, number] | null,
+): string {
+  const g = scene.make.graphics({ x: 0, y: 0 })
+  for (let y = 0; y < n; y++) {
+    let x = 0
+    while (x < n) {
+      const cell = at(x, y)
+      let end = x + 1
+      while (end < n) {
+        const next = at(end, y)
+        if (cell === null ? next !== null : next?.[0] !== cell[0] || next[1] !== cell[1]) break
+        end++
+      }
+      if (cell)
+        g.fillStyle(cell[0], cell[1]).fillRect(x * cellPx, y * cellPx, (end - x) * cellPx, cellPx)
+      x = end
+    }
+  }
+  g.generateTexture(key, n * cellPx, n * cellPx)
+  g.destroy()
+  return key
+}
+
 // Simon (sequence memory) canvas: a round pixel-art Simon device with four quarter-ring pads around a
 // count display. WATCH: the player's growing sequence plays back (input locked, device rim amber);
 // YOUR TURN: repeat it (rim lime, pips below track the replay). Pads have clearly distinct unlit/lit
 // states plus a glow halo; a level-up celebrates before the next playback; a wrong pad blinks the pad
-// that was expected. The server owns the sequence and the verdicts. Scene key === mini-game id.
+// that was expected. Pads answer to clicks/taps and to Q W / A S (or 1-4), printed on the pads on
+// keyboard-sized screens. The server owns the sequence and the verdicts. Scene key === mini-game id.
 export class SimonScene extends MiniGameScene<SimonSnapshot> {
   private prompt?: Phaser.GameObjects.Text
   private shell?: Phaser.GameObjects.Image
@@ -60,6 +103,7 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
   private rivalIcons: Phaser.GameObjects.Image[] = []
   private waitText?: Phaser.GameObjects.Text
   private banner?: Phaser.GameObjects.Text
+  private rivalsSnap?: SimonSnapshot
   private cellPx = 4
   private cx = 0
   private cy = 0
@@ -69,6 +113,7 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
   private playing = false
   private playStart = 0
   private lastTapAt = 0
+  private lastTapPad = -1
   private wasAlive = true
   // Last sequence slot whose tone was played during playback, so each pad sounds once as it lights.
   private lastPlaySlot = -1
@@ -84,6 +129,9 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
   // ended — instead of replaying the whole sequence, a second look for a player stuck mid-replay.
   private playMemo = { round: -1, len: -1, start: 0 }
   private stoppedAt = Number.NEGATIVE_INFINITY
+  // Players already seen out of the run (sounded once), and when a rival's sting last played.
+  private readonly ended = new Set<string>()
+  private rivalSoundAt = Number.NEGATIVE_INFINITY
 
   constructor(...deps: SceneDeps) {
     super('simon', ...deps)
@@ -110,6 +158,9 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
     this.hintPad = -1
     this.hintUntil = 0
     this.pipsKey = ''
+    this.rivalsSnap = undefined
+    this.ended.clear()
+    this.rivalSoundAt = Number.NEGATIVE_INFINITY
 
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
@@ -125,12 +176,26 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
     // device.
     const rivalY = height - (compact ? 20 : 28)
     this.pipsY = rivalY - (compact ? 36 : 46)
-    const areaTop = promptY + promptSize / 2 + (compact ? 20 : 28)
+    // Keyboard screens: name the keys under the prompt (the pads carry their letters too).
+    if (!compact) {
+      this.add
+        .text(this.cx, promptY + promptSize / 2 + 14, this.t('game.simon.keys'), bodyStyle(16))
+        .setOrigin(0.5, 0)
+    }
+    const areaTop = promptY + promptSize / 2 + (compact ? 20 : 52)
     const areaBottom = this.pipsY - (compact ? 22 : 30)
-    const size = Math.max(160, Math.min(width - 48, areaBottom - areaTop, 440))
+    // A big canvas (1080p) gets a bigger device; laptops and phones keep the old cap.
+    const cap = width >= 1400 && height >= 860 ? 600 : 440
+    const size = Math.max(160, Math.min(width - 48, areaBottom - areaTop, cap))
     this.cellPx = Math.max(2, Math.floor(size / DEVICE_CELLS))
     this.cy = (areaTop + areaBottom) / 2
 
+    // Every look of the device is drawn up front (cached per size, so only the first round at a size
+    // pays): drawn lazily, the first lit pad, the YOUR TURN rim or the OUT rim each cost a visible hitch
+    // mid-play — several thousand pixel cells per texture.
+    for (const rim of [PALETTE.frame, PALETTE.amber, PALETTE.lime, PALETTE.red]) this.bodyKey(rim)
+    for (let i = 0; i < 4; i++)
+      for (const look of ['off', 'on', 'halo'] as const) this.padKey(i, look)
     this.shell = this.add.image(this.cx, this.cy, this.bodyKey(PALETTE.frame))
     for (let i = 0; i < 4; i++) {
       const origin = { x: i % 2 === 0 ? 1 : 0, y: i < 2 ? 1 : 0 }
@@ -143,9 +208,26 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
         .image(this.cx, this.cy, this.padKey(i, 'off'))
         .setOrigin(origin.x, origin.y)
         .setInteractive({ useHandCursor: true })
-      pad.on('pointerdown', () => this.tap(i))
+      pad.on('pointerdown', () => this.tap(i, true))
       this.halos.push(halo)
       this.pads.push(pad)
+      for (const k of PAD_KEYS[i] ?? []) this.onKey(k, () => this.tap(i, false))
+      if (!compact) {
+        const at = this.padCenter(i)
+        this.add
+          .text(
+            at.x,
+            at.y,
+            PAD_KEYS[i]?.[0] ?? '',
+            headlineStyle(cap > 440 ? 24 : 16, PALETTE.text, {
+              stroke: '#10121c',
+              strokeThickness: 4,
+            }),
+          )
+          .setOrigin(0.5)
+          .setAlpha(0.75)
+          .setDepth(1)
+      }
     }
     this.add.image(this.cx, this.cy, this.hubKey()).setDepth(2)
     this.hubText = this.add
@@ -201,45 +283,30 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
       look === 'on'
         ? { base: shade(c, 0.12), hi: shade(c, 0.62), lo: c, rim: shade(c, -0.3) }
         : { base: shade(c, -0.5), hi: shade(c, -0.28), lo: shade(c, -0.64), rim: shade(c, -0.78) }
-    const g = this.make.graphics({ x: 0, y: 0 })
-    for (let ty = 0; ty < n; ty++) {
-      for (let tx = 0; tx < n; tx++) {
-        // Distance from the device centre (the texture's inner corner), in cells.
-        const ax = left ? n - tx - 0.5 : tx + 0.5
-        const ay = upper ? n - ty - 0.5 : ty + 0.5
-        const dist = Math.sqrt(ax * ax + ay * ay)
-        if (ax < gap || ay < gap || dist < rIn) continue
-        if (look === 'halo') {
-          if (dist > rOut + margin) continue
-          const alpha = dist <= rOut ? 0.28 : dist <= rOut + margin / 2 ? 0.4 : 0.18
-          g.fillStyle(c, alpha)
-        } else {
-          if (dist > rOut) continue
-          const edge = dist > rOut - 1 || dist < rIn + 1 || ax < gap + 1 || ay < gap + 1
-          // Light from the top-left: the rim band facing it is highlighted, the far one shaded.
-          const facing = ((left ? 1 : -1) * ax + (upper ? 1 : -1) * ay) / dist
-          const band = dist > rOut - 3
-          let color = tones.base
-          if (edge) color = tones.rim
-          else if (band && facing > 0.35) color = tones.hi
-          else if (band && facing < -0.35) color = tones.lo
-          // A lit pad gets a bright glint near its outer rim.
-          if (
-            look === 'on' &&
-            !edge &&
-            dist > rOut - 5 &&
-            dist < rOut - 3 &&
-            Math.abs(facing) < 0.3
-          )
-            color = 0xffffff
-          g.fillStyle(color, 1)
-        }
-        g.fillRect(tx * this.cellPx, ty * this.cellPx, this.cellPx, this.cellPx)
+    return paintCells(this, key, n, this.cellPx, (tx, ty) => {
+      // Distance from the device centre (the texture's inner corner), in cells.
+      const ax = left ? n - tx - 0.5 : tx + 0.5
+      const ay = upper ? n - ty - 0.5 : ty + 0.5
+      const dist = Math.sqrt(ax * ax + ay * ay)
+      if (ax < gap || ay < gap || dist < rIn) return null
+      if (look === 'halo') {
+        if (dist > rOut + margin) return null
+        return [c, dist <= rOut ? 0.28 : dist <= rOut + margin / 2 ? 0.4 : 0.18]
       }
-    }
-    g.generateTexture(key, n * this.cellPx, n * this.cellPx)
-    g.destroy()
-    return key
+      if (dist > rOut) return null
+      const edge = dist > rOut - 1 || dist < rIn + 1 || ax < gap + 1 || ay < gap + 1
+      // Light from the top-left: the rim band facing it is highlighted, the far one shaded.
+      const facing = ((left ? 1 : -1) * ax + (upper ? 1 : -1) * ay) / dist
+      const band = dist > rOut - 3
+      let color = tones.base
+      if (edge) color = tones.rim
+      else if (band && facing > 0.35) color = tones.hi
+      else if (band && facing < -0.35) color = tones.lo
+      // A lit pad gets a bright glint near its outer rim.
+      if (look === 'on' && !edge && dist > rOut - 5 && dist < rOut - 3 && Math.abs(facing) < 0.3)
+        color = 0xffffff
+      return [color, 1]
+    })
   }
 
   // The dark round shell behind the pads, rimmed in the state colour (amber WATCH / lime YOUR TURN).
@@ -248,18 +315,12 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
     if (this.textures.exists(key)) return key
     const n = DEVICE_CELLS + 4
     const r = n / 2
-    const g = this.make.graphics({ x: 0, y: 0 })
-    for (let y = 0; y < n; y++) {
-      for (let x = 0; x < n; x++) {
-        const d = Math.hypot(x + 0.5 - r, y + 0.5 - r)
-        if (d > r) continue
-        g.fillStyle(d > r - 1.2 ? rim : d > r - 2.2 ? shade(rim, -0.5) : shade(PALETTE.bg, -0.3), 1)
-        g.fillRect(x * this.cellPx, y * this.cellPx, this.cellPx, this.cellPx)
-      }
-    }
-    g.generateTexture(key, n * this.cellPx, n * this.cellPx)
-    g.destroy()
-    return key
+    const [dark, inner] = [shade(rim, -0.5), shade(PALETTE.bg, -0.3)]
+    return paintCells(this, key, n, this.cellPx, (x, y) => {
+      const d = Math.hypot(x + 0.5 - r, y + 0.5 - r)
+      if (d > r) return null
+      return [d > r - 1.2 ? rim : d > r - 2.2 ? dark : inner, 1]
+    })
   }
 
   // Centre hub: the classic count display.
@@ -268,18 +329,11 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
     if (this.textures.exists(key)) return key
     const r = DEVICE_CELLS * 0.19 - 1.5
     const n = Math.ceil(r * 2)
-    const g = this.make.graphics({ x: 0, y: 0 })
-    for (let y = 0; y < n; y++) {
-      for (let x = 0; x < n; x++) {
-        const d = Math.hypot(x + 0.5 - n / 2, y + 0.5 - n / 2)
-        if (d > r) continue
-        g.fillStyle(d > r - 1.1 ? PALETTE.frameLit : PALETTE.panel, 1)
-        g.fillRect(x * this.cellPx, y * this.cellPx, this.cellPx, this.cellPx)
-      }
-    }
-    g.generateTexture(key, n * this.cellPx, n * this.cellPx)
-    g.destroy()
-    return key
+    return paintCells(this, key, n, this.cellPx, (x, y) => {
+      const d = Math.hypot(x + 0.5 - n / 2, y + 0.5 - n / 2)
+      if (d > r) return null
+      return [d > r - 1.1 ? PALETTE.frameLit : PALETTE.panel, 1]
+    })
   }
 
   // Screen point in the middle of a pad's ring (for rings/bursts/labels).
@@ -293,11 +347,14 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
 
   // --- Input ----------------------------------------------------------------------------------------
 
-  private tap(pad: number): void {
+  private tap(pad: number, byPointer: boolean): void {
     const me = this.snap?.players[this.selfId]
     if (!me || !me.alive || this.playing) return
-    if (this.time.now - this.lastTapAt < 120) return // debounce double taps
+    // Debounce double-fired taps on the same pad; keys need none (auto-repeat is already filtered),
+    // and a fast typist may hit two pads well inside 120 ms.
+    if (byPointer && this.time.now - this.lastTapAt < 120 && this.lastTapPad === pad) return
     this.lastTapAt = this.time.now
+    this.lastTapPad = pad
     this.litUntil[pad] = this.time.now + TAP_LIT_MS
     this.sfx.pad(pad)
     const at = this.padCenter(pad)
@@ -311,7 +368,8 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
     if (!snap) return
     const me = snap.players[this.selfId]
     const score = snap.scores[this.selfId] ?? 0
-    this.hud?.setScore(this.t('game.common.level', { n: score }))
+    if (snap !== this.rivalsSnap) this.hud?.setScore(this.t('game.common.level', { n: score }))
+    if (snap !== this.rivalsSnap) this.trackRivalsEnded(snap)
     this.renderRivals(snap)
     if (!me) {
       // A spectator (not in this round): the device stays dark.
@@ -393,7 +451,8 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
   }
 
   private levelUp(completed: number): void {
-    this.sfx.correct()
+    // Level up: a rising power-up sweep, done before the next playback's first pad.
+    this.sfx.powerUp()
     ring(this, this.cx, this.cy, PALETTE.lime, DEVICE_CELLS * this.cellPx * 0.5)
     burst(this, this.cx, this.cy, PALETTE.lime, 16, 240)
     floatText(
@@ -417,10 +476,12 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
       // A relayout restart after the run ended only restores the end state (no buzz/shake replay).
       const quiet = this.firstSnapshot
       if (clearedAll && !quiet) {
+        this.sfx.cheer()
         this.sfx.coin()
         burst(this, this.cx, this.cy, PALETTE.amber, 30, 320)
       } else if (!quiet) {
-        this.sfx.wrong()
+        // A wrong pad ends the run: the elimination sting.
+        this.sfx.eliminated()
         shake(this, 0.012, 240)
         flash(this, PALETTE.red, 160)
         this.hintPad = me.seq[me.pos] ?? -1
@@ -445,6 +506,21 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
       clearedAll ? -1 : me.pos,
       clearedAll ? PALETTE.lime : PALETTE.red,
     )
+  }
+
+  // A rival's run ending: a short hurt for a wrong pad, a cheer for clearing the whole sequence —
+  // throttled, and silent while this player's own sequence is playing back (it must stay audible).
+  // The first snapshot only learns who is already out.
+  private trackRivalsEnded(snap: SimonSnapshot): void {
+    for (const [id, p] of Object.entries(snap.players)) {
+      if (p.alive || this.ended.has(id)) continue
+      this.ended.add(id)
+      if (this.firstSnapshot || id === this.selfId || this.playing) continue
+      if (this.time.now - this.rivalSoundAt < RIVAL_SOUND_EVERY_MS) continue
+      this.rivalSoundAt = this.time.now
+      if (p.seq.length <= (snap.scores[id] ?? 0)) this.sfx.cheer()
+      else this.sfx.hurt()
+    }
   }
 
   // One pip per pad in the current sequence: done (filled), next (outlined), still to go (dim).
@@ -474,12 +550,16 @@ export class SimonScene extends MiniGameScene<SimonSnapshot> {
   // The leaders' levels along the bottom, in their colours (✕ = out) — always including yours: when you
   // aren't among the top N, you take the last slot.
   private renderRivals(snap: SimonSnapshot): void {
+    // Levels only change with a snapshot.
+    if (snap === this.rivalsSnap) return
+    this.rivalsSnap = snap
     const ranked = Object.keys(snap.players).sort(
       (a, b) =>
         (snap.scores[b] ?? 0) - (snap.scores[a] ?? 0) ||
         (snap.players[b]?.pos ?? 0) - (snap.players[a]?.pos ?? 0),
     )
-    const shown = ranked.slice(0, this.scale.width < 520 ? 4 : MAX_RIVALS)
+    const { width } = this.scale
+    const shown = ranked.slice(0, width < 520 ? 4 : width < 1400 ? 8 : MAX_RIVALS)
     if (this.selfId in snap.players && !shown.includes(this.selfId))
       shown[shown.length - 1] = this.selfId
     const slot = (this.scale.width - 32) / Math.max(1, shown.length)

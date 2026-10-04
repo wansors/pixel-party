@@ -4,6 +4,7 @@ import {
   type HoneycombInput,
   type HoneycombShape,
   type HoneycombSnapshot,
+  honeycombCutHex,
   honeycombOutline,
 } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
@@ -99,7 +100,8 @@ export class HoneycombCut implements MiniGame<HoneycombState, HoneycombInput> {
     const c = state.carvers.get(playerId)
     if (!c || c.broken || c.left || c.doneAt !== null) return state
     if (!isUnit(input.x) || !isUnit(input.y) || typeof input.down !== 'boolean') return state
-    if (!input.down) {
+    // Lifted — or pressed outside the candy (on the tin, off the edge): the needle isn't in it.
+    if (!input.down || Math.hypot(input.x - 0.5, input.y - 0.5) > HONEYCOMB.candyR) {
       c.lastSeg = -1
       c.last = null
       return state
@@ -209,7 +211,7 @@ export class HoneycombCut implements MiniGame<HoneycombState, HoneycombInput> {
         const c = state.carvers.get(id) as Carver
         return {
           id,
-          cut: c.cut.map((b) => (b ? '1' : '0')).join(''),
+          cut: honeycombCutHex(c.cut),
           progress: Math.round(this.progress(c) * 1000) / 1000,
           cracks: c.cracks,
           broken: c.broken,

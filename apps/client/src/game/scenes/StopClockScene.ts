@@ -7,6 +7,10 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 const PERIOD_MS = 1500
 const TRAIL = 4
+// The everyone strip (PlayerStrip) rebuilds every chip from scratch on any change — new Text objects,
+// each measuring its font again — which cost a frame per snapshot once a full room was playing. It
+// follows the standings at most twice a second; your own progress in the HUD stays immediate.
+const STRIP_EVERY_MS = 500
 // A create() within this long of the scene's own shutdown is a relayout restart mid-round (a new round
 // only starts seconds after the previous one stopped) — the one case where a memo may carry over.
 const RELAYOUT_GAP_MS = 1000
@@ -28,10 +32,10 @@ function grade(err: number): [string, number] | undefined {
 }
 
 // Stop the Clock (timing) canvas. A needle sweeps a ruler-marked gauge (triangle wave, animated
-// locally); tap STOP (or Space) to lock it on the flagged green target. The reported position goes
-// to the server, which scores the absolute error. Each stop leaves a pin + gap bracket and a graded
-// pop; three result cards track every attempt's error, and everyone's tries/error run along the top
-// (a player strip, so a full room never pushes the prompt into the gauge).
+// locally); hit STOP (click/tap, Space or Enter) to lock it on the flagged green target. The reported
+// position goes to the server, which scores the absolute error. Each stop leaves a pin + gap bracket
+// and a graded pop; three result cards track every attempt's error, and everyone's tries/error run
+// along the top (a player strip, so a full room never pushes the prompt into the gauge).
 export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
   private status?: Phaser.GameObjects.Text
   private needle?: Phaser.GameObjects.Graphics
@@ -41,6 +45,11 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
   private banner?: Phaser.GameObjects.Text
   private cards: Card[] = []
   private strip?: PlayerStrip
+  private stripSnap?: StopClockSnapshot
+  private labelsSnap?: StopClockSnapshot
+  private stripAt = 0
+  private cardsKey = ''
+  private keyHint?: Phaser.GameObjects.Text
   private keys = { up: '', down: '' }
   private gauge = { left: 0, width: 0, y: 0, h: 0 }
   private trail: number[] = []
@@ -63,6 +72,11 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
     this.lastAttempt = -1
     this.lastError = 0
     this.pendingAttempt = -1
+    this.stripSnap = undefined
+    this.labelsSnap = undefined
+    this.stripAt = 0
+    this.keyHint = undefined
+    this.cardsKey = ''
     if (this.game.getTime() - this.stoppedAt > RELAYOUT_GAP_MS)
       this.errMemo = { round: -1, errs: [] }
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -71,7 +85,10 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
     const { width, height } = this.scale
     const cx = width / 2
     const compact = Math.min(width, height) < 520
-    const stripSize = compact ? 11 : 13
+    // A big canvas (1080p) gets a longer, taller gauge and bigger readouts.
+    const big = width >= 1400 && height >= 860
+    // Everyone's chips read from the couch on a big (1080p) canvas.
+    const stripSize = compact ? 11 : width >= 1400 && height >= 860 ? 16 : 13
     const stripRows = width < 600 ? 3 : 2
     const stripH = PlayerStrip.rowH(stripSize)
     this.strip = new PlayerStrip(
@@ -90,13 +107,13 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
         cx,
         promptY,
         this.t('game.stopClock.prompt'),
-        bodyStyle(compact ? 14 : 18, PALETTE.text, { align: 'center' }),
+        bodyStyle(compact ? 14 : big ? 22 : 18, PALETTE.text, { align: 'center' }),
       )
       .setOrigin(0.5, 0)
 
     // The gauge: beveled track, ruler ticks, flagged target, sweeping needle.
-    const gw = Math.round(Math.min(width * 0.86, 900))
-    const gh = Math.round(compact ? 64 : 88)
+    const gw = Math.round(Math.min(width * 0.86, big ? 1360 : 900))
+    const gh = Math.round(compact ? 64 : big ? 120 : 88)
     // Never above the prompt + the target's pennant (16 px over the track) + the bevel.
     const gy = Math.round(
       Math.max(this.top + (height - this.top) * 0.36, promptY + promptH + 22 + gh / 2 + 6),
@@ -123,8 +140,8 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
     this.needle = this.add.graphics().setDepth(3)
 
     // Per-attempt result cards under the gauge.
-    const cardW = Math.min(compact ? 84 : 150, (gw - 24) / 3)
-    const cardH = compact ? 40 : 52
+    const cardW = Math.min(compact ? 84 : big ? 200 : 150, (gw - 24) / 3)
+    const cardH = compact ? 40 : big ? 64 : 52
     const cardY = gy + gh / 2 + (compact ? 44 : 60)
     for (let i = 0; i < 3; i++) {
       const x = cx + (i - 1) * (cardW + 12)
@@ -132,15 +149,26 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
         .rectangle(x, cardY, cardW, cardH, PALETTE.panel)
         .setStrokeStyle(2, PALETTE.frame)
       const text = this.add
-        .text(x, cardY, '—', headlineStyle(compact ? 12 : 16, PALETTE.dim, { align: 'center' }))
+        .text(
+          x,
+          cardY,
+          '—',
+          headlineStyle(compact ? 12 : big ? 24 : 16, PALETTE.dim, { align: 'center' }),
+        )
         .setOrigin(0.5)
       this.cards.push({ box, text })
     }
 
-    // The STOP button: a big red arcade key with a pressed twin.
+    // The STOP button: a big red arcade key with a pressed twin; on keyboard screens the keys are named
+    // right under it.
     const bw = Math.round(Math.min(width * 0.7, 440))
     const bh = Math.round(compact ? 96 : 110)
-    const by = height - bh / 2 - (compact ? 16 : 24)
+    const by = height - bh / 2 - (compact ? 16 : 24) - (compact ? 0 : 26)
+    if (!compact) {
+      this.keyHint = this.add
+        .text(cx, height - 8, this.t('game.stopClock.keys'), bodyStyle(16))
+        .setOrigin(0.5, 1)
+    }
     this.keys = {
       up: ensureBevelPanel(this, bw, bh, PALETTE.red, 8),
       down: ensureBevelPanel(this, bw, bh, shade(PALETTE.red, -0.3), 8),
@@ -156,6 +184,7 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
       )
       .setOrigin(0.5)
     this.onKey('SPACE', () => this.stop())
+    this.onKey('ENTER', () => this.stop())
 
     this.banner = addBanner(this)
     this.banner
@@ -183,6 +212,8 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
     if (attempt >= snap.attempts || attempt === this.pendingAttempt) return
     const pos = this.needlePos()
     this.pendingAttempt = attempt
+    // The needle clunks to a stop on the press itself; its grade sounds on top (pinFeedback).
+    this.sfx.lock()
     this.sendInput({ kind: 'stop', attempt, pos })
     if (this.button) {
       this.button.setTexture(this.keys.down)
@@ -229,12 +260,12 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
       shake(this, 0.006, 140)
       return
     }
+    // Perfect rings the jackpot, great chimes; a merely good stop is just the clunk.
     if (err < 0.06) {
-      this.sfx.correct()
+      if (err < 0.02) this.sfx.coin()
+      else this.sfx.correct()
       ring(this, px, y, graded[1], h * 0.8)
       if (err < 0.02) burst(this, px, y, PALETTE.amber, 20, 240)
-    } else {
-      this.sfx.click()
     }
   }
 
@@ -244,16 +275,39 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
     const attempt = snap.attemptsDone[this.selfId] ?? 0
     const done = spectator || attempt >= snap.attempts
     const totalError = snap.totalError[this.selfId] ?? 0
-    this.hud?.setScore(
-      this.t('game.stopClock.try', {
-        n: Math.min(attempt + 1, snap.attempts),
-        total: snap.attempts,
-      }),
-    )
     if (attempt > this.pendingAttempt) this.pendingAttempt = -1
     this.onAttemptChange(snap, attempt, totalError)
     this.renderCards(done ? snap.attempts : attempt, snap.attempts)
-    this.renderChips(snap)
+    if (snap !== this.stripSnap && (this.time.now >= this.stripAt || this.state.final)) {
+      this.stripSnap = snap
+      this.stripAt = this.time.now + STRIP_EVERY_MS
+      this.renderChips(snap)
+    }
+    // Tries, errors and the labels only change with a snapshot.
+    if (snap !== this.labelsSnap) {
+      this.labelsSnap = snap
+      this.hud?.setScore(
+        this.t('game.stopClock.try', {
+          n: Math.min(attempt + 1, snap.attempts),
+          total: snap.attempts,
+        }),
+      )
+      this.status?.setText(
+        this.t(
+          spectator
+            ? 'game.common.waiting'
+            : done
+              ? 'game.stopClock.done'
+              : 'game.stopClock.prompt',
+        ),
+      )
+      this.button?.setAlpha(done ? 0.3 : 1)
+      this.buttonLabel?.setText(this.t(done ? 'game.stopClock.doneBtn' : 'game.stopClock.stop'))
+      this.keyHint?.setVisible(!done)
+      if (done && !spectator && this.banner) {
+        showBanner(this, this.banner, this.t('game.common.finished'), PALETTE.lime)
+      }
+    }
 
     // Needle with a short motion trail; parked (hidden) once every try is used.
     const g = this.needle?.clear()
@@ -262,23 +316,13 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
       this.trail.unshift(x)
       this.trail.length = Math.min(this.trail.length, TRAIL + 1)
       const { y, h } = this.gauge
-      this.trail.slice(1).forEach((tx, i) => {
-        g.fillStyle(PALETTE.amber, 0.35 - i * 0.08).fillRect(tx - 2, y - h / 2, 4, h)
-      })
+      for (let i = 1; i < this.trail.length; i++) {
+        const tx = this.trail[i] ?? x
+        g.fillStyle(PALETTE.amber, 0.35 - (i - 1) * 0.08).fillRect(tx - 2, y - h / 2, 4, h)
+      }
       g.fillStyle(shade(PALETTE.amber, -0.5), 1).fillRect(x - 4, y - h / 2 - 8, 8, h + 16)
       g.fillStyle(PALETTE.amber, 1).fillRect(x - 2, y - h / 2 - 6, 4, h + 12)
       g.fillRect(x - 7, y - h / 2 - 10, 14, 4).fillRect(x - 7, y + h / 2 + 6, 14, 4)
-    }
-
-    this.status?.setText(
-      this.t(
-        spectator ? 'game.common.waiting' : done ? 'game.stopClock.done' : 'game.stopClock.prompt',
-      ),
-    )
-    this.button?.setAlpha(done ? 0.3 : 1)
-    this.buttonLabel?.setText(this.t(done ? 'game.stopClock.doneBtn' : 'game.stopClock.stop'))
-    if (done && !spectator && this.banner) {
-      showBanner(this, this.banner, this.t('game.common.finished'), PALETTE.lime)
     }
   }
 
@@ -318,6 +362,9 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
 
   private renderCards(attempt: number, attempts: number): void {
     const blink = Math.floor(this.time.now / 300) % 2 === 0
+    const key = `${attempt}:${blink}`
+    if (key === this.cardsKey) return
+    this.cardsKey = key
     this.cards.forEach((card, i) => {
       const live = i === attempt && attempt < attempts
       card.box.setStrokeStyle(2, live && blink ? PALETTE.amber : PALETTE.frame)

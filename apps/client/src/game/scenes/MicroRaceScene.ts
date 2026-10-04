@@ -1,4 +1,6 @@
 import {
+  MICRO_RACE_CAR_R,
+  MICRO_RACE_PHYSICS,
   MICRO_RACE_TRACKS,
   MICRO_RACE_WORLD,
   type MicroRaceCar,
@@ -6,19 +8,19 @@ import {
   type MicroRaceSnapshot,
   type MicroRaceTheme,
   PALETTE,
+  RACE_DRAFT_TUNING,
   sampleMicroRaceTrack,
 } from '@pp/shared'
 import type Phaser from 'phaser'
 import { ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, flash, floatText, ring, shake, showBanner } from '../fx'
-import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
+import { ServerClock } from '../netcode/ServerClock'
 import {
   bodyStyle,
   ensureBevelPanel,
   ensurePixelGrid,
   ensurePixelOrb,
   headlineStyle,
-  hexToCss,
   shade,
 } from '../pixelStyle'
 import { YouMarker, nameTagStyle } from '../playerMarks'
@@ -32,16 +34,29 @@ import {
   TRACK_TEX_W,
   paintMicroTrack,
 } from './microRaceArt'
+import { DriveControls, LabelDeclutter, RaceMinimap, RaceStandings } from './raceKit'
+import { type CarPose, OwnCar, RivalCars, RoadIndex, raceClock } from './raceNet'
 
 // World units shown across the view's shorter side (bigger = more zoomed out).
 const VIEW_SPAN = 360
 const LOOK_AHEAD = 70
 const CAM_RATE = 5
-const SEND_EVERY_MS = 60
 // Cars snap to 32 headings, like a classic sprite-rotation racer.
 const HEADING_STEP = Math.PI / 16
 const DUST: Record<MicroRaceTheme, number> = { kitchen: 0xd9b27f, desk: 0x9fe0bf, pool: 0x8fd0a8 }
 const BANNER_MS = 1200
+// The server's bump: restitution, and the approach speed that counts as a hit.
+const RESTITUTION = 1.1
+const HIT_MIN_SPEED = 60
+// A table-edge hit: the world wall flipped a velocity component at least this fast (world units/s).
+const WALL_HIT_SPEED = 70
+// Other cars crossing the line get the crowd at most this often (a pack finishing together is one roar).
+const CHEER_GAP_MS = 1500
+// Rivals' moments play at this fraction of the volume (yours stay full), and their bumps at most this
+// often — a twelve-car pile-up is one crunch.
+const RIVAL_LEVEL = 0.4
+const RIVAL_BUMP_MS = 400
+const NO_TUNING = {}
 
 interface CarView {
   sprite: Phaser.GameObjects.Image
@@ -57,23 +72,27 @@ interface CarView {
   resets: number
 }
 
-function wrapAngle(a: number): number {
-  let r = a
-  while (r > Math.PI) r -= Math.PI * 2
-  while (r < -Math.PI) r += Math.PI * 2
-  return r
-}
-
-const lerpAngle = (a: number, b: number, t: number): number => a + wrapAngle(b - a) * t
-
 // Micro Race canvas. A camera-follow view of a pixel tabletop circuit (painted once per track from the
-// shared spline), every car interpolated from the snapshot and drawn as a pixel racer in its player's
-// colour. Steer by holding where you want to go (touch/mouse) or with the arrow keys / WASD. A minimap
-// and a standings column show the whole race; start lights, laps, bumps, rescues, the flag and the
-// finish window are all derived from snapshot deltas. Wind lines trail a car in a slipstream; a driver
-// who left fades to a ghost.
+// shared spline). Your own car is predicted locally with the server's integrator (it turns the frame
+// you press a key; snapshots only nudge it back in line), every other car is dead-reckoned to the
+// server's present. Steer with the arrows / WASD (SPACE brakes) or by holding the pointer where you
+// want to go. A minimap, a standings column and the race clock show the whole race; start lights,
+// laps (with lap times), bumps, rescues, the flag and the finish window are all derived from snapshot
+// deltas. Wind lines trail a car in a slipstream; a driver who left fades to a ghost.
 export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
-  private readonly interp = new SnapshotInterpolator<MicroRaceSnapshot>(100)
+  private readonly clock = new ServerClock()
+  private readonly rivals = new RivalCars()
+  private readonly own = new OwnCar()
+  private ownActive = false
+  private ownResets = 0
+  private lastLocalBump = 0
+  private lastWallAt = 0
+  private lastRivalBumpAt = Number.NEGATIVE_INFINITY
+  private lastCheerAt = Number.NEGATIVE_INFINITY
+  private drafting = false
+  private lastDraftAt = Number.NEGATIVE_INFINITY
+  private readonly finishSeen = new Set<string>()
+  private snapAt = 0
   private readonly cars = new Map<string, CarView>()
   private carKeys = new Map<number, string>()
   private lastTick = -1
@@ -83,15 +102,16 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
   private cam = { x: 0, y: 0, ready: false }
   private track = -1
   private samples: MicroRacePoint[] = []
+  private road?: RoadIndex
   private theme: MicroRaceTheme = 'kitchen'
   private trackImage?: Phaser.GameObjects.Image
-  private tableShadow?: Phaser.GameObjects.Rectangle
-  private minimap?: { track: Phaser.GameObjects.Graphics; dots: Phaser.GameObjects.Graphics }
+  private tableShadow?: Phaser.GameObjects.Graphics
+  private minimap?: RaceMinimap
   // Slipstream wind lines behind towed cars (screen space, under the cars).
   private trails?: Phaser.GameObjects.Graphics
-  private mm = { x: 0, y: 0, w: 0, h: 0 }
-  private standings: Phaser.GameObjects.Text[] = []
-  private standingsKey = ''
+  private mmBox = { x: 0, y: 0, w: 0 }
+  private standings?: RaceStandings
+  private clockText?: Phaser.GameObjects.Text
   private lamps: Phaser.GameObjects.Image[] = []
   private lampPanel?: Phaser.GameObjects.Image
   private lampKeys = { off: '', red: '', green: '' }
@@ -101,14 +121,10 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
   private banner?: Phaser.GameObjects.Text
   private subline?: Phaser.GameObjects.Text
   private bannerUntil = 0
-  private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
-  private wasd?: Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>
-  private aim?: { x: number; y: number }
-  private drive = { steer: 0, throttle: 0 }
-  // The last drive sent (the server starts every car parked).
-  private sent = { steer: 0, throttle: 0 }
-  private lastSentAt = 0
+  private controls?: DriveControls
+  private readonly tags = new LabelDeclutter()
   private lastLap = 1
+  private lapStartMs = 0
   private finished = false
   private closingSeen = false
   private timeUpShown = false
@@ -123,7 +139,18 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
 
   override create(): void {
     super.create()
-    this.interp.reset()
+    this.clock.reset()
+    this.rivals.reset()
+    this.ownActive = false
+    this.ownResets = 0
+    this.lastLocalBump = 0
+    this.lastWallAt = 0
+    this.lastRivalBumpAt = Number.NEGATIVE_INFINITY
+    this.lastCheerAt = Number.NEGATIVE_INFINITY
+    this.drafting = false
+    this.lastDraftAt = Number.NEGATIVE_INFINITY
+    this.finishSeen.clear()
+    this.snapAt = 0
     for (const c of this.cars.values()) {
       c.sprite.destroy()
       c.pilot.destroy()
@@ -135,20 +162,16 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     this.cam = { x: 0, y: 0, ready: false }
     this.track = -1
     this.samples = []
+    this.road = undefined
     this.trackImage = undefined
     this.tableShadow = undefined
     this.minimap = undefined
-    this.standings = []
-    this.standingsKey = ''
     this.lamps = []
     this.lit = -1
     this.lightsUntil = 0
     this.bannerUntil = 0
-    this.aim = undefined
-    this.drive = { steer: 0, throttle: 0 }
-    this.sent = { steer: 0, throttle: 0 }
-    this.lastSentAt = 0
     this.lastLap = 1
+    this.lapStartMs = 0
     this.finished = false
     this.closingSeen = false
     this.timeUpShown = false
@@ -159,7 +182,8 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
 
     const { width, height } = this.scale
     this.compact = Math.min(width, height) < 520
-    const hintH = this.compact ? 22 : 28
+    const big = !this.compact && height >= 900
+    const hintH = this.compact ? 22 : 30
     this.view = { x: 0, y: this.top, w: width, h: height - this.top - hintH }
     this.zoom = Math.max(0.9, Math.min(2.4, Math.min(this.view.w, this.view.h) / VIEW_SPAN))
 
@@ -175,37 +199,36 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
         width / 2,
         height - hintH / 2,
         this.t(this.compact ? 'game.microRace.hintTouch' : 'game.microRace.hint'),
-        bodyStyle(this.compact ? 11 : 14, PALETTE.dim),
+        bodyStyle(this.compact ? 11 : big ? 16 : 14, PALETTE.dim),
       )
       .setOrigin(0.5)
       .setDepth(701)
 
-    // Minimap (top-right) and standings (top-left), laid over the view.
+    // Minimap (top-right, built with the track) and standings (top-left), laid over the view.
     const pad = this.compact ? 6 : 10
-    const mmW = this.compact ? 104 : 180
-    const mmH = Math.round((mmW * MICRO_RACE_WORLD.h) / MICRO_RACE_WORLD.w)
-    this.mm = { x: width - mmW - pad, y: this.top + pad, w: mmW, h: mmH }
-    this.add
-      .image(
-        this.mm.x - 4,
-        this.mm.y - 4,
-        ensureBevelPanel(this, mmW + 8, mmH + 8, PALETTE.panel, 2, true),
+    const mmW = this.compact ? 104 : Math.round(Math.max(180, Math.min(300, width * 0.14)))
+    this.mmBox = { x: width - mmW - pad - 6, y: this.top + pad + 6, w: mmW }
+    this.standings = new RaceStandings(
+      this,
+      pad,
+      this.top + pad,
+      this.compact ? 4 : 12,
+      this.compact ? 11 : big ? 16 : 14,
+      710,
+    )
+    this.clockText = this.add
+      .text(
+        width / 2,
+        this.top + pad,
+        '',
+        headlineStyle(this.compact ? 12 : big ? 24 : 16, PALETTE.amber, {
+          stroke: '#10121c',
+          strokeThickness: 4,
+        }),
       )
-      .setOrigin(0, 0)
-      .setAlpha(0.85)
-      .setDepth(710)
-    const rowH = this.compact ? 13 : 17
-    for (let i = 0; i < 10; i++) {
-      this.standings.push(
-        this.add
-          .text(pad + 2, this.top + pad + i * rowH, '', {
-            ...bodyStyle(this.compact ? 11 : 14, PALETTE.text, { fontStyle: 'bold' }),
-            stroke: '#10121c',
-            strokeThickness: 3,
-          })
-          .setDepth(712),
-      )
-    }
+      .setOrigin(0.5, 0)
+      .setDepth(712)
+      .setVisible(false)
 
     // Start lights.
     const lampD = this.compact ? 22 : 32
@@ -214,6 +237,7 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
       red: ensurePixelOrb(this, 'pp-mr-lamp-red', 12, PALETTE.red),
       green: ensurePixelOrb(this, 'pp-mr-lamp-green', 12, PALETTE.lime),
     }
+    const mmH = Math.round((mmW * MICRO_RACE_WORLD.h) / MICRO_RACE_WORLD.w)
     const lampY = this.top + (this.compact ? mmH + 40 : 48)
     const panelW = lampD * 3 + lampD * 1.4
     this.lampPanel = this.add
@@ -253,19 +277,7 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
       .setDepth(950)
       .setVisible(false)
 
-    this.cursors = this.input.keyboard?.createCursorKeys()
-    this.wasd = this.input.keyboard?.addKeys('W,A,S,D') as
-      | Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>
-      | undefined
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      this.aim = { x: p.x, y: p.y }
-    })
-    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (p.isDown) this.aim = { x: p.x, y: p.y }
-    })
-    this.input.on('pointerup', () => {
-      this.aim = undefined
-    })
+    this.controls = new DriveControls(this)
   }
 
   // --- world ↔ screen -------------------------------------------------------------------------------
@@ -277,13 +289,6 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     }
   }
 
-  private toWorld(sx: number, sy: number): { x: number; y: number } {
-    return {
-      x: this.cam.x + (sx - this.view.x - this.view.w / 2) / this.zoom,
-      y: this.cam.y + (sy - this.view.y - this.view.h / 2) / this.zoom,
-    }
-  }
-
   // --- track ----------------------------------------------------------------------------------------
 
   private buildTrack(index: number): void {
@@ -292,6 +297,7 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     this.track = index
     this.theme = def.theme
     this.samples = sampleMicroRaceTrack(def, 8)
+    this.road = new RoadIndex(this.samples, true)
     const key = `pp-mr-track-${index}`
     if (!this.textures.exists(key)) {
       const tex = this.textures.createCanvas(key, TRACK_TEX_W, TRACK_TEX_H)
@@ -305,37 +311,28 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     }
     this.trackImage?.destroy()
     this.trackImage = this.add.image(0, 0, key).setOrigin(0, 0).setDepth(0)
-    // A soft shadow under the table edge so it reads as furniture on the floor.
+    // A soft shadow along the table's far edges so it reads as furniture on the floor (two strips, not
+    // a full table-sized quad hidden under the table).
     this.tableShadow?.destroy()
+    const { w, h } = MICRO_RACE_WORLD
     this.tableShadow = this.add
-      .rectangle(0, 0, MICRO_RACE_WORLD.w, MICRO_RACE_WORLD.h, 0x000000, 0.4)
-      .setOrigin(0, 0)
+      .graphics()
+      .fillStyle(0x000000, 0.4)
+      .fillRect(w, 14, 10, h)
+      .fillRect(10, h, w - 10, 14)
       .setDepth(-1)
-
-    // Minimap: the course as a thick line + the start line.
-    this.minimap?.track.destroy()
-    this.minimap?.dots.destroy()
-    const s = this.mm.w / MICRO_RACE_WORLD.w
-    const g = this.add.graphics().setDepth(711)
-    g.lineStyle(Math.max(3, def.halfWidth * 2 * s), 0x8a8d99, 1)
-    g.beginPath()
-    this.samples.forEach((p, i) => {
-      if (i === 0) g.moveTo(this.mm.x + p.x * s, this.mm.y + p.y * s)
-      else g.lineTo(this.mm.x + p.x * s, this.mm.y + p.y * s)
-    })
-    g.closePath()
-    g.strokePath()
-    const s0 = this.samples[0]
-    if (s0) {
-      g.fillStyle(PALETTE.text, 1)
-      g.fillRect(
-        this.mm.x + s0.x * s - 1,
-        this.mm.y + s0.y * s - def.halfWidth * s,
-        2,
-        def.halfWidth * 2 * s,
-      )
-    }
-    this.minimap = { track: g, dots: this.add.graphics().setDepth(712) }
+    this.minimap = new RaceMinimap(
+      this,
+      this.mmBox.x,
+      this.mmBox.y,
+      this.mmBox.w,
+      MICRO_RACE_WORLD,
+      this.samples,
+      def.halfWidth,
+      true,
+      this.compact,
+      711,
+    )
   }
 
   private carKey(color: number): string {
@@ -392,7 +389,7 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
           .setAlpha(0.35)
           .setDepth(15),
         label: this.add
-          .text(0, 0, this.label(c.id), nameTagStyle(this.compact ? 8 : 10, color))
+          .text(0, 0, this.label(c.id), nameTagStyle(this.compact ? 8 : 12, color))
           .setOrigin(0.5, 1)
           .setDepth(30),
         color,
@@ -411,55 +408,114 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
 
   protected frame(snap: MicroRaceSnapshot | null, _time: number, delta: number): void {
     const now = this.time.now
+    let fresh = false
     if (snap && this.state.tick !== this.lastTick) {
       this.lastTick = this.state.tick
       if (snap.track !== this.track) this.buildTrack(snap.track)
-      this.interp.push(snap, now)
+      this.clock.sync(snap.remainingMs, now)
+      this.snapAt = now - this.clock.since(snap.remainingMs, now)
+      this.rivals.push(snap.cars, this.snapAt, now)
       this.onSnapshot(snap, now)
+      fresh = true
     }
     this.updateLights(snap?.goInMs ?? 0, now)
     if (snap && this.state.final) this.timeUp(snap)
     if (this.bannerUntil > 0 && now > this.bannerUntil) {
       this.bannerUntil = 0
       this.banner?.setVisible(false)
+      // A transient banner's small line (a lap time) goes with it.
+      if (!this.finished && !this.timeUpShown) this.subline?.setVisible(false)
     }
-    this.render(now, delta)
-    this.steer(now)
+    if (!snap) return
+    this.drive(snap, now, fresh)
+    this.render(snap, now, delta)
+    this.paintClock(snap, now)
   }
 
-  private steer(now: number): void {
-    // Spectators (not in this round) and finishers have nothing to drive.
-    if (this.finished || !this.snap?.cars.some((c) => c.id === this.selfId)) return
-    const left = this.cursors?.left.isDown || this.wasd?.A.isDown
-    const right = this.cursors?.right.isDown || this.wasd?.D.isDown
-    const up = this.cursors?.up.isDown || this.wasd?.W.isDown
-    const down = this.cursors?.down.isDown || this.wasd?.S.isDown
-    const me = this.cars.get(this.selfId)
-    if (left || right || up || down) {
-      this.drive = {
-        steer: (right ? 1 : 0) - (left ? 1 : 0),
-        throttle: (up ? 1 : 0) - (down ? 1 : 0),
-      }
-    } else if (this.aim && me) {
-      // Steer toward the held point, measured from the car's nose.
-      const target = this.toWorld(this.aim.x, this.aim.y)
-      const diff = wrapAngle(Math.atan2(target.y - me.wy, target.x - me.wx) - me.a)
-      const dist = Math.hypot(target.x - me.wx, target.y - me.wy)
-      this.drive = {
-        steer: Math.max(-1, Math.min(1, diff / 0.5)),
-        throttle: Math.abs(diff) > 2.3 ? 0.45 : dist < 36 ? 0.3 : 1,
-      }
-    } else {
-      this.drive = { steer: 0, throttle: 0 }
+  // Your controls → the server (on change only), and your car's local prediction.
+  private drive(snap: MicroRaceSnapshot, now: number, fresh: boolean): void {
+    const me = snap.cars.find((c) => c.id === this.selfId)
+    const racing = !!me && !me.gone && me.finishMs === null && !this.state.final && !this.finished
+    if (!me || !racing) {
+      // Spectators and finishers have nothing to drive; a finished car rolls on as the server has it.
+      if (this.ownActive && me) this.rivals.adopt(me.id, this.own.pose(), now)
+      this.ownActive = false
+      return
     }
-    // The server holds the last drive: send changes only (rate-limited), never an idle heartbeat.
-    const d = this.drive
-    const changed = d.steer !== this.sent.steer || d.throttle !== this.sent.throttle
-    if (changed && now - this.lastSentAt > SEND_EVERY_MS) {
-      this.sent = d
-      this.lastSentAt = now
-      this.sendInput({ kind: 'drive', ...d })
+    const shown = this.cars.get(me.id)
+    const at = shown ? this.toScreen(shown.wx, shown.wy) : null
+    const read = this.controls?.read(at && shown ? { x: at.x, y: at.y, a: shown.a } : null)
+    const held = read
+      ? (this.controls?.sync(read, now, (d) => this.sendInput({ kind: 'drive', ...d })) ??
+        read.drive)
+      : { steer: 0, throttle: 0 }
+    if (!this.ownActive) {
+      this.own.snapTo(me)
+      this.ownResets = me.resets
+      this.ownActive = true
     }
+    const body = this.own.body
+    body.steer = held.steer
+    body.throttle = held.throttle
+    body.finishMs = null
+    const goIn = snap.goInMs - this.clock.since(snap.remainingMs, now)
+    if (goIn > 0) {
+      // On the grid until the green light.
+      if (fresh) this.own.snapTo(me)
+      this.own.hold(now)
+      return
+    }
+    const def = MICRO_RACE_TRACKS[this.track]
+    this.road?.update(body.x, body.y)
+    body.off = !!def && (this.road?.dist ?? 0) > def.halfWidth
+    const vx0 = body.vx
+    const vy0 = body.vy
+    this.own.step(now, {
+      physics: MICRO_RACE_PHYSICS,
+      tuning: me.draft ? RACE_DRAFT_TUNING : NO_TUNING,
+      world: MICRO_RACE_WORLD,
+      carR: MICRO_RACE_CAR_R,
+    })
+    this.wallHit(vx0, vy0, now)
+    if (fresh) {
+      if (me.resets > this.ownResets) this.own.snapTo(me)
+      else this.own.reconcile(me, this.snapAt)
+    }
+    this.ownResets = me.resets
+    // Bumps happen on your screen right away (the server's verdict follows a snapshot later).
+    for (const c of snap.cars) {
+      if (c.id === me.id || c.gone) continue
+      const other = this.rivals.state(c.id, now)
+      if (!other) continue
+      const hit = this.own.contact(other, MICRO_RACE_CAR_R, RESTITUTION)
+      if (hit >= HIT_MIN_SPEED && now - this.lastLocalBump > 250) {
+        this.lastLocalBump = now
+        const p = this.own.pose()
+        const s = this.toScreen(p.x, p.y)
+        this.bumpFx(s.x, s.y)
+      }
+    }
+  }
+
+  // Your car slamming into the table's edge: the step's wall bounce flipped a fast velocity component
+  // with the car pressed against that edge.
+  private wallHit(vx0: number, vy0: number, now: number): void {
+    const b = this.own.body
+    const r = MICRO_RACE_CAR_R + 1
+    const { w, h } = MICRO_RACE_WORLD
+    const hitX = vx0 * b.vx < 0 && Math.abs(vx0) >= WALL_HIT_SPEED && (b.x <= r || b.x >= w - r)
+    const hitY = vy0 * b.vy < 0 && Math.abs(vy0) >= WALL_HIT_SPEED && (b.y <= r || b.y >= h - r)
+    if (!(hitX || hitY) || now - this.lastWallAt < 400) return
+    this.lastWallAt = now
+    this.sfx.crash()
+    shake(this, 0.005, 110)
+  }
+
+  private bumpFx(x: number, y: number): void {
+    burst(this, x, y, PALETTE.text, 10, 150)
+    this.sfx.crash()
+    shake(this, 0.006, 120)
+    floatText(this, x, y - 24, this.t('game.microRace.bump'), PALETTE.amber, this.compact ? 12 : 16)
   }
 
   private onSnapshot(snap: MicroRaceSnapshot, now: number): void {
@@ -467,12 +523,28 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     this.hud?.setScore(
       me ? this.t('game.microRace.status', { lap: me.lap, laps: snap.laps, pos: me.pos }) : '',
     )
-    this.updateStandings(snap)
+    this.standings?.set(
+      snap.cars.map((c) => ({
+        id: c.id,
+        pos: c.pos,
+        name: this.label(c.id),
+        color: this.state.colorOf(c.id, PALETTE.text),
+        avatar: this.state.avatarOf(c.id),
+        mine: c.id === this.selfId,
+        done: c.finishMs !== null,
+        gone: c.gone,
+      })),
+    )
 
     if (this.firstSnapshot) {
       // Adopt the race as it is (a relayout mid-race must not replay laps, bumps or the flag).
-      for (const c of snap.cars) this.viewOf(c)
+      for (const c of snap.cars) {
+        this.viewOf(c)
+        if (c.finishMs !== null) this.finishSeen.add(c.id)
+      }
+      this.drafting = !!me?.draft
       this.lastLap = me?.lap ?? 1
+      this.lapStartMs = snap.raceMs
       this.closingSeen = snap.closing
       this.lit = snap.goInMs > 0 ? this.litFor(snap.goInMs) : 4
       if (me && me.finishMs !== null) this.onFinished(me, false)
@@ -495,19 +567,14 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
       const mine = c.id === this.selfId
       const p = this.toScreen(v.wx, v.wy)
       if (c.hits > v.hits) {
-        burst(this, p.x, p.y, PALETTE.text, mine ? 10 : 6, 150)
-        if (mine) {
-          this.sfx.pop()
-          shake(this, 0.006, 120)
-          floatText(
-            this,
-            p.x,
-            p.y - 24,
-            this.t('game.microRace.bump'),
-            PALETTE.amber,
-            this.compact ? 12 : 16,
-          )
-        }
+        // Your own bump already played the moment it happened on your screen; rivals' are softer.
+        if (!mine) {
+          burst(this, p.x, p.y, PALETTE.text, 6, 150)
+          if (now - this.lastRivalBumpAt >= RIVAL_BUMP_MS && now - this.lastLocalBump > 400) {
+            this.lastRivalBumpAt = now
+            this.sfx.quiet(() => this.sfx.crash(), RIVAL_LEVEL * 0.75)
+          }
+        } else if (now - this.lastLocalBump > 400) this.bumpFx(p.x, p.y)
       }
       if (c.resets > v.resets) {
         const q = this.toScreen(c.x, c.y)
@@ -528,16 +595,32 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
       }
       v.hits = c.hits
       v.resets = c.resets
+      // Someone else takes the flag: the crowd roars (yours plays with your own finish).
+      if (c.finishMs !== null && !this.finishSeen.has(c.id)) {
+        this.finishSeen.add(c.id)
+        if (!mine && !c.gone && now - this.lastCheerAt >= CHEER_GAP_MS) {
+          this.lastCheerAt = now
+          this.sfx.quiet(() => this.sfx.cheer(), RIVAL_LEVEL)
+        }
+      }
     }
 
     if (!me) return
+    // Tucked into a slipstream: a rush of air as the tow kicks in (not again for a tow that flickers).
+    if (me.draft && !this.drafting && me.finishMs === null && now - this.lastDraftAt > 2000) {
+      this.lastDraftAt = now
+      this.sfx.whoosh()
+    }
+    this.drafting = me.draft
     if (!this.finished && me.lap > this.lastLap) {
+      const lapTime = raceClock(snap.raceMs - this.lapStartMs)
+      this.lapStartMs = snap.raceMs
       if (me.lap === snap.laps) {
         this.sfx.correct()
-        this.say(this.t('game.microRace.finalLap'), PALETTE.amber, BANNER_MS)
+        this.say(this.t('game.microRace.finalLap'), PALETTE.amber, BANNER_MS, lapTime)
       } else {
         this.sfx.coin()
-        this.say(this.t('game.microRace.lap', { n: me.lap }), PALETTE.cyan, BANNER_MS)
+        this.say(this.t('game.microRace.lap', { n: me.lap }), PALETTE.cyan, BANNER_MS, lapTime)
       }
     }
     this.lastLap = me.lap
@@ -549,6 +632,19 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
         this.say(this.t('game.microRace.hurry'), PALETTE.red, BANNER_MS)
       }
     }
+  }
+
+  // The race clock (since the green light), extrapolated between snapshots; yours stops at the flag.
+  private paintClock(snap: MicroRaceSnapshot, now: number): void {
+    const text = this.clockText
+    if (!text) return
+    const me = snap.cars.find((c) => c.id === this.selfId)
+    const racing = snap.goInMs <= 0 && this.lit === 4 && now >= this.lightsUntil
+    text.setVisible(racing)
+    if (!racing) return
+    const ms =
+      me?.finishMs ?? snap.raceMs + (this.state.final ? 0 : this.clock.since(snap.remainingMs, now))
+    text.setText(raceClock(ms))
   }
 
   // The flag fell before this car made it home: say so, with where it ended up.
@@ -573,30 +669,30 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     this.placeBanner()
     if (this.banner) showBanner(this, this.banner, text, win ? PALETTE.lime : PALETTE.amber)
     this.bannerUntil = 0
-    const time = me.finishMs ?? 0
-    const tenths = Math.floor(time / 100)
-    const stamp = `${Math.floor(tenths / 600)}:${String(Math.floor((tenths % 600) / 10)).padStart(2, '0')}.${tenths % 10}`
     this.subline
       ?.setText(
-        `${this.t('game.microRace.time', { time: stamp })}\n${this.t('game.common.waiting')}`,
+        `${this.t('game.microRace.time', { time: raceClock(me.finishMs ?? 0) })}\n${this.t('game.common.waiting')}`,
       )
       .setAlign('center')
       .setLineSpacing(8)
       .setVisible(true)
     if (!withFx) return
+    this.lastCheerAt = this.time.now
+    this.sfx.cheer()
     if (win) this.sfx.win()
-    else this.sfx.coin()
     const x = this.scale.width / 2
     const y = this.banner?.y ?? this.scale.height / 2
     burst(this, x, y, PALETTE.amber, 24, 260)
     burst(this, x, y, this.state.colorOf(this.selfId, PALETTE.lime), 18, 220)
   }
 
-  // Transient banner (lap, GO!, hurry…); the finish banner is sticky.
-  private say(text: string, color: number, ms: number): void {
+  // Transient banner (lap, GO!, hurry…) with an optional small line under it; the finish banner is
+  // sticky.
+  private say(text: string, color: number, ms: number, sub = ''): void {
     if (!this.banner || this.finished || this.timeUpShown) return
     this.placeBanner()
     showBanner(this, this.banner, text, color)
+    this.subline?.setText(sub).setVisible(sub !== '')
     this.bannerUntil = this.time.now + ms
   }
 
@@ -626,52 +722,27 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     })
   }
 
-  private updateStandings(snap: MicroRaceSnapshot): void {
-    const maxRows = this.compact ? 4 : 10
-    let rows = snap.cars.slice(0, maxRows)
-    const me = snap.cars.find((c) => c.id === this.selfId)
-    if (me && !rows.includes(me)) rows = [...rows.slice(0, maxRows - 1), me]
-    const lines = rows.map((c) => {
-      const name = this.label(c.id).slice(0, 8)
-      const tail = c.finishMs !== null ? ' ★' : ''
-      return {
-        text: `${c.pos}. ${name}${tail}`,
-        color: this.state.colorOf(c.id, PALETTE.text),
-        mine: c.id === this.selfId,
-      }
-    })
-    const key = lines.map((l) => `${l.text}|${l.color}`).join(';')
-    if (key === this.standingsKey) return
-    this.standingsKey = key
-    this.standings.forEach((t, i) => {
-      const line = lines[i]
-      if (!line) {
-        t.setVisible(false)
-        return
-      }
-      t.setText(line.mine ? `▶${line.text}` : ` ${line.text}`)
-        .setColor(hexToCss(line.color))
-        .setVisible(true)
-    })
-  }
-
-  private render(now: number, delta: number): void {
-    const sample = this.interp.sample(now)
-    if (!sample) return
-    const fromById = new Map(sample.from.cars.map((c) => [c.id, c]))
-    for (const c of sample.to.cars) {
-      const prev = fromById.get(c.id)
+  private render(snap: MicroRaceSnapshot, now: number, delta: number): void {
+    const freeze = this.state.final
+    for (const c of snap.cars) {
       const v = this.viewOf(c)
-      v.wx = prev ? lerp(prev.x, c.x, sample.t) : c.x
-      v.wy = prev ? lerp(prev.y, c.y, sample.t) : c.y
-      v.a = prev ? lerpAngle(prev.a, c.a, sample.t) : c.a
+      const pose: CarPose | null =
+        c.id === this.selfId && this.ownActive
+          ? this.own.pose()
+          : this.rivals.pose(c.id, now, delta, freeze)
+      if (!pose) continue
+      v.wx = pose.x
+      v.wy = pose.y
+      v.a = pose.a
     }
 
     // Camera: chase the player's own car (or the leader) with a little look-ahead.
-    const me = this.cars.get(this.selfId) ?? this.cars.get(sample.to.cars[0]?.id ?? '')
+    const me = this.cars.get(this.selfId) ?? this.cars.get(snap.cars[0]?.id ?? '')
     if (me) {
-      const tx = me.wx + Math.cos(me.a) * LOOK_AHEAD * Math.min(1, this.selfSpeed / 120)
-      const ty = me.wy + Math.sin(me.a) * LOOK_AHEAD * Math.min(1, this.selfSpeed / 120)
+      if (me === this.cars.get(this.selfId)) this.trackSpeed(me, delta)
+      const look = LOOK_AHEAD * Math.min(1, this.selfSpeed / 120)
+      const tx = me.wx + Math.cos(me.a) * look
+      const ty = me.wy + Math.sin(me.a) * look
       if (!this.cam.ready) {
         this.cam = { x: tx, y: ty, ready: true }
       } else {
@@ -696,17 +767,21 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     if (this.trackImage) {
       const o = this.toScreen(0, 0)
       this.trackImage.setPosition(o.x, o.y).setScale(this.zoom * TEXEL)
-      const sh = this.toScreen(10, 14)
-      this.tableShadow?.setPosition(sh.x, sh.y).setScale(this.zoom)
+      this.tableShadow?.setPosition(o.x, o.y).setScale(this.zoom)
     }
 
     const lift = this.zoom * 2
-    const dots = this.minimap?.dots
-    dots?.clear()
     const trails = this.trails
     trails?.clear()
-    const s = this.mm.w / MICRO_RACE_WORLD.w
-    for (const c of sample.to.cars) {
+    const tagUp = CAR_COLS * TEXEL * this.zoom * 0.5 + 2
+    const tags = this.tags
+    tags.reset()
+    const own = this.cars.get(this.selfId)
+    if (own) {
+      const s = this.toScreen(own.wx, own.wy)
+      tags.reserve(s.x, s.y - tagUp, 24, 28)
+    }
+    for (const c of snap.cars) {
       const v = this.cars.get(c.id)
       if (!v) continue
       const p = this.toScreen(v.wx, v.wy)
@@ -714,7 +789,12 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
       v.sprite.setPosition(p.x, p.y).setRotation(heading)
       v.pilot.setPosition(p.x, p.y).setRotation(heading)
       v.shadow.setPosition(p.x + lift, p.y + lift * 1.5).setRotation(heading)
-      v.label.setPosition(p.x, p.y - CAR_COLS * TEXEL * this.zoom * 0.5 - 2)
+      // Name tags in race order; one that would overlap another waits until the pack spreads out.
+      v.label
+        .setPosition(Math.round(p.x), Math.round(p.y - tagUp))
+        .setVisible(
+          c.id !== this.selfId && tags.place(p.x, p.y - tagUp, v.label.width, v.label.height),
+        )
       // A driver who left races on as a faded ghost that blocks no one.
       const alpha = c.gone ? 0.35 : 1
       v.sprite.setAlpha(alpha)
@@ -737,63 +817,46 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
           )
         }
       }
-      const mine = c.id === this.selfId
-      if (dots) {
-        const r = mine ? 4 : 3
-        if (mine) {
-          dots.fillStyle(PALETTE.text, 1)
-          dots.fillRect(
-            this.mm.x + v.wx * s - r - 1,
-            this.mm.y + v.wy * s - r - 1,
-            r * 2 + 2,
-            r * 2 + 2,
-          )
-        }
-        dots.fillStyle(v.color, 1)
-        dots.fillRect(this.mm.x + v.wx * s - r, this.mm.y + v.wy * s - r, r * 2, r * 2)
-      }
-      if (mine) this.selfCues(c, v, p, now, delta)
+      if (c.id === this.selfId) this.selfCues(c, v, p, now)
     }
+    const mm = this.minimap
+    if (!mm) return
+    mm.clear()
+    for (const c of snap.cars) {
+      const v = this.cars.get(c.id)
+      if (v && c.id !== this.selfId) mm.car(v.wx, v.wy, v.color, c.gone)
+    }
+    const mine = this.cars.get(this.selfId)
+    if (mine) mm.self(mine.wx, mine.wy, mine.color)
+  }
+
+  // Your speed on screen (the camera's look-ahead): the predicted car's own, else from its motion.
+  private trackSpeed(v: CarView, delta: number): void {
+    if (this.ownActive) {
+      this.selfSpeed = this.own.speed
+    } else if (this.selfPrev && delta > 0) {
+      const d = Math.hypot(v.wx - this.selfPrev.x, v.wy - this.selfPrev.y)
+      this.selfSpeed += ((d * 1000) / delta - this.selfSpeed) * 0.2
+    }
+    this.selfPrev = { x: v.wx, y: v.wy }
   }
 
   // "That's you" marker, off-road dust and the wrong-way warning for the player's own car.
-  private selfCues(
-    c: MicroRaceCar,
-    v: CarView,
-    p: { x: number; y: number },
-    now: number,
-    delta: number,
-  ): void {
-    if (this.selfPrev && delta > 0) {
-      const d = Math.hypot(v.wx - this.selfPrev.x, v.wy - this.selfPrev.y)
-      this.selfSpeed = lerp(this.selfSpeed, (d * 1000) / delta, 0.2)
-    }
-    this.selfPrev = { x: v.wx, y: v.wy }
+  private selfCues(c: MicroRaceCar, v: CarView, p: { x: number; y: number }, now: number): void {
     v.label.setVisible(false)
     this.marker?.place(p.x, p.y - CAR_COLS * TEXEL * this.zoom * 0.5, now)
-    if (c.off && this.selfSpeed > 40 && now - this.lastDustAt > 150) {
+    const off = this.ownActive ? this.own.body.off : c.off
+    if (off && this.selfSpeed > 40 && now - this.lastDustAt > 150) {
       this.lastDustAt = now
       const bx = p.x - Math.cos(v.a) * 12 * this.zoom
       const by = p.y - Math.sin(v.a) * 12 * this.zoom
       burst(this, bx, by, DUST[this.theme], 3, 50)
     }
     // Wrong way: heading against the course direction at the nearest sample while moving.
-    if (this.finished || this.timeUpShown || this.samples.length === 0) return
+    if (this.finished || this.timeUpShown || !this.road) return
     if ((this.snap?.goInMs ?? 0) > 0) return
-    let best = 0
-    let bestD = Number.POSITIVE_INFINITY
-    this.samples.forEach((q, i) => {
-      const d = (q.x - v.wx) ** 2 + (q.y - v.wy) ** 2
-      if (d < bestD) {
-        bestD = d
-        best = i
-      }
-    })
-    const n = this.samples.length
-    const a = this.samples[(best - 1 + n) % n] as MicroRacePoint
-    const b = this.samples[(best + 1) % n] as MicroRacePoint
-    const along = Math.cos(v.a) * (b.x - a.x) + Math.sin(v.a) * (b.y - a.y)
-    const wrong = along < -8 && this.selfSpeed > 30
+    if (!this.ownActive) this.road.update(v.wx, v.wy)
+    const wrong = this.road.along(v.a) < -0.5 && this.selfSpeed > 30
     if (wrong && !this.wrongWay) {
       this.sfx.wrong()
       this.say(this.t('game.microRace.wrongWay'), PALETTE.red, BANNER_MS)

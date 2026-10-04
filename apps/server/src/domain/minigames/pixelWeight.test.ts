@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { PIXEL_OBJECTS, pixelVariant } from '@pp/shared'
+import { PIXEL_OBJECTS, type PixelWeightObject, pixelVariant, unpackCells } from '@pp/shared'
 import type { Random } from '../ports/Random'
 import { PixelWeight } from './pixelWeight'
 
 // Deterministic seed; the exact object order doesn't matter — the tests read the answer off the puzzle.
 const zero: Random = { next: () => 0 }
+const cellsOf = (o: PixelWeightObject) => unpackCells(o.cols, o.rows, o.bits)
 const init = (players: string[], now = 0, random: Random = zero) =>
   new PixelWeight().init({ players, seed: 1, random, now, config: { durationMs: 40_000 } })
 
@@ -25,7 +26,7 @@ describe('PixelWeight', () => {
   test('puzzles are seeded pixel-art objects whose answer is the filled-pixel count', () => {
     const s = init(['a'])
     expect(s.puzzles).toHaveLength(8)
-    expect(s.puzzles[0]?.answer).toBe(s.puzzles[0]?.object.pixels.length)
+    expect(s.puzzles[0]?.answer).toBe((s.puzzles[0] ? cellsOf(s.puzzles[0].object) : []).length)
     expect(s.puzzles[0]?.answer).toBeGreaterThan(0)
   })
 
@@ -88,7 +89,7 @@ describe('PixelWeight', () => {
     const answers = new Map<string, Set<number>>()
     for (let seed = 1; seed <= 30; seed++) {
       for (const p of init(['a'], 0, seeded(seed)).puzzles) {
-        expect(p.answer).toBe(p.object.pixels.length)
+        expect(p.answer).toBe(cellsOf(p.object).length)
         expect(p.object.maxGuess).toBe(p.object.cols * p.object.rows)
         answers.set(p.object.name, (answers.get(p.object.name) ?? new Set()).add(p.answer))
       }
@@ -106,6 +107,28 @@ describe('PixelWeight', () => {
     expect(game.isFinished(s, 500)).toBe(false)
     s = game.leave(s, 'gone', 500)
     expect(game.isFinished(s, 500)).toBe(true)
-    expect(game.snapshot(s, 500).objects.gone).toBeNull()
+    expect(game.snapshot(s, 500).at.gone).toBeNull()
+  })
+
+  test('the wire carries each object in play once, packed, with the exact cells of the variant', () => {
+    const game = new PixelWeight()
+    let s = init(['a', 'b', 'c'], 0, seeded(3))
+    const first = s.puzzles[0]
+    if (!first) throw new Error('no puzzle')
+    s = game.onInput(s, 'c', { kind: 'guess', index: 0, value: first.answer }, 100)
+    const snap = game.snapshot(s, 100)
+    expect(snap.at).toEqual({ a: 0, b: 0, c: 1 })
+    expect(snap.objects.map((o) => o.index)).toEqual([0, 1])
+    for (const o of snap.objects) {
+      expect(o.bits).toHaveLength(Math.ceil(o.cols / 4) * o.rows)
+      expect(o).not.toHaveProperty('answer')
+    }
+    // A 12-player snapshot stays small: the objects are packed and shared.
+    const full = init(
+      Array.from({ length: 12 }, (_, i) => `p${i}`),
+      0,
+      seeded(5),
+    )
+    expect(JSON.stringify(game.snapshot(full, 0)).length).toBeLessThan(1000)
   })
 })

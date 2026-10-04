@@ -138,4 +138,25 @@ describe('Pang', () => {
     game.onInput(s, 'a', { kind: 'move', dir: 5 as 1 }, 0)
     expect(arena(s, 'a').dir).toBe(0)
   })
+
+  test('a fire pressed just before the harpoon is done fires the moment it is; earlier ones are dropped', () => {
+    const s = init(['a'])
+    const a = arena(s, 'a')
+    a.balloons = []
+    a.nextWaveAt = 99_999
+    game.onInput(s, 'a', { kind: 'fire' }, 0)
+    // The harpoon reaches the ceiling after PANG.h / speed ≈ 737 ms.
+    const flight = (PANG.h / PANG.harpoonSpeed) * 1000
+    game.onInput(s, 'a', { kind: 'fire' }, 100) // far too early: forgotten
+    let t = run(s, 0, flight + 60)
+    expect(a.harpoon).toBeNull()
+    game.onInput(s, 'a', { kind: 'fire' }, t)
+    expect(a.harpoon).not.toBeNull()
+    // Pressed again 100 ms before this one ends: fires right after it.
+    game.onInput(s, 'a', { kind: 'fire' }, t + flight - 100)
+    t = run(s, t, t + flight + 60)
+    expect(a.harpoon).not.toBeNull()
+    expect(a.harpoon?.tip).toBeGreaterThan(PANG.h * 0.8)
+    expect(game.snapshot(s, t).arenas[0]?.dir).toBe(0)
+  })
 })

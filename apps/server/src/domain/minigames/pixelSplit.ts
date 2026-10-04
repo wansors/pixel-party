@@ -2,10 +2,11 @@ import {
   PIXEL_OBJECTS,
   type PixelObject,
   type PixelSplitInput,
+  type PixelSplitObject,
   type PixelSplitSnapshot,
   columnCounts,
+  packCells,
 } from '@pp/shared'
-import type { PixelSplitObject } from '@pp/shared'
 import type { Random } from '../ports/Random'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
@@ -93,7 +94,7 @@ export class PixelSplit implements MiniGame<PixelSplitState, PixelSplitInput> {
           name: src.name,
           cols: src.cols,
           rows: src.rows,
-          pixels: src.cells,
+          bits: packCells(src.cols, src.rows, src.cells),
         },
         cols,
         total,
@@ -168,14 +169,19 @@ export class PixelSplit implements MiniGame<PixelSplitState, PixelSplitInput> {
     return { placements: sorted, ranks, stats }
   }
 
+  // Each object in play goes on the wire once, however many players are on it (it's static per level).
   snapshot(state: PixelSplitState, now: number): PixelSplitSnapshot {
-    const objects: Record<PlayerId, PixelSplitObject | null> = {}
+    const at: Record<PlayerId, number | null> = {}
+    const objects: PixelSplitObject[] = []
     for (const id of state.players) {
       const ptr = state.pointer.get(id) ?? 0
-      objects[id] = state.puzzles[ptr]?.object ?? null
+      const object = state.puzzles[ptr]?.object
+      at[id] = object ? object.index : null
+      if (object && !objects.includes(object)) objects.push(object)
     }
     return {
-      objects,
+      objects: objects.sort((a, b) => a.index - b.index),
+      at,
       scores: Object.fromEntries(state.score),
       remainingMs: Math.max(0, state.endsAt - now),
     }

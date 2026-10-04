@@ -20,6 +20,46 @@ export function freezeDollSweepAt(lane: number, lanes: number, from: number, dir
   return (((((lane - from) * dir) % lanes) + lanes) % lanes) / (lanes - 1)
 }
 
+// Runner physics (field lengths per second): RUN is ~1.6× WALK but slides ~400 ms when released
+// (WALK: ~150 ms). Shared so the client moves your own runner the moment you press.
+export const FREEZE_DOLL = {
+  walk: 0.048,
+  run: 0.077,
+  // field lengths / s² — full RUN in ~150 ms
+  accel: 0.5,
+  walkGlideMs: 150,
+  runGlideMs: 400,
+} as const
+
+export function freezeDollSpeed(mode: FreezeDollMode): number {
+  return mode === 'run' ? FREEZE_DOLL.run : mode === 'walk' ? FREEZE_DOLL.walk : 0
+}
+
+// One step of a runner toward `target` speed: accelerate, or brake over the glide of the speed it had
+// when it started slowing (`brake` remembers that deceleration; 0 = not braking). Then move.
+export function freezeDollMove(
+  r: { x: number; v: number; brake: number },
+  target: number,
+  step: number,
+): void {
+  const { walk, run, accel, walkGlideMs, runGlideMs } = FREEZE_DOLL
+  if (r.v < target) {
+    r.v = Math.min(target, r.v + accel * step)
+    r.brake = 0
+  } else if (r.v > target) {
+    if (r.brake === 0) {
+      const glideMs =
+        r.v <= walk
+          ? walkGlideMs
+          : walkGlideMs + (runGlideMs - walkGlideMs) * Math.min(1, (r.v - walk) / (run - walk))
+      r.brake = r.v / (glideMs / 1000)
+    }
+    r.v = Math.max(target, r.v - r.brake * step)
+    if (r.v === target) r.brake = 0
+  }
+  r.x += r.v * step
+}
+
 // ready = the opening beat before the first chant (nobody can move yet, nobody is judged).
 export type FreezeDollLight = 'ready' | 'green' | 'turn' | 'red'
 

@@ -3,15 +3,22 @@ import Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
 import { burst, flash, floatText, ring, shake } from '../fx'
 import { ServerClock } from '../netcode/ServerClock'
-import { bodyStyle, ensurePixelGrid, shade } from '../pixelStyle'
+import { bodyStyle, ensurePixelGrid, fitText, shade } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // Mirrors the server's fruitCatch.ts tuning: items resolve at CATCH_Y, the basket catches within
-// ±BASKET_HALF of its centre (normalized x). The basket is drawn exactly that wide so what you see is
-// what scores.
+// ±BASKET_HALF of its centre (normalized x) and slides toward its target at most BASKET_SPEED widths
+// per second. The basket is drawn exactly that wide, sliding the same way, so what you see is what
+// scores.
 const CATCH_Y = 0.9
 const BASKET_HALF = 0.12
-const KEY_SPEED = 1.3 // normalized widths per second with the arrow keys
+const BASKET_SPEED = 1.8
+// A moving pointer's target is sent at most this often (keys send every press/release at once).
+const SEND_EVERY_MS = 33
+// A score rise this soon after a catch rang at the rim is that catch's confirmation.
+const CONFIRM_MS = 600
+// Two coins this close together are the same catch (heard from the snapshot, then seen at the rim).
+const SAME_CATCH_MS = 120
 
 // Fruit variety is cosmetic only (the server just says "fruit"): picked by item id, so every player
 // sees the same apple as the same apple.
@@ -83,7 +90,10 @@ interface Seen {
 
 // Fruit Catch canvas (Phase 5). The server owns the falling stream + scoring; this renders the items on
 // the server's clock (each falls linearly, so the last snapshot is extrapolated: an item touches the rim
-// when the server resolves it) and the player's own basket locally (drag / ◀ ▶).
+// when the server resolves it) and the player's own basket locally, sliding at the server's speed cap
+// toward the same target. Steering: the mouse (the basket follows the pointer; on touch, drag), or
+// ◀ ▶ / A D — a held key heads for that side at full speed, letting go stops on the spot. Item sprites
+// are pooled.
 export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
   private basket?: Phaser.GameObjects.Image
   // You: your lobby avatar standing in the basket, peeking over the rim (facing the way you move;
@@ -94,20 +104,30 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
   private faceUntil = 0
   private face: 'happy' | 'hurt' = 'happy'
   private readonly sprites = new Map<number, Phaser.GameObjects.Image>()
+  private spritePool: Phaser.GameObjects.Image[] = []
   private readonly seen = new Map<number, Seen>()
   // Items already resolved on screen (they reached the rim), so a snapshot still carrying one doesn't
   // replay its catch.
   private readonly resolved = new Set<number>()
   private readonly clock = new ServerClock()
-  private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
+  private steerKeys: { left: Phaser.Input.Keyboard.Key[]; right: Phaser.Input.Keyboard.Key[] } = {
+    left: [],
+    right: [],
+  }
+  private keySide = 0
+  // Where the basket is (sliding toward `basketX`, the target, at BASKET_SPEED).
+  private posX = 0.5
   private fruitKeys: string[] = []
   private bombKeys: string[] = []
   private lastTick = -1
   private basketX = 0.5
-  private lastSentX = -1
+  // The server starts every target at 0.5: nothing is sent until the player actually steers (D28).
+  private lastSentX = 0.5
   private lastSentAt = 0
   private lastScore = 0
   private lastCombo = 0
+  // When a catch last sounded at the rim (the score that confirms it then stays quiet).
+  private caughtAt = Number.NEGATIVE_INFINITY
   // Joined after the round started (not in its snapshot): no basket, just the rain of fruit.
   private spectating = false
   // Screen mapping of the play field: normalized y 0 → skyTop, CATCH_Y → the basket's rim.
@@ -123,9 +143,14 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
     this.clock.reset()
     this.lastTick = -1
     this.basketX = 0.5
-    this.lastSentX = -1
+    this.posX = 0.5
+    this.keySide = 0
+    this.lastSentAt = 0
+    this.spritePool = []
+    this.lastSentX = 0.5
     this.lastScore = 0
     this.lastCombo = 0
+    this.caughtAt = Number.NEGATIVE_INFINITY
     this.spectating = false
     for (const s of this.sprites.values()) s.destroy()
     this.sprites.clear()
@@ -187,34 +212,55 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
     this.skyTop = this.top
     this.rimY = groundY - 2 - basketH
 
-    this.add
+    const hint = this.add
       .text(
         width / 2,
         height - groundH / 2,
         this.t('game.fruitCatch.hint'),
-        bodyStyle(12, PALETTE.text),
+        bodyStyle(Math.min(width, height) < 520 ? 12 : 15, PALETTE.text),
       )
       .setOrigin(0.5)
       .setAlpha(0.8)
       .setDepth(21)
+    fitText(hint, width - 16, Math.min(width, height) < 520 ? 12 : 15)
 
-    this.cursors = this.input.keyboard?.createCursorKeys()
+    const kb = this.input.keyboard
+    if (kb) {
+      this.steerKeys = {
+        left: [kb.addKey('LEFT'), kb.addKey('A')],
+        right: [kb.addKey('RIGHT'), kb.addKey('D')],
+      }
+    }
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.aim(p.x))
+    // A mouse steers by just moving over the field; a finger by dragging.
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (p.isDown) this.aim(p.x)
+      if (p.isDown || !p.wasTouch) this.aim(p.x)
     })
   }
 
   private aim(px: number): void {
+    if (this.spectating) return
     this.basketX = Phaser.Math.Clamp(px / this.scale.width, 0, 1)
   }
 
-  private maybeSend(now: number): void {
-    // Throttle move intents; only send on a meaningful change.
-    if (now - this.lastSentAt < 60 || Math.abs(this.basketX - this.lastSentX) < 0.01) return
+  // ◀ ▶ / A D: a held side steers for that edge at the speed cap; letting go stops on the spot.
+  private steerKeysFrame(now: number): void {
+    const down = (keys: Phaser.Input.Keyboard.Key[]): number => (keys.some((k) => k.isDown) ? 1 : 0)
+    const side = down(this.steerKeys.right) - down(this.steerKeys.left)
+    if (side === this.keySide) return
+    this.keySide = side
+    this.basketX = side < 0 ? 0 : side > 0 ? 1 : this.posX
+    this.maybeSend(now, true)
+  }
+
+  // Sends the steering target when it changed: key presses at once, a moving pointer at most every
+  // SEND_EVERY_MS (its last position always goes out).
+  private maybeSend(now: number, force = false): void {
+    if (Math.abs(this.basketX - this.lastSentX) < 0.002) return
+    if (!force && now - this.lastSentAt < SEND_EVERY_MS) return
     this.lastSentAt = now
     this.lastSentX = this.basketX
-    this.sendInput({ kind: 'move', x: this.basketX })
+    this.sendInput({ kind: 'move', x: Math.round(this.basketX * 1e4) / 1e4 })
   }
 
   private screenY(y: number): number {
@@ -236,17 +282,19 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
       if (snap) this.renderItems(snap, now, this.scale.width)
       return
     }
-    if (this.cursors?.left.isDown) this.basketX -= (KEY_SPEED * delta) / 1000
-    if (this.cursors?.right.isDown) this.basketX += (KEY_SPEED * delta) / 1000
-    this.basketX = Phaser.Math.Clamp(this.basketX, 0, 1)
-    this.maybeSend(now)
+    if (!this.state.final) {
+      this.steerKeysFrame(now)
+      this.maybeSend(now)
+      const reach = (BASKET_SPEED * delta) / 1000
+      this.posX += Phaser.Math.Clamp(this.basketX - this.posX, -reach, reach)
+    }
 
     const { width } = this.scale
-    this.basket?.setX(this.basketX * width)
+    this.basket?.setX(this.posX * width)
     const catcher = this.catcher
     if (catcher) {
-      const moved = this.basketX - this.lastBasketX
-      this.lastBasketX = this.basketX
+      const moved = this.posX - this.lastBasketX
+      this.lastBasketX = this.posX
       if (Math.abs(moved) > 0.0005) {
         catcher.setPose('side').face(moved)
         this.movedAt = now
@@ -254,7 +302,7 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
         catcher.setPose('front').image.setFlipX(false)
       }
       catcher.setExpression(now < this.faceUntil ? this.face : 'idle').tick(now)
-      catcher.image.setX(this.basketX * width)
+      catcher.image.setX(this.posX * width)
     }
 
     if (snap) this.renderItems(snap, now, width)
@@ -271,9 +319,14 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
       this.lastCombo = combo
     }
     if (myScore > this.lastScore) {
-      this.sfx.coin()
+      // A catch the rim already rang for stays quiet; one the screen didn't call still gets its coin.
+      if (this.time.now - this.caughtAt > CONFIRM_MS) {
+        this.sfx.coin()
+        this.caughtAt = this.time.now
+      }
       floatText(this, bx, this.rimY - 10, `+${myScore - this.lastScore}`, PALETTE.lime)
       if (combo >= 3 && combo > this.lastCombo && combo % 3 === 0) {
+        this.sfx.lineClear(Math.min(4, combo / 3))
         floatText(
           this,
           bx,
@@ -318,7 +371,8 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
 
     for (const [id, sprite] of this.sprites) {
       if (!current.has(id)) {
-        sprite.destroy()
+        sprite.setVisible(false)
+        this.spritePool.push(sprite)
         this.sprites.delete(id)
       }
     }
@@ -327,12 +381,13 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
   private resolveFx(id: number, item: Seen, width: number): void {
     if (this.spectating) return
     const x = item.x * width
-    const caught = Math.abs(item.x - this.basketX) <= BASKET_HALF
+    const caught = Math.abs(item.x - this.posX) <= BASKET_HALF
     if (item.kind === 'bomb') {
       if (!caught) return
       this.face = 'hurt'
       this.faceUntil = this.time.now + 700
-      this.sfx.wrong()
+      this.sfx.explosion()
+      this.sfx.hurt()
       burst(this, x, this.rimY, PALETTE.orange, 26, 320)
       burst(this, x, this.rimY, PALETTE.red, 14, 200)
       shake(this, 0.014, 260)
@@ -341,6 +396,10 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
       return
     }
     if (caught) {
+      // Rung the moment it drops in (the snapshot's +N then confirms it silently) — unless that
+      // snapshot got here first and already rang for it.
+      if (this.time.now - this.caughtAt > SAME_CATCH_MS) this.sfx.coin()
+      this.caughtAt = this.time.now
       this.face = 'happy'
       this.faceUntil = this.time.now + 350
       const color = FRUIT_COLORS[id % FRUIT_COLORS.length] ?? PALETTE.red
@@ -358,7 +417,7 @@ export class FruitCatchScene extends MiniGameScene<FruitCatchSnapshot> {
         item.kind === 'bomb'
           ? (this.bombKeys[0] ?? '')
           : (this.fruitKeys[item.id % this.fruitKeys.length] ?? '')
-      sprite = this.add.image(x, y, key)
+      sprite = (this.spritePool.pop() ?? this.add.image(x, y, key)).setTexture(key).setVisible(true)
       this.sprites.set(item.id, sprite)
     }
     sprite.setPosition(x, y).setDisplaySize(size, size * (sprite.frame.height / sprite.frame.width))

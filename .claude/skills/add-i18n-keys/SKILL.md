@@ -22,7 +22,9 @@ python3 .claude/skills/add-i18n-keys/i18n-add.py '{
 - Namespaces: shell UI under `room.*`, `join.*`, `common.*`; scenes under `game.<camelCaseId>.*`
   (`game.pixelHoops`, `game.quickDraw`…); mini-game catalog entries under
   `catalog.minigame.<id>.name` / `.blurb` (read by `CatalogI18nService`, English fallback = the
-  `@pp/shared` MINIGAMES meta — but every id should have both languages).
+  `@pp/shared` MINIGAMES meta — but every id should have both languages), plus the optional
+  `.tagline` (intro joke) and `.controls` (the PC keys in one short line, e.g. "← → or A D move ·
+  SPACE jump", shown on the round intro — every game has one).
 - Shared scene strings already exist under `game.common` (`you`, `pts {n}`, `level {n}`, `combo {n}`,
   `youWin`, `youLose`, `draw`, `out`, `miss`, `perfect`, `great`, `good`, `wrong`, `nice`, `waiting`,
   `finished`, `done`, `correct {n}`) — reuse before adding.

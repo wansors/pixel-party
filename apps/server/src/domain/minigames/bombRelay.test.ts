@@ -26,6 +26,22 @@ describe('BombRelay', () => {
     expect(red?.legProgress).toBe(0)
   })
 
+  test('mashes count up to the human mashing ceiling per second', () => {
+    const game = new BombRelay()
+    let state = game.init(ctx())
+    // An autoclicker's burst counts 15 mashes a second: the first 12 pass the bomb on, and the next
+    // holder's allowance is their own.
+    for (let i = 0; i < 40; i++) state = game.onInput(state, 'a', { kind: 'mash' }, 1)
+    expect(game.snapshot(state, 1).teams.red?.relays).toBe(1)
+    for (let i = 0; i < 40; i++) state = game.onInput(state, 'b', { kind: 'mash' }, 2)
+    expect(game.snapshot(state, 2).teams.red?.relays).toBe(2)
+    // Back to 'a' within the same second: only 3 of its 15 are left.
+    for (let i = 0; i < 40; i++) state = game.onInput(state, 'a', { kind: 'mash' }, 3)
+    expect(game.snapshot(state, 3).teams.red?.legProgress).toBe(3)
+    for (let i = 0; i < 9; i++) state = game.onInput(state, 'a', { kind: 'mash' }, 1001)
+    expect(game.snapshot(state, 1001).teams.red?.relays).toBe(3)
+  })
+
   test('only the current holder can mash', () => {
     const game = new BombRelay()
     let state = game.init(ctx())

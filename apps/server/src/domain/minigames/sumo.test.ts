@@ -168,3 +168,29 @@ describe('Sumo', () => {
     expect(snap.bodies.every((b) => typeof b.x === 'number')).toBe(true)
   })
 })
+
+describe('Sumo wire (the client predicts from it)', () => {
+  test('a dash is acknowledged by seq even when the cooldown refuses it', () => {
+    const game = new Sumo()
+    let s = new Sumo().init({ players: ['a', 'b'], seed: 1, random: { next: () => 0 }, now: 0 })
+    s = game.onInput(s, 'a', { kind: 'move', dx: 1, dy: 0 }, 50)
+    s = game.onInput(s, 'a', { kind: 'dash', seq: 1 }, 100)
+    s = game.onInput(s, 'a', { kind: 'dash', seq: 2 }, 200)
+    const body = game.snapshot(s, 200).bodies.find((b) => b.id === 'a')
+    expect(body?.dash).toBe(2)
+    expect(s.bodies.get('a')?.dashAt).toBe(100)
+  })
+
+  test('the snapshot carries velocity and push so the client can step the same physics', () => {
+    const game = new Sumo()
+    let s = game.init({ players: ['a', 'b'], seed: 1, random: { next: () => 0 }, now: 0 })
+    s = game.onInput(s, 'a', { kind: 'move', dx: 0, dy: -3 }, 10)
+    s = game.tick(s, 50, 50)
+    const a = game.snapshot(s, 50).bodies.find((b) => b.id === 'a')
+    expect(a?.ax).toBe(0)
+    expect(a?.ay).toBe(-1)
+    expect(a?.vy).toBeLessThan(0)
+    // Rounded for the wire: no long float tails.
+    expect(String(a?.x).length).toBeLessThanOrEqual(6)
+  })
+})

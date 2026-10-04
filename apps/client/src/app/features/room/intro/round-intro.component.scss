@@ -82,6 +82,16 @@
     line-height: 1.45;
     color: var(--c-text);
   }
+  .controls {
+    margin-top: 0.6rem;
+    padding-top: 0.6rem;
+    border-top: 2px dashed var(--c-frame);
+    color: var(--c-amber);
+    .label {
+      display: inline;
+      margin-right: 0.6rem;
+    }
+  }
 }
 
 .teams {
@@ -127,8 +137,8 @@
   }
 }
 .ready {
-  color: var(--c-dim);
-  font-size: var(--fs-xs);
+  color: var(--c-text);
+  font-size: var(--fs-sm);
   letter-spacing: 0.12em;
 }
 
@@ -185,5 +195,22 @@
   }
   .howto p {
     font-size: var(--fs-sm);
+  }
+}
+
+// Big PC screens (1080p and up): the card grows with the screen so the rules read from the sofa.
+@media (min-width: 1600px) and (min-height: 900px) {
+  .intro {
+    width: min(100%, 50rem);
+  }
+  .pad {
+    gap: 1.4rem;
+    padding: 2rem 2rem 2.2rem;
+  }
+  .howto p {
+    font-size: 1.3rem;
+  }
+  .tagline {
+    font-size: 1.2rem;
   }
 }

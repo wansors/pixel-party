@@ -18,7 +18,7 @@ party with friends** — one process, on one local network, no accounts — whic
 permanently **stateless, anonymous, and single-instance by design**: no database (D15), no further
 social/polish phase (D16), no multi-instance scaling (D17). What remains open-ended is growing the
 mini-game catalog with brand-new ideas. Design decisions from the clear-out pass are logged in
-[`implementation-decisions.md`](implementation-decisions.md) (D1–D29). The game is **PC-first**; 37
+[`implementation-decisions.md`](implementation-decisions.md) (D1–D32). The game is **PC-first**; 37
 of the 55 games are tagged `mobileFriendly` (lobby badge + filter, D21). Rooms hold up to **12
 players** (usually 4–8) and every game declares the headcounts it supports (D27); the per-game
 player-fit & balance audit ([`player-fit-audit.md`](player-fit-audit.md)) and its fixes (D28, D29)
@@ -27,7 +27,7 @@ below.
 
 ### Foundation & platform
 - Bun workspaces monorepo, hexagonal server, `@pp/shared` wire contracts, Biome + TS strict +
-  determinism gate + **GitHub Actions CI**. Test suite: **634 server/shared + 24 client (Karma)**, green.
+  determinism gate + **GitHub Actions CI**. Test suite: **677 server/shared + 33 client (Karma)**, green.
 - Server-authoritative, deterministic core (seeded `Random` + `Clock` ports; the domain never touches
   `Math.random`/`Date.now`). Bun-native WS with a hand-written shape validator (no Zod).
 - Angular 20 shell + Phaser 3 (decoupled); **i18n EN/ES** (Transloco) across the UI + every scene;
@@ -41,6 +41,10 @@ below.
   (auto-on-disconnect + manual) + kick, idle-room reaper, observability (JSON logs + `/api/metrics`).
 - Scoring: position→points table with tie-averaging; **final-ranking tiebreakers** (most 1st places →
   best average position, `domain/services/finalRanking`).
+- **PC launch bar (D30)**: party mode (`bun run start` — one optimized process serving the client
+  build + `/api` + `/ws`); every game audited for performance and PC gameplay
+  ([`pc-launch-audit.md`](pc-launch-audit.md)) — client-side prediction of your own input, full
+  keyboard controls named on the intro card, 1080p layouts, no per-frame churn, snapshots ≤ ~4 KB.
 - **Player fit (D27)**: rooms of up to 12; each game's hard min/max + recommended range on the lobby
   card, unfit games greyed out and skipped by the engine, a "Best for N" filter, START refused when no
   picked game fits.
@@ -189,6 +193,41 @@ seeded variants of the same content, because snapshots are broadcast to the whol
       the server, or a calibration tap.
 - [x] Playtest tooling: the rally and circuit bots stay parked when `PP_REPO` is unset. Default it to
       the git root.
+
+## Skill radar review (2026-10-04) — DONE
+
+- [x] **Make the post-match skill radar read as a shape that means something** (requested after the
+      PC audit: "it looks more like spikes than a geometric area"). Validated with a simulation:
+      200 sessions per row, 8 players with hidden per-axis skills, random line-ups. D31 has the
+      details.
+  - **What was wrong**:
+    - Axes not played yet were drawn as 0, so their vertices fell to the centre: 52 % of vertices
+      after 3 rounds, 27 % after 6.
+    - Each round was scored as points ÷ the winner's points. On the steep award table that made
+      single rounds swing an axis to the rim or the centre.
+  - **Now**:
+    - Each round is measured by the player's place in it as a 0..1 share of the field.
+    - The per-axis average is shrunk toward the middle of the room (0.5), so it takes a few rounds to
+      stand out.
+    - Unmeasured axes sit at the neutral middle with a dimmed label.
+    - A value of 0 still keeps a minimum radius.
+    - A dashed ring marks the middle of the room, explained in a one-line caption.
+  - **Result**: 0 % of vertices at the centre at any session length, and the drawn values track the
+    hidden skills slightly better (r 0.62 → 0.76 vs 0.58 → 0.72 over 3 → 20 rounds).
+
+## Audio review (2026-10-04) — DONE
+
+- [x] **More and better sound effects** (D32): a noise voice and 18 new or reworked SFX (hits,
+      crashes, explosions, shots, jumps, landings, whooshes, splashes, steps, piece locks, line clears,
+      power-ups, damage, crowd, fuse, flips, bounces). Every game's events are remapped to fitting
+      sounds instead of generic beeps.
+- [x] **More music** (D32):
+  - the theme for the join screen, lobby and final;
+  - chiptune loops by mood during rounds (2 action, 2 think, 1 tension) plus a results loop, rotating
+    between rounds;
+  - silence in the three games whose sound is the game.
+- [ ] *Optional*: more produced tracks (like the Suno theme) per mood. The director would need a
+      per-mood mp3 list next to the chip songs.
 
 ## How this backlog works
 

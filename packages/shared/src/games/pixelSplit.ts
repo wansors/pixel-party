@@ -1,19 +1,22 @@
 // Pixel Split ("cut in half") wire shapes. A pixel-art object is shown; place a vertical cut so both
 // halves hold the same number of filled pixels. A seeded object sequence is shared by everyone; each
 // player advances at their own pace. The server owns the per-column counts and scores the cut.
-import type { PixelCell } from './pixelObjects'
 
 export interface PixelSplitObject {
-  // Index into the player's sequence; echoed back on the cut so the server drops stale input.
+  // Index into the shared sequence; echoed back on the cut so the server drops stale input.
   index: number
   name: string
   cols: number
   rows: number
-  pixels: PixelCell[]
+  // The filled cells, packed (packCells / unpackCells in pixelObjects).
+  bits: string
 }
 
 export interface PixelSplitSnapshot {
-  objects: Record<string, PixelSplitObject | null>
+  // The objects players are on right now, each sent once (everyone on the same level shares one).
+  objects: PixelSplitObject[]
+  // playerId -> index of the object that player is on (null once the sequence is exhausted).
+  at: Record<string, number | null>
   scores: Record<string, number>
   remainingMs: number
 }

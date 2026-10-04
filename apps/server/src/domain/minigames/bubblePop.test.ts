@@ -208,3 +208,33 @@ describe('BubblePop', () => {
     expect(snap.cols).toBe(COLS)
   })
 })
+
+describe('BubblePop wire (the client predicts from it)', () => {
+  test('the snapshot carries the queue, the board as digits, the queue pointer and the shot count', () => {
+    const game = new BubblePop()
+    const s = init(['p'])
+    const board = emptyBoard()
+    board[idx(0, 0)] = 2
+    s.boards.set('p', board)
+    s.shotQueue = [3, 2, 1, 2]
+    let next = game.onInput(s, 'p', { kind: 'shoot', col: 6 }, 1)
+    // Out-of-range columns are refused outright (not counted as a shot).
+    next = game.onInput(next, 'p', { kind: 'shoot', col: 9 }, 1)
+    const snap = game.snapshot(next, 1)
+    expect(snap.queue).toBe('3212')
+    const b = nn(snap.boards.p)
+    expect(b.shots).toBe(1)
+    // Colour 3 isn't on the board, so the shot skipped to the first 2 (slot 1); the pointer is past it.
+    expect(b.shot).toBe(2)
+    expect(b.grid[idx(0, 6)]).toBe('2')
+    expect(b.grid.length).toBe(CELLS)
+  })
+
+  test('a shot after the board is done is still counted, so the client stops replaying it', () => {
+    const game = new BubblePop()
+    const s = init(['p'])
+    s.doneAt.set('p', 5)
+    const next = game.onInput(s, 'p', { kind: 'shoot', col: 1 }, 6)
+    expect(game.snapshot(next, 6).boards.p?.shots).toBe(1)
+  })
+})

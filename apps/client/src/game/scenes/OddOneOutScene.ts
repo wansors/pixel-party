@@ -13,12 +13,20 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 const MILESTONE = 5
 // Every player gets a chip; rooms bigger than this get an extra strip row.
 const CHIPS_PER_ROW = 6
+// The chip strip is rebuilt at most this often.
+const STRIP_EVERY_MS = 250
+// A solved board the server still hasn't moved past after this long never counted (the tap landed
+// inside the server's own cooldown, say): it opens for taps again instead of locking the player out.
+const CONFIRM_MS = 1200
+// A rival clearing every board gets a crowd cheer, at most this often.
+const CHEER_EVERY_MS = 1500
 
 // Odd One Out canvas. Renders this player's current board — a framed grid of beveled tiles, one a
 // little brighter — and rebuilds it (with a quick pop-in) whenever the player reaches a new level.
 // A right tap rings + bursts; a wrong tap wiggles red and costs a short cooldown (the board dims and a
 // red bar drains under the prompt until taps count again). Every 5th level cheers, and a chip strip
-// shows every player's level.
+// shows every player's level. Mouse only on a PC: spotting is spatial, and a keyboard cursor over up to
+// 36 tiles would only be slower.
 export class OddOneOutScene extends MiniGameScene<OddOneOutSnapshot> {
   private tiles: Phaser.GameObjects.Image[] = []
   // Home x of each tile, so a wiggle always settles back in place.
@@ -33,6 +41,10 @@ export class OddOneOutScene extends MiniGameScene<OddOneOutSnapshot> {
   private drawnLevel = -1
   // Level whose odd tile was just tapped: further taps wait for the server's next board.
   private solvedLevel = -1
+  private solvedAt = 0
+  private barShown = false
+  private chipsKey = ''
+  private chipsAt = Number.NEGATIVE_INFINITY
   private boardTop = 0
   private boardSide = 0
   private promptSize = 0
@@ -44,6 +56,9 @@ export class OddOneOutScene extends MiniGameScene<OddOneOutSnapshot> {
   private cooling = false
   private cooldownBar?: Phaser.GameObjects.Graphics
   private barBox = { x: 0, y: 0, w: 0, h: 0 }
+  // Players already seen done (cheered once), and when the last cheer played.
+  private readonly finishers = new Set<string>()
+  private cheerAt = Number.NEGATIVE_INFINITY
 
   constructor(...deps: SceneDeps) {
     super('odd-one-out', ...deps)
@@ -56,10 +71,16 @@ export class OddOneOutScene extends MiniGameScene<OddOneOutSnapshot> {
     this.levelKeys = new Set()
     this.drawnLevel = -1
     this.solvedLevel = -1
+    this.solvedAt = 0
+    this.barShown = false
+    this.chipsKey = ''
+    this.chipsAt = Number.NEGATIVE_INFINITY
     this.finished = false
     this.cooldownEndsAt = 0
     this.lastTick = -1
     this.cooling = false
+    this.finishers.clear()
+    this.cheerAt = Number.NEGATIVE_INFINITY
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.clearBoard())
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
@@ -83,7 +104,7 @@ export class OddOneOutScene extends MiniGameScene<OddOneOutSnapshot> {
     this.barBox = { x: cx - barW / 2, y: barY, w: barW, h: barH }
     this.cooldownBar = this.add.graphics().setDepth(6)
 
-    const chipSize = compact ? 11 : 13
+    const chipSize = compact ? 11 : height >= 900 ? 16 : 13
     const roster = Object.keys(this.state.names).length
     const stripRows = (width < 600 ? 2 : 1) + (roster > CHIPS_PER_ROW ? 1 : 0)
     const stripTop = height - (compact ? 12 : 18) - stripRows * PlayerStrip.rowH(chipSize)
@@ -95,7 +116,7 @@ export class OddOneOutScene extends MiniGameScene<OddOneOutSnapshot> {
       chipSize,
       stripRows,
     )
-    this.boardSide = Math.floor(Math.min(width - 32, stripTop - 12 - this.boardTop, 620))
+    this.boardSide = Math.floor(Math.min(width - 32, stripTop - 12 - this.boardTop, 760))
     // Centered in the free band (on phones that also brings it closer to the thumbs).
     this.boardTop += Math.max(0, (stripTop - 12 - this.boardTop - this.boardSide) / 2)
     this.boardFrame = this.add.image(
@@ -156,6 +177,7 @@ export class OddOneOutScene extends MiniGameScene<OddOneOutSnapshot> {
     this.sendInput({ kind: 'tap', level: board.level, cell })
     if (cell === board.oddCell) {
       this.solvedLevel = board.level
+      this.solvedAt = this.time.now
       this.sfx.correct()
       ring(this, tile.x, tile.y, PALETTE.lime, tile.width * 0.8)
       burst(this, tile.x, tile.y, board.odd, 14, 220)
@@ -180,13 +202,20 @@ export class OddOneOutScene extends MiniGameScene<OddOneOutSnapshot> {
     this.hud?.setScore(this.t('game.common.level', { n: cleared + 1 }))
     // undefined = not in this round; null = this player has cleared every board.
     const board = snap.boards[me]
+    if (board && board.level === this.solvedLevel && this.time.now - this.solvedAt > CONFIRM_MS)
+      this.solvedLevel = -1
     if (board && board.level !== this.drawnLevel) {
       if (this.drawnLevel >= 0) this.onLevelUp(board.level)
       this.draw(board)
     } else if (board === null && !this.finished) {
       this.finished = true
       this.clearBoard()
-      if (!this.firstSnapshot) this.sfx.coin()
+      if (!this.firstSnapshot) {
+        // Every board cleared: the crowd roars.
+        this.sfx.cheer()
+        this.sfx.coin()
+        this.cheerAt = this.time.now
+      }
       if (this.prompt) {
         this.prompt.setText(this.t('game.common.waiting'))
         fitText(this.prompt, this.scale.width - 32, this.promptSize)
@@ -194,17 +223,40 @@ export class OddOneOutScene extends MiniGameScene<OddOneOutSnapshot> {
       if (this.banner) showBanner(this, this.banner, this.t('game.common.finished'), PALETTE.lime)
     }
 
+    this.trackFinishers(snap)
     this.trackCooldown(snap.cooldowns[me] ?? 0)
     this.renderCooldown(!!board)
 
-    const chips = Object.entries(snap.scores)
-      .sort((a, b) => b[1] - a[1])
-      .map(([id, n]) => ({
-        text: `${this.label(id).slice(0, 10).toUpperCase()} ${n + 1}`,
-        avatar: this.state.avatarOf(id),
-        color: this.state.colorOf(id),
-      }))
-    this.strip?.set(chips)
+    // Rivals' chips change only when someone's level does, and are rebuilt at most every
+    // STRIP_EVERY_MS (each rebuild re-creates a dozen chips).
+    const chipsKey =
+      this.time.now - this.chipsAt < STRIP_EVERY_MS
+        ? this.chipsKey
+        : Object.values(snap.scores).join(',')
+    if (chipsKey !== this.chipsKey) {
+      this.chipsKey = chipsKey
+      this.chipsAt = this.time.now
+      const chips = Object.entries(snap.scores)
+        .sort((a, b) => b[1] - a[1])
+        .map(([id, n]) => ({
+          text: `${this.label(id).slice(0, 10).toUpperCase()} ${n + 1}`,
+          avatar: this.state.avatarOf(id),
+          color: this.state.colorOf(id),
+        }))
+      this.strip?.set(chips)
+    }
+  }
+
+  // A rival clearing every board cheers (throttled); the first snapshot only learns who is done.
+  private trackFinishers(snap: OddOneOutSnapshot): void {
+    for (const [id, board] of Object.entries(snap.boards)) {
+      if (board !== null || this.finishers.has(id)) continue
+      this.finishers.add(id)
+      if (this.firstSnapshot || id === this.selfId) continue
+      if (this.time.now - this.cheerAt < CHEER_EVERY_MS) continue
+      this.cheerAt = this.time.now
+      this.sfx.cheer()
+    }
   }
 
   private trackCooldown(ms: number): void {
@@ -217,7 +269,8 @@ export class OddOneOutScene extends MiniGameScene<OddOneOutSnapshot> {
   private renderCooldown(playing: boolean): void {
     const left = this.cooldownEndsAt - this.time.now
     const cooling = playing && left > 0
-    const g = this.cooldownBar?.clear()
+    const g = cooling || this.barShown ? this.cooldownBar?.clear() : undefined
+    this.barShown = cooling
     if (cooling && g) {
       const { x, y, w, h } = this.barBox
       const frac = Phaser.Math.Clamp(left / ODD_ONE_OUT_WRONG_COOLDOWN_MS, 0, 1)
@@ -236,10 +289,12 @@ export class OddOneOutScene extends MiniGameScene<OddOneOutSnapshot> {
 
   private onLevelUp(level: number): void {
     if (this.boardFrame) punch(this, this.boardFrame, 0.03, 80)
+    // The next board's tiles flip in (a milestone level plays its level-up sting instead).
+    if (level % MILESTONE !== 0) this.sfx.flip()
     if (level % MILESTONE !== 0 || !this.prompt) return
     const { x, y } = this.prompt
     burst(this, x, y, PALETTE.amber, 22, 280)
     floatText(this, x, y + 30, this.t('game.common.level', { n: level + 1 }), PALETTE.amber, 22)
-    this.sfx.coin()
+    this.sfx.powerUp()
   }
 }

@@ -3,7 +3,7 @@ import type { PixelBeatInput } from '@pp/shared'
 import type { MiniGameInitCtx } from './MiniGame'
 import { PixelBeat } from './pixelBeat'
 
-// next() = 0.5 zeroes the jitter term ((r.next() - 0.5) * 160), so beats land exactly 650ms apart:
+// A short round stays in the steady opening tempo — plain quarter notes exactly 650ms apart:
 // 1200, 1850, 2500, ...
 const baseCtx = (overrides: Partial<MiniGameInitCtx> = {}): MiniGameInitCtx => ({
   players: ['a', 'b'],
@@ -25,6 +25,34 @@ describe('PixelBeat', () => {
       expect(t).toBeLessThan(40_000)
       if (i > 0) expect(t).toBeGreaterThan(state.beatTimes[i - 1] as number)
     }
+  })
+
+  test('the opening is a steady beat; later bars tighten the tempo and add off-beats and rests', () => {
+    const game = new PixelBeat()
+    const beats = game.init(baseCtx({ config: { durationMs: 40_000 } })).beatTimes
+    const gaps = beats.slice(1).map((t, i) => t - (beats[i] as number))
+    const early = gaps.filter((_, i) => (beats[i] as number) < 8000)
+    expect(new Set(early)).toEqual(new Set([650]))
+    const late = gaps.filter((_, i) => (beats[i] as number) > 30_000)
+    // Off-beats (half a beat) and a quicker beat by the end; never closer than a playable half beat.
+    expect(Math.min(...late)).toBeLessThan(300)
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(230)
+    expect(late.some((g) => g > 400 && g < 560)).toBe(true) // a whole beat is quicker than 650
+    expect(late.some((g) => g > 650)).toBe(true) // a rest
+  })
+
+  test('a beat let pass breaks the streak', () => {
+    const game = new PixelBeat()
+    let state = game.init(baseCtx({ config: { durationMs: 5000 } }))
+    state = game.onInput(state, 'a', { kind: 'tap' }, 1200)
+    state = game.onInput(state, 'b', { kind: 'tap' }, 1200)
+    state = game.onInput(state, 'b', { kind: 'tap' }, 1850)
+    // The 1850 beat's window closes (plus the latency credit): a missed it, b didn't.
+    state = game.tick(state, 50, 1850 + 470)
+    expect(game.snapshot(state, 2320).streaks).toEqual({ a: 1, b: 2 })
+    state = game.tick(state, 50, 1850 + 471)
+    expect(game.snapshot(state, 2321).streaks).toEqual({ a: 0, b: 2 })
+    expect(game.snapshot(state, 2321).scores).toEqual({ a: 3, b: 6 })
   })
 
   test('a tap exactly at a beat scores the perfect value', () => {

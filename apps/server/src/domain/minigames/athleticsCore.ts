@@ -1,15 +1,15 @@
-import type { AthleticsFoot } from '@pp/shared'
+import { ATHLETICS_STRIDE, type AthleticsFoot, athleticsStrideGain } from '@pp/shared'
 
 // Shared sprint model behind the track & field games (`trackRace`, `fieldEvent`): the classic
 // two-button arcade run. Every stride on the opposite foot adds a speed impulse that shrinks as the
 // runner nears top speed; the same foot twice adds nothing; speed bleeds off continuously. Steady
 // speed therefore tracks the alternating tap rate: ~7 m/s at 6 strides/s, ~9.3 at 10, ~10.8 at 15.
 
-const STRIDE_BOOST = 2.2 // m/s added per stride at a standstill
-const TOP_SPEED = 16 // asymptote the boost saturates toward (never reached by humans)
+// Per stride: +2.2 m/s at a standstill, saturating toward 16 m/s (never reached by humans) — the
+// numbers live in @pp/shared (ATHLETICS_STRIDE) so the client can predict its own strides.
 export const DRAG = 1.0 // exponential speed decay per second
 // Strides closer together than this are ignored (20 strides/s cap): no macro out-runs a thumb.
-export const MIN_STRIDE_MS = 50
+export const MIN_STRIDE_MS = ATHLETICS_STRIDE.minMs
 
 export interface Runner {
   x: number
@@ -31,7 +31,7 @@ export function stride(r: Runner, foot: AthleticsFoot, now: number): boolean {
   if (foot === r.lastFoot || now - r.lastStrideAt < MIN_STRIDE_MS) return false
   r.lastFoot = foot
   r.lastStrideAt = now
-  r.v += STRIDE_BOOST * (1 - r.v / TOP_SPEED)
+  r.v += athleticsStrideGain(r.v)
   return true
 }
 

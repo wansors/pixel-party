@@ -5,10 +5,12 @@ import {
   type FreezeDollSnapshot,
   type FreezeDollStatus,
   PALETTE,
+  freezeDollMove,
+  freezeDollSpeed,
   freezeDollSweepAt,
 } from '@pp/shared'
 import Phaser from 'phaser'
-import { type AvatarExpression, AvatarSprite, avatarPx } from '../avatars'
+import { type AvatarExpression, AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
 import {
   addBanner,
   burst,
@@ -28,7 +30,7 @@ import {
   hexToCss,
   shade,
 } from '../pixelStyle'
-import { YouMarker, addShadow } from '../playerMarks'
+import { type Shadow, YouMarker, addShadow } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -38,9 +40,19 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 // comes before every turn (sometimes a fake-out); facing the field, her laser sweeps across the lanes
 // (from a different lane each time, wrapping round at the edge) and any lane it has reached is watched
 // until she looks away. Hold WALK (↑ / W / SPACE) or RUN (SHIFT) — or the two big buttons — to move;
-// the server judges every hit.
+// the server judges every hit. Your own runner is predicted with the server's physics (shared), so it
+// sets off and glides to a stop the moment you press or let go, easing onto the server's position.
 
 const CHANT_STEPS = 8
+// Your own footsteps: a slow beat walking, a quick one running (nobody else's are heard).
+const WALK_STEP_MS = 300
+const RUN_STEP_MS = 170
+// Other runners reaching the line get the crowd at most this often.
+const CHEER_GAP_MS = 1500
+// Rivals' moments play at this fraction of the volume (yours stay full), so a full room stays readable.
+const RIVAL_LEVEL = 0.5
+// Time constant of the ease from your predicted runner onto the server's position.
+const CORRECT_TAU_MS = 200
 const HEART_ROWS = ['_RR_RR_', 'RRRRRRR', 'RRRRRRR', '_RRRRR_', '__RRR__', '___R___']
 
 // The doll, 14×18: hair H (+ highlight h), skin S, eyes E, mouth M, collar W, dress D (+ shade d), shoes K.
@@ -105,7 +117,7 @@ const FACES: Partial<Record<FreezeDollStatus, AvatarExpression>> = {
 
 interface RunnerView {
   avatar: AvatarSprite
-  shadow: Phaser.GameObjects.Ellipse
+  shadow: Shadow
   hearts: Phaser.GameObjects.Image[]
   x: number
   status: FreezeDollRunner['status']
@@ -158,7 +170,16 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
   private bannerShown = false
   // The doll's last gloat (one speech bubble at a time).
   private gloatUntil = 0
-
+  private heartKey = ''
+  private barKey = ''
+  private chromeRef: unknown = null
+  // Your runner, predicted.
+  private pred?: { x: number; v: number; brake: number }
+  private lastFootAt = Number.NEGATIVE_INFINITY
+  private footSide = 0
+  private lastCheerAt = Number.NEGATIVE_INFINITY
+  private lastFrameAt = 0
+  private warmed = false
   constructor(...deps: SceneDeps) {
     super('freeze-doll', ...deps)
   }
@@ -182,6 +203,20 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     this.gloatUntil = 0
     this.lanes = 0
     this.promptText = ''
+    this.pred = undefined
+    this.lastFootAt = Number.NEGATIVE_INFINITY
+    this.footSide = 0
+    this.lastCheerAt = Number.NEGATIVE_INFINITY
+    this.barKey = ''
+    this.chromeRef = null
+    this.warmed = false
+    this.lastFrameAt = 0
+    this.heartKey = ensurePixelGrid(this, {
+      key: 'fd-heart',
+      rows: HEART_ROWS,
+      legend: { R: PALETTE.red },
+      pixelSize: this.compact ? 2 : 3,
+    })
 
     // Who's who: a strip of names + hearts under the HUD.
     const stripSize = this.compact ? 11 : 13
@@ -189,7 +224,8 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     const dollTop = this.top + 8 + PlayerStrip.rowH(stripSize) * 2
 
     // The doll.
-    const dollH = this.compact ? 104 : 156
+    // Bigger on a big screen (the doll is the clock everyone watches).
+    const dollH = this.compact ? 104 : height >= 900 ? 212 : 156
     this.dollPx = Math.max(3, Math.floor((dollH - 30) / DOLL_FRONT.length))
     this.dollKeys = {
       back: ensurePixelGrid(this, {
@@ -342,10 +378,14 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
   private buildField(lanes: number): void {
     const { width } = this.scale
     this.lanes = lanes
-    const maxLane = this.compact ? 64 : 96
+    const maxLane = this.compact ? 64 : 144
     this.laneW = Math.min(maxLane, Math.floor((width - 24) / Math.max(1, lanes)))
     this.lanesX0 = width / 2 - (this.laneW * lanes) / 2
-    this.avatarSize = avatarPx(Math.min(this.compact ? 32 : 48, this.laneW - 6))
+    // As big as the lane allows, but the race stays at least ~4 runners tall.
+    const fieldH = this.startY - this.fieldTop
+    this.avatarSize = avatarPx(
+      Math.min(this.compact ? 32 : 64, this.laneW - 6, Math.floor(fieldH / 4)),
+    )
     // Finishers stand on the rope, fully inside the field (clear of the chant bar above).
     this.finishY = this.fieldTop + Math.round(this.avatarSize * 0.95) + 4
     const g = this.field as Phaser.GameObjects.Graphics
@@ -382,7 +422,21 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
   }
 
   protected frame(snap: FreezeDollSnapshot | null, time: number, delta: number): void {
+    const dt = this.lastFrameAt ? Math.min(100, time - this.lastFrameAt) : 0
+    this.lastFrameAt = time
     if (!snap) return
+    if (!this.warmed) {
+      this.warmed = true
+      this.warmAvatars(
+        snap.runners.map((r) => r.id),
+        [
+          ['back', 'idle', 0],
+          ['front', 'hurt', 0],
+          ['front', 'ko', 0],
+          ['front', 'happy', 0],
+        ],
+      )
+    }
     if (this.lanes === 0) this.buildField(snap.lanes)
     if (snap !== this.snapRef) {
       this.snapRef = snap
@@ -390,10 +444,15 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     }
     const since = time - this.snapAt
     this.syncMode()
+    this.predict(snap, since, dt)
     this.paintDoll(snap, since, time)
     this.paintLaser(snap, since)
     this.paintRunners(snap, since, time, delta)
-    this.paintChrome(snap)
+    // Strip, HUD and prompt only change with the snapshot.
+    if (snap !== this.chromeRef) {
+      this.chromeRef = snap
+      this.paintChrome(snap)
+    }
   }
 
   private paintDoll(snap: FreezeDollSnapshot, since: number, time: number): void {
@@ -434,8 +493,11 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     )
     // The chant: a note per step, and a segmented bar that fills as it plays (frozen on a twitch).
     const g = this.songBar as Phaser.GameObjects.Graphics
-    g.clear()
-    if (snap.songMs <= 0 || light === 'red' || light === 'ready') return
+    if (snap.songMs <= 0 || light === 'red' || light === 'ready') {
+      if (this.barKey !== '') g.clear()
+      this.barKey = ''
+      return
+    }
     const elapsed =
       light === 'green' ? Math.min(snap.songMs, snap.songElapsedMs + since) : snap.songElapsedMs
     const step = Math.min(CHANT_STEPS - 1, Math.floor((elapsed / snap.songMs) * CHANT_STEPS))
@@ -446,9 +508,14 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
       if (this.lastStep !== -1 || elapsed < snap.songMs / CHANT_STEPS) this.sfx.chant(step)
       this.lastStep = step
     }
+    // Redrawn only when a segment changes (it fills a step at a time).
+    const frac = elapsed / snap.songMs
+    const barKey = `${Math.floor(frac * CHANT_STEPS)}:${frac > 0}`
+    if (barKey === this.barKey) return
+    this.barKey = barKey
+    g.clear()
     const { x, y, w, h } = this.songBox
     const segW = (w - (CHANT_STEPS - 1) * 3) / CHANT_STEPS
-    const frac = elapsed / snap.songMs
     for (let i = 0; i < CHANT_STEPS; i++) {
       const lit = (i + 1) / CHANT_STEPS <= frac + 1e-6
       const partial = !lit && i / CHANT_STEPS < frac
@@ -499,13 +566,25 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     beam.lineBetween(this.eyes.x + this.dollPx * 2, this.eyes.y, tx, ty)
   }
 
+  // Your runner: the server's physics on your held control, from the moment you press — eased onto
+  // the server's position (run on at its speed). Stunned, finished or out, it simply follows the server.
+  private predict(snap: FreezeDollSnapshot, since: number, dt: number): void {
+    const me = snap.runners.find((r) => r.id === this.selfId)
+    if (!me || me.status !== 'racing' || this.state.final) {
+      this.pred = undefined
+      return
+    }
+    const server = Math.min(1, me.x + (me.v * since) / 1000)
+    const p = this.pred ?? { x: server, v: me.v, brake: 0 }
+    this.pred = p
+    const target = snap.light === 'ready' ? 0 : freezeDollSpeed(this.desiredMode())
+    freezeDollMove(p, target, dt / 1000)
+    p.x = Math.min(1, p.x + (server - p.x) * (1 - Math.exp(-dt / CORRECT_TAU_MS)))
+    if (Math.abs(server - p.x) > 0.08) p.x = server
+  }
+
   private paintRunners(snap: FreezeDollSnapshot, since: number, time: number, delta: number): void {
-    const heartKey = ensurePixelGrid(this, {
-      key: 'fd-heart',
-      rows: HEART_ROWS,
-      legend: { R: PALETTE.red },
-      pixelSize: 2,
-    })
+    const heartKey = this.heartKey
     const k = Math.min(1, delta / 80)
     for (const r of snap.runners) {
       let view = this.views.get(r.id)
@@ -534,13 +613,18 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
         if (r.status === 'out') this.layDown(view, false)
       }
       this.reactTo(r, view)
-      // Dead-reckon from the snapshot's speed, then ease toward it (no visible snapping).
-      const target = r.status === 'racing' ? Math.min(1, r.x + (r.v * since) / 1000) : r.x
-      view.x += (target - view.x) * k
-      if (Math.abs(target - view.x) > 0.08) view.x = target
+      // You: the prediction. The others: dead-reckoned from the snapshot's speed, eased toward it.
+      const mine = r.id === this.selfId ? this.pred : undefined
+      if (mine) view.x = mine.x
+      else {
+        const target = r.status === 'racing' ? Math.min(1, r.x + (r.v * since) / 1000) : r.x
+        view.x += (target - view.x) * k
+        if (Math.abs(target - view.x) > 0.08) view.x = target
+      }
       const x = this.laneX(r.lane)
       const y = this.yAt(view.x)
-      const moving = r.v > 0.001 && r.status === 'racing'
+      const moving = (mine ? mine.v : r.v) > 0.001 && r.status === 'racing'
+      if (mine && moving) this.footsteps(mine.v)
       const bob = moving ? Math.abs(Math.sin(time / 90)) * -3 : 0
       // Back to the camera while racing; turned around (face visible) when lasered, out or safe.
       const face = FACES[r.status]
@@ -565,6 +649,17 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     }
   }
 
+  // Your runner's feet, from the frame you set off (the prediction moves at once) until it stops.
+  private footsteps(v: number): void {
+    const now = this.time.now
+    const walk = freezeDollSpeed('walk')
+    const gap = v > (walk + freezeDollSpeed('run')) / 2 ? RUN_STEP_MS : WALK_STEP_MS
+    if (now - this.lastFootAt < gap) return
+    this.lastFootAt = now
+    this.footSide ^= 1
+    this.sfx.step(this.footSide)
+  }
+
   // Snapshot deltas → hits, eliminations, finishes.
   private reactTo(r: FreezeDollRunner, view: RunnerView): void {
     if (this.firstSnapshot) {
@@ -587,12 +682,12 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
           this.quip('game.common.stamps', r.id),
           this.compact ? 12 : 16,
         )
-        this.sfx.eliminated()
+        this.sfx.quiet(() => this.sfx.eliminated(), self ? 1 : RIVAL_LEVEL)
         this.layDown(view, true)
       } else {
         floatText(this, x, y - 10, '-♥', PALETTE.red, this.compact ? 12 : 16)
         if (self) {
-          this.sfx.wrong()
+          this.sfx.hurt()
           flash(this, PALETTE.red, 200, 0.25)
         }
       }
@@ -602,6 +697,12 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
       this.layDown(view, true)
     if (r.status === 'finished' && view.status !== 'finished') {
       burst(this, x, this.finishY, this.state.colorOf(r.id), 18, 200)
+      // Over the line: the crowd roars (yours always; a pack arriving together is one roar).
+      const now = this.time.now
+      if (self || now - this.lastCheerAt >= CHEER_GAP_MS) {
+        this.lastCheerAt = now
+        this.sfx.quiet(() => this.sfx.cheer(), self ? 1 : RIVAL_LEVEL * 0.8)
+      }
       if (self) {
         this.sfx.win()
         floatText(
@@ -612,7 +713,7 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
           PALETTE.lime,
           this.compact ? 12 : 16,
         )
-      } else this.sfx.coin()
+      }
     }
     view.status = r.status
     view.hearts0 = r.hearts
@@ -704,7 +805,10 @@ export class FreezeDollScene extends MiniGameScene<FreezeDollSnapshot> {
     if (snap.light === 'ready')
       return { text: this.t('game.freezeDoll.readyHint'), color: PALETTE.amber }
     if (snap.light === 'green')
-      return { text: this.t('game.freezeDoll.goHint'), color: PALETTE.lime }
+      return {
+        text: this.t(this.compact ? 'game.freezeDoll.goHint' : 'game.freezeDoll.goKeys'),
+        color: PALETTE.lime,
+      }
     return { text: this.t('game.freezeDoll.freeze'), color: PALETTE.red }
   }
 }

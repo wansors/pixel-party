@@ -176,14 +176,19 @@ export interface MicroRaceCar {
   draft: boolean
   // The driver left the round: the car is a ghost that blocks no one.
   gone: boolean
+  // Velocity (world units/s): clients dead-reckon every car to the present with it, and reconcile
+  // their own predicted car against it.
+  vx: number
+  vy: number
 }
 
 export interface MicroRaceSnapshot {
   // Index into MICRO_RACE_TRACKS.
   track: number
   laps: number
-  // Time until the start lights go green (0 once racing).
+  // Time until the start lights go green (0 once racing), and the race clock since then.
   goInMs: number
+  raceMs: number
   cars: MicroRaceCar[]
   // Hard round clock (shrinks to the finish window once the first car finishes).
   remainingMs: number
@@ -191,9 +196,165 @@ export interface MicroRaceSnapshot {
   closing: boolean
 }
 
-// Drive: steer in [-1, 1] (right positive), throttle in [-1, 1] (negative = brake, then reverse).
+// Drive: steer in [-1, 1] (right positive), throttle in [-1, 1] (negative = brake, then reverse). The
+// server holds the last drive until the next one.
 export interface MicroRaceInput {
   kind: 'drive'
   steer: number
   throttle: number
+}
+
+// --- Car physics, shared by the server and the client's own-car prediction ---------------------------
+//
+// The arcade car model behind every top-down racer (Micro Race, Rally Stage, Speed Circuit). It lives
+// here, not in the server, so the client can run the very same integration for the car its player
+// drives (it reacts on the frame a key goes down instead of a snapshot later) and only reconcile with
+// the server's authoritative state. Both sides step it in RACE_STEP_S sub-steps.
+
+// The server's sub-step: its 50 ms tick split in four. The client predicts on the same fixed step.
+export const RACE_STEP_S = 0.0125
+
+export interface RaceCarPhysics {
+  maxSpeed: number
+  offMaxSpeed: number
+  accel: number
+  brake: number
+  reverseAccel: number
+  maxReverse: number
+  rollDrag: number
+  offDrag: number
+  // Bleeds speed above offMaxSpeed while off the road.
+  offDecel: number
+  // Lateral velocity decay rate (1/s): lower = more drift.
+  grip: number
+  offGrip: number
+  // rad/s at full lock once rolling; below turnFullSpeed steering authority scales down linearly.
+  turnRate: number
+  turnFullSpeed: number
+  // Above understeerFrom the steering loosens, up to highSpeedUndersteer at top speed.
+  understeerFrom: number
+  highSpeedUndersteer: number
+}
+
+// What the integrator reads and writes on a car.
+export interface RaceCarBody {
+  x: number
+  y: number
+  a: number
+  vx: number
+  vy: number
+  steer: number
+  throttle: number
+  off: boolean
+  // Set once the car took the flag: it then brakes to a stop on its own.
+  finishMs: number | null
+}
+
+// Per-step tweaks a game layers on top of the base physics (a surface's grip, a slipstream, a boost).
+export interface RaceCarTuning {
+  grip?: number
+  maxSpeedScale?: number
+  accelScale?: number
+}
+
+// Micro Race's tabletop cars.
+export const MICRO_RACE_CAR_R = 11
+export const MICRO_RACE_PHYSICS: RaceCarPhysics = {
+  maxSpeed: 250,
+  offMaxSpeed: 105,
+  accel: 300,
+  brake: 650,
+  reverseAccel: 240,
+  maxReverse: 90,
+  rollDrag: 0.35,
+  offDrag: 1.6,
+  offDecel: 520, // bleeds speed above offMaxSpeed while on the table surface
+  grip: 9,
+  offGrip: 5,
+  turnRate: 3.6,
+  turnFullSpeed: 70,
+  // Above this speed steering loosens (brake for hairpins).
+  understeerFrom: 160,
+  highSpeedUndersteer: 0.3,
+}
+// Slipstream (Micro Race and Speed Circuit): a little more top speed and pull.
+export const RACE_DRAFT_TUNING = { maxSpeedScale: 1.1, accelScale: 1.15 } as const
+export const RACE_WALL_BOUNCE = 0.4
+
+export const raceWrapAngle = (a: number): number => {
+  let r = a
+  while (r > Math.PI) r -= Math.PI * 2
+  while (r < -Math.PI) r += Math.PI * 2
+  return r
+}
+
+export const raceClamp1 = (v: number): number => Math.max(-1, Math.min(1, v))
+
+// One physics sub-step of `h` seconds.
+export function integrateRaceCar(
+  car: RaceCarBody,
+  h: number,
+  p: RaceCarPhysics,
+  tune: RaceCarTuning = {},
+): void {
+  const maxSpeed = p.maxSpeed * (tune.maxSpeedScale ?? 1)
+  const accel = p.accel * (tune.accelScale ?? 1)
+  const fx = Math.cos(car.a)
+  const fy = Math.sin(car.a)
+  let vF = car.vx * fx + car.vy * fy
+  let vR = -car.vx * fy + car.vy * fx
+  // Finished cars brake to a stop on their own.
+  const throttle = car.finishMs !== null ? (vF > 1 ? -0.5 : 0) : car.throttle
+  const steer = car.finishMs !== null ? 0 : car.steer
+  if (throttle > 0) {
+    // Partial throttle holds a proportionally lower cruising speed (a gentle touch = a crawl).
+    if (vF < 0) vF = Math.min(0, vF + p.brake * throttle * h)
+    else if (vF < maxSpeed * throttle) vF = Math.min(maxSpeed * throttle, vF + accel * h)
+  } else if (throttle < 0) {
+    if (vF > 0) vF = Math.max(0, vF + p.brake * throttle * h)
+    else vF = Math.max(-p.maxReverse, vF + p.reverseAccel * throttle * h)
+  }
+  vF -= vF * (car.off ? p.offDrag : p.rollDrag) * h
+  if (car.off && vF > p.offMaxSpeed) vF = Math.max(p.offMaxSpeed, vF - p.offDecel * h)
+  vF = Math.min(maxSpeed, vF)
+  vR *= Math.exp(-(car.off ? p.offGrip : (tune.grip ?? p.grip)) * h)
+  const speed = Math.abs(vF)
+  const understeer =
+    1 -
+    p.highSpeedUndersteer *
+      Math.max(0, Math.min(1, (speed - p.understeerFrom) / (maxSpeed - p.understeerFrom)))
+  const authority = Math.min(1, speed / p.turnFullSpeed) * understeer * Math.sign(vF)
+  car.a = raceWrapAngle(car.a + steer * p.turnRate * authority * h)
+  // Velocity keeps its old (forward, lateral) split relative to the new heading → a little slide out
+  // of every turn that the grip then eats.
+  const nfx = Math.cos(car.a)
+  const nfy = Math.sin(car.a)
+  car.vx = nfx * vF - nfy * vR
+  car.vy = nfy * vF + nfx * vR
+  car.x += car.vx * h
+  car.y += car.vy * h
+}
+
+// The world edge is a hard wall.
+export function raceWorldWalls(
+  car: RaceCarBody,
+  w: number,
+  h: number,
+  carR: number,
+  bounce: number,
+): void {
+  if (car.x < carR) {
+    car.x = carR
+    car.vx = Math.abs(car.vx) * bounce
+  } else if (car.x > w - carR) {
+    car.x = w - carR
+    car.vx = -Math.abs(car.vx) * bounce
+  }
+  if (car.y < carR) {
+    car.y = carR
+    car.vy = Math.abs(car.vy) * bounce
+  } else if (car.y > h - carR) {
+    car.y = h - carR
+    car.vy = -Math.abs(car.vy) * bounce
+  }
 }

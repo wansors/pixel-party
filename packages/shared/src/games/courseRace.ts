@@ -1,4 +1,9 @@
-import { type MicroRacePoint, sampleSpline } from './microRace'
+import {
+  type MicroRacePoint,
+  type RaceCarPhysics,
+  type RaceCarTuning,
+  sampleSpline,
+} from './microRace'
 
 // Course racers built on the Micro Race engine, on courses bigger than a screen (the client follows
 // your car and shows a minimap):
@@ -26,6 +31,51 @@ export interface CourseDef {
 }
 
 export const COURSE_SPACING = 8
+
+// Car physics per course kind (the shared integrator in microRace.ts; the client predicts its own car
+// with the same numbers). Rally: a lively tarmac car that slides on gravel. Circuit: faster, grippier.
+export const COURSE_PHYSICS: Readonly<Record<CourseKind, RaceCarPhysics>> = {
+  stage: {
+    maxSpeed: 270,
+    offMaxSpeed: 110,
+    accel: 300,
+    brake: 650,
+    reverseAccel: 240,
+    maxReverse: 90,
+    rollDrag: 0.35,
+    offDrag: 1.6,
+    offDecel: 520,
+    grip: 9,
+    offGrip: 4.5,
+    turnRate: 3.7,
+    turnFullSpeed: 70,
+    understeerFrom: 170,
+    highSpeedUndersteer: 0.3,
+  },
+  circuit: {
+    maxSpeed: 320,
+    offMaxSpeed: 130,
+    accel: 320,
+    brake: 700,
+    reverseAccel: 240,
+    maxReverse: 90,
+    rollDrag: 0.35,
+    offDrag: 1.6,
+    offDecel: 560,
+    grip: 10,
+    offGrip: 5,
+    turnRate: 3.4,
+    turnFullSpeed: 80,
+    understeerFrom: 220,
+    highSpeedUndersteer: 0.35,
+  },
+}
+export const COURSE_CAR_R: Readonly<Record<CourseKind, number>> = { stage: 12, circuit: 13 }
+// Rally gravel: loose (less grip) and a little slower.
+export const COURSE_GRAVEL_TUNING: Readonly<RaceCarTuning> = { grip: 4.2, maxSpeedScale: 0.93 }
+// Circuit boost pads: +25 % top speed, +60 % pull for BOOST_MS.
+export const COURSE_BOOST_MS = 1200
+export const COURSE_BOOST = { maxSpeedScale: 1.25, accelScale: 1.6 } as const
 
 export const RALLY_STAGES: readonly CourseDef[] = [
   {
@@ -196,6 +246,9 @@ export interface CourseCar {
   boost: boolean
   // The driver left the round: the car is a ghost that blocks no one.
   gone: boolean
+  // Velocity (world units/s), for dead reckoning and the client's own-car reconciliation.
+  vx: number
+  vy: number
 }
 
 export interface CourseRaceSnapshot {
@@ -203,7 +256,9 @@ export interface CourseRaceSnapshot {
   course: number
   laps: number
   checkpoints: number
+  // Time until the green light, and the race clock since then.
   goInMs: number
+  raceMs: number
   cars: CourseCar[]
   remainingMs: number
   closing: boolean

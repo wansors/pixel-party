@@ -1,17 +1,17 @@
 import type { TetrisSprintInput, TetrisSprintSnapshot } from '@pp/shared'
+import { tetrisFall } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 import {
   COLS,
   type PlayerBoardState,
   ROWS,
+  applyInput,
+  boardView,
   createPlayerBoard,
   createQueue,
-  hardDrop,
-  renderBoard,
+  isTetrisInput,
   restartBoard,
-  stepFall,
-  tryMove,
-  tryRotate,
+  shapeAtOf,
 } from './tetrisCore'
 
 const DEFAULT_DURATION_MS = 60_000
@@ -63,12 +63,10 @@ export class LineClearSprint implements MiniGame<LineClearSprintState, TetrisSpr
     input: TetrisSprintInput,
     now: number,
   ): LineClearSprintState {
-    if (now < state.startedAt || now >= state.endsAt) return state
     const p = state.boards.get(playerId)
-    if (!p || p.toppedOut) return state
-    if (input.kind === 'move') tryMove(p, input.dir === 'left' ? -1 : 1)
-    else if (input.kind === 'drop') hardDrop(p, state.queue)
-    else if (input.kind === 'rotate') tryRotate(p)
+    if (!p || !isTetrisInput(input)) return state
+    if (now < state.startedAt || now >= state.endsAt) return state
+    applyInput(p, input, state.queue)
     this.onTopOut(state, playerId, p, now)
     return state
   }
@@ -82,7 +80,7 @@ export class LineClearSprint implements MiniGame<LineClearSprintState, TetrisSpr
         restartBoard(p, state.queue)
         state.restartAt.delete(pid)
       }
-      stepFall(p, dt, state.queue)
+      tetrisFall(p, dt, shapeAtOf(state.queue))
       this.onTopOut(state, pid, p, now)
     }
     return state
@@ -137,7 +135,7 @@ export class LineClearSprint implements MiniGame<LineClearSprintState, TetrisSpr
     for (const pid of state.players) {
       const p = state.boards.get(pid)
       if (!p) continue
-      boards[pid] = { grid: renderBoard(p), linesCleared: p.linesCleared, toppedOut: p.toppedOut }
+      boards[pid] = boardView(p, state.queue)
       progress[pid] = p.linesCleared
     }
     return {

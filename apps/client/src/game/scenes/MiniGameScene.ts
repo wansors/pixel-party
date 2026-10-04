@@ -2,6 +2,7 @@ import type { ClientMsg, MiniGameId } from '@pp/shared'
 import Phaser from 'phaser'
 import type { RoundState } from '../RoundState'
 import type { Sfx } from '../Sfx'
+import { type AvatarWarmSpec, avatarWarmups } from '../avatars'
 import { Hud } from '../hud'
 import type { Translate } from '../i18n'
 import { addArcadeBackdrop } from '../pixelStyle'
@@ -23,6 +24,10 @@ export type MiniGameSceneCtor = new (...deps: SceneDeps) => MiniGameScene<unknow
 const RELAYOUT_THRESHOLD_W = 0.03
 const RELAYOUT_THRESHOLD_H = 0.12
 const RELAYOUT_DEBOUNCE_MS = 250
+// Keys whose browser default (button activation, slider nudge, page scroll) must not fire mid-round.
+const GAME_KEYS = 'SPACE,ENTER,UP,DOWN,LEFT,RIGHT'
+// Avatar textures generated per frame while warming (warmAvatars).
+const WARM_PER_FRAME = 3
 
 // Common base for every mini-game canvas. Scene key === mini-game id, so GameClient can start a round's
 // scene by id. It owns the cross-cutting plumbing each scene used to repeat:
@@ -51,6 +56,8 @@ export abstract class MiniGameScene<S> extends Phaser.Scene {
   // delta feedback (a restart must not replay "+12", a pop, or a win fanfare).
   protected firstSnapshot = false
   private laidOutAt = { w: 0, h: 0 }
+  // Texture work queued by warmAvatars(), drained a few items per frame.
+  private warmQueue: (() => void)[] = []
   private relayoutTimer?: Phaser.Time.TimerEvent
 
   constructor(
@@ -71,6 +78,7 @@ export abstract class MiniGameScene<S> extends Phaser.Scene {
     this.seenSnapshot = false
     this.firstSnapshot = false
     this.hud = undefined
+    this.warmQueue = []
     this.laidOutAt = { w: this.scale.width, h: this.scale.height }
     this.scale.on('resize', this.onResize, this)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -84,6 +92,21 @@ export abstract class MiniGameScene<S> extends Phaser.Scene {
   create(opts: { hud?: boolean } = {}): void {
     addArcadeBackdrop(this)
     if (opts.hud !== false) this.hud = new Hud(this, this.sfx)
+    this.claimGameKeys()
+  }
+
+  // The game keys belong to the game while it runs. A page control left focused (the sound toggle, a
+  // volume slider clicked between rounds or mid-round) would otherwise also take Space/Enter/arrows —
+  // toggling the music or sliding the volume while the player steers. Capturing them stops the
+  // browser's default; the scene's own handlers still fire.
+  private claimGameKeys(): void {
+    const keyboard = this.input.keyboard
+    if (!keyboard) return
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur()
+    }
+    keyboard.addCapture(GAME_KEYS)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => keyboard.removeCapture(GAME_KEYS))
   }
 
   // First y coordinate free for scene content (below the HUD strip, or the top edge without one).
@@ -122,6 +145,17 @@ export abstract class MiniGameScene<S> extends Phaser.Scene {
     })
   }
 
+  // Pre-generates the avatar textures a round will need (poses, faces, stride frames) a few per frame,
+  // instead of all at once the first time someone trips, walks or cheers mid-round — with 12 players
+  // that's a visible hitch. Call it once the roster is known (the first snapshot).
+  protected warmAvatars(ids: readonly string[], specs: readonly AvatarWarmSpec[]): void {
+    const looks = ids.map((id) => ({
+      avatar: this.state.avatarOf(id),
+      color: this.state.colorOf(id),
+    }))
+    this.warmQueue.push(...avatarWarmups(this, looks, specs))
+  }
+
   protected sendInput(input: Record<string, unknown>): void {
     this.send({ type: 'MINIGAME_INPUT', input })
   }
@@ -137,6 +171,7 @@ export abstract class MiniGameScene<S> extends Phaser.Scene {
   protected abstract frame(snap: S | null, time: number, delta: number): void
 
   override update(time: number, delta: number): void {
+    for (let k = 0; k < WARM_PER_FRAME && this.warmQueue.length > 0; k++) this.warmQueue.pop()?.()
     try {
       const snap = this.snap
       this.firstSnapshot = snap !== null && !this.seenSnapshot

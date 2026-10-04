@@ -3,8 +3,15 @@ import type Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
 import { burst, floatText, punch, ring, shake } from '../fx'
 import { ServerClock } from '../netcode/ServerClock'
-import { bodyStyle, ensurePixelGrid, ensurePixelOrb, headlineStyle, shade } from '../pixelStyle'
-import { addShadow } from '../playerMarks'
+import {
+  bodyStyle,
+  ensurePixelGrid,
+  ensurePixelOrb,
+  fitText,
+  headlineStyle,
+  shade,
+} from '../pixelStyle'
+import { type Shadow, addShadow } from '../playerMarks'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 // Mirrors the server's pixelDash.ts: an obstacle's `t` is its time-to-arrival over LEAD_MS (1 = just
@@ -79,7 +86,7 @@ const OBSTACLES: { rows: string[]; legend: Record<string, number> }[] = [
 export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
   // You: your lobby avatar in side view, running right (bob + lean instead of leg frames).
   private runner?: AvatarSprite
-  private shadow?: Phaser.GameObjects.Ellipse
+  private shadow?: Shadow
   private hurtUntil = 0
   private button?: Phaser.GameObjects.Image
   private buttonKey = ''
@@ -94,6 +101,9 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
   private streak = 0
   private jumping = false
   private crashing = false
+  // Footfalls: the stride frame last heard, and which foot is next.
+  private stride = -1
+  private foot = 0
   // Scene time when the runner may jump again (in the air / landing until then).
   private readyAt = 0
   private ready = true
@@ -118,6 +128,8 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
     this.streak = 0
     this.jumping = false
     this.crashing = false
+    this.stride = -1
+    this.foot = 0
     this.readyAt = 0
     this.ready = true
     this.spectating = false
@@ -134,7 +146,7 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
     const playH = height - this.top
     this.groundY = Math.round(this.top + playH * (compact ? 0.6 : 0.64))
     this.runnerX = Math.round(width * (compact ? 0.22 : 0.18))
-    this.runnerH = avatarPx(Math.max(32, Math.min(96, (this.groundY - this.top) * 0.26)))
+    this.runnerH = avatarPx(Math.max(32, Math.min(128, (this.groundY - this.top) * 0.26)))
     this.obstacleH = Math.round(this.runnerH * 0.55)
     this.speed = (width + this.obstacleH - this.runnerX) / LEAD_MS
 
@@ -171,7 +183,7 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
       )
       .setOrigin(0.5)
       .setDepth(6)
-    this.add
+    const hint = this.add
       .text(
         width / 2,
         Math.min(height - 12, by + d / 2 + 18),
@@ -181,9 +193,12 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
       .setOrigin(0.5)
       .setAlpha(0.8)
       .setDepth(6)
+    fitText(hint, width - 16, compact ? 12 : 15)
 
     this.input.on('pointerdown', () => this.jump())
-    for (const key of ['SPACE', 'UP', 'W']) this.onKey(key, () => this.jump())
+    // Captured so SPACE / the arrows never scroll the page.
+    this.input.keyboard?.addKeys('SPACE,UP,W,ENTER')
+    for (const key of ['SPACE', 'UP', 'W', 'ENTER']) this.onKey(key, () => this.jump())
   }
 
   // Far mountains, mid hills and the ground strip — tile sprites scrolled at 12%, 40% and 100% of the
@@ -296,7 +311,7 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
     const now = this.time.now
     if (this.spectating || now < this.readyAt) return
     this.sendInput({ kind: 'jump' })
-    this.sfx.click()
+    this.sfx.jump()
     // Airborne until now + AIR_MS: does an obstacle arrive meanwhile? (The server judges it the same.)
     const wasted = !this.obstacleTimes(now).some(
       (t) => t * LEAD_MS >= -LATE_MS && t * LEAD_MS <= AIR_MS,
@@ -325,6 +340,7 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
         this.jumping = false
         runner.setY(this.groundY).setAngle(0)
         burst(this, runner.x, this.groundY - 2, 0x8a7a6a, 5, 70)
+        this.sfx.land()
         if (wasted) this.onWastedLanding()
       },
     })
@@ -392,6 +408,11 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
       if (!this.jumping && !this.crashing && moving) {
         const stride = Math.floor(now / RUN_FRAME_MS) % 2
         runner.image.setY(this.groundY - stride * Math.max(2, this.runnerH / 16)).setAngle(4)
+        // A footfall each time the runner comes down (every other stride frame), left-right.
+        if (stride === 0 && this.stride === 1 && !this.spectating) this.sfx.step(this.foot++)
+        this.stride = stride
+      } else {
+        this.stride = -1
       }
       const lift = (this.groundY - runner.image.y) / (this.runnerH * 1.6)
       this.shadow?.setScale(Math.max(0.4, 1 - lift), 1)
@@ -424,8 +445,11 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
   }
 
   private onClear(): void {
-    this.sfx.correct()
     this.streak++
+    // Every STREAK_EVERY-th clear in a row rings the combo instead of the coin.
+    if (this.streak % STREAK_EVERY === 0)
+      this.sfx.lineClear(Math.min(4, this.streak / STREAK_EVERY))
+    else this.sfx.coin()
     const x = this.runnerX
     const y = this.groundY - this.runnerH * 1.6
     floatText(this, x, y, '+1', PALETTE.lime, 16)
@@ -446,7 +470,9 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
   private onCrash(): void {
     const runner = this.runner?.image
     this.streak = 0
-    this.sfx.wrong()
+    // Straight into it.
+    this.sfx.hit()
+    this.sfx.hurt()
     shake(this, 0.01, 220)
     floatText(
       this,

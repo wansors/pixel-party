@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { type RoundAnalysis, buildRadars, buildSummary } from './sessionAnalysis'
+import {
+  RADAR_NEUTRAL,
+  type RoundAnalysis,
+  buildRadars,
+  buildSummary,
+  placementShares,
+} from './sessionAnalysis'
 
 const round = (over: Partial<RoundAnalysis>): RoundAnalysis => ({
   minigameId: 'button-masher',
@@ -10,15 +16,36 @@ const round = (over: Partial<RoundAnalysis>): RoundAnalysis => ({
   ...over,
 })
 
+describe('placementShares', () => {
+  test('first is 1, last is 0, linear in between; ties share their places', () => {
+    const shares = placementShares(
+      new Map([
+        ['a', 10],
+        ['b', 5],
+        ['c', 5],
+        ['d', 0],
+      ]),
+    )
+    expect(shares.get('a')).toBe(1)
+    expect(shares.get('b')).toBe(0.5)
+    expect(shares.get('c')).toBe(0.5)
+    expect(shares.get('d')).toBe(0)
+  })
+
+  test('a room of one is neutral', () => {
+    expect(placementShares(new Map([['solo', 10]])).get('solo')).toBe(RADAR_NEUTRAL)
+  })
+})
+
 describe('buildRadars', () => {
-  test('averages normalized results per axis, only for axes played', () => {
+  test('averages standings per axis, shrunk toward neutral, only for axes played', () => {
     const history: RoundAnalysis[] = [
       round({
         minigameId: 'button-masher',
         axes: ['speed'],
         norm: new Map([
           ['a', 1],
-          ['b', 0.5],
+          ['b', 0],
         ]),
       }),
       round({
@@ -32,10 +59,17 @@ describe('buildRadars', () => {
     ]
     const radars = buildRadars(history, ['a', 'b'])
     const a = radars.find((r) => r.playerId === 'a')
-    expect(a?.axes.speed).toBe(1)
-    expect(a?.axes.knowledge).toBe(0)
+    // One round won → above the middle, but one round can't pin an axis to the rim (or the centre).
+    expect(a?.axes.speed).toBe(0.75)
+    expect(a?.axes.knowledge).toBe(0.25)
     // Axes never exercised this session are absent.
     expect(a?.axes.memory).toBeUndefined()
+  })
+
+  test('standing out takes several rounds', () => {
+    const won = round({ axes: ['speed'], norm: new Map([['a', 1]]) })
+    const [a] = buildRadars([won, won, won, won], ['a'])
+    expect(a?.axes.speed).toBe(0.9)
   })
 
   test('a game tagged with multiple axes feeds each of them', () => {
@@ -43,8 +77,8 @@ describe('buildRadars', () => {
       round({ minigameId: 'number-rush', axes: ['focus', 'speed'], norm: new Map([['a', 0.8]]) }),
     ]
     const [a] = buildRadars(history, ['a'])
-    expect(a?.axes.focus).toBe(0.8)
-    expect(a?.axes.speed).toBe(0.8)
+    expect(a?.axes.focus).toBe(0.65)
+    expect(a?.axes.speed).toBe(0.65)
   })
 
   test('players absent from a round are skipped, not zeroed', () => {
@@ -59,8 +93,8 @@ describe('buildRadars', () => {
       }),
     ]
     const b = buildRadars(history, ['a', 'b']).find((r) => r.playerId === 'b')
-    // b only played round 2 → its speed is that round's value, not diluted by the missed round.
-    expect(b?.axes.speed).toBe(1)
+    // b only played round 2 → its speed is that round's value (shrunk), not diluted by the missed round.
+    expect(b?.axes.speed).toBe(0.75)
   })
 })
 

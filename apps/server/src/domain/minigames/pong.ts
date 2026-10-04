@@ -229,14 +229,17 @@ export class Pong implements MiniGame<PongState, PongInput> {
         if (!pid) continue
         const opp = pid === duel.a ? duel.b : duel.a
         const side = pid === duel.a ? 'left' : 'right'
+        const mirror = side === 'left' ? 1 : -1
         players[pid] = {
           opponentId: opp,
           side,
-          youY: duel.padY.get(pid) ?? 0.5,
-          oppY: opp ? (duel.padY.get(opp) ?? 0.5) : 0.5,
+          youY: round4(duel.padY.get(pid) ?? 0.5),
+          oppY: round4(opp ? (duel.padY.get(opp) ?? 0.5) : 0.5),
           // Mirror the ball for the right-side player so "your paddle" is always drawn on the left.
-          ballX: side === 'left' ? duel.ball.x : 1 - duel.ball.x,
-          ballY: duel.ball.y,
+          ballX: round4(side === 'left' ? duel.ball.x : 1 - duel.ball.x),
+          ballY: round4(duel.ball.y),
+          vx: round4(duel.ball.vx * mirror),
+          vy: round4(duel.ball.vy),
           scoreYou: duel.score.get(pid) ?? 0,
           scoreOpp: opp ? (duel.score.get(opp) ?? 0) : 0,
           golden: duel.golden && !done,
@@ -251,6 +254,9 @@ export class Pong implements MiniGame<PongState, PongInput> {
     return { roundRemainingMs: Math.max(0, clockEndsAt - now), players }
   }
 }
+
+// Four decimals are a tenth of a pixel on any screen; the full float would double the snapshot.
+const round4 = (v: number): number => Math.round(v * 10_000) / 10_000
 
 // Winner of a duel: the stored winner once decided, else the leader on points (a duel still running
 // when the round is cut short) — equal is a draw (null), as is a bye.

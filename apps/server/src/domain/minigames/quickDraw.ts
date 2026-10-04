@@ -6,6 +6,14 @@ import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './Mi
 const DEFAULT_DURATION_MS = 20_000
 const MIN_DELAY_MS = 2000
 const DELAY_SPREAD_MS = 3000
+// A standoff nobody draws in this long after the signal is over (both lose): two players who froze
+// don't hold the whole room until the bell.
+const DRAW_WINDOW_MS = 4000
+// Bounds on the client's own reaction time (see creditedMs): nobody draws faster than a human can, and
+// the client may claim back at most this much of the server's measurement — the signal reaches the
+// screen with the next snapshot (up to 150 ms later) plus a LAN trip each way.
+const HUMAN_FLOOR_MS = 100
+const MAX_LATENCY_CREDIT_MS = 200
 
 interface Duel {
   a: PlayerId
@@ -13,7 +21,7 @@ interface Duel {
   fireAt: number
   done: boolean
   winner: PlayerId | null // set once done (null = nobody drew in time: both lose)
-  drawnBy: Map<PlayerId, number> // valid tap time (>= fireAt), per player
+  drawnBy: Map<PlayerId, number> // credited reaction time (ms after fireAt) of a valid draw, per player
   falseStart: Set<PlayerId> // players who tapped before the signal
   forfeit: boolean // decided by the opponent leaving
 }
@@ -23,6 +31,16 @@ export interface QuickDrawState {
   playerDuel: Map<PlayerId, number>
   startedAt: number
   endsAt: number
+}
+
+// The server times a draw from the signal to the tap's arrival, which includes the snapshot cadence and
+// the round trip; the client times it from the moment its own sign said FIRE!, so the scene sends that
+// too. Trusted only so far: never under a human floor, never more than MAX_LATENCY_CREDIT_MS better than
+// the server saw, never worse. Who wins a standoff is still the first draw to arrive.
+function creditedMs(serverMs: number, claimed: unknown): number {
+  if (typeof claimed !== 'number' || !Number.isFinite(claimed)) return serverMs
+  const floor = Math.max(HUMAN_FLOOR_MS, serverMs - MAX_LATENCY_CREDIT_MS)
+  return Math.min(serverMs, Math.max(Math.round(claimed), floor))
 }
 
 // Duel format: a western reaction shootout. Players are seeded-paired 1v1; each duel waits a seeded
@@ -82,7 +100,7 @@ export class QuickDraw implements MiniGame<QuickDrawState, QuickDrawInput> {
       duel.winner = opponent
     } else {
       // First valid reaction wins; inputs are applied one-at-a-time so ties are impossible.
-      duel.drawnBy.set(playerId, now)
+      duel.drawnBy.set(playerId, creditedMs(now - duel.fireAt, input.ms))
       duel.done = true
       duel.winner = playerId
     }
@@ -90,10 +108,11 @@ export class QuickDraw implements MiniGame<QuickDrawState, QuickDrawInput> {
   }
 
   tick(state: QuickDrawState, _dt: number, now: number): QuickDrawState {
-    // No per-tick physics; a duel where nobody reacted is lost by both at the timer (see getResult).
-    if (now >= state.endsAt) {
-      for (const duel of state.duels) {
-        if (!duel.done) duel.done = true
+    // No per-tick physics; a duel where nobody reacted is lost by both (see getResult) — at the timer,
+    // or once the draw window after its signal has passed.
+    for (const duel of state.duels) {
+      if (!duel.done && (now >= state.endsAt || now >= duel.fireAt + DRAW_WINDOW_MS)) {
+        duel.done = true
       }
     }
     return state
@@ -136,20 +155,20 @@ export class QuickDraw implements MiniGame<QuickDrawState, QuickDrawInput> {
           outcomes.push({
             id: pid,
             tier: 'win',
-            margin: drew !== undefined ? duel.fireAt - drew : -span,
+            margin: drew !== undefined ? -drew : -span,
           })
           if (opponentJumped) waiting.push(pid)
         } else {
           const margin = duel.falseStart.has(pid)
             ? -3 * span
             : winnerMs !== undefined
-              ? duel.fireAt - winnerMs
+              ? -winnerMs
               : -2 * span
           outcomes.push({ id: pid, tier: 'loss', margin })
         }
         stats[pid] =
           drew !== undefined
-            ? `${drew - duel.fireAt} ms`
+            ? `${drew} ms`
             : duel.falseStart.has(pid)
               ? 'false start'
               : duel.winner === null
@@ -177,7 +196,7 @@ export class QuickDraw implements MiniGame<QuickDrawState, QuickDrawInput> {
           done,
           // No draws: a duel nobody won by the timer is lost by both. A bye neither wins nor loses.
           won: done && opp !== null ? duel.winner === pid : null,
-          reactionMs: ms !== undefined ? ms - duel.fireAt : null,
+          reactionMs: ms ?? null,
           oppLeft: duel.forfeit && duel.winner === pid,
         }
       }

@@ -14,7 +14,7 @@ D15–D17). Don't propose features that assume an internet-facing, multi-tenant,
 ## Current phase
 
 **Phases 0 & 1 complete** (development started 2026-07-20; closed out 2026-07-23). The stack is
-scaffolded and the game is playable end-to-end. Run it with `bun run dev` (see `README.md`). Live now:
+scaffolded and the game is playable end-to-end. Develop with `bun run dev`; play with `bun run start` (party mode: one optimized process on :3000 serving the client build + /api + /ws; see `README.md`). Live now:
 rooms + lobby (ready/host), host game selector + round count, server-authoritative session engine (intro
 countdown → play → per-round result → cumulative scoreboard → final), scoring/scoreboard/final ranking,
 **Phases 0–5 complete** (2026-08-21). **55 mini-games** — 48 FFA
@@ -65,6 +65,7 @@ Documentation lives in `docs/`:
 - `backlog.md` — phased roadmap (MVP first, then incremental epics); tracks implementation status and
   the *Next iterations* TODO list.
 - `player-fit-audit.md` — per-game player range + the balance/correctness audit of all 55 games (D27).
+- `pc-launch-audit.md` — the PC performance & gameplay audit of all 55 games and its fixes (D30).
 - `implementation-decisions.md` — KISS decision log (what was built/deferred and why; revertable).
 
 ## Code layout (implemented)
@@ -92,6 +93,8 @@ Documentation lives in `docs/`:
   (Phaser, framework-agnostic): `GameClient`, `serverMsgRouter`, `RoundState` (snapshot + roster
   names/colors/avatars), `hud` (standard HUD strip), `fx` (juice kit, incl. the `eliminate` moment and NPC
   `speechBubble`s), `quips` (seeded banter-line pools, the same jab on every screen — D25),
+  `Sfx` (synthesized SFX incl. a noise voice) + `chipMusic`/`musicMoods` (synthesized in-round music by
+  mood — the `AudioService` director plays the mp3 theme in lobby/final, D32),
   `pixelStyle` (pixel-art textures/text), `avatarSprites` (the Phaser-free 16×16 avatar set: front/side/
   back views, expressions, stride frames) + `avatars` (`ensureAvatarTexture`, `AvatarSprite`,
   `avatarPx`) + `playerMarks` (YOU marker, name tags, shadows) — every scene draws players as their
@@ -106,7 +109,10 @@ Documentation lives in `docs/`:
   behind the rally and circuit scenes)
   + `netcode/SnapshotInterpolator` (client-side interpolation for physics-driven real-time scenes) and
   `netcode/ServerClock` (server-clock extrapolation for items whose position is a pure function of time);
-  `scenes/duelWatch` lets a duel's bye (or a late joiner) watch a live duel.
+  `scenes/duelWatch` lets a duel's bye, a finished duellist or a late joiner watch a live duel;
+  `scenes/raceNet` + `raceKit` are the racers' prediction/dead-reckoning and pooled race HUD.
+  Rules the client predicts live in `@pp/shared` (the Tetris engine in `games/tetrisSprint`, the car
+  integrator, `snakeStep`, `sumoStep`, `bomberStepDir`, `asteroidsFly`, …; D30).
 
 ### Adding a mini-game
 One domain module (`domain/minigames/<id>.ts` implementing `MiniGame`) + registry entry + shared wire

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { decodeShot, encodeShot } from '@pp/shared'
 import { SeededRandom } from '../../infrastructure/driven/random/SeededRandom'
 import type { MiniGameInitCtx } from './MiniGame'
 import { SinkTheFleet, type SinkTheFleetState } from './sinkTheFleet'
@@ -34,8 +35,34 @@ describe('SinkTheFleet', () => {
     const water = cellOf(state, other, false)
     state = game.onInput(state, starter, { kind: 'fire', cell: water }, 1)
     const snap = game.snapshot(state, 1)
-    expect(snap.players[starter]?.shots).toEqual([{ cell: water, hit: false }])
+    expect(snap.players[starter]?.shots.map(decodeShot)).toEqual([{ cell: water, hit: false }])
     expect(snap.players[other]?.yourTurn).toBe(true)
+  })
+
+  test('shots travel packed as one number each; ship positions never do', () => {
+    const game = new SinkTheFleet()
+    let state = game.init(ctx(['a', 'b']))
+    const starter = game.snapshot(state, 1).players.a?.yourTurn ? 'a' : 'b'
+    const other = starter === 'a' ? 'b' : 'a'
+    const hit = cellOf(state, other, true)
+    state = game.onInput(state, starter, { kind: 'fire', cell: hit }, 1)
+    const view = game.snapshot(state, 1).players[starter]
+    expect(view?.shots).toEqual([encodeShot(hit, true)])
+    expect(decodeShot(encodeShot(hit, true))).toEqual({ cell: hit, hit: true })
+    expect(Object.keys(view ?? {}).sort()).toEqual(
+      [
+        'done',
+        'fleetCells',
+        'hitsOnOpponent',
+        'hitsOnYou',
+        'oppLeft',
+        'opponentId',
+        'shots',
+        'turnRemainingMs',
+        'won',
+        'yourTurn',
+      ].sort(),
+    )
   })
 
   test('a hit shoots again', () => {

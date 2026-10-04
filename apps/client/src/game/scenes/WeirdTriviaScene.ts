@@ -33,9 +33,11 @@ export class WeirdTriviaScene extends QuizSceneBase<WeirdTriviaSnapshot> {
     const fooled = Math.max(0, ...decoys.values())
     let line = ''
     if (rightCount === 0) line = this.t('game.weirdTrivia.nobody')
-    else if (players.length > 1 && rightCount === players.length)
+    else if (players.length > 1 && rightCount === players.length) {
       line = this.t('game.weirdTrivia.everybody')
-    else if (fooled >= 2) line = this.t('game.weirdTrivia.fooled', { n: fooled })
+      // The whole room knew it: the studio audience roars.
+      this.sfx.cheer()
+    } else if (fooled >= 2) line = this.t('game.weirdTrivia.fooled', { n: fooled })
     if (!line) return
     const { x, y, w } = this.panelBox
     floatText(this, x + w / 2, y + 4, line, PALETTE.amber, this.compact ? 16 : 20)

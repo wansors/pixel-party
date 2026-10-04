@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { MEMORY_FLASH_COLORS } from '@pp/shared'
 import type { Random } from '../ports/Random'
 import { MemoryFlash, type MemoryFlashState } from './memoryFlash'
 
@@ -16,9 +17,31 @@ describe('MemoryFlash', () => {
   test('the true count is never on the wire, only the choices (which include it)', () => {
     const game = new MemoryFlash()
     const s = init(['a'])
-    const board = game.snapshot(s, 0).boards.a
+    const snap = game.snapshot(s, 0)
+    expect(snap.at.a).toBe(0)
+    const board = snap.boards.find((b) => b.level === snap.at.a)
     expect(board?.choices).toContain(right(s, 0))
     expect(board).not.toHaveProperty('answer')
+  })
+
+  test('the packed burst holds exactly the cells drawn, and the target count matches the answer', () => {
+    const s = init(['a'])
+    s.boards.forEach((board, level) => {
+      expect(board.cells).toHaveLength(board.cols * board.rows)
+      expect(board.cells).toMatch(/^[.0-3]+$/)
+      const target = MEMORY_FLASH_COLORS.findIndex((c) => c.hex === board.targetColor)
+      const count = [...board.cells].filter((ch) => ch === String(target)).length
+      expect(count).toBe(right(s, level))
+    })
+  })
+
+  test('a board shared by several players goes on the wire once', () => {
+    const game = new MemoryFlash()
+    let s = init(['a', 'b', 'c'])
+    s = game.onInput(s, 'c', answer(0, right(s, 0)), 1000)
+    const snap = game.snapshot(s, 1000)
+    expect(snap.at).toEqual({ a: 0, b: 0, c: 1 })
+    expect(snap.boards.map((b) => b.level)).toEqual([0, 1])
   })
 
   test('a right answer scores; a wrong one advances without scoring; stale levels are dropped', () => {
@@ -55,6 +78,6 @@ describe('MemoryFlash', () => {
     expect(game.isFinished(s, 500)).toBe(false)
     s = game.leave(s, 'gone', 500)
     expect(game.isFinished(s, 500)).toBe(true)
-    expect(game.snapshot(s, 500).boards.gone).toBeNull()
+    expect(game.snapshot(s, 500).at.gone).toBeNull()
   })
 })

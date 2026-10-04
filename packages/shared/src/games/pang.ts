@@ -21,6 +21,7 @@ export const PANG = {
   vx: 0.16,
   walk: 0.45,
   harpoonSpeed: 0.95,
+  fireBufferMs: 150,
 } as const
 
 // [x, y, size, vx, vy] per balloon, rounded for the wire.
@@ -29,6 +30,8 @@ export type PangBalloon = [number, number, number, number, number]
 export interface PangArena {
   id: string
   x: number
+  // The way the player is walking (-1 left · 0 still · 1 right), for the client's dead reckoning.
+  dir: -1 | 0 | 1
   // Harpoon tip height and the x it was fired from, while one is flying (null = ready to fire).
   harpoon: number | null
   harpoonX: number | null
@@ -46,5 +49,6 @@ export interface PangSnapshot {
   remainingMs: number
 }
 
-// move: -1 left · 0 stop · 1 right (held state). fire: launch the harpoon if none is flying.
+// move: -1 left · 0 stop · 1 right (held state). fire: launch the harpoon if none is flying — a press
+// that comes in up to PANG.fireBufferMs before the flying one is done fires the moment it is.
 export type PangInput = { kind: 'move'; dir: -1 | 0 | 1 } | { kind: 'fire' }

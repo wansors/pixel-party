@@ -1,4 +1,4 @@
-import { PALETTE, type PixelSplitObject, type PixelSplitSnapshot } from '@pp/shared'
+import { PALETTE, type PixelSplitObject, type PixelSplitSnapshot, unpackCells } from '@pp/shared'
 import Phaser from 'phaser'
 import { addBanner, burst, floatText, punch, ring, showBanner } from '../fx'
 import { bodyStyle, ensureBevelPanel, ensurePixelBlock, headlineStyle, shade } from '../pixelStyle'
@@ -15,20 +15,32 @@ const SPLIT_MS = 380
 const REVEAL_DELAY_MS = 220
 // Space between the board's bottom edge and the cut handle.
 const HANDLE_GAP = 26
+// The cut line's tick plays at most this often (a fast drag across the board would buzz otherwise).
+const CUT_TICK_EVERY_MS = 45
+
+// The everyone strip (PlayerStrip) rebuilds every chip from scratch on any change — new Text objects,
+// each measuring its font again — which cost a frame per snapshot once a full room was scoring. It
+// follows the scores at most twice a second; your own score in the HUD stays immediate.
+const STRIP_EVERY_MS = 500
 
 interface Cell {
   img: Phaser.GameObjects.Image
   x: number
 }
 
-// Pixel Split canvas. The object stays visible on a gridded board; drag the cut line (or ← →) to a
-// column boundary so both halves hold the same number of pixels — the halves are tinted apart as it
-// moves — then press CUT (Enter/Space). The object splits open, each half shows its count and the
-// score delta rates the cut. Objects arrive mirrored/shifted by the server, so the ideal cut moves.
+// Pixel Split canvas. The object stays visible on a gridded board; drag the cut line (or ← → / A D) to
+// a column boundary so both halves hold the same number of pixels — the halves are tinted apart as it
+// moves — then press CUT (Enter/Space). The object splits open at once, each half shows its count, and
+// the score delta rates the cut when the server has scored it. Objects arrive mirrored/shifted by the
+// server, so the ideal cut moves.
 export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
   private prompt?: Phaser.GameObjects.Text
   private boardGfx?: Phaser.GameObjects.Graphics
   private cells: Cell[] = []
+  // Hidden cell images ready for the next object: a level reuses the last one's images instead of
+  // destroying and creating ~100 of them (the split-apart halves return here once they've faded).
+  private pool: Phaser.GameObjects.Image[] = []
+  private maxCell = 44
   private cutGfx?: Phaser.GameObjects.Graphics
   private handle?: Phaser.GameObjects.Image
   private handleLabel?: Phaser.GameObjects.Text
@@ -36,8 +48,13 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
   private submitLabel?: Phaser.GameObjects.Text
   private waitText?: Phaser.GameObjects.Text
   private banner?: Phaser.GameObjects.Text
+  // The keyboard path, named on screen (hidden on touch-sized screens).
+  private hint?: Phaser.GameObjects.Text
   // Everyone's score at a glance (avatar + name + points) under the HUD.
   private strip?: PlayerStrip
+  private stripSnap?: PixelSplitSnapshot
+  private scoreSnap?: PixelSplitSnapshot
+  private stripAt = 0
   private leftKey = ''
   private rightKey = ''
   private boardCX = 0
@@ -56,7 +73,10 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
   private drawnIndex = -1
   private lastScore = 0
   private submitted?: { index: number; cut: number }
+  // When the last split-apart started (the next object waits for the halves to clear).
+  private splitAt = Number.NEGATIVE_INFINITY
   private finished = false
+  private cutTickAt = Number.NEGATIVE_INFINITY
 
   constructor(...deps: SceneDeps) {
     super('pixel-split', ...deps)
@@ -65,17 +85,25 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
   override create(): void {
     super.create()
     this.cells = []
+    this.pool = []
     this.drawnIndex = -1
     this.drawnCut = -1
     this.lastScore = 0
     this.cut = 1
     this.cols = 0
     this.submitted = undefined
+    this.splitAt = Number.NEGATIVE_INFINITY
     this.finished = false
+    this.cutTickAt = Number.NEGATIVE_INFINITY
+    this.stripSnap = undefined
+    this.scoreSnap = undefined
+    this.stripAt = 0
+    this.hint = undefined
 
     const { width, height } = this.scale
     const compact = Math.min(width, height) < 520
-    const stripSize = compact ? 11 : 13
+    // Everyone's chips read from the couch on a big (1080p) canvas.
+    const stripSize = compact ? 11 : width >= 1400 && height >= 860 ? 16 : 13
     const stripRows = width < 600 ? 3 : 2
     const stripH = PlayerStrip.rowH(stripSize)
     this.strip = new PlayerStrip(
@@ -101,10 +129,17 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
       )
       .setOrigin(0.5)
 
-    // CUT button at the bottom, the cut handle row above it, the board filling the rest.
+    // The keys hint at the very bottom (keyboard screens only), the CUT button above it, the cut handle
+    // row above that, the board filling the rest.
+    const hintH = compact ? 0 : 26
+    if (!compact) {
+      this.hint = this.add
+        .text(cx, height - 8, this.t('game.pixelSplit.keys'), bodyStyle(16, PALETTE.dim))
+        .setOrigin(0.5, 1)
+    }
     const btnH = compact ? 56 : 64
     const btnW = Math.round(Math.min(width * 0.6, 300))
-    const btnY = height - (compact ? 20 : 28) - btnH / 2
+    const btnY = height - (compact ? 20 : 28) - hintH - btnH / 2
     const up = ensureBevelPanel(this, btnW, btnH, PALETTE.lime)
     const down = ensureBevelPanel(this, btnW, btnH, shade(PALETTE.lime, -0.25))
     this.submitImg = this.add.image(cx, btnY, up).setInteractive({ useHandCursor: true })
@@ -130,7 +165,10 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
     const boardBottom = this.handleY + handleSize / 2
     this.boardCX = cx
     this.boardCY = (boardTop + boardBottom) / 2
-    this.boardW = Math.min(width - 32, 620)
+    // The board grows with a big canvas (1080p), keeping its old size on laptops and phones.
+    const big = width >= 1400 && height >= 860
+    this.boardW = Math.min(width - 32, big ? Math.round(width * 0.6) : 620)
+    this.maxCell = big ? 64 : 44
     this.boardH = boardBottom - boardTop - HANDLE_GAP - handleSize
     this.boardGfx = this.add.graphics()
     this.cutGfx = this.add.graphics().setDepth(5)
@@ -156,8 +194,9 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
     dragZone.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (p.isDown) this.setCutFromX(p.x)
     })
-    this.onKey('LEFT', () => this.moveCut(this.cut - 1), { repeat: true })
-    this.onKey('RIGHT', () => this.moveCut(this.cut + 1), { repeat: true })
+    for (const k of ['LEFT', 'A']) this.onKey(k, () => this.moveCut(this.cut - 1), { repeat: true })
+    for (const k of ['RIGHT', 'D'])
+      this.onKey(k, () => this.moveCut(this.cut + 1), { repeat: true })
     this.onKey('ENTER', () => this.submit())
     this.onKey('SPACE', () => this.submit())
 
@@ -175,8 +214,10 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
     if (compact) this.banner.setFontSize(24)
   }
 
-  private currentObject(): PixelSplitObject | null {
-    return this.snap?.objects[this.selfId] ?? null
+  private currentObject(snap: PixelSplitSnapshot | null = this.snap): PixelSplitObject | null {
+    const at = snap?.at[this.selfId]
+    if (!snap || at === null || at === undefined) return null
+    return snap.objects.find((o) => o.index === at) ?? null
   }
 
   private setCutFromX(x: number): void {
@@ -189,15 +230,20 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
     const clamped = Phaser.Math.Clamp(next, 1, this.cols - 1)
     if (clamped === this.cut) return
     this.cut = clamped
+    if (this.time.now - this.cutTickAt < CUT_TICK_EVERY_MS) return
+    this.cutTickAt = this.time.now
     this.sfx.tick()
   }
 
   private submit(): void {
     const obj = this.currentObject()
     if (!obj || this.submitted?.index === obj.index) return
-    this.sfx.click()
+    // The blade swishes through and the halves fly apart, on the press itself.
+    this.sfx.whoosh()
     this.submitted = { index: obj.index, cut: this.cut }
     this.sendInput({ kind: 'cut', index: obj.index, cut: this.cut })
+    // The halves fly apart right away (a pure picture of the cut); the verdict follows the score.
+    this.splitApart(this.cut)
   }
 
   // Board window + faint column guides (every possible cut position).
@@ -223,7 +269,7 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
     this.cols = obj.cols
     this.rows = obj.rows
     this.cellSize = Math.floor(
-      Math.min((this.boardW - 20) / obj.cols, (this.boardH - 20) / obj.rows, 44),
+      Math.min((this.boardW - 20) / obj.cols, (this.boardH - 20) / obj.rows, this.maxCell),
     )
     this.gridX0 = Math.round(this.boardCX - (obj.cols * this.cellSize) / 2)
     // Board + cut handle travel together, centred in the free space (a flat object on a tall phone
@@ -236,24 +282,42 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
     this.handleLabel?.setY(this.handleY)
   }
 
+  private takeCell(x: number, y: number, size: number): Phaser.GameObjects.Image {
+    const img = this.pool.pop() ?? this.add.image(0, 0, this.leftKey).setDepth(2)
+    return img
+      .setTexture(this.leftKey)
+      .setPosition(x, y)
+      .setDisplaySize(size, size)
+      .setAlpha(1)
+      .setVisible(true)
+  }
+
+  private freeCells(imgs: Phaser.GameObjects.Image[]): void {
+    for (const img of imgs) this.pool.push(img.setVisible(false))
+  }
+
   private drawObject(obj: PixelSplitObject): void {
-    for (const c of this.cells) c.img.destroy()
+    this.freeCells(this.cells.map((c) => c.img))
     this.layoutFor(obj)
     this.drawBoard()
     const s = this.cellSize
-    const fresh: Cell[] = obj.pixels.map((px) => ({
+    const fresh: Cell[] = unpackCells(obj.cols, obj.rows, obj.bits).map((px) => ({
       x: px.x,
-      img: this.add
-        .image(this.gridX0 + px.x * s + s / 2, this.gridTop + px.y * s + s / 2, this.leftKey)
-        .setDisplaySize(s - 1, s - 1)
-        .setDepth(2),
+      img: this.takeCell(this.gridX0 + px.x * s + s / 2, this.gridTop + px.y * s + s / 2, s - 1),
     }))
     // After a cut, let the old halves fly apart before the next object drops in.
-    if (this.drawnIndex >= 0) {
+    const wait = this.splitAt + REVEAL_DELAY_MS - this.time.now
+    if (this.drawnIndex >= 0 && wait > 0) {
       for (const c of fresh) c.img.setVisible(false)
-      this.time.delayedCall(REVEAL_DELAY_MS, () => {
+      this.time.delayedCall(wait, () => {
+        // Unless a quick next cut has already sent these back to the pool.
+        if (this.cells !== fresh) return
         for (const c of fresh) c.img.setVisible(true)
+        this.sfx.land()
       })
+    } else if (this.drawnIndex >= 0) {
+      // The next object drops onto the board (the first one, or a relayout redraw, lands silently).
+      this.sfx.land()
     }
     this.cells = fresh
     this.drawnIndex = obj.index
@@ -264,29 +328,39 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
   }
 
   // The object just scored splits open along the cut; each half pops its pixel count.
-  private splitApart(cut: number, gained: number): void {
+  private splitApart(cut: number): void {
     const s = this.cellSize
-    let left = 0
-    let right = 0
-    for (const c of this.cells) {
-      const isLeft = c.x < cut
-      if (isLeft) left++
-      else right++
+    this.splitAt = this.time.now
+    // One tween per half (not one per pixel); the faded halves go back to the pool.
+    const halves = [
+      { imgs: this.cells.filter((c) => c.x < cut).map((c) => c.img), dx: -s * 1.5 },
+      { imgs: this.cells.filter((c) => c.x >= cut).map((c) => c.img), dx: s * 1.5 },
+    ]
+    for (const { imgs, dx } of halves) {
+      if (imgs.length === 0) continue
       this.tweens.add({
-        targets: c.img,
-        x: c.img.x + (isLeft ? -s * 1.5 : s * 1.5),
+        targets: imgs,
+        x: (target: Phaser.GameObjects.Image) => target.x + dx,
         alpha: 0,
         duration: SPLIT_MS,
         ease: 'Quad.easeOut',
-        onComplete: () => c.img.destroy(),
+        onComplete: () => this.freeCells(imgs),
       })
     }
+    const left = halves[0]?.imgs.length ?? 0
+    const right = halves[1]?.imgs.length ?? 0
     this.cells = []
     const cutX = this.gridX0 + cut * s
     const y = this.gridTop - 6
     const even = left === right
     floatText(this, cutX - 50, y, String(left), even ? PALETTE.lime : LEFT_COLOR, 24)
     floatText(this, cutX + 50, y, String(right), even ? PALETTE.lime : RIGHT_COLOR, 24)
+  }
+
+  // The server's verdict on the cut just made (its score delta), at the cut.
+  private rateCut(cut: number, gained: number): void {
+    const s = this.cellSize
+    const cutX = this.gridX0 + cut * s
     const [label, color] =
       gained >= MAX_POINTS
         ? [this.t('game.common.perfect'), PALETTE.lime]
@@ -312,26 +386,35 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
 
   protected frame(snap: PixelSplitSnapshot | null): void {
     if (!snap) return
-    this.strip?.set(
-      Object.keys(snap.scores).map((id) => ({
-        text: `${this.label(id)} ${snap.scores[id] ?? 0}`,
-        avatar: this.state.avatarOf(id),
-        color: this.state.colorOf(id),
-      })),
-    )
-    const obj = snap.objects[this.selfId] ?? null
+    // Scores change only with a snapshot: the HUD chip follows each one, the strip is throttled.
+    if (snap !== this.scoreSnap) {
+      this.scoreSnap = snap
+      this.hud?.setScore(this.t('game.common.pts', { n: snap.scores[this.selfId] ?? 0 }))
+    }
+    const now = this.time.now
+    if (snap !== this.stripSnap && (now >= this.stripAt || this.state.final)) {
+      this.stripSnap = snap
+      this.stripAt = now + STRIP_EVERY_MS
+      this.strip?.set(
+        Object.keys(snap.scores).map((id) => ({
+          text: `${this.label(id)} ${snap.scores[id] ?? 0}`,
+          avatar: this.state.avatarOf(id),
+          color: this.state.colorOf(id),
+        })),
+      )
+    }
+    const obj = this.currentObject(snap)
     const myScore = snap.scores[this.selfId] ?? 0
-    this.hud?.setScore(this.t('game.common.pts', { n: myScore }))
 
     const advanced = obj ? obj.index !== this.drawnIndex : !this.finished
     if (advanced && this.drawnIndex >= 0 && this.submitted?.index === this.drawnIndex) {
-      this.splitApart(this.submitted.cut, myScore - this.lastScore)
+      this.rateCut(this.submitted.cut, myScore - this.lastScore)
     }
     this.lastScore = myScore
 
     if (!obj) {
       // Out of objects — or a spectator, not in this round at all.
-      this.showFinished(!(this.selfId in snap.objects))
+      this.showFinished(!(this.selfId in snap.at))
       return
     }
     if (obj.index !== this.drawnIndex) this.drawObject(obj)
@@ -361,7 +444,14 @@ export class PixelSplitScene extends MiniGameScene<PixelSplitSnapshot> {
     for (const c of this.cells) c.img.setVisible(false)
     this.cutGfx?.clear()
     this.boardGfx?.setVisible(false)
-    for (const o of [this.handle, this.handleLabel, this.submitImg, this.submitLabel, this.prompt])
+    for (const o of [
+      this.handle,
+      this.handleLabel,
+      this.submitImg,
+      this.submitLabel,
+      this.prompt,
+      this.hint,
+    ])
       o?.setVisible(false)
     if (this.finished) return
     this.finished = true

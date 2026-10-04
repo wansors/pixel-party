@@ -16,6 +16,8 @@ export interface MazeSprintSnapshot {
   // Steps from the entrance to the exit (the full length of every rival's progress bar).
   startDist: number
   // playerId -> steps taken so far.
+  steps: Record<string, number>
+  // playerId -> how far toward the exit (startDist − dist): the live standings' tally.
   progress: Record<string, number>
   // playerId -> 0 if not finished, otherwise the server time they reached the exit.
   doneAt: Record<string, number>

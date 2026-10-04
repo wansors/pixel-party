@@ -2,7 +2,7 @@
 // Objects are hand-drawn as ASCII art ('#' = filled pixel) and compiled to filled-cell lists at load.
 // The server owns the truth (filled count, per-column counts) for scoring; the client renders the cells.
 // Pixel Weight never shows an object as drawn: it weighs a seeded variant (pixelVariant), so a count
-// learnt in one round is no use in the next.
+// learnt in one round is no use in the next. On the wire an object's cells travel packed (packCells).
 
 export interface PixelCell {
   x: number
@@ -238,4 +238,32 @@ export function columnCounts(obj: PixelObject): number[] {
   const counts = new Array<number>(obj.cols).fill(0)
   for (const cell of obj.cells) counts[cell.x] = (counts[cell.x] ?? 0) + 1
   return counts
+}
+
+// Filled cells packed into a bitmap string for the wire: row-major, each row ceil(cols / 4) hex digits,
+// a digit's most significant bit being the leftmost of its four columns. A 16x9 heart is 36 characters
+// instead of ~1.4 KB of {x, y} pairs — and Pixel Weight / Pixel Split put the object each player is on
+// in every snapshot, so this is most of what a full room's snapshot weighs.
+export function packCells(cols: number, rows: number, cells: readonly PixelCell[]): string {
+  const digits = Math.ceil(cols / 4)
+  const nibbles = new Array<number>(digits * rows).fill(0)
+  for (const { x, y } of cells) {
+    if (x < 0 || x >= cols || y < 0 || y >= rows) continue
+    const i = y * digits + (x >> 2)
+    nibbles[i] = (nibbles[i] ?? 0) | (8 >> (x & 3))
+  }
+  return nibbles.map((n) => n.toString(16)).join('')
+}
+
+// The filled cells of a packCells bitmap, row by row (malformed digits read as empty).
+export function unpackCells(cols: number, rows: number, bits: string): PixelCell[] {
+  const digits = Math.ceil(cols / 4)
+  const cells: PixelCell[] = []
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const nibble = Number.parseInt(bits[y * digits + (x >> 2)] ?? '0', 16)
+      if (nibble & (8 >> (x & 3))) cells.push({ x, y })
+    }
+  }
+  return cells
 }

@@ -16,6 +16,24 @@ export { AVATAR_SIZE, toAvatarId } from './avatarSprites'
 // side facing right — flip it to face left — or back), with an expression (idle, blink, happy, hurt,
 // KO) and a stride frame. `pixel` is the size of one sprite pixel in texture pixels; scale the image
 // with setDisplaySize.
+// One avatar texture a round will need: pose, face and stride frame.
+export type AvatarWarmSpec = readonly [AvatarPose, AvatarExpression, AvatarStep]
+
+// Thunks generating every listed texture for every look — a scene drains them a few per frame
+// (MiniGameScene.warmAvatars) instead of generating them mid-round.
+export function avatarWarmups(
+  scene: Phaser.Scene,
+  looks: readonly { avatar: AvatarId; color: number }[],
+  specs: readonly AvatarWarmSpec[],
+  pixel = 4,
+): (() => void)[] {
+  return looks.flatMap((look) =>
+    specs.map(([pose, expression, step]) => () => {
+      ensureAvatarTexture(scene, look.avatar, look.color, pixel, pose, expression, step)
+    }),
+  )
+}
+
 export function ensureAvatarTexture(
   scene: Phaser.Scene,
   avatar: AvatarId,

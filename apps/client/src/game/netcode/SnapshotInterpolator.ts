@@ -12,7 +12,9 @@ export class SnapshotInterpolator<T> {
   private prev?: { at: number; snap: T }
   private curr?: { at: number; snap: T }
 
-  constructor(private readonly renderDelayMs = 100) {}
+  // The delay must cover the snapshot interval (150 ms at 20 Hz / every 3 ticks): shorter, and every
+  // snapshot plays as a freeze then a jump, because render time catches up with the newest snapshot.
+  constructor(private readonly renderDelayMs = 150) {}
 
   // Record a freshly received snapshot with the client time it arrived.
   push(snap: T, now: number): void {

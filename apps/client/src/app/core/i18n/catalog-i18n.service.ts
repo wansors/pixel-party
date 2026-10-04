@@ -32,6 +32,13 @@ export class CatalogI18nService {
     return typeof entry?.tagline === 'string' ? entry.tagline : ''
   }
 
+  // The game's PC controls in one line ("← → or A D move · SPACE jump") for the round intro; '' when a
+  // game has none.
+  minigameControls(id: MiniGameId): string {
+    const entry = this.transloco.translateObject<{ controls?: unknown }>(`catalog.minigame.${id}`)
+    return typeof entry?.controls === 'string' ? entry.controls : ''
+  }
+
   // Skill-axis display label for the Phase 4 radar; English fallback is the capitalized axis id.
   axisLabel(axis: SkillAxis): string {
     const fallback = axis.charAt(0).toUpperCase() + axis.slice(1)

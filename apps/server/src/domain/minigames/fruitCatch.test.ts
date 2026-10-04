@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { Random } from '../ports/Random'
-import { FruitCatch } from './fruitCatch'
+import { BASKET_SPEED, FruitCatch } from './fruitCatch'
 
 // Deterministic RNG: next()=0.5 → every item is a fruit (0.5 ≥ BOMB_CHANCE) at x=0.5, mid fall speed.
 const half: Random = { next: () => 0.5 }
@@ -33,6 +33,7 @@ describe('FruitCatch', () => {
     let s = init(['p'])
     const item = nn(s.items[0])
     s = game.onInput(s, 'p', { kind: 'move', x: item.x }, 0)
+    s = game.tick(s, 1000, 0) // the basket slides there
     const now = item.spawnAt + item.fallMs // y = 1 ≥ CATCH_Y
     s = game.tick(s, 50, now)
     expect(s.scores.get('p')).toBe(1)
@@ -48,6 +49,7 @@ describe('FruitCatch', () => {
     const item = nn(s.items[0])
     s.combos.set('p', 3)
     s = game.onInput(s, 'p', { kind: 'move', x: 0 }, 0) // far from x=0.5
+    s = game.tick(s, 1000, 0) // the basket slides there
     s = game.tick(s, 50, item.spawnAt + item.fallMs)
     expect(s.scores.get('p')).toBe(0)
     expect(s.combos.get('p')).toBe(0)
@@ -81,6 +83,7 @@ describe('FruitCatch', () => {
     const item = nn(s.items[0])
     s = game.onInput(s, 'a', { kind: 'move', x: item.x }, 0)
     s = game.onInput(s, 'b', { kind: 'move', x: 0 }, 0)
+    s = game.tick(s, 1000, 0) // the basket slides there
     s = game.tick(s, 50, item.spawnAt + item.fallMs)
     const result = game.getResult(s)
     expect(result.placements[0]).toBe('a')
@@ -106,6 +109,7 @@ describe('FruitCatch', () => {
     let s = init(['p'])
     const [a, b] = [nn(s.items[0]), nn(s.items[1])]
     s = game.onInput(s, 'p', { kind: 'move', x: a.x }, 0)
+    s = game.tick(s, 1000, 0) // the basket slides there
     s = game.tick(s, 50, a.spawnAt + a.fallMs)
     s = game.tick(s, 50, b.spawnAt + b.fallMs)
     expect(s.bestCombos.get('p')).toBe(2)
@@ -114,8 +118,21 @@ describe('FruitCatch', () => {
     let t = new FruitCatch().init({ players: ['p'], seed: 1, random: { next: () => 0 }, now: 0 })
     const bomb = nn(t.items[0])
     t = game.onInput(t, 'p', { kind: 'move', x: bomb.x }, 0)
+    t = game.tick(t, 1000, 0) // the basket slides there
     t = game.tick(t, 50, bomb.spawnAt + bomb.fallMs)
     expect(t.bombs.get('p')).toBe(1)
     expect(t.combos.get('p')).toBe(0)
+  })
+})
+
+describe('FruitCatch basket speed', () => {
+  test('the basket slides toward its target at BASKET_SPEED instead of teleporting', () => {
+    const game = new FruitCatch()
+    let s = game.init({ players: ['p'], seed: 1, random: { next: () => 0.5 }, now: 0 })
+    s = game.onInput(s, 'p', { kind: 'move', x: 1 }, 0)
+    s = game.tick(s, 50, 50)
+    expect(s.baskets.get('p')).toBeCloseTo(0.5 + (BASKET_SPEED * 50) / 1000, 6)
+    s = game.tick(s, 1000, 1050)
+    expect(s.baskets.get('p')).toBe(1)
   })
 })

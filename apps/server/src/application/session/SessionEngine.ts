@@ -23,6 +23,7 @@ import {
   type RoundAnalysis,
   buildRadars,
   buildSummary,
+  placementShares,
 } from '../../domain/services/sessionAnalysis'
 import type { Clock } from '../ports/Clock'
 import type { Publisher } from '../ports/Publisher'
@@ -386,21 +387,18 @@ export class SessionEngine {
     return { placements, teams }
   }
 
-  // Capture this round for the post-match analysis. Normalization is points-relative: the round's top
-  // scorer maps to 1.0 and the rest scale down by the award table — a simple, format-agnostic proxy for
-  // "how well did they do on this game's skill".
+  // Capture this round for the post-match analysis: each player's place in the round as a 0..1 share
+  // of the field (placementShares) — a format-agnostic "how did you do on this game's skill against
+  // this room" (D31).
   private recordAnalysis(
     id: MiniGameId,
     roundPoints: Map<PlayerId, number>,
     placements: PlayerId[],
   ): void {
-    const maxPts = Math.max(0, ...roundPoints.values())
-    const norm = new Map<PlayerId, number>()
-    for (const [pid, pts] of roundPoints) norm.set(pid, maxPts > 0 ? pts / maxPts : 0)
     this.analysis.push({
       minigameId: id,
       axes: MINIGAMES_BY_ID.get(id)?.axes ?? [],
-      norm,
+      norm: placementShares(roundPoints),
       winnerId: placements[0] ?? null,
       standings: this.standingsSnapshot(),
     })

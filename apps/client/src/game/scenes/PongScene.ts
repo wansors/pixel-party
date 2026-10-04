@@ -1,7 +1,6 @@
 import { PALETTE, type PongPlayerView, type PongSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import { addBanner, burst, floatText, punch, ring, shake, showBanner } from '../fx'
-import { SnapshotInterpolator, lerp } from '../netcode/SnapshotInterpolator'
 import {
   bodyStyle,
   ensurePixelGrid,
@@ -12,14 +11,27 @@ import {
   shade,
 } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
-import { DuelWatch } from './duelWatch'
+import { DuelWatch, verdictKey } from './duelWatch'
 
 // Mirrors the server's pong.ts: paddles sit at x = 0.04 / 0.96 and return the ball when its centre is
-// within ±PAD_HALF of the paddle centre; first to WIN_SCORE takes the duel.
+// within ±PAD_HALF of the paddle centre (speeding it up by SPEEDUP, capped at MAX_VX, and angling it
+// by where it struck); first to WIN_SCORE takes the duel.
 const PAD_X = 0.04
 const PAD_HALF = 0.13
+const BALL_MAX_VY = 0.5
+const SPEEDUP = 1.05
+const MAX_VX = 1.4
 const WIN_SCORE = 5
-const KEY_SPEED = 1.4 // normalized field heights per second with the keyboard
+const KEY_SPEED = 1.8 // normalized field heights per second with the keyboard
+const SEND_EVERY_MS = 30
+// The ball is run forward from the latest snapshot at most this far (a stalled stream freezes it
+// instead of flying it off), in steps of PREDICT_STEP_MS.
+const PREDICT_MAX_MS = 400
+const PREDICT_STEP_MS = 8
+// A snapshot's correction to the predicted ball fades in over about this long (no visible jump).
+const CORRECTION_MS = 60
+// The opponent's paddle eases toward each snapshot's position over about this long.
+const PADDLE_EASE_MS = 50
 const TRAIL = 8
 // How long the bye's "no rival" card and the GOLDEN POINT call stay over the court.
 const BYE_CARD_MS = 3000
@@ -47,12 +59,16 @@ interface Side {
 }
 
 // Pixel Pong canvas (Phase 5, duel). The server simulates the ball; "your" paddle is always on your
-// end (the server mirrors the ball for the right-side player) and is moved locally for zero-lag feel,
-// while the ball + opponent paddle come from the snapshot, smoothed by the interpolator. Landscape
-// screens play left↔right; portrait phones rotate the court so you defend the bottom edge and slide the
-// paddle with your thumb. The mapping is purely visual — the wire stays normalized (x along, y across).
-// A tie at the bell plays a golden point. The bye (or a player who joined mid-round) watches someone
-// else's duel, read-only, from that duellist's end of the court.
+// end (the server mirrors the ball for the right-side player) and is moved locally for zero-lag feel —
+// by the mouse (just move it), W/S or ↑/↓, or a finger. The ball is not drawn an interpolation buffer
+// behind: it runs forward from the latest snapshot's position + velocity with the server's own
+// wall/paddle rules (your paddle as you hold it now), so a return looks and sounds the moment it
+// happens; each new snapshot's correction fades in over a few frames. The opponent's paddle eases
+// toward its latest position. Landscape screens play left↔right; portrait phones rotate the court so
+// you defend the bottom edge and slide the paddle with your thumb. The mapping is purely visual — the
+// wire stays normalized (x along, y across). A tie at the bell plays a golden point. The bye (or a
+// player who joined mid-round) watches someone else's duel, read-only, from that duellist's end of the
+// court — and so does a duellist a few seconds after their own duel is over.
 export class PongScene extends MiniGameScene<PongSnapshot> {
   private me?: Side
   private opp?: Side
@@ -62,7 +78,18 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
   private subline?: Phaser.GameObjects.Text
   private hint?: Phaser.GameObjects.Text
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys
-  private readonly interp = new SnapshotInterpolator<PongSnapshot>(100)
+  private wasd?: Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>
+  // The latest snapshot of the viewed duel, when it arrived, and the ball as it was then.
+  private latest?: PongPlayerView
+  private anchor = { x: 0.5, y: 0.5, vx: 0, vy: 0, at: 0 }
+  // What was drawn last frame, and the correction still fading out of it.
+  private shown = { x: 0.5, y: 0.5 }
+  private err = { x: 0, y: 0 }
+  private lastFrameAt = 0
+  private oppShown = 0.5
+  private youShown = 0.5
+  private lastBounce = { me: 0, opp: 0 }
+  private lastWall = 0
   private trail: { x: number; y: number }[] = []
   private lastTick = -1
   private padY = 0.5
@@ -71,9 +98,8 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
   private synced = false
   private lastScoreYou = 0
   private lastScoreOpp = 0
-  private lastBallX = 0.5
   private lastBallY = 0.5
-  private lastDir = 0
+  private lastVx = 0
   private wasDone = false
   private wasGolden = false
   // undefined = not applied yet, so the first view (even a bye's null) always runs setOpponent.
@@ -106,7 +132,15 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
 
   override create(): void {
     super.create()
-    this.interp.reset()
+    this.latest = undefined
+    this.anchor = { x: 0.5, y: 0.5, vx: 0, vy: 0, at: 0 }
+    this.shown = { x: 0.5, y: 0.5 }
+    this.err = { x: 0, y: 0 }
+    this.lastFrameAt = 0
+    this.oppShown = 0.5
+    this.youShown = 0.5
+    this.lastBounce = { me: 0, opp: 0 }
+    this.lastWall = 0
     this.trail = []
     this.lastTick = -1
     this.padY = 0.5
@@ -114,9 +148,8 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
     this.synced = false
     this.lastScoreYou = 0
     this.lastScoreOpp = 0
-    this.lastBallX = 0.5
     this.lastBallY = 0.5
-    this.lastDir = 0
+    this.lastVx = 0
     this.wasDone = false
     this.wasGolden = false
     this.oppId = undefined
@@ -167,8 +200,11 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
       .text(
         width / 2,
         height - hintH / 2,
-        this.t('game.pixelPong.hint', { n: WIN_SCORE }),
-        bodyStyle(this.compact ? 11 : 14, PALETTE.dim),
+        this.t(this.compact ? 'game.pixelPong.hint' : 'game.pixelPong.hintPc', { n: WIN_SCORE }),
+        bodyStyle(this.compact ? 11 : 16, PALETTE.dim, {
+          align: 'center',
+          wordWrap: { width: width * 0.94 },
+        }),
       )
       .setOrigin(0.5)
 
@@ -189,10 +225,15 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
       .setDepth(950)
       .setVisible(false)
 
-    this.cursors = this.input.keyboard?.createCursorKeys()
+    const kb = this.input.keyboard
+    if (kb) {
+      this.cursors = kb.createCursorKeys()
+      this.wasd = { W: kb.addKey('W'), A: kb.addKey('A'), S: kb.addKey('S'), D: kb.addKey('D') }
+    }
+    // A finger drags the paddle; a mouse just moves it (no button to hold).
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.aim(p))
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (p.isDown) this.aim(p)
+      if (p.isDown || !p.wasTouch) this.aim(p)
     })
   }
 
@@ -292,7 +333,8 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
 
   private maybeSend(now: number): void {
     if (!this.playing || !this.touched) return
-    if (now - this.lastSentAt < 60 || Math.abs(this.padY - this.lastSentY) < 0.01) return
+    if (now - this.lastSentAt < SEND_EVERY_MS || Math.abs(this.padY - this.lastSentY) < 0.005)
+      return
     this.lastSentAt = now
     this.lastSentY = this.padY
     this.sendInput({ kind: 'move', y: this.padY })
@@ -302,67 +344,135 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
     const now = this.time.now
     if (snap && this.state.tick !== this.lastTick) {
       this.lastTick = this.state.tick
-      this.interp.push(snap, now)
       const own = snap.players[this.selfId]
-      this.playing = !!own && own.opponentId !== null
-      const viewId = this.playing
-        ? this.selfId
-        : this.watch.pick(snap.players, time, (_, v) => v.side === 'left')
-      if (viewId !== this.viewId) this.setView(viewId, own?.opponentId === null)
+      const viewId = this.watch.follow(snap.players, this.selfId, time, (_, v) => v.side === 'left')
+      this.playing = !!own && own.opponentId !== null && viewId === this.selfId
+      if (viewId !== this.viewId) this.setView(viewId, own)
       const view = viewId === null ? undefined : snap.players[viewId]
-      if (view) this.onView(view)
+      if (view) this.onView(view, now)
     }
 
     if (this.playing) {
       const step = (KEY_SPEED * delta) / 1000
-      const back = this.vertical ? this.cursors?.left : this.cursors?.up
-      const fwd = this.vertical ? this.cursors?.right : this.cursors?.down
-      if (back?.isDown || fwd?.isDown) this.touched = true
-      if (back?.isDown) this.padY -= step
-      if (fwd?.isDown) this.padY += step
+      const back = this.vertical
+        ? this.cursors?.left.isDown || this.wasd?.A.isDown
+        : this.cursors?.up.isDown || this.wasd?.W.isDown
+      const fwd = this.vertical
+        ? this.cursors?.right.isDown || this.wasd?.D.isDown
+        : this.cursors?.down.isDown || this.wasd?.S.isDown
+      if (back || fwd) this.touched = true
+      if (back) this.padY -= step
+      if (fwd) this.padY += step
       this.padY = Phaser.Math.Clamp(this.padY, 0, 1)
       this.maybeSend(now)
     }
 
-    const viewId = this.viewId
-    const latest = viewId ? this.interp.latest()?.players[viewId] : undefined
-    if (!viewId || !latest) {
+    const view = this.latest
+    const prevFrame = this.lastFrameAt
+    this.lastFrameAt = now
+    if (!this.viewId || !view) {
       const mePos = this.paddlePos(true, this.padY)
       this.me?.paddle.setPosition(mePos.x, mePos.y)
       return
     }
-    // Interpolate ball + paddles from the snapshot (yours is local while you play) — except across a
-    // point (the ball teleports back to serve).
-    let ballX = latest.ballX
-    let ballY = latest.ballY
-    let oppY = latest.oppY
-    let youY = latest.youY
-    const sample = this.interp.sample(now)
-    const from = sample?.from.players[viewId]
-    const to = sample?.to.players[viewId]
-    if (sample && from && to) {
-      oppY = lerp(from.oppY, to.oppY, sample.t)
-      youY = lerp(from.youY, to.youY, sample.t)
-      const served = from.scoreYou !== to.scoreYou || from.scoreOpp !== to.scoreOpp
-      ballX = served ? to.ballX : lerp(from.ballX, to.ballX, sample.t)
-      ballY = served ? to.ballY : lerp(from.ballY, to.ballY, sample.t)
-    }
-    const mePos = this.paddlePos(true, this.playing ? this.padY : youY)
+    // Paddles: yours where you hold it; the snapshot's ease toward their latest position.
+    const ease = 1 - Math.exp(-delta / PADDLE_EASE_MS)
+    this.oppShown += (view.oppY - this.oppShown) * ease
+    this.youShown += (view.youY - this.youShown) * ease
+    const youY = this.playing ? this.padY : this.youShown
+    const mePos = this.paddlePos(true, youY)
     this.me?.paddle.setPosition(mePos.x, mePos.y)
-    const oppPos = this.paddlePos(false, oppY)
+    const oppPos = this.paddlePos(false, this.oppShown)
     this.opp?.paddle.setPosition(oppPos.x, oppPos.y)
-    const b = this.toScreen(ballX, ballY)
-    this.ball?.setPosition(b.x, b.y).setVisible(!latest.done)
-    this.drawTrail(b, !latest.done)
+
+    // The ball: run forward from the latest snapshot, plus the fading correction.
+    const ball = this.predict(now, youY, this.oppShown, prevFrame)
+    const fade = Math.exp(-delta / CORRECTION_MS)
+    this.err.x *= fade
+    this.err.y *= fade
+    this.shown = { x: ball.x + this.err.x, y: Phaser.Math.Clamp(ball.y + this.err.y, 0, 1) }
+    const b = this.toScreen(this.shown.x, this.shown.y)
+    this.ball?.setPosition(b.x, b.y).setVisible(!view.done)
+    this.drawTrail(b, !view.done)
+  }
+
+  // The ball `now`, run forward from the latest snapshot with the server's rules: wall bounces, and
+  // returns off a paddle that covers it (yours at `youY`, theirs at `oppY`). A return that happens
+  // since the previous frame gets its sound and ring right away.
+  private predict(
+    now: number,
+    youY: number,
+    oppY: number,
+    prevFrame: number,
+  ): { x: number; y: number } {
+    const a = this.anchor
+    let { x, y, vx, vy } = a
+    if (this.latest?.done) return { x, y }
+    const span = Math.min(PREDICT_MAX_MS, Math.max(0, now - a.at))
+    for (let t = 0; t < span; ) {
+      const dt = Math.min(PREDICT_STEP_MS, span - t)
+      t += dt
+      x += (vx * dt) / 1000
+      y += (vy * dt) / 1000
+      if (y < 0) {
+        y = -y
+        vy = Math.abs(vy)
+        if (a.at + t > prevFrame) this.wallFx(now)
+      } else if (y > 1) {
+        y = 2 - y
+        vy = -Math.abs(vy)
+        if (a.at + t > prevFrame) this.wallFx(now)
+      }
+      const mine = x <= PAD_X && vx < 0
+      const theirs = x >= 1 - PAD_X && vx > 0
+      if (!mine && !theirs) continue
+      const pad = mine ? youY : oppY
+      // Past the paddle line already (a miss): the ball flies on to the edge of the court.
+      if (Math.abs(y - pad) > PAD_HALF || (mine ? x < PAD_X - 0.03 : x > 1 - PAD_X + 0.03)) {
+        x = Phaser.Math.Clamp(x, -0.02, 1.02)
+        continue
+      }
+      x = mine ? PAD_X : 1 - PAD_X
+      vx = (mine ? 1 : -1) * Math.min(MAX_VX, Math.abs(vx) * SPEEDUP)
+      vy = ((y - pad) / PAD_HALF) * BALL_MAX_VY
+      if (a.at + t > prevFrame) this.bounceFx(mine, y, now)
+    }
+    return { x, y }
+  }
+
+  // The ball glancing off a side wall: a lower blip than a paddle return (throttled, so a re-anchored
+  // prediction crossing the same wall again stays silent).
+  private wallFx(now: number): void {
+    if (now - this.lastWall < 250) return
+    this.lastWall = now
+    this.rally(() => this.sfx.bounce(0.1))
+  }
+
+  // A rally sound: full volume in your own duel, quieter for a duel you're only watching.
+  private rally(sound: () => void): void {
+    if (this.playing) sound()
+    else this.sfx.quiet(sound, 0.5)
+  }
+
+  // One return's feedback (the predicted bounce or, if the prediction missed it, the snapshot's).
+  private bounceFx(mine: boolean, across: number, now: number): void {
+    const side = mine ? 'me' : 'opp'
+    if (now - this.lastBounce[side] < 250) return
+    this.lastBounce[side] = now
+    this.onReturn(mine, across)
   }
 
   // A new viewpoint: your own duel on the first snapshot, or the next duel a spectator watches. The
-  // near end takes the viewed duellist's colors; a bye first hears it scores a draw, then watches.
-  private setView(viewId: string | null, bye: boolean): void {
+  // near end takes the viewed duellist's colors; a bye first hears it scores a draw, then watches; a
+  // duellist whose duel is over keeps their verdict in the HUD.
+  private setView(viewId: string | null, own: PongPlayerView | undefined): void {
+    const bye = own?.opponentId === null
     this.viewId = viewId
     this.synced = false
     this.wasDone = false
     this.wasGolden = false
+    this.latest = undefined
+    this.err = { x: 0, y: 0 }
     this.trail = []
     this.banner?.setVisible(false)
     this.subline?.setVisible(false)
@@ -376,7 +486,9 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
       me.name.setText(this.label(viewId)).setColor(hexToCss(color))
     }
     if (this.playing) return
-    this.hud?.setScore(bye ? this.t('game.common.duelBye') : '')
+    this.hud?.setScore(
+      bye ? this.t('game.common.duelBye') : own?.done ? this.t(verdictKey(own.won)) : '',
+    )
     if (bye && !this.byeShown && this.banner) {
       this.byeShown = true
       const text = this.t('game.common.duelBye')
@@ -408,26 +520,42 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
     })
   }
 
-  // Discrete events from each fresh snapshot: points, paddle returns, golden point, the final result.
-  private onView(view: PongPlayerView): void {
+  // Each fresh snapshot of the viewed duel: re-anchors the ball, then the discrete events — points,
+  // returns the prediction missed, golden point, the final result.
+  private onView(view: PongPlayerView, now: number): void {
+    const prevLatest = this.latest
+    this.latest = view
     if (view.opponentId !== this.oppId) this.setOpponent(view.opponentId)
     if (this.playing) this.hud?.setScore(this.t('game.common.pts', { n: view.scoreYou }))
     else if (view.opponentId) {
-      this.hint?.setText(
-        this.t('game.common.duelWatch', {
-          a: this.state.nameOf(this.viewId ?? ''),
-          b: this.state.nameOf(view.opponentId),
-        }),
-      )
+      const watching = this.t('game.common.duelWatch', {
+        a: this.state.nameOf(this.viewId ?? ''),
+        b: this.state.nameOf(view.opponentId),
+      })
+      if (this.hint?.text !== watching) this.hint?.setText(watching)
     }
     this.me?.digit.setText(String(view.scoreYou))
     this.opp?.digit.setText(String(view.scoreOpp))
+    const scored = this.synced && view.scoreYou > this.lastScoreYou
+    const conceded = this.synced && view.scoreOpp > this.lastScoreOpp
+    // Re-anchor the ball. Mid-rally, what was on screen carries over as a correction that fades out;
+    // after a point (a fresh serve) or on a new view it simply starts from the snapshot.
+    const fresh = !prevLatest || !this.synced || scored || conceded
+    if (!fresh) {
+      this.err = { x: this.shown.x - view.ballX, y: this.shown.y - view.ballY }
+    } else {
+      this.err = { x: 0, y: 0 }
+      this.oppShown = view.oppY
+      this.youShown = view.youY
+    }
+    this.anchor = { x: view.ballX, y: view.ballY, vx: view.vx, vy: view.vy, at: now }
+    this.shown = { x: view.ballX + this.err.x, y: view.ballY + this.err.y }
     if (!this.synced) {
       this.synced = true
       this.lastScoreYou = view.scoreYou
       this.lastScoreOpp = view.scoreOpp
-      this.lastBallX = view.ballX
       this.lastBallY = view.ballY
+      this.lastVx = view.vx
       this.wasDone = view.done
       this.wasGolden = view.golden
       if (view.golden) this.hud?.setCenter(this.t('game.pixelPong.golden'), PALETTE.amber)
@@ -435,23 +563,16 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
       return
     }
 
-    const scored = view.scoreYou > this.lastScoreYou
-    const conceded = view.scoreOpp > this.lastScoreOpp
     if (scored) this.onPoint(true)
     if (conceded) this.onPoint(false)
-    if (!scored && !conceded) {
-      const dx = view.ballX - this.lastBallX
-      const dir = Math.abs(dx) < 0.002 ? this.lastDir : Math.sign(dx)
-      if (this.lastDir < 0 && dir > 0) this.onReturn(true, view.ballY)
-      else if (this.lastDir > 0 && dir < 0) this.onReturn(false, view.ballY)
-      this.lastDir = dir
-    } else {
-      this.lastDir = 0
+    // A return the prediction didn't call (the paddle moved at the last moment): its fx now.
+    if (!scored && !conceded && Math.sign(view.vx) !== Math.sign(this.lastVx) && view.vx !== 0) {
+      this.bounceFx(view.vx > 0, view.ballY, now)
     }
     this.lastScoreYou = view.scoreYou
     this.lastScoreOpp = view.scoreOpp
-    this.lastBallX = view.ballX
     this.lastBallY = view.ballY
+    this.lastVx = view.vx
 
     if (view.golden && !this.wasGolden) this.onGolden()
     this.wasGolden = view.golden
@@ -492,8 +613,8 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
     this.trail = []
     if (side) punch(this, side.digit, 0.5, 140)
     if (!this.playing) {
-      // Watching: a neutral pop for either end.
-      this.sfx.pop()
+      // Watching: the ball whizzing past either end.
+      this.rally(() => this.sfx.whoosh())
       burst(this, exit.x, exit.y, side?.color ?? PALETTE.amber, 20, 260)
     } else if (mine) {
       this.sfx.correct()
@@ -507,7 +628,7 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
         24,
       )
     } else {
-      this.sfx.wrong()
+      this.sfx.hurt()
       shake(this, 0.008, 200)
       burst(this, exit.x, exit.y, this.opp?.color ?? PALETTE.red, 20, 260)
     }
@@ -516,7 +637,7 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
   private onReturn(mine: boolean, across: number): void {
     const side = mine ? this.me : this.opp
     if (!side) return
-    this.sfx.pad(mine ? 2 : 1)
+    this.rally(() => this.sfx.bounce(mine ? 0.7 : 0.45))
     const hit = this.toScreen(mine ? PAD_X : 1 - PAD_X, across)
     ring(this, hit.x, hit.y, side.color, this.ballR * 4)
     punch(this, side.paddle, 0.15, 70)
@@ -554,12 +675,15 @@ export class PongScene extends MiniGameScene<PongSnapshot> {
     this.subline?.setText(sub).setVisible(true)
     if (!withFx) return
     if (view.won) {
+      this.sfx.cheer()
       this.sfx.coin()
       const { width, height } = this.scale
       burst(this, width / 2, height / 2, PALETTE.amber, 24, 300)
       burst(this, width / 2, height / 2, this.me?.color ?? PALETTE.lime, 18, 240)
     } else if (view.won === null) {
       this.sfx.tick()
+    } else {
+      this.sfx.wrong()
     }
   }
 }

@@ -35,12 +35,20 @@ export class YouMarker {
   }
 }
 
-// Soft ground shadow under a standing character, sized from its display size.
-export function addShadow(
-  scene: Phaser.Scene,
-  size: number,
-  depth: number,
-): Phaser.GameObjects.Ellipse {
+// Soft ground shadow under a standing character, sized from its display size. An image of a cached
+// ellipse texture rather than an Ellipse shape: images batch with the avatar sprites around them, while
+// a shape between sprites switches pipelines (a draw-call break per player, every frame).
+export function addShadow(scene: Phaser.Scene, size: number, depth: number): Shadow {
+  const w = Math.round(size * 0.75)
   const h = Math.max(4, Math.round(size * 0.2))
-  return scene.add.ellipse(0, 0, Math.round(size * 0.75), h, 0x000000, 0.35).setDepth(depth)
+  const key = `pp-shadow-${w}x${h}`
+  if (!scene.textures.exists(key)) {
+    const g = scene.make.graphics({ x: 0, y: 0 }, false)
+    g.fillStyle(0x000000, 1).fillEllipse(w / 2, h / 2, w, h)
+    g.generateTexture(key, w, h)
+    g.destroy()
+  }
+  return scene.add.image(0, 0, key).setAlpha(0.35).setDepth(depth)
 }
+
+export type Shadow = Phaser.GameObjects.Image

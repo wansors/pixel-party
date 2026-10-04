@@ -1,4 +1,11 @@
-import { type AthleticsFoot, PALETTE, type TrackRaceSnapshot, type TrackRunner } from '@pp/shared'
+import {
+  ATHLETICS_STRIDE,
+  type AthleticsFoot,
+  PALETTE,
+  type TrackRaceSnapshot,
+  type TrackRunner,
+  athleticsStrideGain,
+} from '@pp/shared'
 import type Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, flash, floatText, shake, showBanner } from '../fx'
@@ -25,6 +32,14 @@ const SPRITE_M = 2.2 // world metres the athlete's box spans (head room included
 const STUMBLE_MS = 260
 // Lanes keep at least this many px while the stands can give up room for them.
 const LANE_MIN = 20
+// Footstep sounds at most this often (a frantic masher is a drum roll, not a buzz).
+const STEP_SFX_MS = 90
+// Other runners crossing the line get the crowd at most this often (a blanket finish is one roar).
+const CHEER_GAP_MS = 1500
+// Rivals' moments play at this fraction of the volume (yours stay full); their clipped hurdles at
+// most this often.
+const RIVAL_LEVEL = 0.4
+const RIVAL_CRASH_MS = 250
 
 // Each athlete is the player's lobby avatar in side view: two-frame strides tied to the distance run,
 // crouched in the blocks, tucked over a hurdle, wincing on a stumble, happy past the line.
@@ -71,8 +86,14 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
   private lastTick = -1
   private prevPhase: TrackRaceSnapshot['phase'] | '' = ''
   private prev = new Map<string, TrackRunner>()
+  // Each runner's on-screen distance this frame (reused).
+  private readonly shown = new Map<string, number>()
   private cleared = new Set<number>()
   private lastFoot: AthleticsFoot | null = null
+  private lastStrideAt = Number.NEGATIVE_INFINITY
+  private lastStepSfxAt = Number.NEGATIVE_INFINITY
+  private lastCheerAt = Number.NEGATIVE_INFINITY
+  private lastRivalCrashAt = Number.NEGATIVE_INFINITY
   private goHideAt = 0
   private arrivedAt = 0
 
@@ -91,8 +112,13 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     this.lastTick = -1
     this.prevPhase = ''
     this.prev = new Map()
+    this.shown.clear()
     this.cleared = new Set()
     this.lastFoot = null
+    this.lastStrideAt = Number.NEGATIVE_INFINITY
+    this.lastStepSfxAt = Number.NEGATIVE_INFINITY
+    this.lastCheerAt = Number.NEGATIVE_INFINITY
+    this.lastRivalCrashAt = Number.NEGATIVE_INFINITY
     this.goHideAt = 0
 
     const { width, height } = this.scale
@@ -114,7 +140,7 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
           width / 2,
           height - 14,
           this.t(this.withHurdles ? 'game.athletics.hintHurdles' : 'game.athletics.hintDash'),
-          bodyStyle(13, PALETTE.dim),
+          bodyStyle(height >= 900 ? 16 : 13, PALETTE.dim),
         )
         .setOrigin(0.5)
     }
@@ -274,7 +300,7 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
             0,
             0,
             mine ? this.t('game.common.you') : this.state.nameOf(r.id),
-            nameTagStyle(this.compact ? 8 : 10, color),
+            nameTagStyle(this.compact ? 8 : this.laneH >= 56 ? 12 : 10, color),
           )
           .setOrigin(1, 0.5)
           .setDepth(640),
@@ -295,12 +321,33 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
   }
 
   private step(foot: AthleticsFoot): void {
+    const snap = this.snap
     const me = this.own()
-    if (!this.snap || !me || me.finishMs !== null || this.snap.remainingMs <= 0) return
+    if (!snap || !me || me.finishMs !== null || snap.remainingMs <= 0) return
     this.sendInput({ kind: 'step', foot })
-    this.sfx.click()
-    // Taps in the air or on the same foot don't count on the server; mirror that in the cue.
+    // The server's stride rule, mirrored: after the gun, out of the blocks, on the ground, the other
+    // foot, not faster than the cap. A counted stride speeds your runner up right away (the next
+    // snapshot confirms it); the rest only move the cue.
+    const now = this.time.now
     const airborne = (this.views.get(this.selfId)?.airStart ?? -1) >= 0
+    // Your footfall, the moment you press (left and right a slightly different pitch); a press in
+    // the blocks or in the air is just a tap.
+    if (snap.phase === 'go' && !me.held && !airborne) {
+      if (now - this.lastStepSfxAt >= STEP_SFX_MS) {
+        this.lastStepSfxAt = now
+        this.sfx.step(foot === 'L' ? 0 : 1)
+      }
+    } else this.sfx.click()
+    const counts =
+      snap.phase === 'go' &&
+      !me.held &&
+      !airborne &&
+      foot !== this.lastFoot &&
+      now - this.lastStrideAt >= ATHLETICS_STRIDE.minMs
+    if (counts) {
+      this.lastStrideAt = now
+      this.tracker.nudge(me.id, athleticsStrideGain(this.tracker.v(me.id)), now)
+    }
     if (!airborne) this.lastFoot = foot
     this.pad?.setNext(this.lastFoot === 'L' ? 'R' : 'L')
   }
@@ -314,7 +361,7 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     this.sendInput({ kind: 'jump' })
     // Predict the hop right away; the next snapshot confirms it.
     view.airStart = this.time.now
-    this.sfx.pad(3)
+    this.sfx.jump()
   }
 
   // --- Frame ----------------------------------------------------------------------------------------
@@ -335,9 +382,14 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     }
 
     const freeze = this.state.final
-    const shown = new Map(snap.runners.map((r) => [r.id, this.tracker.x(r.id, now, delta, freeze)]))
+    const shown = this.shown
+    let lead = 0
+    for (const r of snap.runners) {
+      const x = this.tracker.x(r.id, now, delta, freeze)
+      shown.set(r.id, x)
+      lead = Math.max(lead, x)
+    }
     const me = this.own()
-    const lead = Math.max(0, ...shown.values())
     const camX = (me ? (shown.get(me.id) ?? 0) : lead) - this.anchorX / this.ppm
     const toX = (x: number): number => (x - camX) * this.ppm
 
@@ -386,7 +438,11 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     // Airborne: server truth for others; own hop is predicted on press and confirmed by snapshots.
     if (r.air && v.airStart < 0) v.airStart = this.arrivedAt - r.airT * AIR_MS
     const airT = v.airStart >= 0 ? (now - v.airStart) / AIR_MS : -1
-    if (airT > 1) v.airStart = -1
+    if (airT > 1) {
+      v.airStart = -1
+      // Your own touch-down (everyone else's hops stay silent).
+      if (mine && r.finishMs === null) this.sfx.land()
+    }
     const crouched =
       snap.phase === 'set' || r.held || (r.v < 0.4 && r.x < 0.5 && r.finishMs === null)
     const airborne = v.airStart >= 0
@@ -418,7 +474,7 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
       if (r.finishMs === null && this.footY(lane) - this.avatarSize() >= room) {
         this.marker?.place(sx, Math.max(headY, room), now)
       } else this.marker?.hide()
-      if (r.finishMs === null) this.pad?.setSpeed(r.v)
+      if (r.finishMs === null) this.pad?.setSpeed(this.tracker.v(r.id))
     }
   }
 
@@ -478,6 +534,8 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     }
 
     if (this.prevPhase === 'set' && snap.phase === 'go') {
+      // The starting gun's crack, then the GO.
+      this.sfx.gunshot()
       this.sfx.go()
       flash(this, PALETTE.lime, 140, 0.25)
       this.showEnd(this.t('game.athletics.go'), PALETTE.lime)
@@ -509,14 +567,22 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
         burst(this, sx + this.ppm * 0.4, this.footY(lane) - 8, PALETTE.text, mine ? 12 : 6, 160)
         if (mine) {
           this.cleared.add(idx)
-          this.sfx.pop()
+          this.sfx.crash()
           shake(this, 0.009, 160)
           floatText(this, sx, y, this.t('game.athletics.ouch'), PALETTE.amber, 16)
+        } else if (now - this.lastRivalCrashAt >= RIVAL_CRASH_MS) {
+          this.lastRivalCrashAt = now
+          this.sfx.quiet(() => this.sfx.crash(), RIVAL_LEVEL * 0.75)
         }
       }
       if (before && before.finishMs === null && r.finishMs !== null) {
         if (mine) this.showFinish(r, true)
-        else
+        else {
+          // Someone else breaks the tape: the crowd roars (one roar for a blanket finish).
+          if (now - this.lastCheerAt >= CHEER_GAP_MS) {
+            this.lastCheerAt = now
+            this.sfx.quiet(() => this.sfx.cheer(), RIVAL_LEVEL)
+          }
           floatText(
             this,
             sx,
@@ -525,6 +591,7 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
             view?.color ?? PALETTE.text,
             12,
           )
+        }
       }
     })
 
@@ -574,8 +641,9 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     const others = (this.snap?.runners ?? []).some((r) => r.id !== me.id && r.finishMs === null)
     this.subline?.setText(others ? this.t('game.common.waiting') : '').setVisible(others)
     if (!withFx) return
+    this.lastCheerAt = this.time.now
+    this.sfx.cheer()
     if (winner) this.sfx.fanfare()
-    else this.sfx.coin()
     const view = this.views.get(me.id)
     if (view) {
       const img = view.avatar.image

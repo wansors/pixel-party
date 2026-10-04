@@ -1,6 +1,7 @@
 // Pixel Pong (B1) wire shapes. A real-time 1v1 duel: players are seeded-paired, each controls a paddle
 // on their side, and the server simulates the ball authoritatively. Each client renders its own paddle
-// locally (immediate) and the ball + opponent paddle from the snapshot, smoothed by the interpolator.
+// locally (immediate), the opponent paddle from the snapshot, and the ball predicted forward from the
+// latest snapshot's position + velocity.
 // First to WIN_SCORE, or the leader when the round timer expires; a tie plays a golden point (next point
 // wins) for a few seconds more, then it's a draw. Positions are normalized (x,y in [0,1]). The snapshot
 // is public: a bye (or a late joiner) watches someone else's duel from it, read-only.
@@ -13,6 +14,10 @@ export interface PongPlayerView {
   oppY: number
   ballX: number
   ballY: number
+  // Ball velocity (field units per second, x mirrored like ballX): the client runs the ball forward
+  // from the latest snapshot instead of drawing it an interpolation buffer behind.
+  vx: number
+  vy: number
   scoreYou: number
   scoreOpp: number
   // Tied at the timer: the next point wins.

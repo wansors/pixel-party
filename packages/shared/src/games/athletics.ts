@@ -11,6 +11,15 @@
 
 export type AthleticsFoot = 'L' | 'R'
 
+// The sprint model's stride: each counted stride adds `boost` × (1 − v / topSpeed) m/s; strides closer
+// together than `minMs` don't count. The server runs it (athleticsCore); the client predicts its own
+// strides with the same numbers so the speed meter and the runner react on the tap.
+export const ATHLETICS_STRIDE = { boost: 2.2, topSpeed: 16, minMs: 50 } as const
+
+export function athleticsStrideGain(v: number): number {
+  return ATHLETICS_STRIDE.boost * (1 - v / ATHLETICS_STRIDE.topSpeed)
+}
+
 export interface TrackRunner {
   id: string
   // Metres from the start line (keeps growing past the finish while the runner slows down).

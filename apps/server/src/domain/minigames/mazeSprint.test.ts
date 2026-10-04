@@ -197,6 +197,7 @@ describe('MazeSprint', () => {
     expect(snap.walls).toEqual(s.walls)
     expect(snap.exitIndex).toBe(EXIT_INDEX)
     expect(snap.pos.p).toBe(0)
+    expect(snap.steps.p).toBe(0)
     expect(snap.progress.p).toBe(0)
     expect(snap.doneAt.p).toBe(0)
     expect(snap.remainingMs).toBe(45_000)
@@ -211,6 +212,9 @@ describe('MazeSprint', () => {
     const snap = game.snapshot(s, 1000)
     expect(snap.dist.p).toBe(path.length - 3)
     expect(snap.dist.q).toBe(path.length)
+    // The live standings count the way made toward the exit, not the steps (wandering isn't progress).
+    expect(snap.progress.p).toBe(3)
+    expect(snap.progress.q).toBe(0)
   })
 
   test('steps closer together than MIN_STEP_MS are dropped (key-repeat rates don`t matter)', () => {
@@ -224,6 +228,21 @@ describe('MazeSprint', () => {
     // ...one MIN_STEP_MS after the last step does.
     game.onInput(s, 'p', { kind: 'move', dir: nn(path[1]) }, 1000 + MIN_STEP_MS)
     expect(s.steps.get('p')).toBe(2)
+  })
+
+  test('two evenly-sent steps bunched up by the network both land; the pace stays capped', () => {
+    const game = new MazeSprint()
+    const s = init(['p'])
+    const path = findPath(s.walls, 0, s.exitIndex)
+    game.onInput(s, 'p', { kind: 'move', dir: nn(path[0]) }, 1000)
+    // Sent 100 ms apart, arriving 70 ms apart: still a step.
+    game.onInput(s, 'p', { kind: 'move', dir: nn(path[1]) }, 1070)
+    expect(s.steps.get('p')).toBe(2)
+    // But the slack is spent: the next one has to wait for the steady pace (1000 + 2 × MIN_STEP_MS).
+    game.onInput(s, 'p', { kind: 'move', dir: nn(path[2]) }, 1100)
+    expect(s.steps.get('p')).toBe(2)
+    game.onInput(s, 'p', { kind: 'move', dir: nn(path[2]) }, 1000 + 2 * MIN_STEP_MS)
+    expect(s.steps.get('p')).toBe(3)
   })
 
   test('a player who leaves no longer holds up the everyone-finished early end', () => {
