@@ -35,6 +35,11 @@ export class SessionManager {
     return true
   }
 
+  // Host skip of the current round; false when no round is running.
+  skip(roomCode: string, byPlayerId: PlayerId): boolean {
+    return this.engines.get(roomCode)?.skipRound(byPlayerId) ?? false
+  }
+
   input(roomCode: string, playerId: PlayerId, input: unknown): void {
     this.engines.get(roomCode)?.onInput(playerId, input)
   }

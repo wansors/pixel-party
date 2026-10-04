@@ -111,6 +111,9 @@ export type ClientMsg =
   // Host-only: after FINAL_RANKING, return the room to the lobby (same roster/line-up/handicap) so
   // another session can be configured and started without everyone leaving and re-joining.
   | { type: 'PLAY_AGAIN' }
+  // Host-only: abandon the current round (its intro or the game itself) without scoring it and move
+  // on to the next one — the escape hatch for a round that misbehaves, so nobody has to wait it out.
+  | { type: 'SKIP_ROUND' }
   // Per-frame/round input for the active mini-game. Opaque payload validated by the active game.
   | { type: 'MINIGAME_INPUT'; input: unknown }
   | { type: 'LEAVE' }
@@ -160,6 +163,8 @@ export type ServerMsg =
   | { type: 'ROUND_STATE'; round: number; tick: number; state: unknown; final?: boolean }
   // A round finished — placements + points for this round.
   | { type: 'ROUND_RESULT'; round: number; result: RoundResultDto }
+  // The host skipped this round: no points, the next ROUND_INTRO (or FINAL_RANKING) follows at once.
+  | { type: 'ROUND_SKIPPED'; round: number; minigameId: MiniGameId; byPlayerId: string }
   // Session-wide cumulative ranking (shown between rounds).
   | { type: 'SCOREBOARD'; scores: ScoreEntryDto[] }
   // Session over — final ranking, plus the Phase 4 post-match analysis (radar per player + summary).

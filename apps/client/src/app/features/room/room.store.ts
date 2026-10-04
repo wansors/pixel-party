@@ -106,6 +106,8 @@ export class RoomStore {
   readonly isHost = signal(false)
   readonly reconnecting = signal(false)
   readonly message = signal('')
+  // A short, neutral heads-up for everyone (e.g. "the host skipped this game"); clears itself.
+  readonly notice = signal('')
 
   // Host session config (mirrors LOBBY_STATE so everyone sees the current selection).
   readonly selectedGameIds = signal<MiniGameId[]>([])
@@ -133,6 +135,7 @@ export class RoomStore {
   private game?: GameClient
   private defaultConfigSent = false
   private countdownTimer?: ReturnType<typeof setInterval>
+  private noticeTimer?: ReturnType<typeof setTimeout>
   // Consecutive round wins per player, used to bump a winner's callout to the "streak" tier.
   private readonly winStreak = new Map<string, number>()
   private identity: Identity = { name: '', color: NEUTRAL, avatar: 'cat' }
@@ -238,6 +241,7 @@ export class RoomStore {
     this.zone.runOutsideAngular(() => this.net.connect(code))
     this.destroyRef.onDestroy(() => {
       this.clearCountdown()
+      clearTimeout(this.noticeTimer)
       this.game?.destroy()
       this.net.disconnect()
     })
@@ -299,6 +303,18 @@ export class RoomStore {
         this.audio.playResults()
         if (this.isRoundWinner(msg.result)) this.audio.sfx.win()
         else this.audio.sfx.coin()
+        this.game?.handle(msg)
+        break
+      case 'ROUND_SKIPPED':
+        // No result screen: the next ROUND_INTRO (or FINAL_RANKING) is already on its way.
+        this.clearCountdown()
+        this.showNotice(
+          this.transloco.translate(
+            msg.byPlayerId === this.selfId() ? 'room.skip.doneSelf' : 'room.skip.done',
+            { host: this.playerName(msg.byPlayerId), game: this.gameName(msg.minigameId) },
+          ),
+        )
+        this.audio.sfx.whoosh()
         this.game?.handle(msg)
         break
       case 'SCOREBOARD':
@@ -523,6 +539,17 @@ export class RoomStore {
 
   shuffleTeams(): void {
     if (this.isHost()) this.net.send({ type: 'SHUFFLE_TEAMS' })
+  }
+
+  // Host escape hatch: abandon the current round (intro or game) unscored, e.g. when a game bugs out.
+  skipRound(): void {
+    if (this.isHost()) this.net.send({ type: 'SKIP_ROUND' })
+  }
+
+  private showNotice(text: string): void {
+    clearTimeout(this.noticeTimer)
+    this.notice.set(text)
+    this.noticeTimer = setTimeout(() => this.notice.set(''), 4000)
   }
 
   // ── Lookups used by the view templates ─────────────────────────────────────────────────────────

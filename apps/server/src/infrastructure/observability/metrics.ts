@@ -9,6 +9,7 @@ export type MetricKey =
   | 'kicks'
   | 'host_transfers'
   | 'sessions_started'
+  | 'rounds_skipped'
   | 'messages'
   | 'errors'
   | 'rooms_reaped'

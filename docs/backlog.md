@@ -230,6 +230,13 @@ seeded variants of the same content, because snapshots are broadcast to the whol
       in [`music-prompts.md`](music-prompts.md); the director would need a per-mood mp3 list next to
       the chip songs.
 
+## Launch requests (2026-10-04)
+
+- [x] **Show the app version**: `APP_VERSION` (1.0.0, the public beta) in the SND panel, on the join
+      screen, in `/api/health` and in the server's startup banner.
+- [x] **The host can skip a round** that misbehaves (D33): a two-click **SKIP GAME** button in the
+      header during the intro and the round. No points; the next round starts at once.
+
 ## Maintenance — dependencies (reviewed 2026-10-04)
 
 - [x] Bun 1.4.2 is the latest release; CI already installs `latest`, and the README asks for 1.3+.

@@ -17,6 +17,7 @@ describe('isValidClientMsg', () => {
   test('accepts well-formed host-control intents', () => {
     expect(isValidClientMsg({ type: 'TRANSFER_HOST', playerId: 'p1' })).toBe(true)
     expect(isValidClientMsg({ type: 'KICK_PLAYER', playerId: 'p2' })).toBe(true)
+    expect(isValidClientMsg({ type: 'SKIP_ROUND' })).toBe(true)
   })
 
   test('HOST_CONFIG handicap is an optional boolean', () => {

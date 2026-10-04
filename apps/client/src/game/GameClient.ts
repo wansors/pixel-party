@@ -53,6 +53,7 @@ export class GameClient {
       this.state.final = msg.final === true
     })
     .on('ROUND_RESULT', () => this.stopActive())
+    .on('ROUND_SKIPPED', () => this.stopActive())
     .on('FINAL_RANKING', () => this.stopActive())
 
   constructor(

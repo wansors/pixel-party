@@ -18,12 +18,32 @@
       @if (store.reconnecting()) {
         <span class="reconnect blink">{{ 'room.reconnecting' | transloco }}</span>
       }
+      @if (canSkip()) {
+        <button
+          #skipBtn
+          type="button"
+          class="arcade-btn skip"
+          [class.armed]="skipArmed()"
+          [title]="'room.skip.hint' | transloco"
+          (click)="onSkip(skipBtn)"
+        >
+          @if (skipArmed()) {
+            {{ 'room.skip.confirm' | transloco }}
+          } @else {
+            <span class="long">{{ 'room.skip.button' | transloco }}</span>
+            <span class="short">{{ 'room.skip.short' | transloco }}</span>
+          }
+        </button>
+      }
       <app-audio-controls />
     </span>
   </header>
 
   @if (store.message()) {
     <p class="msg" role="alert">{{ store.message() }}</p>
+  }
+  @if (store.notice()) {
+    <p class="notice" role="status">{{ store.notice() }}</p>
   }
 
   <!-- Kept out of the @switch: the Phaser canvas must survive the intro/result views. -->

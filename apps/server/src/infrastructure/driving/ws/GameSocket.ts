@@ -337,6 +337,22 @@ export function startGameServer(deps: GameSocketDeps) {
     send(ws, { type: 'ACK', intent: 'PLAY_AGAIN', ok: true })
   }
 
+  // Host-only: skip the round in progress (a misbehaving game shouldn't hold the whole room).
+  const handleSkipRound = (ws: ServerWebSocket<SocketData>): void => {
+    const room = deps.rooms.get(ws.data.roomCode)
+    if (!room || !ws.data.playerId || !room.isHost(ws.data.playerId)) {
+      send(ws, { type: 'ACK', intent: 'SKIP_ROUND', ok: false, reason: 'not_host' })
+      return
+    }
+    if (!manager.skip(room.code, ws.data.playerId)) {
+      send(ws, { type: 'ACK', intent: 'SKIP_ROUND', ok: false, reason: 'no_round' })
+      return
+    }
+    deps.metrics.inc('rounds_skipped')
+    deps.logger.info('round_skipped', { room: room.code, by: ws.data.playerId })
+    send(ws, { type: 'ACK', intent: 'SKIP_ROUND', ok: true })
+  }
+
   const handleTransferHost = (
     ws: ServerWebSocket<SocketData>,
     msg: Extract<ClientMsg, { type: 'TRANSFER_HOST' }>,
@@ -431,6 +447,9 @@ export function startGameServer(deps: GameSocketDeps) {
         break
       case 'PLAY_AGAIN':
         handlePlayAgain(ws)
+        break
+      case 'SKIP_ROUND':
+        handleSkipRound(ws)
         break
       case 'MINIGAME_INPUT':
         handleMinigameInput(ws, msg)

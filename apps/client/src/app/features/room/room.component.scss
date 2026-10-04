@@ -80,6 +80,29 @@
   .reconnect {
     color: var(--c-red);
   }
+  // Same compact size as the SND button next to it; turns red once armed ("SURE?").
+  .skip {
+    padding: 0.35rem 0.5rem;
+    white-space: nowrap;
+    color: var(--c-dim);
+    &.armed {
+      color: var(--c-text);
+      background: var(--c-red);
+      border-color: var(--c-red);
+    }
+    // Phones: the short label, so the round info keeps its room in the header.
+    .short {
+      display: none;
+    }
+    @media (max-width: 600px) {
+      .long {
+        display: none;
+      }
+      .short {
+        display: inline;
+      }
+    }
+  }
 }
 
 .msg {
@@ -87,6 +110,23 @@
   padding: 0.5rem 0.75rem;
   background: #2a1420;
   color: var(--c-red);
+  border: 3px solid var(--c-frame);
+  font-size: var(--fs-sm);
+}
+
+// Floats over the views (no layout shift under a running canvas) and clears itself after a few seconds.
+.notice {
+  position: absolute;
+  top: 3.75rem;
+  left: 1rem;
+  right: 1rem;
+  z-index: 30;
+  width: fit-content;
+  margin: 0 auto;
+  text-align: center;
+  padding: 0.5rem 0.75rem;
+  background: var(--c-panel-alt);
+  color: var(--c-amber);
   border: 3px solid var(--c-frame);
   font-size: var(--fs-sm);
 }

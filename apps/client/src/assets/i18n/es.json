@@ -204,6 +204,14 @@
       "solved": "¡resuelto!",
       "off": "de error",
       "steps": "pasos"
+    },
+    "skip": {
+      "button": "SALTAR JUEGO",
+      "confirm": "¿SEGURO?",
+      "hint": "Pasar de este juego para todos (la ronda no puntúa)",
+      "done": "{{host}} ha pasado de {{game}}: esta ronda no cuenta",
+      "doneSelf": "Has pasado de {{game}}: esta ronda no cuenta",
+      "short": "SALTAR"
     }
   },
   "team": {

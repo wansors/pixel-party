@@ -201,6 +201,14 @@
       "solved": "solved",
       "off": "off",
       "steps": "steps"
+    },
+    "skip": {
+      "button": "SKIP GAME",
+      "confirm": "SURE?",
+      "hint": "Skip this game for everyone (the round scores no points)",
+      "done": "{{host}} skipped {{game}}: no points this round",
+      "doneSelf": "You skipped {{game}}: no points this round",
+      "short": "SKIP"
     }
   },
   "team": {

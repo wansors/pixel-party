@@ -862,3 +862,22 @@ misses — each would be speculative or gated, and the project rule is "nothing 
     at the same slider position.
 - **Kept open**: more produced songs (like the theme) would beat synthesized loops if the user makes
   them. That would take a per-mood mp3 list next to the chip songs in the director.
+
+### D33 — The host can skip a round — DONE
+
+- **Date**: 2026-10-04. **Context**: requested for launch. If a game misbehaves in the middle of a
+  party (a bug, a stuck state, a round nobody understands), everyone had to wait it out.
+- **What**:
+  - A host-only `SKIP_ROUND` intent, accepted while a round is in its intro or being played. The
+    engine publishes `ROUND_SKIPPED` (round, game, who), drops the game state and goes straight to
+    the next round's intro, or to the final ranking after the last round.
+  - A skipped round scores nothing and feeds nothing to the post-match analysis. There's no result
+    screen for it.
+  - In the client, the host gets a **SKIP GAME** button in the room header during the intro and the
+    round. The first click arms it (**SURE?**, red); a second click within 3 s skips. The button
+    drops focus after each click, so the game's SPACE/ENTER can't press it again. On phones it reads
+    **SKIP**.
+  - Everyone sees a short notice ("Ana skipped Simon: no points this round"); the host's reads "You
+    skipped…". `rounds_skipped` is counted in `/api/metrics`.
+- **Not changed**: the protocol version stays at 4. The change only adds messages; an older client
+  ignores `ROUND_SKIPPED` and moves on at the next `ROUND_INTRO`.

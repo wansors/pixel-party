@@ -136,6 +136,24 @@ export class SessionEngine {
     return sequence
   }
 
+  // The host's escape hatch (SKIP_ROUND): drop the round in its intro or while it plays — no points, no
+  // analysis — and go straight to the next intro (or the final ranking). False outside a round.
+  skipRound(byPlayerId: PlayerId): boolean {
+    const inRound = this.phase === 'intro' || this.phase === 'playing' || this.phase === 'finishing'
+    if (!inRound) return false
+    const now = this.clock.now()
+    this.publish({
+      type: 'ROUND_SKIPPED',
+      round: this.roundIndex + 1,
+      minigameId: this.sequence[this.roundIndex] as MiniGameId,
+      byPlayerId,
+    })
+    this.game = undefined
+    this.gameState = undefined
+    this.advance(now)
+    return true
+  }
+
   onInput(playerId: PlayerId, input: unknown): void {
     if (this.phase !== 'playing' || !this.game || !this.roundSet.has(playerId)) return
     this.acted.add(playerId)

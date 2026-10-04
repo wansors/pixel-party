@@ -296,6 +296,47 @@ describe('SessionEngine', () => {
     expect(engine.isFinished).toBe(true)
   })
 
+  test('the host can skip a round in its intro or mid-game: no points, straight to the next', () => {
+    const room = Room.create('SKIP', 12)
+    room.add(Player.create({ id: 'a', name: 'a', color: '#fff', avatar: 'x' }))
+    room.add(Player.create({ id: 'b', name: 'b', color: '#fff', avatar: 'x' }))
+    room.configure(['button-masher', 'color-trap', 'number-rush'], 3)
+
+    let t = 0
+    const captured: ServerMsg[] = []
+    const engine = new SessionEngine(
+      room,
+      { toRoom: (_c, m) => captured.push(m) },
+      { now: () => t },
+      noRandom,
+      CONFIG,
+    )
+    engine.start()
+    // Round 1 skipped during its intro.
+    expect(engine.skipRound('a')).toBe(true)
+    // Round 2 skipped while it plays (after the intro and a few ticks of input).
+    for (let i = 0; i < 4; i++) {
+      t += 1000 / CONFIG.tickHz
+      engine.onInput('a', { kind: 'mash' })
+      engine.tick()
+    }
+    expect(engine.skipRound('a')).toBe(true)
+    // Round 3 plays out normally.
+    for (let i = 0; i < 2000 && !engine.isFinished; i++) {
+      t += 1000 / CONFIG.tickHz
+      engine.onInput('a', { kind: 'mash' })
+      engine.onInput('a', { kind: 'tap' })
+      engine.tick()
+    }
+    const skipped = captured.flatMap((m) => (m.type === 'ROUND_SKIPPED' ? [m.round] : []))
+    expect(skipped).toEqual([1, 2])
+    const results = captured.flatMap((m) => (m.type === 'ROUND_RESULT' ? [m.round] : []))
+    expect(results).toEqual([3])
+    expect(engine.isFinished).toBe(true)
+    // Nothing to skip once the session is over.
+    expect(engine.skipRound('a')).toBe(false)
+  })
+
   test('caps rounds at the number of distinct games (no-repeat)', () => {
     const room = Room.create('CAP', 10)
     room.add(Player.create({ id: 'a', name: 'a', color: '#fff', avatar: 'x' }))

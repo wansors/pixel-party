@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, type OnInit, inject } from '@angular/core'
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  type OnInit,
+  computed,
+  inject,
+  signal,
+} from '@angular/core'
 import { ActivatedRoute, Router } from '@angular/router'
 import { TranslocoPipe } from '@jsverse/transloco'
 import { AVATARS, type AvatarId, PLAYER_COLORS } from '@pp/shared'
@@ -37,6 +45,31 @@ export class RoomComponent implements OnInit {
   readonly store = inject(RoomStore)
   private readonly route = inject(ActivatedRoute)
   private readonly router = inject(Router)
+
+  // Host-only "skip game" button (intro or mid-round): the first click arms it, a second one within
+  // 3 s skips — so a stray click can't throw away a round everyone is enjoying.
+  readonly canSkip = computed(
+    () => this.store.isHost() && (this.store.view() === 'intro' || this.store.view() === 'round'),
+  )
+  readonly skipArmed = signal(false)
+  private disarmTimer?: ReturnType<typeof setTimeout>
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => clearTimeout(this.disarmTimer))
+  }
+
+  onSkip(button: HTMLElement): void {
+    // Drop focus so the game's SPACE/ENTER keys can't press the button again.
+    button.blur()
+    clearTimeout(this.disarmTimer)
+    if (this.skipArmed()) {
+      this.skipArmed.set(false)
+      this.store.skipRound()
+      return
+    }
+    this.skipArmed.set(true)
+    this.disarmTimer = setTimeout(() => this.skipArmed.set(false), 3000)
+  }
 
   // 1-based round indices for the header's progress pips.
   pips(total: number): number[] {

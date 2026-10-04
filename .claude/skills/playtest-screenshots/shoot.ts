@@ -4,7 +4,7 @@
 // $PP_SHOTS_DIR/<tag>/ (default ./shots/<tag>/).
 //
 // Usage: bun shoot.ts <tag> <width>x<height> <game-id>[,<game-id>...] [--join] [--lobby] [--me-host]
-//        [--lang=es] [--keys=ArrowRight,Space*800] [--more=3] [--bots=11] [--perf]
+//        [--lang=es] [--keys=ArrowRight,Space*800] [--more=3] [--bots=11] [--perf] [--skip]
 // Bots: a game with a strategy module in ./bots/<game-id>.ts is played for real by all three bots
 // (default export `(snapshot, myPlayerId) => input | input[] | null`, called every 150 ms); other games
 // get generic junk inputs.
@@ -16,6 +16,8 @@
 //         frames since the previous shot: fps, p95/max frame gap, Phaser step cost (avg/p95/max ms),
 //         long tasks, JS heap, and the live scene's display objects / tweens plus the texture count
 //         (steady growth = a leak).
+// --skip: with --me-host, the browser host skips round 1 mid-game with the header's SKIP GAME button
+//         (shots: `-skip-armed` after the first click, `-skipped` after the confirming one).
 // Env:   PP_CLIENT (http://localhost:4200)  PP_SERVER (http://localhost:3000)
 //        CHROME (auto-detected)  PP_SHOTS_DIR (./shots)
 import { existsSync } from 'node:fs'
@@ -290,6 +292,15 @@ const done = new Promise<void>((resolve) => {
       setTimeout(async () => {
         if (round !== r) return
         await shot(`${g}-play1`)
+        if (flags.includes('--skip') && meHost && r === 1) {
+          await page.click('button.skip')
+          await Bun.sleep(300)
+          await shot(`${g}-skip-armed`)
+          await page.click('button.skip')
+          await Bun.sleep(900)
+          await shot(`${g}-skipped`)
+          return
+        }
         // Interact (the --keys sequence, or a few taps around the middle of the canvas + Space), then
         // another look — `--more` times over.
         const interact = async (): Promise<void> => {
@@ -324,6 +335,8 @@ const done = new Promise<void>((resolve) => {
     } else if (m.type === 'ROUND_STATE' && m.final) {
       // The round's frozen last frame (FINISH stamp), shown for the server's grace period.
       setTimeout(() => void shot(`${current}-finish`), 450)
+    } else if (m.type === 'ROUND_SKIPPED') {
+      playing = false
     } else if (m.type === 'ROUND_RESULT') {
       playing = false
       setTimeout(() => void shot(`${current}-result`), 900)
