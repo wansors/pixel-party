@@ -540,15 +540,15 @@ export class PangScene extends MiniGameScene<PangSnapshot> {
       // As big as the column allows, but every row (thumbnail + its label) must fit the arena's height:
       // the column count (1–3) that gives the biggest thumbnails.
       const availH = PANG.h * this.arena.scale
-      const fit = (cols: number): number =>
+      const boxHeight = (cols: number): number =>
         Math.floor(
           Math.min(
             ((colW - (cols - 1) * 8) / cols) * PANG.h,
             availH / Math.max(1, Math.ceil(others.length / cols)) - labelH,
           ),
         )
-      const cols = [1, 2, 3].reduce((best, c) => (fit(c) > fit(best) ? c : best), 1)
-      const boxH = fit(cols)
+      const cols = [1, 2, 3].reduce((best, c) => (boxHeight(c) > boxHeight(best) ? c : best), 1)
+      const boxH = boxHeight(cols)
       const boxW = Math.round(boxH / PANG.h)
       this.miniBoxes = others.map((_, i) => ({
         x: colX + (i % cols) * (boxW + 8),
