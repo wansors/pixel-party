@@ -98,7 +98,8 @@ The image runs as the unprivileged `bun` user and also works with `--read-only`.
 
 ## Health and monitoring
 
-- **Health check** built into the image: `GET /api/health` every 30 s. `docker ps` shows `healthy`.
+- **Health check** built into the image: `GET /api/health` every 30 s. `docker ps` / `podman ps` show
+  `healthy`.
 - `GET /api/health` → `{"ok":true,"version":"1.2.0"}`: the running version, handy when a tab shows an
   old one.
 - `GET /api/metrics` → JSON with the live gauges (`active_rooms`, `running_sessions`) and counters since

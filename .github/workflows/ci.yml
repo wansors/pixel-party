@@ -165,7 +165,10 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: true
+          # Docker media types, not OCI: Podman only honours a HEALTHCHECK in Docker-format images.
+          # (Provenance attestations need OCI, so they're off.)
+          outputs: type=image,push=true,oci-mediatypes=false
+          provenance: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: VERSION=${{ steps.version.outputs.version }}
