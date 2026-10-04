@@ -15,6 +15,8 @@ const isStr = (v: unknown): v is string => typeof v === 'string'
 const isNum = (v: unknown): v is number => typeof v === 'number'
 const isBool = (v: unknown): v is boolean => typeof v === 'boolean'
 const isStrArray = (v: unknown): v is string[] => Array.isArray(v) && v.every(isStr)
+// Every mini-game input is a JSON object; null, primitives and arrays never are.
+const isObj = (v: unknown): boolean => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 // Exhaustive per-type table. `satisfies Record<ClientMsg['type'], Validator>` is load-bearing: adding a
 // future ClientMsg variant FAILS typecheck until a validator is added here.
@@ -24,7 +26,7 @@ const VALIDATORS = {
     isStr(m.color) &&
     isStr(m.avatar) &&
     (m.touch === undefined || isBool(m.touch)),
-  REJOIN: (m) => isStr(m.playerId),
+  REJOIN: (m) => isStr(m.playerId) && isStr(m.token),
   SET_READY: (m) => isBool(m.ready),
   HOST_CONFIG: (m) =>
     isStrArray(m.minigameIds) &&
@@ -37,7 +39,7 @@ const VALIDATORS = {
   START_SESSION: () => true,
   PLAY_AGAIN: () => true,
   SKIP_ROUND: () => true,
-  MINIGAME_INPUT: (m) => 'input' in m,
+  MINIGAME_INPUT: (m) => isObj(m.input),
   LEAVE: () => true,
 } satisfies Record<ClientMsg['type'], Validator>
 

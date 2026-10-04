@@ -241,8 +241,13 @@ seeded variants of the same content, because snapshots are broadcast to the whol
       into one file, web client, one port), pushed to Docker Hub for amd64 and arm64 by every green
       push to `develop`, which also bumps the version (minor; major for breaking changes).
       [`docker.md`](docker.md) documents every variable and the port.
-  - [ ] Configure `DOCKERHUB_USERNAME` (variable) and `DOCKERHUB_TOKEN` (secret) in GitHub
+  - [ ] Add the `DOCKERHUB_TOKEN` secret in GitHub
         ([`release.md`](release.md)). Until then CI skips the release step.
+- [x] **Pre-release audit** (D37, [`security-audit.md`](security-audit.md)): two one-message
+      server crashes, a seat takeover and the debug error page fixed; inputs, names and rooms
+      bounded; CSP; CI hardened; license notices in the image. Fuzz and socket tests keep it so.
+  - [ ] *Owner*: check the music's Suno license (credit it or replace it), pick one spelling of the
+        author's name, and optionally delete the local `refs/original` backup.
 - [x] **PC first, also on screen** (D34): the mobile-friendly badges, the **Mobile** filter and the
       intro's device badge only show while someone in the room joined from a phone.
 

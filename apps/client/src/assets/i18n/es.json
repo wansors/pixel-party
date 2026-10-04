@@ -212,7 +212,8 @@
       "hint": "Pasar de este juego para todos (la ronda no puntúa)",
       "done": "{{host}} ha pasado de {{game}}: esta ronda no cuenta",
       "doneSelf": "Has pasado de {{game}}: esta ronda no cuenta",
-      "short": "SALTAR"
+      "short": "SALTAR",
+      "failed": "{{game}} ha petado y nos lo saltamos: esta ronda no cuenta"
     }
   },
   "team": {
@@ -224,7 +225,8 @@
     "room_full": "La sala está a tope",
     "session_in_progress": "La partida ya ha empezado",
     "name_taken": "Ese nombre ya lo tiene otro",
-    "no_games_fit": "Ningún juego elegido vale para tantos jugadores"
+    "no_games_fit": "Ningún juego elegido vale para tantos jugadores",
+    "invalid_name": "Ponte un nombre con alguna letra, anda"
   },
   "catalog": {
     "axis": {

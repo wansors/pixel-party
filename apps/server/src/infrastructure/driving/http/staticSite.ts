@@ -30,6 +30,34 @@ const TYPES: Record<string, string> = {
   '.mp3': 'audio/mpeg',
 }
 const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.txt', '.svg'])
+
+// Browser hardening for every page and asset: everything (scripts, styles, fonts, music, the socket)
+// comes from this server, so the policy only allows this origin. Styles allow inline (Angular's style
+// bindings), images allow data:/blob: (Phaser's built-in textures). Angular's critical-CSS inlining is
+// off in angular.json: its inline <script> would be blocked.
+// The Host header ends up inside a header value: hostnames, IPv4/IPv6 and a port only.
+const safeHost = (host: string | null): string =>
+  host && /^[A-Za-z0-9.:[\]-]+$/.test(host) ? host : 'localhost'
+
+function securityHeaders(host: string): Record<string, string> {
+  return {
+    'content-security-policy': [
+      "default-src 'self'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob:",
+      "font-src 'self'",
+      "media-src 'self' blob:",
+      `connect-src 'self' ws://${host} wss://${host}`,
+      "object-src 'none'",
+      "base-uri 'self'",
+      "frame-ancestors 'none'",
+      "form-action 'self'",
+    ].join('; '),
+    'x-content-type-options': 'nosniff',
+    'referrer-policy': 'no-referrer',
+  }
+}
 // Angular's output hashing: `main-YIJL4BYC.js`, `chunk-…`, `styles-…`.
 const HASHED = /-[A-Z0-9]{8}\.(js|css)$/
 const FOREVER = 'public, max-age=31536000, immutable'
@@ -61,12 +89,18 @@ export function loadStaticSite(dir: string): StaticSite | null {
   return {
     serve(req) {
       if (req.method !== 'GET' && req.method !== 'HEAD') return null
-      const path = decodeURIComponent(new URL(req.url).pathname)
+      let path: string
+      try {
+        path = decodeURIComponent(new URL(req.url).pathname)
+      } catch {
+        return null // malformed %-escape: not one of ours (404)
+      }
       const asset = assets.get(path) ?? (extname(path) === '' ? index : undefined)
       if (!asset) return null
       const headers: Record<string, string> = {
         'content-type': asset.type,
         'cache-control': asset.cache,
+        ...securityHeaders(safeHost(req.headers.get('host'))),
       }
       if (asset.gzip && (req.headers.get('accept-encoding') ?? '').includes('gzip')) {
         return new Response(asset.gzip, {

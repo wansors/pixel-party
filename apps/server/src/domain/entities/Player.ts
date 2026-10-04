@@ -7,6 +7,8 @@ export interface PlayerProps {
   avatar: string
   // Joined from a touch-first device (phone/tablet) — only drives the lobby's mobile hints.
   touch?: boolean
+  // Secret proof of the seat for REJOIN (the id is public: every LOBBY_STATE lists it).
+  rejoinToken?: string
 }
 
 // Anonymous, ephemeral player (no account in Phase 1). Private constructor + static factories:
@@ -22,12 +24,22 @@ export class Player {
     private _ready = false,
     private _connected = true,
     readonly touch = false,
+    readonly rejoinToken = '',
   ) {}
 
   static create(props: PlayerProps): Player {
     const name = props.name.trim()
     if (name.length === 0) throw new Error('player name must not be empty')
-    return new Player(props.id, name, props.color, props.avatar, false, true, props.touch === true)
+    return new Player(
+      props.id,
+      name,
+      props.color,
+      props.avatar,
+      false,
+      true,
+      props.touch === true,
+      props.rejoinToken ?? '',
+    )
   }
 
   static reconstitute(props: PlayerProps & { ready: boolean; connected: boolean }): Player {
@@ -39,6 +51,7 @@ export class Player {
       props.ready,
       props.connected,
       props.touch === true,
+      props.rejoinToken ?? '',
     )
   }
 

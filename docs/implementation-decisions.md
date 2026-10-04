@@ -984,7 +984,8 @@ misses — each would be speculative or gated, and the project rule is "nothing 
 
     A run whose commit is no longer the head of `develop` steps aside; the newer run releases both.
     Pull requests build the image without pushing it. The whole release step waits until the
-    `DOCKERHUB_USERNAME` variable exists, so CI stays green before the account is configured.
+    `DOCKERHUB_TOKEN` secret exists (the user defaults to `wansors`), so CI stays green before the
+    account is configured.
   - **Docs**: [`docker.md`](docker.md) is for whoever runs the image. It covers:
     - the one port and how to remap it;
     - every variable, with its default and when to change it;
@@ -1000,3 +1001,42 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   - the first real image build runs in CI.
 - **Trade-off**: release commits land on `develop` from CI, so local clones `git pull --rebase`
   before pushing.
+
+### D37 — Pre-release audit: nothing a client sends may take the server down — DONE
+
+- **Date**: 2026-10-04. **Context**: the repository and the image go public with the beta, so the code
+  was audited first. Full report: [`security-audit.md`](security-audit.md).
+- **Found, and confirmed live**:
+  - a `null` game input crashed the whole process, and so did a blank name;
+  - any player could take any seat, the host's included, with its public id;
+  - the image served Bun's debug error page;
+  - names, colors and avatars were unchecked, and frames could be 16 MB;
+  - room creation was unbounded;
+  - CI gave its token full scope and used unpinned actions;
+  - the third-party license notices were missing from the image.
+- **What**:
+  - Guards around every handler, the sweeper and each session tick. A game that throws loses only
+    its round (`ROUND_SKIPPED` with `byPlayerId: null`, "… broke down and was skipped").
+  - `MINIGAME_INPUT` must be an object; the shared `cleanName` cleans names; colors and avatars are
+    kept to the offered sets.
+  - A secret `rejoinToken` per seat (protocol 5).
+  - `development: false` and `NODE_ENV=production` in the image.
+  - 64 KB frames and at most 100 rooms.
+  - CSP and hardening headers; Angular's critical-CSS inlining is off, since its inline script would
+    break under the policy.
+  - CI: a read-only token by default, SHA-pinned actions plus Dependabot, the dispatch input passed
+    through `env`. The release needs only the `DOCKERHUB_TOKEN` secret (the user defaults to
+    `wansors`).
+  - License notices in `/app/licenses`.
+- **Kept as tests**:
+  - `inputFuzz.test.ts`: 55 games × malformed inputs, under a second;
+  - `test/socket.test.ts`: the null input, blank and oversized names, rejoin without the token.
+- **Verified**:
+  - the image built with Podman (181 MB) and run `--read-only` as uid 1000;
+  - its health check passes;
+  - a full session played against it in headless Chrome, with no console errors and no CSP
+    violations;
+  - the attack probes re-run against the container;
+  - a protocol fuzz of ~9,000 hostile intents: 0 crashes, 0 handler errors.
+- **Left to the owner**: the music's Suno license, one spelling of the author's name, and deleting the
+  local `refs/original` backup.

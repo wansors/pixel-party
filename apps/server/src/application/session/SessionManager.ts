@@ -7,8 +7,12 @@ import type { Publisher } from '../ports/Publisher'
 import type { SessionConfig } from './SessionEngine'
 import { SessionEngine } from './SessionEngine'
 
+// A mini-game threw: where ('input' | 'tick' | 'abort') and what, for the logs.
+export type SessionErrorHandler = (roomCode: string, where: string, err: unknown) => void
+
 // Owns the live session engines keyed by room code. The simulation loop calls tickAll() each tick; the
-// WS adapter routes START_SESSION -> start() and MINIGAME_INPUT -> input().
+// WS adapter routes START_SESSION -> start() and MINIGAME_INPUT -> input(). A game that throws costs
+// at most its round, never the room or the process.
 export class SessionManager {
   private readonly engines = new Map<string, SessionEngine>()
 
@@ -17,6 +21,7 @@ export class SessionManager {
     private readonly clock: Clock,
     private readonly random: Random,
     private readonly config: SessionConfig,
+    private readonly onError: SessionErrorHandler = () => {},
   ) {}
 
   isRunning(roomCode: string): boolean {
@@ -40,8 +45,13 @@ export class SessionManager {
     return this.engines.get(roomCode)?.skipRound(byPlayerId) ?? false
   }
 
+  // An input the game chokes on is dropped; the round goes on.
   input(roomCode: string, playerId: PlayerId, input: unknown): void {
-    this.engines.get(roomCode)?.onInput(playerId, input)
+    try {
+      this.engines.get(roomCode)?.onInput(playerId, input)
+    } catch (err) {
+      this.onError(roomCode, 'input', err)
+    }
   }
 
   // State-restore messages for a reconnecting socket; empty if no session is running for that room.
@@ -55,7 +65,20 @@ export class SessionManager {
 
   tickAll(): void {
     for (const [code, engine] of this.engines) {
-      engine.tick()
+      try {
+        engine.tick()
+      } catch (err) {
+        // A game that throws mid-round can't be trusted to recover: drop the round (no points, the
+        // next one starts) so one bug never stalls the party. Outside a round, end the session.
+        this.onError(code, 'tick', err)
+        let skipped = false
+        try {
+          skipped = engine.skipRound(null)
+        } catch (abortErr) {
+          this.onError(code, 'abort', abortErr)
+        }
+        if (!skipped) this.engines.delete(code)
+      }
       if (engine.isFinished) this.engines.delete(code)
     }
   }

@@ -209,7 +209,8 @@
       "hint": "Skip this game for everyone (the round scores no points)",
       "done": "{{host}} skipped {{game}}: no points this round",
       "doneSelf": "You skipped {{game}}: no points this round",
-      "short": "SKIP"
+      "short": "SKIP",
+      "failed": "{{game}} broke down and was skipped: no points this round"
     }
   },
   "team": {
@@ -221,7 +222,8 @@
     "room_full": "Room is full",
     "session_in_progress": "Session already in progress",
     "name_taken": "That name is taken",
-    "no_games_fit": "No picked game fits this many players"
+    "no_games_fit": "No picked game fits this many players",
+    "invalid_name": "Pick a name with some letters in it"
   },
   "catalog": {
     "axis": {

@@ -12,6 +12,7 @@ describe('ServerMsgRouter', () => {
       playerId: 'p1',
       roomCode: 'ABCD',
       isHost: true,
+      rejoinToken: 'secret',
     })
     expect(seen).toBe('p1')
   })

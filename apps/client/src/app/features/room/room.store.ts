@@ -225,20 +225,31 @@ export class RoomStore {
     return `pp:pid:${this.code()}`
   }
 
+  // This tab's seat in the room: { id, token } as stored on WELCOME (anything else → join fresh).
+  private storedSeat(): { id: string; token: string } | null {
+    try {
+      const seat = JSON.parse(sessionStorage.getItem(this.pidKey()) ?? 'null')
+      return typeof seat?.id === 'string' && typeof seat?.token === 'string' ? seat : null
+    } catch {
+      return null
+    }
+  }
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────────────────────────
   connect(code: string, identity: Identity): void {
     this.code.set(code)
     this.identity = identity
     this.audio.ensureMusic()
 
-    // A seat id persisted from an earlier connection lets a page reload / socket drop rejoin in place.
-    const storedId = sessionStorage.getItem(this.pidKey())
-    if (storedId) this.net.restoreIdentity(storedId)
+    // A seat persisted from an earlier connection lets a page reload / socket drop rejoin in place.
+    const seat = this.storedSeat()
+    if (seat) this.net.restoreIdentity(seat.id, seat.token)
 
     this.net.connected$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((up) => {
       if (!up) return
       // With a known id this is a reconnect → reclaim the seat; otherwise it is a first-time join.
-      if (this.net.playerId) this.net.send({ type: 'REJOIN', playerId: this.net.playerId })
+      const { playerId, rejoinToken } = this.net
+      if (playerId && rejoinToken) this.net.send({ type: 'REJOIN', playerId, token: rejoinToken })
       else this.sendJoin()
     })
     this.net.reconnecting$
@@ -265,7 +276,10 @@ export class RoomStore {
       case 'WELCOME':
         this.selfId.set(msg.playerId)
         this.isHost.set(msg.isHost)
-        sessionStorage.setItem(this.pidKey(), msg.playerId)
+        sessionStorage.setItem(
+          this.pidKey(),
+          JSON.stringify({ id: msg.playerId, token: msg.rejoinToken }),
+        )
         this.game?.handle(msg)
         break
       case 'LOBBY_STATE':
@@ -317,10 +331,12 @@ export class RoomStore {
         // No result screen: the next ROUND_INTRO (or FINAL_RANKING) is already on its way.
         this.clearCountdown()
         this.showNotice(
-          this.transloco.translate(
-            msg.byPlayerId === this.selfId() ? 'room.skip.doneSelf' : 'room.skip.done',
-            { host: this.playerName(msg.byPlayerId), game: this.gameName(msg.minigameId) },
-          ),
+          msg.byPlayerId === null
+            ? this.transloco.translate('room.skip.failed', { game: this.gameName(msg.minigameId) })
+            : this.transloco.translate(
+                msg.byPlayerId === this.selfId() ? 'room.skip.doneSelf' : 'room.skip.done',
+                { host: this.playerName(msg.byPlayerId), game: this.gameName(msg.minigameId) },
+              ),
         )
         this.audio.sfx.whoosh()
         this.game?.handle(msg)

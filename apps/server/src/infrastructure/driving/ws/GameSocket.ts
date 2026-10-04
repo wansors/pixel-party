@@ -181,6 +181,7 @@ export function startGameServer(deps: GameSocketDeps) {
       playerId: result.playerId,
       roomCode: ws.data.roomCode,
       isHost: result.isHost,
+      rejoinToken: result.rejoinToken,
     })
     const room = deps.rooms.get(ws.data.roomCode)
     if (room) {
@@ -202,7 +203,9 @@ export function startGameServer(deps: GameSocketDeps) {
     if (ws.data.playerId) return
     const room = deps.rooms.get(ws.data.roomCode)
     const player = room?.get(msg.playerId)
-    if (!room || !player) {
+    // A wrong token is answered like a gone seat: ids are public, so only the seat's own client (which
+    // got the token in its WELCOME) may reclaim it.
+    if (!room || !player || player.rejoinToken !== msg.token) {
       // Seat is gone (e.g. dropped from the lobby). Tell the client so it can fall back to a fresh JOIN.
       send(ws, { type: 'ACK', intent: 'REJOIN', ok: false, reason: 'unknown_player' })
       return
@@ -221,6 +224,7 @@ export function startGameServer(deps: GameSocketDeps) {
       playerId: player.id,
       roomCode: ws.data.roomCode,
       isHost: ws.data.isHost,
+      rejoinToken: player.rejoinToken,
     })
     broadcastLobby(room)
     for (const m of manager.resumeMessages(room.code)) send(ws, m)
@@ -504,8 +508,25 @@ export function startGameServer(deps: GameSocketDeps) {
     broadcastLobby(room)
   }
 
+  // Last line of defence for everything a client can trigger: an exception in a handler is logged and
+  // answered, never allowed to take the process (and every room in it) down.
+  const guard = (where: string, fn: () => void): void => {
+    try {
+      fn()
+    } catch (err) {
+      deps.metrics.inc('errors')
+      deps.logger.error('handler_failed', {
+        where,
+        error: String(err),
+        stack: (err as Error)?.stack,
+      })
+    }
+  }
+
   const server = Bun.serve<SocketData, never>({
     port: deps.port ?? config.port,
+    // Production answers a failed request with a bare 500, not Bun's debug page (stack + source).
+    development: config.isDevelopment,
     async fetch(req, srv) {
       const url = new URL(req.url)
 
@@ -536,6 +557,8 @@ export function startGameServer(deps: GameSocketDeps) {
     },
     websocket: {
       idleTimeout: config.wsIdleTimeoutSec,
+      // The biggest legitimate frame (a full HOST_CONFIG) is ~2 KB; Bun's default would take 16 MB.
+      maxPayloadLength: 64 * 1024,
       // Bun's automatic ping/pong keepalive. Without it, a connection with no application traffic for
       // `wsIdleTimeoutSec` (e.g. a player idling in the lobby, or reading a self-paced puzzle round)
       // gets force-closed as idle even though the player is still there.
@@ -557,10 +580,11 @@ export function startGameServer(deps: GameSocketDeps) {
           send(ws, { type: 'ERROR', reason: 'malformed message' })
           return
         }
-        dispatch(ws, parsed)
+        const msg = parsed
+        guard(`message:${msg.type}`, () => dispatch(ws, msg))
       },
       close(ws) {
-        teardown(ws)
+        guard('close', () => teardown(ws))
       },
     },
   })
@@ -570,7 +594,21 @@ export function startGameServer(deps: GameSocketDeps) {
       server.publish(roomTopic(code), JSON.stringify(msg))
     },
   }
-  manager = new SessionManager(publisher, deps.clock, deps.random, deps.sessionConfig)
+  manager = new SessionManager(
+    publisher,
+    deps.clock,
+    deps.random,
+    deps.sessionConfig,
+    (room, where, err) => {
+      deps.metrics.inc('errors')
+      deps.logger.error('session_failed', {
+        room,
+        where,
+        error: String(err),
+        stack: (err as Error)?.stack,
+      })
+    },
+  )
   const loop = buildSimulationLoop(manager, deps.sessionConfig.tickHz)
 
   // Idle-room reaper: sweep on a coarse interval (min of the idle window and 60 s) so abandoned lobbies
@@ -578,19 +616,23 @@ export function startGameServer(deps: GameSocketDeps) {
   // drops the room.
   const idleMs = deps.roomIdleTimeoutSec * 1000
   const sweepTimer = setInterval(
-    () => {
-      const reaped = reapIdleRooms({
-        rooms: deps.rooms,
-        manager,
-        now: deps.clock.now(),
-        idleMs,
-        onReap: (code) => {
-          server.publish(roomTopic(code), JSON.stringify({ type: 'ERROR', reason: 'room_closed' }))
-          deps.logger.info('room_reaped', { room: code })
-        },
-      })
-      if (reaped.length) deps.metrics.inc('rooms_reaped', reaped.length)
-    },
+    () =>
+      guard('sweep', () => {
+        const reaped = reapIdleRooms({
+          rooms: deps.rooms,
+          manager,
+          now: deps.clock.now(),
+          idleMs,
+          onReap: (code) => {
+            server.publish(
+              roomTopic(code),
+              JSON.stringify({ type: 'ERROR', reason: 'room_closed' }),
+            )
+            deps.logger.info('room_reaped', { room: code })
+          },
+        })
+        if (reaped.length) deps.metrics.inc('rooms_reaped', reaped.length)
+      }),
     Math.min(idleMs, 60_000),
   )
 

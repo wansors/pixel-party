@@ -17,7 +17,7 @@ They all share **one port**. Source code and full docs: <https://github.com/wans
 docker run -d --name pixel-party --restart unless-stopped \
   -p 3000:3000 \
   -e PUBLIC_URL=http://192.168.1.50:3000 \
-  <dockerhub-user>/pixel-party:latest
+  wansors/pixel-party:latest
 ```
 
 Then, on every device on the same network, open **`http://<IP of the machine running Docker>:3000`**
@@ -85,6 +85,17 @@ All are optional; the defaults are what a LAN party needs. Set them with `-e NAM
 written to disk. Restarting the container ends every room in progress, so do updates between parties.
 The image runs as the unprivileged `bun` user and also works with `--read-only`.
 
+## Security
+
+- The container runs as the unprivileged `bun` user, writes nothing, and works `--read-only`.
+- Every page carries a strict Content-Security-Policy: scripts, styles, fonts, music and the
+  WebSocket may only come from this server.
+- The server survives anything a client sends. Malformed messages are refused, frames are capped at
+  64 KB, names are cleaned, and rooms are capped at 100. A game that crashes only loses its round.
+- A seat can only be reclaimed by the tab that holds its secret token.
+- It was built for a **trusted LAN** and has no accounts or passwords. Don't expose the port to the
+  internet. Details: <https://github.com/wansors/pixel-party/blob/develop/docs/security-audit.md>.
+
 ## Health and monitoring
 
 - **Health check** built into the image: `GET /api/health` every 30 s. `docker ps` shows `healthy`.
@@ -112,7 +123,7 @@ cable for the server if you can; over Wi-Fi, the router matters more than the se
 ```yaml
 services:
   pixel-party:
-    image: <dockerhub-user>/pixel-party:latest
+    image: wansors/pixel-party:latest
     container_name: pixel-party
     restart: unless-stopped
     ports:
@@ -131,7 +142,7 @@ services:
 
 - **Standard (any OS)**: `-p 3000:3000`, as above. Set `PUBLIC_URL` if you want the log to show the
   right address.
-- **Linux, host network**: `docker run -d --network host <dockerhub-user>/pixel-party`. No `-p`
+- **Linux, host network**: `docker run -d --network host wansors/pixel-party`. No `-p`
   needed. The server sees the real LAN addresses and prints them itself. Change the port with
   `-e PORT=…`.
 - **Behind a reverse proxy** (nginx, Caddy, Traefik): forward everything to port 3000, **including
@@ -154,7 +165,7 @@ version.
 ## Updating
 
 ```bash
-docker pull <dockerhub-user>/pixel-party:latest
+docker pull wansors/pixel-party:latest
 docker rm -f pixel-party
 docker run -d --name pixel-party … (same command as before)
 ```

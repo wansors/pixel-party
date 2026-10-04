@@ -167,6 +167,14 @@ pub/sub: `ws.subscribe(topic)` / `server.publish(topic, data)`.
   - `room:<code>` — all lobby/round/scoreboard events for that room publish here.
   - `player:<id>` — targeted server-internal pushes (e.g., a result the tick loop emits).
 - JSON messages to start; switch to binary only if measurements demand it.
+- **Hardening** (D37, [`security-audit.md`](security-audit.md)):
+  - Frames are capped at 64 KB.
+  - Every handler, the sweeper and each session tick run in a guard: a throw is logged
+    (`handler_failed` / `session_failed`), never fatal. A game that throws while ticking loses its
+    round, which is skipped with `byPlayerId: null`.
+  - Names are cleaned (`cleanName`), and colors and avatars kept to the offered sets.
+  - Rooms are capped at 100.
+  - Static responses carry a strict CSP plus `nosniff` and `no-referrer`.
 
 ### Protocol (typed, shared — no Zod)
 `packages/shared/src/protocol.ts` is the single source of truth for both apps:
@@ -230,6 +238,8 @@ decoupled and talk through one thin service.
   not per frame).
 - **Reconnect**: bounded exponential backoff `min(1000 * 2^attempts, 30_000)`, suppressed on
   intentional close or protocol mismatch. Rejoin restores the player's session scoreboard (FR-2.3).
+  The tab keeps `{ id, token }` in `sessionStorage`. `REJOIN` must carry the secret `rejoinToken`
+  that only that seat's `WELCOME` contained, because player ids are public (D37).
 - **Build**: Angular 22 via `@angular/build` (`ng serve`/`ng build`), TypeScript 6.0 (Angular 22's range). The WS URL is derived from
   `location` at runtime, so a build talks to whichever server served it (see *Serving* below).
 - **Keys**: `MiniGameScene` captures Space/Enter/arrows while a scene runs (blurring a focused page

@@ -66,7 +66,7 @@ socket share an origin. Assets are gzipped, and the hashed bundles are cached by
 One image holds the whole game: server, web client, API and WebSocket on one port.
 
 ```bash
-docker run -d --name pixel-party --restart unless-stopped -p 3000:3000 <dockerhub-user>/pixel-party
+docker run -d --name pixel-party --restart unless-stopped -p 3000:3000 wansors/pixel-party
 ```
 
 Then open `http://<that machine's LAN IP>:3000` on every device. [`docs/docker.md`](docs/docker.md)

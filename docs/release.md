@@ -46,10 +46,12 @@ The release commit lands on `develop` on GitHub, so your local `develop` is one 
 
 ### 1. Docker Hub
 
-1. Create the repository `pixel-party` under your Docker Hub user (public), or let the first push
-   create it.
+1. The repository is <https://hub.docker.com/r/wansors/pixel-party> (public).
 2. *Account settings → Personal access tokens → Generate new token*, with **Read, Write, Delete**
    permissions. Docker Hub requires Delete for the step that updates the repository description.
+   Make a new token for this repository rather than reusing another project's: GitHub secrets can't
+   be read back or shared between repositories of a personal account. A token per project can also
+   be revoked on its own.
 
 ### 2. GitHub repository settings
 
@@ -57,12 +59,12 @@ The release commit lands on `develop` on GitHub, so your local `develop` is one 
 
 | Kind | Name | Value |
 |---|---|---|
-| Variable | `DOCKERHUB_USERNAME` | your Docker Hub user, e.g. `wansors` |
-| Secret | `DOCKERHUB_TOKEN` | the token from step 1 |
-| Variable *(optional)* | `DOCKERHUB_IMAGE` | full image name, if it isn't `<DOCKERHUB_USERNAME>/pixel-party` |
+| **Secret** | `DOCKERHUB_TOKEN` | the token from step 1, the only thing you **must** add |
+| Variable *(optional)* | `DOCKERHUB_USERNAME` | the Docker Hub user to log in as, if it isn't `wansors` |
+| Variable *(optional)* | `DOCKERHUB_IMAGE` | the full image name, if it isn't `<user>/pixel-party` |
 
-The release step is **skipped while `DOCKERHUB_USERNAME` is unset**, so CI stays green before Docker
-Hub is configured. No versions are bumped until then either.
+**While `DOCKERHUB_TOKEN` is missing, the release does nothing**: the step leaves a notice and CI stays
+green. No versions are bumped until then either.
 
 *Settings → Actions → General → Workflow permissions*: **Read and write permissions**, so the release
 can push its commit and tag. If `develop` is a protected branch, allow GitHub Actions to push to it,

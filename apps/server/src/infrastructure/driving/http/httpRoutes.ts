@@ -14,6 +14,10 @@ export interface HttpDeps {
   metricsSnapshot?: () => Record<string, number>
 }
 
+// Far beyond any LAN party (a handful of rooms), low enough that a script hammering POST /api/rooms
+// can't fill the memory before the idle sweeper (ROOM_IDLE_TIMEOUT_SEC) clears unused rooms.
+export const MAX_ROOMS = 100
+
 const cors = (origin: string | null): Record<string, string> => {
   // Reflect only allowlisted origins (fail-closed); cookies ride the WS upgrade, not these calls.
   if (origin && config.allowedOrigins.includes(origin)) {
@@ -47,6 +51,10 @@ export async function handleHttp(req: Request, deps: HttpDeps): Promise<Response
   }
 
   if (url.pathname === '/api/rooms' && req.method === 'POST') {
+    if (deps.rooms.list().length >= MAX_ROOMS) {
+      deps.logger?.warn('room_limit', { rooms: MAX_ROOMS })
+      return json({ error: 'too_many_rooms' }, 503, origin)
+    }
     const { code } = deps.createRoom.execute()
     deps.metrics?.inc('rooms_created')
     deps.logger?.info('room_created', { code })

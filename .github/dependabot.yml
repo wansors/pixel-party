@@ -1,0 +1,11 @@
+# Keeps the SHA-pinned GitHub Actions in ci.yml current (one grouped PR a week). npm/bun packages are
+# upgraded by hand with the full gate (docs/backlog.md → Maintenance).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

@@ -8,6 +8,10 @@ export class CryptoIdGenerator implements IdGenerator {
     return crypto.randomUUID()
   }
 
+  secret(): string {
+    return crypto.randomUUID()
+  }
+
   roomCode(len: number): string {
     const bytes = new Uint8Array(len)
     crypto.getRandomValues(bytes)

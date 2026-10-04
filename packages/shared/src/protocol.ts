@@ -5,7 +5,7 @@ import type { TeamId } from './theme'
 // changed semantics). The server stamps it on WELCOME; the client compares against its own compiled
 // constant and surfaces a "please refresh" notice on mismatch — a stale cached bundle then fails loud
 // instead of misbehaving silently.
-export const PROTOCOL_VERSION = 4
+export const PROTOCOL_VERSION = 5
 
 // ---------------------------------------------------------------------------------------------------
 // Shared DTOs
@@ -96,8 +96,9 @@ export type ClientMsg =
   // with mobile-friendly badges and the Mobile filter — the party is PC-first (D21).
   | { type: 'JOIN'; name: string; color: string; avatar: string; touch?: boolean }
   // Reclaim an existing seat after a socket drop (transient reconnect or page reload). Carries the
-  // previously minted playerId; the server re-attaches it and replays the current session state.
-  | { type: 'REJOIN'; playerId: string }
+  // previously minted playerId plus the secret `token` its WELCOME carried (player ids are public: every
+  // LOBBY_STATE lists them); the server re-attaches the seat and replays the current session state.
+  | { type: 'REJOIN'; playerId: string; token: string }
   | { type: 'SET_READY'; ready: boolean }
   // Host-only: configure the session (which games, how many rounds, catch-up on/off). Ignored from
   // non-hosts. `handicap` omitted = leave the current setting unchanged.
@@ -128,7 +129,13 @@ export type ClientMsgType = ClientMsg['type']
 // Server -> Client messages.
 // ---------------------------------------------------------------------------------------------------
 
-export type JoinRejectReason = 'room_not_found' | 'room_full' | 'session_in_progress' | 'name_taken'
+export type JoinRejectReason =
+  | 'room_not_found'
+  | 'room_full'
+  | 'session_in_progress'
+  | 'name_taken'
+  // Nothing printable left after cleanName().
+  | 'invalid_name'
 
 export type ServerMsg =
   // First frame after upgrade: server-resolved identity + protocol version for the refresh check.
@@ -138,6 +145,8 @@ export type ServerMsg =
       playerId: string
       roomCode: string
       isHost: boolean
+      // Secret proof of this seat, sent only to its own socket: REJOIN must echo it.
+      rejoinToken: string
     }
   // Full lobby snapshot (roster + readiness + host config); re-sent on any lobby change.
   | {
@@ -167,8 +176,9 @@ export type ServerMsg =
   | { type: 'ROUND_STATE'; round: number; tick: number; state: unknown; final?: boolean }
   // A round finished — placements + points for this round.
   | { type: 'ROUND_RESULT'; round: number; result: RoundResultDto }
-  // The host skipped this round: no points, the next ROUND_INTRO (or FINAL_RANKING) follows at once.
-  | { type: 'ROUND_SKIPPED'; round: number; minigameId: MiniGameId; byPlayerId: string }
+  // The round was dropped with no points; the next ROUND_INTRO (or FINAL_RANKING) follows at once.
+  // `byPlayerId` is the host who skipped it, or null when the server dropped a game that failed.
+  | { type: 'ROUND_SKIPPED'; round: number; minigameId: MiniGameId; byPlayerId: string | null }
   // Session-wide cumulative ranking (shown between rounds).
   | { type: 'SCOREBOARD'; scores: ScoreEntryDto[] }
   // Session over — final ranking, plus the Phase 4 post-match analysis (radar per player + summary).

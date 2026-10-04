@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import type { ServerMsg } from '@pp/shared'
+import { AVATARS, PLAYER_COLORS, type ServerMsg } from '@pp/shared'
 
-// A browser reload opens the new socket and REJOINs before the server has processed the old socket's
-// close. That late close must not drop (lobby) or mark offline (mid-session) the reclaimed seat.
+// The game socket end to end: seat reclaiming (REJOIN), start refusals, and what a hostile or broken
+// client may send without taking the server down.
 process.env.ALLOWED_ORIGINS = 'http://test.local'
 
 const { CreateRoomUseCase } = await import('../src/application/use-cases/CreateRoomUseCase')
@@ -89,6 +89,17 @@ async function createRoom(): Promise<string> {
   return ((await res.json()) as { code: string }).code
 }
 
+async function join(code: string, name: string): Promise<{ client: Client; welcome: ServerMsg }> {
+  const client = await connect(code)
+  client.ws.send(JSON.stringify({ type: 'JOIN', name, color: '#29d3f2', avatar: 'owl' }))
+  return { client, welcome: await client.next('WELCOME') }
+}
+
+const healthy = async (): Promise<boolean> =>
+  (await fetch(`http://localhost:${server.port}/api/health`)).ok
+
+// A browser reload opens the new socket and REJOINs before the server has processed the old socket's
+// close. That late close must not drop (lobby) or mark offline (mid-session) the reclaimed seat.
 describe('REJOIN while the previous socket is still open (page reload race)', () => {
   test('keeps the reclaimed seat and closes the superseded socket', async () => {
     const code = await createRoom()
@@ -103,7 +114,9 @@ describe('REJOIN while the previous socket is still open (page reload race)', ()
 
     // The "reloaded page" reclaims the seat while socket A is still connected.
     const b = await connect(code)
-    b.ws.send(JSON.stringify({ type: 'REJOIN', playerId: welcome.playerId }))
+    b.ws.send(
+      JSON.stringify({ type: 'REJOIN', playerId: welcome.playerId, token: welcome.rejoinToken }),
+    )
     await b.next('WELCOME')
     await a.closed // the server closes the superseded socket…
 
@@ -138,5 +151,56 @@ describe('START_SESSION with a line-up that does not fit the headcount (D27)', (
     expect(ack).toMatchObject({ intent: 'START_SESSION', ok: false, reason: 'no_games_fit' })
 
     host.ws.close()
+  })
+})
+
+describe('REJOIN needs the seat token', () => {
+  test("another player can't take a seat with its public id", async () => {
+    const code = await createRoom()
+    const { client: host, welcome } = await join(code, 'Host')
+    if (welcome.type !== 'WELCOME') throw new Error('no welcome')
+    const { client: rival } = await join(code, 'Rival')
+    // The rival sees the host's id in every LOBBY_STATE, but not its token.
+    const thief = await connect(code)
+    thief.ws.send(JSON.stringify({ type: 'REJOIN', playerId: welcome.playerId, token: 'guess' }))
+    const ack = await thief.next('ACK')
+    expect(ack).toMatchObject({ intent: 'REJOIN', ok: false })
+    expect(host.ws.readyState).toBe(WebSocket.OPEN)
+    for (const c of [host, rival, thief]) c.ws.close()
+  })
+})
+
+describe('hostile messages never take the server down', () => {
+  test('a null game input is refused as malformed', async () => {
+    const code = await createRoom()
+    const { client: host } = await join(code, 'Host')
+    host.ws.send(JSON.stringify({ type: 'HOST_CONFIG', minigameIds: ['pang'], rounds: 1 }))
+    await host.next('LOBBY_STATE')
+    host.ws.send(JSON.stringify({ type: 'START_SESSION' }))
+    await host.next('ROUND_STATE')
+    host.ws.send(JSON.stringify({ type: 'MINIGAME_INPUT', input: null }))
+    expect(await host.next('ERROR')).toMatchObject({ reason: 'malformed message' })
+    expect(await healthy()).toBe(true)
+    host.ws.close()
+  })
+
+  test('a blank or invisible name is rejected; a long one is cut', async () => {
+    const code = await createRoom()
+    const blank = await connect(code)
+    blank.ws.send(JSON.stringify({ type: 'JOIN', name: ' \u200b ', color: '#fff', avatar: 'cat' }))
+    expect(await blank.next('JOIN_REJECTED')).toMatchObject({ reason: 'invalid_name' })
+    expect(await healthy()).toBe(true)
+
+    const long = await connect(code)
+    long.ws.send(
+      JSON.stringify({ type: 'JOIN', name: 'Z'.repeat(5000), color: 'url(x)', avatar: 'dragon' }),
+    )
+    const lobby = await long.next('LOBBY_STATE')
+    if (lobby.type !== 'LOBBY_STATE') throw new Error('no lobby')
+    const [seat] = lobby.players
+    expect(seat?.name).toBe('Z'.repeat(16))
+    expect(seat?.color).toBe(PLAYER_COLORS[0])
+    expect(seat?.avatar).toBe(AVATARS[0])
+    long.ws.close()
   })
 })

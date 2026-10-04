@@ -69,6 +69,7 @@ Documentation lives in `docs/`:
 - `implementation-decisions.md` — KISS decision log (what was built/deferred and why; revertable).
 - `docker.md` — running the Docker image (the port, every env var; also the Docker Hub page) and
   `release.md` — how a green push to `develop` becomes a version + image (D36).
+- `security-audit.md` — the pre-release audit: findings, fixes and what's left to the owner (D37).
 
 ## Code layout (implemented)
 
@@ -122,6 +123,7 @@ types in `packages/shared/src/games/` + one Phaser scene extending `MiniGameScen
 id) registered in `game/scenes/index.ts` + a `MINIGAMES` catalog entry (incl. the required
 `mobileFriendly` call and the `players` fit — hard min/max + recommended range, D27) +
 `catalog.minigame.<id>` name/blurb in both `en.json` and `es.json`. The session engine and wire contract don't change.
+`inputFuzz.test.ts` picks every catalog game up on its own: `onInput` must ignore any malformed object (D37).
 
 ### Project skills (`.claude/skills/`)
 `verify-all` (full quality gate; bootstraps Bun if missing), `playtest-screenshots` (bots + headless

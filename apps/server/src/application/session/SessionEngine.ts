@@ -138,7 +138,8 @@ export class SessionEngine {
 
   // The host's escape hatch (SKIP_ROUND): drop the round in its intro or while it plays — no points, no
   // analysis — and go straight to the next intro (or the final ranking). False outside a round.
-  skipRound(byPlayerId: PlayerId): boolean {
+  // `byPlayerId` null: the server dropped a game that threw.
+  skipRound(byPlayerId: PlayerId | null): boolean {
     const inRound = this.phase === 'intro' || this.phase === 'playing' || this.phase === 'finishing'
     if (!inRound) return false
     const now = this.clock.now()

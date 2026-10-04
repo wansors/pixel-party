@@ -40,9 +40,15 @@ LABEL org.opencontainers.image.title="Pixel Party" \
 WORKDIR /app
 COPY --from=build /app/dist/server.js ./server.js
 COPY --from=build /app/apps/client/dist/client/browser ./client
+# The licenses that travel with the code: the project's own, and the notices of every third-party
+# package bundled into the client (collected by the Angular build). The font's OFL is in client/fonts.
+COPY --from=build /app/LICENSE ./licenses/LICENSE
+COPY --from=build /app/apps/client/dist/client/3rdpartylicenses.txt ./licenses/THIRD-PARTY-NOTICES.txt
 
-# No transpiler cache on disk: the bundle is plain JS, and the container can run --read-only.
-ENV PORT=3000 \
+# NODE_ENV=production: Bun answers errors with a bare 500 instead of its debug page. No transpiler
+# cache on disk: the bundle is plain JS, and the container can run --read-only.
+ENV NODE_ENV=production \
+    PORT=3000 \
     CLIENT_DIR=/app/client \
     BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
 # Nothing is written to disk: the game keeps everything in memory, so the image runs unprivileged.

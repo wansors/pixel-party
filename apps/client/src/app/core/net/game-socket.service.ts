@@ -24,18 +24,25 @@ export class GameSocketService {
   private lastUrl = ''
 
   private _playerId?: string
+  private _rejoinToken?: string
   get playerId(): string | undefined {
     return this._playerId
   }
+  // The seat's secret from WELCOME; REJOIN must carry it.
+  get rejoinToken(): string | undefined {
+    return this._rejoinToken
+  }
 
-  // Seed a known id (from sessionStorage) so the first frame after connect is a REJOIN, not a JOIN.
-  restoreIdentity(playerId: string): void {
+  // Seed a known seat (from sessionStorage) so the first frame after connect is a REJOIN, not a JOIN.
+  restoreIdentity(playerId: string, rejoinToken: string): void {
     this._playerId = playerId
+    this._rejoinToken = rejoinToken
   }
 
   // Drop the identity so the next connect re-JOINs fresh (used when a REJOIN is refused).
   resetIdentity(): void {
     this._playerId = undefined
+    this._rejoinToken = undefined
   }
 
   get isConnected(): boolean {
@@ -86,6 +93,7 @@ export class GameSocketService {
       }
       if (msg.type === 'WELCOME') {
         this._playerId = msg.playerId
+        this._rejoinToken = msg.rejoinToken
         if (msg.protocolVersion !== PROTOCOL_VERSION) {
           this.protocolMismatch = true
           console.warn(
