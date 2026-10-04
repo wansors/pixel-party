@@ -180,18 +180,6 @@ The theme already plays here. Use this one to alternate between sessions or for 
 - **Exclude**: `slow ballad, sad, lo-fi, fade out`
 - **File**: `final-anthem.mp3` · **Length**: 1.5–2.5 min
 
-## Spanish-flavoured alternatives (optional)
-
-The party is Spanish. A few takes with local colour can be fun as extra variants. Keep them
-instrumental during rounds.
-- **Think, "verbena" quiz**:
-  `chiptune pasodoble, 8-bit Spanish fair music, 100 bpm, playful brass-like square lead, festive and cheeky, game show, no vocals`
-- **Tension, flamenco standoff**:
-  `chiptune flamenco, 8-bit, 108 bpm, rhythmic palmas on noise channel, phrygian square-wave lead, tense and dramatic, no vocals`
-- **Final, "fiesta"**:
-  `chiptune rumba, 8-bit Spanish party anthem, 118 bpm, joyful, handclaps, catchy hook, festive ending`.
-  With vocals, put Spanish lyrics in the Lyrics field.
-
 ## Checklist before adding a track
 
 - [ ] Steady tempo, no slow intro, hard stop (no fade).
