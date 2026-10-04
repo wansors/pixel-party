@@ -66,9 +66,9 @@ The release commit lands on `develop` on GitHub, so your local `develop` is one 
 **While `DOCKERHUB_TOKEN` is missing, the release does nothing**: the step leaves a notice and CI stays
 green. No versions are bumped until then either.
 
-*Settings → Actions → General → Workflow permissions*: **Read and write permissions**, so the release
-can push its commit and tag. If `develop` is a protected branch, allow GitHub Actions to push to it,
-or the release commit is rejected.
+No other repository setting is needed. `ci.yml` grants the release job `contents: write` itself, so
+*Settings → Actions → General → Workflow permissions* can stay at the read-only default. If `develop`
+is a protected branch, allow GitHub Actions to push to it, or the release commit is rejected.
 
 ## Locally
 
