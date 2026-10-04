@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core'
 import { TranslocoPipe } from '@jsverse/transloco'
 import { AudioService } from '../core/audio/audio.service'
 
@@ -38,6 +38,7 @@ import { AudioService } from '../core/audio/audio.service'
       }
     </div>
   `,
+  changeDetection: ChangeDetectionStrategy.Eager,
   styles: `
     .audio { position: relative; }
     .snd { font-size: var(--fs-sm); padding: 0.35rem 0.5rem; }

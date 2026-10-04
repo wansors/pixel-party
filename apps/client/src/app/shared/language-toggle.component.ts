@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core'
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core'
 import { TranslocoPipe } from '@jsverse/transloco'
 import { LanguageService } from '../core/i18n/language.service'
 
@@ -22,6 +22,7 @@ import { LanguageService } from '../core/i18n/language.service'
       }
     </div>
   `,
+  changeDetection: ChangeDetectionStrategy.Eager,
   styles: `
     .lang { display: inline-flex; gap: 0.25rem; }
     .seg { font-size: var(--fs-xs); padding: 0.3rem 0.4rem; opacity: 0.6; }

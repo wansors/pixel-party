@@ -13,7 +13,8 @@
     "importHelpers": true,
     "target": "ES2022",
     "module": "preserve",
-    "baseUrl": ".",
+    // The app imports @pp/shared from the monorepo, outside this folder.
+    "rootDir": "../..",
     "paths": {
       "@pp/shared": ["../../packages/shared/src/index.ts"],
       "@pp/*": ["../../packages/*/src"]

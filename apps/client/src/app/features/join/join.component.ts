@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http'
-import { Component, inject, signal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { ActivatedRoute, Router } from '@angular/router'
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco'
@@ -97,6 +97,7 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
       <footer><app-language-toggle /></footer>
     </main>
   `,
+  changeDetection: ChangeDetectionStrategy.Eager,
   styles: `
     .join { display: grid; justify-content: center; align-content: safe center; height: 100dvh;
       overflow-y: auto; padding: 3.5rem 1rem; gap: 0.75rem; }

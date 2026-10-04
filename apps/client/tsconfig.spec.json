@@ -3,12 +3,19 @@
   "compilerOptions": {
     "outDir": "./out-tsc/spec",
     "types": ["jasmine"],
-    "baseUrl": ".",
     "paths": {
       "@pp/shared": ["../../packages/shared/src/index.ts"],
       "@pp/*": ["../../packages/*/src"],
-      "phaser": ["src/testing/phaser-stub.ts"]
+      "phaser": ["./src/testing/phaser-stub.ts"]
     }
   },
-  "include": ["src/**/*.d.ts", "src/**/*.spec.ts"]
+  "include": ["src/**/*.d.ts", "src/**/*.spec.ts"],
+  "angularCompilerOptions": {
+    "extendedDiagnostics": {
+      "checks": {
+        "nullishCoalescingNotNullable": "suppress",
+        "optionalChainNotNullable": "suppress"
+      }
+    }
+  }
 }

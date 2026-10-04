@@ -1,4 +1,4 @@
-import { Component } from '@angular/core'
+import { ChangeDetectionStrategy, Component } from '@angular/core'
 import { RouterOutlet } from '@angular/router'
 
 // Thin shell: hosts the router outlet. The join screen, lobby, round canvas and scoreboards live in
@@ -6,6 +6,7 @@ import { RouterOutlet } from '@angular/router'
 @Component({
   selector: 'app-root',
   imports: [RouterOutlet],
+  changeDetection: ChangeDetectionStrategy.Eager,
   template: '<router-outlet />',
 })
 export class App {}

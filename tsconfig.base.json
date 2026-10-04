@@ -9,8 +9,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
-    "baseUrl": ".",
-    "paths": { "@pp/*": ["packages/*/src"] }
+    "paths": { "@pp/*": ["./packages/*/src"] }
   },
   "exclude": ["node_modules", "dist"]
 }
