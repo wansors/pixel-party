@@ -38,19 +38,20 @@ const json = (body: unknown, status: number, origin: string | null): Response =>
 
 // Minimal /api surface: health, create room, and a room-exists probe the join screen uses before
 // upgrading the socket. Room JOIN identity is resolved on the WS side; these are pre-upgrade helpers.
-export async function handleHttp(req: Request, deps: HttpDeps): Promise<Response> {
-  const url = new URL(req.url)
+// `path` is the request path below BASE_PATH (defaults to the URL's own path).
+export async function handleHttp(req: Request, deps: HttpDeps, path?: string): Promise<Response> {
+  const pathname = path ?? new URL(req.url).pathname
   const origin = req.headers.get('origin')
 
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(origin) })
 
-  if (url.pathname === '/api/health') return json({ ok: true, version: APP_VERSION }, 200, origin)
+  if (pathname === '/api/health') return json({ ok: true, version: APP_VERSION }, 200, origin)
 
-  if (url.pathname === '/api/metrics' && req.method === 'GET') {
+  if (pathname === '/api/metrics' && req.method === 'GET') {
     return json(deps.metricsSnapshot?.() ?? {}, 200, origin)
   }
 
-  if (url.pathname === '/api/rooms' && req.method === 'POST') {
+  if (pathname === '/api/rooms' && req.method === 'POST') {
     if (deps.rooms.list().length >= MAX_ROOMS) {
       deps.logger?.warn('room_limit', { rooms: MAX_ROOMS })
       return json({ error: 'too_many_rooms' }, 503, origin)
@@ -61,8 +62,8 @@ export async function handleHttp(req: Request, deps: HttpDeps): Promise<Response
     return json({ code }, 201, origin)
   }
 
-  if (url.pathname.startsWith('/api/rooms/') && req.method === 'GET') {
-    const code = url.pathname.slice('/api/rooms/'.length)
+  if (pathname.startsWith('/api/rooms/') && req.method === 'GET') {
+    const code = pathname.slice('/api/rooms/'.length)
     const room = deps.rooms.get(code)
     return json({ exists: !!room, phase: room?.phase ?? null }, room ? 200 : 404, origin)
   }

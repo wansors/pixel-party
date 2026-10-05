@@ -5,8 +5,8 @@ import { ActivatedRoute, Router } from '@angular/router'
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco'
 import { APP_VERSION, AVATARS, type AvatarId, MINIGAMES, PLAYER_COLORS } from '@pp/shared'
 import { firstValueFrom } from 'rxjs'
-import { environment } from '../../../environments/environment'
 import { AudioService } from '../../core/audio/audio.service'
+import { appUrl } from '../../core/net/app-url'
 import { AudioControlsComponent } from '../../shared/audio-controls.component'
 import { LanguageToggleComponent } from '../../shared/language-toggle.component'
 import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
@@ -202,9 +202,7 @@ export class JoinComponent {
 
   async createRoom(): Promise<void> {
     try {
-      const res = await firstValueFrom(
-        this.http.post<{ code: string }>(`${environment.apiUrl}/api/rooms`, {}),
-      )
+      const res = await firstValueFrom(this.http.post<{ code: string }>(appUrl('api/rooms'), {}))
       this.enter(res.code)
     } catch {
       this.message.set(this.transloco.translate('join.cantReach'))
@@ -216,7 +214,7 @@ export class JoinComponent {
     if (!code) return
     try {
       const res = await firstValueFrom(
-        this.http.get<{ exists: boolean }>(`${environment.apiUrl}/api/rooms/${code}`),
+        this.http.get<{ exists: boolean }>(appUrl(`api/rooms/${encodeURIComponent(code)}`)),
       )
       if (!res.exists) {
         this.message.set(this.transloco.translate('join.roomNotFound', { code }))

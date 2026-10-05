@@ -2,7 +2,7 @@ import { Injectable, inject, NgZone } from '@angular/core'
 import type { ClientMsg, ServerMsg } from '@pp/shared'
 import { PROTOCOL_VERSION } from '@pp/shared'
 import { BehaviorSubject, Subject } from 'rxjs'
-import { environment } from '../../../environments/environment'
+import { socketUrl } from './app-url'
 
 // Owns the raw WebSocket. Angular components/feature services consume state$; Phaser reads it through
 // GameClient. The socket handlers run OUTSIDE the Angular zone (the round feature boots Phaser +
@@ -51,7 +51,7 @@ export class GameSocketService {
 
   // Connect to a specific room. Identity (playerId/isHost) is resolved server-side after JOIN.
   connect(roomCode: string): void {
-    this.lastUrl = `${environment.wsBase}?room=${encodeURIComponent(roomCode)}`
+    this.lastUrl = `${socketUrl('ws')}?room=${encodeURIComponent(roomCode)}`
     if (this.reconnectTimer !== undefined) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = undefined

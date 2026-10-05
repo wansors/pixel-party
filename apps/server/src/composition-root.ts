@@ -47,7 +47,7 @@ export function bootstrap() {
     },
   }
 
-  const site = config.serveClient ? loadStaticSite(config.clientDir) : null
+  const site = config.serveClient ? loadStaticSite(config.clientDir, config.basePath) : null
   const server = startGameServer({
     rooms,
     createRoom,
@@ -62,7 +62,7 @@ export function bootstrap() {
   })
 
   logger.info('server_listening', {
-    url: `http://localhost:${server.port}`,
+    url: `http://localhost:${server.port}${config.basePath}/`,
     version: APP_VERSION,
     client: !!site,
   })
@@ -80,6 +80,6 @@ function lanUrls(port: number): string[] {
   const lan = Object.values(networkInterfaces())
     .flat()
     .filter((a) => a && a.family === 'IPv4' && !a.internal)
-    .map((a) => `http://${a?.address}:${port}`)
-  return [...lan, `http://localhost:${port}`]
+    .map((a) => `http://${a?.address}:${port}${config.basePath}/`)
+  return [...lan, `http://localhost:${port}${config.basePath}/`]
 }

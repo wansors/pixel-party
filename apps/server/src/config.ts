@@ -9,6 +9,19 @@ export const envInt = (raw: string | undefined, fallback: number, min = 1): numb
   return Number.isFinite(n) && n >= min ? n : fallback
 }
 
+// Where a reverse proxy mounts the game, e.g. `/pixel-party` (docs/docker.md). Empty = the domain
+// root. Normalised to a leading slash and no trailing one; anything but plain path segments is a
+// configuration error, reported at startup.
+export const parseBasePath = (raw: string | undefined): string => {
+  const trimmed = (raw ?? '').trim().replace(/\/+$/, '')
+  if (!trimmed) return ''
+  const path = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
+  if (!/^(\/[A-Za-z0-9._~-]+)+$/.test(path)) {
+    throw new Error(`BASE_PATH must be a URL path like /pixel-party (got "${raw}")`)
+  }
+  return path
+}
+
 // Browser origins allowed to open the WS upgrade. Fail-closed: when unset, the dev client origin is
 // admitted ONLY in an explicit development environment; everywhere else the list is empty so an
 // unconfigured non-dev deployment rejects every origin. Parsed once, then frozen for the process.
@@ -26,6 +39,7 @@ const parseAllowedOrigins = (): string[] => {
 
 export const config = {
   port: envInt(process.env.PORT, 3000),
+  basePath: parseBasePath(process.env.BASE_PATH),
   isDevelopment,
   // Fixed-timestep sim loop for real-time mini-games (party games don't need 60).
   tickHz: envInt(process.env.TICK_HZ, 20),

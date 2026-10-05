@@ -1,11 +1,12 @@
 // Global styles — retro classic-arcade pixel-art identity (see docs/art-direction.md).
 // Palette mirrors packages/shared/src/theme.ts (PALETTE); keep the two in sync.
 
-// Self-hosted pixel font (CSP-safe, bundled from public/ — no external CDN). "Press Start 2P" (OFL).
-// See art-direction §3. The monospace stack stays as a fallback while the woff2 loads.
+// Self-hosted pixel font (CSP-safe, no external CDN). "Press Start 2P" (OFL; the license ships as
+// fonts/OFL.txt). See art-direction §3. A relative url(): the build bundles the file next to the
+// styles, so it loads under any BASE_PATH. The monospace stack stays as a fallback while it loads.
 @font-face {
   font-family: 'PixelArcade';
-  src: url('/fonts/press-start-2p.woff2') format('woff2');
+  src: url('./assets/fonts/press-start-2p.woff2') format('woff2');
   font-display: swap;
 }
 

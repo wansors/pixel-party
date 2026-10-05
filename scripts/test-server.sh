@@ -29,10 +29,12 @@ B_RC=0
 echo "=== group A: non-WS server suites + packages/shared ==="
 bun test "${NONWS[@]}" "${SHARED_TESTS[@]}" || A_RC=$?
 
-if [[ ${#WS[@]} -gt 0 ]]; then
+# One process per WS suite: each sets its own env (ALLOWED_ORIGINS, BASE_PATH…) before importing
+# config, which is read once per process.
+for f in "${WS[@]}"; do
   echo ""
-  echo "=== group B: WS suites ==="
-  bun test "${WS[@]}" || B_RC=$?
-fi
+  echo "=== group B: $f ==="
+  bun test "$f" || B_RC=$?
+done
 
 if [[ $A_RC -ne 0 || $B_RC -ne 0 ]]; then exit 1; fi

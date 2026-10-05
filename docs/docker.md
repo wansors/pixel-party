@@ -59,6 +59,7 @@ All are optional; the defaults are what a LAN party needs. Set them with `-e NAM
 |---|---|---|
 | `PUBLIC_URL` | *(empty)* | The address printed in the startup log for players to open, e.g. `http://192.168.1.50:3000`. Inside a container the server only sees its internal Docker IP (172.x.x.x), which players can't reach, so set it if you go by the log. It changes nothing else. |
 | `PORT` | `3000` | Port the server listens on **inside** the container. Map the same one with `-p`. |
+| `BASE_PATH` | *(empty)* | Serve the game below a path instead of the domain root, e.g. `/pixel-party` → `https://example.com/pixel-party/`. For reverse proxies that host several apps on one domain; see *Under a path*. |
 | `ROOM_MAX_PLAYERS` | `12` | Seats per room. 12 is the most any game is built for, so higher values are capped at 12. Each game also declares its own player range; the lobby shows which ones fit the room. |
 | `HANDICAP_ENABLED` | `false` | Whether new rooms start with the **catch-up** option on: up to a bonus for the players furthest behind, so the ranking stays open. The host can still switch it on/off in every lobby. |
 | `HANDICAP_MAX_BONUS_PCT` | `20` | Size of that catch-up bonus: at most this many percent extra points per round, for the player furthest behind (0–100). |
@@ -147,9 +148,43 @@ services:
   needed. The server sees the real LAN addresses and prints them itself. Change the port with
   `-e PORT=…`.
 - **Behind a reverse proxy** (nginx, Caddy, Traefik): forward everything to port 3000, **including
-  the WebSocket upgrade on `/ws`**, and keep the `Host` header. Nginx needs
-  `proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";` on `/ws`. Caddy and
-  Traefik do it by default.
+  the WebSocket upgrade on `/ws`**, and keep the `Host` header *with its port* (nginx:
+  `$http_host`, not `$host`). Nginx also needs `proxy_http_version 1.1`, `Upgrade` and `Connection`
+  headers. Caddy and Traefik forward WebSockets by default.
+- **Hosting platforms** must allow WebSockets on the plan you use. Some only do on paid tiers, and
+  then the page loads but stays on "Connecting…".
+
+### Under a path (`BASE_PATH`)
+
+To serve the game at `https://example.com/pixel-party/` next to other apps, start it with
+`-e BASE_PATH=/pixel-party`. The server writes that path into the page's `<base href>`, so the
+bundles, the font, the music, the API, the WebSocket, the invite links and the room URLs all live
+below it. `https://example.com/pixel-party` (no slash) redirects to the slash.
+
+It works with either kind of proxy rule. The server accepts requests with the prefix and without it,
+so pick whichever your proxy does:
+
+```nginx
+map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+
+server {
+  listen 443 ssl;
+  server_name example.com;
+
+  location /pixel-party/ {
+    proxy_pass http://127.0.0.1:3000;     # passes /pixel-party/... through as is
+    # proxy_pass http://127.0.0.1:3000/;  # or strips it: the game copes with both
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+  }
+}
+```
+
+Caddy: `handle_path /pixel-party/* { reverse_proxy 127.0.0.1:3000 }`, which strips the prefix, or
+`handle /pixel-party/* { reverse_proxy 127.0.0.1:3000 }`, which keeps it. The health check (and
+`/api/health`) answers on both paths.
 
 ## Tags and platforms
 

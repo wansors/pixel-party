@@ -3,6 +3,7 @@ import type { MiniGameId } from '@pp/shared'
 import { CHIP_SONGS, ChipMusic } from '../../../game/chipMusic'
 import { roundMusic } from '../../../game/musicMoods'
 import { Sfx } from '../../../game/Sfx'
+import { appUrl } from '../net/app-url'
 
 const THEME_FADE_MS = 600
 
@@ -51,7 +52,7 @@ export class AudioService {
   // opening an invite link directly — so on rejection retry once on the first pointer press.
   ensureMusic(): void {
     if (!this.music) {
-      this.music = new Audio('/audio/background-song.mp3')
+      this.music = new Audio(appUrl('audio/background-song.mp3'))
       this.music.loop = true
       this.music.volume = this.musicVolume()
     }

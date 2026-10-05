@@ -53,7 +53,7 @@ shared visual language so all screens and mini-games read as one coherent system
 - For long-form/body text (rules, tooltips) a slightly more legible pixel/mono face may be used if the
   headline font hurts readability — legibility wins over theme for instructions.
 
-> **Implemented** — `apps/client/public/fonts/press-start-2p.woff2` is the full Press Start 2P (OFL,
+> **Implemented** — `apps/client/src/assets/fonts/press-start-2p.woff2` (bundled by the build; its OFL is `public/fonts/OFL.txt`) is the full Press Start 2P (OFL,
 > `OFL.txt` alongside), exposed as the `PixelArcade` family. It is an 8 px bitmap design, so pixel-font
 > text uses the fixed type scale in `styles.scss` — `--fs-xs` 8 px, `--fs-sm` 12, `--fs-md` 16,
 > `--fs-lg` 24, `--fs-xl` 32, `--fs-xxl` 48, `--fs-huge` 64 (crisp at multiples of 8, and of 4 on 2x

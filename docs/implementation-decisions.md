@@ -1041,3 +1041,31 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   - a protocol fuzz of ~9,000 hostile intents: 0 crashes, 0 handler errors.
 - **Left to the owner**: the music's Suno license, one spelling of the author's name, and deleting the
   local `refs/original` backup.
+
+### D38 — `BASE_PATH`: the game below a path, behind any proxy — DONE
+
+- **Date**: 2026-10-05. **Context**: requested in order to deploy the image inside a path (e.g.
+  `https://example.com/pixel-party/`) on a proxy that hosts other apps on the same domain.
+- **What**:
+  - **Server**: `BASE_PATH` (normalised to `/a/b`; anything but path segments stops the server at
+    startup).
+    - The static site rewrites index.html's `<base href="/">` to `<base href="/a/b/">` when it loads,
+      so **one image works at any path** and the client needs no rebuild.
+    - Requests are served **with the prefix and without it**, so a proxy that passes `/a/b/...`
+      through and one that strips it both work, with the same setting.
+    - `/a/b` without a slash redirects (308) to `/a/b/`.
+    - The startup banner and the logged URL include the path.
+  - **Client**: every URL is resolved against `document.baseURI` (`core/net/app-url`): the API
+    calls, the WebSocket, the invite link and the music. The font is now a relative `url()` that the
+    build bundles into `media/`, moved from `public/fonts` to `src/assets/fonts` (its OFL stays in
+    `public/fonts`). In dev the base stays `/` and the dev-server proxy is unchanged.
+  - Fixed on the way: a long invite URL pushed the lobby's COPY LINK button out of its card.
+- **Tests**:
+  - `test/basePath.test.ts`: normalisation and errors, base href, the redirect, assets and the API
+    with and without the prefix, the WebSocket below the prefix;
+  - `app-url.spec.ts`;
+  - the WebSocket suites now get one process each, since each sets its own environment before
+    `config` is read.
+- **Verified**: the image behind a real nginx on `/pixel-party`, with a pass-through rule and a
+  stripping rule. Both served the page, assets, font, music, API and WebSocket, and a full browser
+  session (join, lobby, skip, three games, podium) ran with no errors.

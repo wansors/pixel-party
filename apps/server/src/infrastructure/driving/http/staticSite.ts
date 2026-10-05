@@ -6,8 +6,9 @@ import { extname, join, relative } from 'node:path'
 // front, Angular's hashed bundles are cached for good, index.html never is, and client routes
 // (/room/ABCD) fall back to index.html.
 export interface StaticSite {
-  // The response for a GET/HEAD of a site path, or null when it isn't one (the caller 404s).
-  serve(req: Request): Response | null
+  // The response for a GET/HEAD of a site path, or null when it isn't one (the caller 404s). `path` is
+  // the request path below BASE_PATH (defaults to the URL's own path).
+  serve(req: Request, path?: string): Response | null
 }
 
 interface Asset {
@@ -15,6 +16,8 @@ interface Asset {
   type: string
   cache: string
   gzip?: Uint8Array<ArrayBuffer>
+  // Served instead of the file when set (index.html with its <base href> rewritten).
+  body?: Uint8Array<ArrayBuffer>
 }
 
 const TYPES: Record<string, string> = {
@@ -58,8 +61,8 @@ function securityHeaders(host: string): Record<string, string> {
     'referrer-policy': 'no-referrer',
   }
 }
-// Angular's output hashing: `main-YIJL4BYC.js`, `chunk-…`, `styles-…`.
-const HASHED = /-[A-Z0-9]{8}\.(js|css)$/
+// Angular's output hashing: `main-YIJL4BYC.js`, `chunk-…`, `styles-…`, the bundled font in `media/`.
+const HASHED = /-[A-Z0-9]{8}\.(js|css|woff2)$/
 const FOREVER = 'public, max-age=31536000, immutable'
 
 function walk(dir: string): string[] {
@@ -69,29 +72,40 @@ function walk(dir: string): string[] {
   })
 }
 
-export function loadStaticSite(dir: string): StaticSite | null {
+// The build says <base href="/">; under BASE_PATH it must name the mount point, so the page's relative
+// URLs (bundles, styles, fonts, music, API, socket) and Angular's router all resolve below it.
+function rewriteBase(html: string, basePath: string): string {
+  return basePath ? html.replace('<base href="/">', `<base href="${basePath}/">`) : html
+}
+
+export function loadStaticSite(dir: string, basePath = ''): StaticSite | null {
   if (!existsSync(join(dir, 'index.html'))) return null
   const assets = new Map<string, Asset>()
   for (const file of walk(dir)) {
     const path = `/${relative(dir, file).split('\\').join('/')}`
     const ext = extname(file)
+    const body =
+      path === '/index.html'
+        ? new TextEncoder().encode(rewriteBase(readFileSync(file, 'utf8'), basePath))
+        : undefined
     assets.set(path, {
       file,
       type: TYPES[ext] ?? 'application/octet-stream',
       cache:
         path === '/index.html' ? 'no-cache' : HASHED.test(path) ? FOREVER : 'public, max-age=3600',
+      body: body as Uint8Array<ArrayBuffer> | undefined,
       gzip: COMPRESSIBLE.has(ext)
-        ? (Bun.gzipSync(readFileSync(file)) as Uint8Array<ArrayBuffer>)
+        ? (Bun.gzipSync(body ?? readFileSync(file)) as Uint8Array<ArrayBuffer>)
         : undefined,
     })
   }
   const index = assets.get('/index.html') as Asset
   return {
-    serve(req) {
+    serve(req, rawPath) {
       if (req.method !== 'GET' && req.method !== 'HEAD') return null
       let path: string
       try {
-        path = decodeURIComponent(new URL(req.url).pathname)
+        path = decodeURIComponent(rawPath ?? new URL(req.url).pathname)
       } catch {
         return null // malformed %-escape: not one of ours (404)
       }
@@ -107,7 +121,7 @@ export function loadStaticSite(dir: string): StaticSite | null {
           headers: { ...headers, 'content-encoding': 'gzip', vary: 'accept-encoding' },
         })
       }
-      return new Response(Bun.file(asset.file), { headers })
+      return new Response(asset.body ?? Bun.file(asset.file), { headers })
     },
   }
 }

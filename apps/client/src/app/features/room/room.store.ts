@@ -26,6 +26,7 @@ import { linesOf, pickLine } from '../../../game/quips'
 import { AudioService } from '../../core/audio/audio.service'
 import { CatalogI18nService } from '../../core/i18n/catalog-i18n.service'
 import { localizeStat } from '../../core/i18n/stat-i18n'
+import { appUrl } from '../../core/net/app-url'
 import { GameSocketService } from '../../core/net/game-socket.service'
 import type { RadarAxis } from '../../shared/skill-radar.component'
 
@@ -218,7 +219,7 @@ export class RoomStore {
   })
 
   get inviteUrl(): string {
-    return `${location.origin}/?code=${this.code()}`
+    return appUrl(`?code=${this.code()}`)
   }
 
   private pidKey(): string {

@@ -37,6 +37,9 @@
 // ── Room code card ──────────────────────────────────────────────────────────
 .code-card {
   display: grid;
+  // One column no wider than the card: a long invite URL (a BASE_PATH, a long host) ellipsizes
+  // instead of widening the column and pushing the copy button out.
+  grid-template-columns: minmax(0, 1fr);
   justify-items: center;
   gap: 0.35rem;
   padding: 0.8rem 0.6rem;
@@ -78,6 +81,9 @@
     color: var(--c-cyan);
     font-family: monospace;
     font-size: 0.75rem;
+  }
+  .arcade-btn {
+    flex-shrink: 0;
   }
 }
 

@@ -248,6 +248,8 @@ seeded variants of the same content, because snapshots are broadcast to the whol
       bounded; CSP; CI hardened; license notices in the image. Fuzz and socket tests keep it so.
   - [ ] *Owner*: check the music's Suno license (credit it or replace it), pick one spelling of the
         author's name, and optionally delete the local `refs/original` backup.
+- [x] **`BASE_PATH`** (D38): the image can be served below a path (`https://host/pixel-party/`)
+      behind a proxy that keeps or strips the prefix.
 - [x] **PC first, also on screen** (D34): the mobile-friendly badges, the **Mobile** filter and the
       intro's device badge only show while someone in the room joined from a phone.
 

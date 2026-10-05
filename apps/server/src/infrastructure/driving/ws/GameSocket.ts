@@ -17,6 +17,7 @@ import { balancedTeams, smallerTeam } from '../../../domain/services/teamAssignm
 import { reapIdleRooms } from '../../live/roomSweeper'
 import type { Logger } from '../../observability/logger'
 import type { Metrics } from '../../observability/metrics'
+import { withinBase } from '../http/basePath'
 import { handleHttp } from '../http/httpRoutes'
 import type { StaticSite } from '../http/staticSite'
 import { buildSimulationLoop } from './simulationLoop'
@@ -529,12 +530,18 @@ export function startGameServer(deps: GameSocketDeps) {
     development: config.isDevelopment,
     async fetch(req, srv) {
       const url = new URL(req.url)
+      const base = config.basePath
+      // `/pixel-party` → `/pixel-party/`: the page's relative URLs only resolve below the slash.
+      if (base && url.pathname === base) {
+        return new Response(null, { status: 308, headers: { location: `${base}/${url.search}` } })
+      }
+      const path = withinBase(url.pathname, base)
 
-      if (url.pathname.startsWith('/api')) {
-        return handleHttp(req, { ...deps, metricsSnapshot })
+      if (path.startsWith('/api')) {
+        return handleHttp(req, { ...deps, metricsSnapshot }, path)
       }
 
-      if (url.pathname === '/ws') {
+      if (path === '/ws') {
         // Origin allowlist (fail-closed): reject cross-origin upgrades. A missing Origin is a non-browser
         // client — exactly what the allowlist scrutinizes. In party mode the page we served is
         // same-origin and always welcome.
@@ -553,7 +560,7 @@ export function startGameServer(deps: GameSocketDeps) {
         return new Response('Upgrade failed', { status: 426 })
       }
 
-      return deps.site?.serve(req) ?? new Response('Not found', { status: 404 })
+      return deps.site?.serve(req, path) ?? new Response('Not found', { status: 404 })
     },
     websocket: {
       idleTimeout: config.wsIdleTimeoutSec,
