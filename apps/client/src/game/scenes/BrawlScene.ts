@@ -1,8 +1,23 @@
-import { BRAWL, type BrawlAction, type BrawlFighter, type BrawlSnapshot, PALETTE } from '@pp/shared'
+import {
+  BRAWL,
+  type BrawlAction,
+  type BrawlFighter,
+  type BrawlItemKind,
+  type BrawlSnapshot,
+  type BrawlWeapon,
+  PALETTE,
+} from '@pp/shared'
 import Phaser from 'phaser'
 import { type AvatarExpression, AvatarSprite, avatarPx } from '../avatars'
-import { addBanner, burst, eliminate, flash, floatText, shake, showBanner } from '../fx'
-import { ensureBevelPanel, ensurePixelGrid, fitFontSize, headlineStyle, shade } from '../pixelStyle'
+import { addBanner, burst, eliminate, flash, floatText, punch, shake, showBanner } from '../fx'
+import {
+  ensureBevelPanel,
+  ensurePixelGrid,
+  fitFontSize,
+  headlineStyle,
+  hexToCss,
+  shade,
+} from '../pixelStyle'
 import { YouMarker } from '../playerMarks'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
@@ -10,13 +25,16 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 // Street Brawl: a side-view street at night — shop fronts behind, the pavement as the back edge of the
 // fight, the road in front. Every fighter is their lobby avatar (turned to face their way, a shadow at
 // their feet, a little HP bar overhead), drawn back-to-front by depth. Fists, feet and grabs reach out
-// in the fighter's color; pipes and bottles show in hand; items lie on the road. Hits pop "POW!". The HUD
-// counts your KO credit (half for the finisher, half shared by damage — "1.5 KO").
+// in the fighter's color; items lie on the road. A picked-up pipe, bat or bottle is held up in the hand
+// and PUNCH swings it (the PUNCH button turns into it, "BAT ×4"); a fuel can is hugged to the chest and
+// PUNCH throws it — it spins down the street and goes up in a fireball. Hits pop "POW!" (or the weapon's
+// "CLANG!" / "HOME RUN!" / "SMASH!"). The HUD counts your KO credit (half for the finisher, half shared
+// by damage — "1.5 KO").
 // Your own fighter is predicted: it walks and turns the moment you press and swings the moment you
 // attack (with the server's timings, so a refused press never swings), easing onto the server's view.
 // Arrows/WASD move; SPACE/J/Z punch, K/X kick, L/C grab — or the d-pad and the three buttons.
 
-const ITEM_ROWS: Record<string, { rows: string[]; legend: Record<string, number> }> = {
+const ITEM_ROWS: Record<BrawlItemKind, { rows: string[]; legend: Record<string, number> }> = {
   pipe: {
     rows: ['________', 'GG______', '_GGG____', '___GGG__', '_____GGG', '______GG'],
     legend: { G: 0x9aa3b8 },
@@ -29,6 +47,50 @@ const ITEM_ROWS: Record<string, { rows: string[]; legend: Record<string, number>
     rows: ['__BBBB__', '_BBBBBB_', 'BBbBBBBB', 'BBBBBBBB', '_BBBBBW_', '______WW'],
     legend: { B: 0xc8772f, b: 0xf2b36b, W: 0xf4f1e8 },
   },
+  bat: {
+    rows: ['_____WWW', '____WWWW', '___WWWW_', '__WWW___', '_HH_____', 'HH______'],
+    legend: { W: 0xc89a5a, H: 0x5a3a20 },
+  },
+  // A red jerrycan: handle and spout on top, the embossed X on its side.
+  fuel: {
+    rows: ['_HHH__S', '_H_H_SS', 'RRRRRRR', 'RXRRRXR', 'RRXRXRR', 'RRRXRRR', 'RRXRXRR', 'RRRRRRR'],
+    legend: { H: 0x3a3a48, S: 0x9aa3b8, R: 0xd8342c, X: 0xffcf4b },
+  },
+}
+
+// Weapons as they're held: drawn along +x from the grip (`grip` = its spot across the sprite, where the
+// hand closes), then turned by the swing. The fuel can is hugged to the chest instead (its street sprite).
+type Swung = Exclude<BrawlWeapon, 'fuel'>
+const HELD: Record<Swung, { rows: string[]; legend: Record<string, number>; grip: number }> = {
+  pipe: {
+    rows: ['GGGGGGGGGGGG', 'gggggggggggg'],
+    legend: { G: 0xb8c0d4, g: 0x7d869c },
+    grip: 0.08,
+  },
+  bat: {
+    rows: ['_______WWWW_', 'HHHHWWWWWWWW', '_______WWWW_'],
+    legend: { W: 0xc89a5a, H: 0x5a3a20 },
+    grip: 0.12,
+  },
+  bottle: {
+    rows: ['____GGGG', 'WWGGGLGG', '____GGGG'],
+    legend: { G: 0x2f9e5a, L: 0x8ef0b0, W: 0xd8dce8 },
+    grip: 0.25,
+  },
+}
+// Held weapon angles in degrees, facing right (mirrored facing left): raised at rest, wound back as a
+// swing starts and brought down past level by its end, SWING_MS in.
+const HOLD_DEG = -65
+const WIND_DEG = -125
+const STRIKE_DEG = 30
+const SWING_MS = 150
+// A pipe or bat swung for the last time stays in the hand this long after the hit (to finish the swing).
+const SPENT_MS = 200
+// The word a weapon's hit pops instead of "POW!".
+const HIT_WORD: Record<Swung, string> = {
+  pipe: 'game.brawl.hitPipe',
+  bat: 'game.brawl.hitBat',
+  bottle: 'game.brawl.hitBottle',
 }
 
 // The fighter's face per action (the rest keep the idle face, blinking).
@@ -42,6 +104,10 @@ interface View {
   avatar: AvatarSprite
   shadow: Phaser.GameObjects.Ellipse
   hp: Phaser.GameObjects.Graphics
+  // The weapon in hand (hidden when empty-handed).
+  weapon: Phaser.GameObjects.Image
+  // A pipe or bat whose last swing just landed, kept in hand until the swing is over.
+  spent?: { kind: Swung; until: number }
   x: number
   y: number
   // The HP bar as last drawn (redrawn only when it changes).
@@ -53,7 +119,7 @@ type Move = keyof typeof BRAWL.moves
 const CORRECT_TAU_MS = 200
 // How far each attack reaches (mirrors the server's rules). Only used to pick your own swing's sound
 // the moment you press: a smack when someone stands in range, a rush of air when it whiffs.
-const REACH = { punch: 0.095, kick: 0.125, pipe: 0.135 } as const
+const REACH = { punch: 0.095, kick: 0.125, pipe: 0.135, bat: 0.15 } as const
 // Your landed hit already sounded on the press: the server's echo this soon after isn't replayed.
 const OWN_HIT_ECHO_MS = 450
 // Everyone else's hits: softer, and at most this often (a twelve-way street fight is no drum solo).
@@ -68,7 +134,14 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
   private views = new Map<string, View>()
   private limbs?: Phaser.GameObjects.Graphics
   private itemImgs = new Map<number, Phaser.GameObjects.Image>()
-  private itemKeys: Record<string, string> = {}
+  private itemKeys: Partial<Record<BrawlItemKind, string>> = {}
+  private heldKeys: Partial<Record<Swung, string>> = {}
+  // Fuel cans in flight, and the explosions already shown.
+  private canImgs = new Map<number, Phaser.GameObjects.Image>()
+  private seenBlasts = new Set<number>()
+  // The PUNCH button's label turns into the weapon you carry ("BAT ×4", "THROW!").
+  private punchBtn?: { img: Phaser.GameObjects.Image; label: Phaser.GameObjects.Text; w: number }
+  private punchKey = ''
   private strip?: PlayerStrip
   private banner?: Phaser.GameObjects.Text
   private marker?: YouMarker
@@ -86,7 +159,7 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
   // Your fighter, predicted (world units), and the attack you just threw (shown before the server's
   // echo), plus when the next one may go.
   private pred?: { x: number; y: number }
-  private swing?: { kind: Move; at: number; face: 1 | -1 }
+  private swing?: { kind: Move; at: number; face: 1 | -1; weapon: BrawlWeapon | null }
   private nextAttackAt = 0
   private face: 1 | -1 = 1
   private ownHitAt = Number.NEGATIVE_INFINITY
@@ -101,6 +174,10 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
     this.compact = Math.min(width, height) < 520
     this.views = new Map()
     this.itemImgs = new Map()
+    this.canImgs = new Map()
+    this.seenBlasts = new Set()
+    this.punchBtn = undefined
+    this.punchKey = ''
     this.keysHeld = { up: false, down: false, left: false, right: false }
     this.pad = new Map()
     this.touched = false
@@ -157,7 +234,7 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
       const key = ensureBevelPanel(this, actW, b * 2, color, 5, true)
       const img = this.add.image(x, padY, key).setDepth(700).setInteractive()
       const label = this.t(`game.brawl.${kind}`)
-      this.add
+      const text = this.add
         .text(
           x,
           padY,
@@ -170,6 +247,7 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
         .setOrigin(0.5)
         .setDepth(701)
       img.on('pointerdown', () => this.attack(kind))
+      if (kind === 'punch') this.punchBtn = { img, label: text, w: actW }
     })
     this.input.on('pointerup', (p: Phaser.Input.Pointer) => this.pad.delete(p.id))
     const kb = this.input.keyboard
@@ -229,12 +307,24 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
     this.street = { x: 12 + this.fighterPx / 2, top: bandTop, sx, sy: bandH / BRAWL.depth }
     this.paintStreet(areaTop, bandTop, areaBottom, width)
     this.limbs = this.add.graphics().setDepth(400)
-    for (const [k, icon] of Object.entries(ITEM_ROWS)) {
+    for (const k of Object.keys(ITEM_ROWS) as BrawlItemKind[]) {
+      const icon = ITEM_ROWS[k]
       this.itemKeys[k] = ensurePixelGrid(this, {
         key: `brawl-item-${k}`,
         rows: icon.rows,
         legend: icon.legend,
         pixelSize: this.compact ? 2 : 3,
+      })
+    }
+    // Held weapons at the avatar's own pixel scale.
+    const ps = Math.max(1, Math.round(this.fighterPx / 16))
+    for (const k of Object.keys(HELD) as Swung[]) {
+      const held = HELD[k]
+      this.heldKeys[k] = ensurePixelGrid(this, {
+        key: `brawl-held-${k}-${ps}`,
+        rows: held.rows,
+        legend: held.legend,
+        pixelSize: ps,
       })
     }
     this.marker = new YouMarker(this, this.compact ? 8 : 12, 450)
@@ -284,7 +374,7 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
     const now = this.time.now
     if (now < this.nextAttackAt || this.serverBusy(me, now)) return
     this.sendInput({ kind })
-    this.swing = { kind, at: now, face: this.face }
+    this.swing = { kind, at: now, face: this.face, weapon: kind === 'punch' ? me.weapon : null }
     this.nextAttackAt = now + BRAWL.moves[kind].cooldownMs
     this.swingSfx(kind, me, now)
   }
@@ -293,13 +383,21 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
   // or kick smacks — harder for a kick or a weapon — when someone hittable stands in its reach (as far
   // as this screen knows), and whiffs otherwise.
   private swingSfx(kind: Move, me: BrawlFighter, now: number): void {
-    if (kind === 'grab') {
+    // A grab, or a fuel can leaving your hands (its blast sounds when it goes up).
+    if (kind === 'grab' || (kind === 'punch' && me.weapon === 'fuel')) {
       this.sfx.whoosh()
       return
     }
     const at = this.pred ?? me
     const face = this.face
-    const reach = kind === 'kick' ? REACH.kick : me.weapon === 'pipe' ? REACH.pipe : REACH.punch
+    const reach =
+      kind === 'kick'
+        ? REACH.kick
+        : me.weapon === 'pipe'
+          ? REACH.pipe
+          : me.weapon === 'bat'
+            ? REACH.bat
+            : REACH.punch
     const lands = this.snap?.fighters.some((o) => {
       if (o.id === me.id || o.action === 'ko' || o.action === 'down' || o.guard) return false
       const ahead = (o.x - at.x) * face
@@ -310,9 +408,17 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
       return
     }
     this.ownHitAt = now
+    const weapon = kind === 'punch' ? me.weapon : null
     this.sfx.hit(
-      kind === 'kick' ? 1.2 : me.weapon === 'bottle' ? 1.5 : me.weapon === 'pipe' ? 1.3 : 0.9,
+      kind === 'kick'
+        ? 1.2
+        : weapon === 'bottle' || weapon === 'bat'
+          ? 1.5
+          : weapon === 'pipe'
+            ? 1.3
+            : 0.9,
     )
+    if (weapon === 'bottle') this.sfx.shatter()
   }
 
   // Still staggered, floored or mid-attack on the server (as of the last snapshot, run on to now).
@@ -399,6 +505,7 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
     const me = snap.fighters.find((f) => f.id === this.selfId)
     if (me && !this.state.final) this.predict(me, time, dt)
     this.paintItems(snap)
+    this.paintCans(snap, time)
     this.paintFighters(snap, time, dt)
   }
 
@@ -421,6 +528,66 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
     }
   }
 
+  // Thrown fuel cans: flown on from the snapshot at the shared speed, spinning at chest height.
+  private paintCans(snap: BrawlSnapshot, time: number): void {
+    const since = Math.min(0.2, (time - this.snapAt) / 1000)
+    const seen = new Set<number>()
+    for (const [id, x, y, face] of snap.cans) {
+      seen.add(id)
+      let img = this.canImgs.get(id)
+      if (!img) {
+        img = this.add.image(0, 0, this.itemKeys.fuel ?? '')
+        this.canImgs.set(id, img)
+      }
+      const fx = Math.max(
+        BRAWL.bodyR,
+        Math.min(BRAWL.w - BRAWL.bodyR, x + face * BRAWL.fuel.speed * since),
+      )
+      const p = this.toScreen(fx, y)
+      img
+        .setPosition(Math.round(p.x), Math.round(p.y - this.fighterPx * 0.45))
+        .setAngle((time * 0.9 * face) % 360)
+        .setDepth(101 + y * 500)
+    }
+    for (const [id, img] of this.canImgs) {
+      if (seen.has(id)) continue
+      img.destroy()
+      this.canImgs.delete(id)
+    }
+  }
+
+  // A fuel can going up: a fireball the size of the blast, sparks and smoke, the screen shakes.
+  private explosion(x: number, y: number): void {
+    const p = this.toScreen(x, y)
+    const cy = p.y - this.fighterPx * 0.3
+    const fire = this.add
+      .ellipse(
+        p.x,
+        p.y - this.fighterPx * 0.15,
+        BRAWL.fuel.blastX * this.street.sx * 2,
+        BRAWL.fuel.blastY * this.street.sy * 2 + this.fighterPx * 0.6,
+        PALETTE.orange,
+        0.6,
+      )
+      .setDepth(380)
+      .setScale(0.3)
+    this.tweens.add({
+      targets: fire,
+      scale: 1,
+      alpha: 0,
+      duration: 420,
+      ease: 'Cubic.easeOut',
+      onComplete: () => fire.destroy(),
+    })
+    burst(this, p.x, cy, PALETTE.amber, 26, 340)
+    burst(this, p.x, cy, PALETTE.red, 16, 260)
+    burst(this, p.x, cy, 0x4b4f63, 10, 140)
+    floatText(this, p.x, cy - 12, this.t('game.brawl.boom'), PALETTE.orange, this.compact ? 16 : 24)
+    shake(this, 0.014, 260)
+    flash(this, PALETTE.orange, 140, 0.18)
+    this.sfx.explosion()
+  }
+
   private paintFighters(snap: BrawlSnapshot, time: number, dt: number): void {
     const since = (time - this.snapAt) / 1000
     const g = this.limbs as Phaser.GameObjects.Graphics
@@ -433,6 +600,7 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
       view.avatar.destroy()
       view.shadow.destroy()
       view.hp.destroy()
+      view.weapon.destroy()
       this.views.delete(id)
       if (id === this.selfId) this.marker?.hide()
     }
@@ -450,7 +618,8 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
         avatar.image.setOrigin(0.5, 1)
         const shadow = this.add.ellipse(0, 0, px * 0.9, px * 0.25, 0x000000, 0.35).setDepth(99)
         const hp = this.add.graphics().setDepth(395)
-        view = { avatar, shadow, hp, x: f.x, y: f.y, hpKey: '' }
+        const weapon = this.add.image(0, 0, this.heldKeys.pipe ?? '').setVisible(false)
+        view = { avatar, shadow, hp, weapon, x: f.x, y: f.y, hpKey: '' }
         this.views.set(f.id, view)
       }
       const mine = f.id === this.selfId && f.action !== 'ko' && this.pred !== undefined
@@ -507,7 +676,17 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
       if (action === 'hurt' && ms < 120)
         view.avatar.image.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL)
       else view.avatar.image.clearTint()
-      this.paintLimbs(g, f, action, face, ms, p, lying)
+      // The weapon in hand: your swing's (a can you've just thrown is gone at once), else the server's.
+      const thrown =
+        mine && this.swing?.weapon === 'fuel' && time - this.swing.at < 500 && f.weapon === 'fuel'
+      const held: BrawlWeapon | null =
+        swing?.kind === 'punch'
+          ? swing.weapon
+          : thrown
+            ? null
+            : (f.weapon ?? (view.spent && time < view.spent.until ? view.spent.kind : null))
+      this.paintLimbs(g, f, action, face, ms, p, lying, held)
+      this.paintWeapon(view, held, action, face, ms, p, lying)
       this.paintHp(view, f, p)
       if (f.id === this.selfId) {
         if (f.action === 'ko') this.marker?.hide()
@@ -523,7 +702,7 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
     return (d.dx !== 0 || d.dy !== 0) && !swinging
   }
 
-  // Limbs and weapons, in the fighter's color.
+  // Fists and feet, in the fighter's color (a swung weapon replaces the fist: see paintWeapon).
   private paintLimbs(
     g: Phaser.GameObjects.Graphics,
     f: BrawlFighter,
@@ -532,11 +711,14 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
     ms: number,
     p: { x: number; y: number },
     lying: boolean,
+    held: BrawlWeapon | null,
   ): void {
+    if (lying) return
     const px = this.fighterPx
     const color = this.state.colorOf(f.id)
     const hand = { x: p.x + face * px * 0.35, y: p.y - px * 0.45 }
-    if (action === 'punch' || action === 'grab') {
+    const swung = action === 'punch' && held !== null && held !== 'fuel'
+    if ((action === 'punch' && !swung) || action === 'grab') {
       const reach =
         (action === 'grab' ? 0.55 : 0.75) * px * Math.sin(Math.min(1, ms / 160) * Math.PI)
       g.fillStyle(shade(color, -0.3), 1)
@@ -558,16 +740,93 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
         8,
       )
     }
-    if (f.weapon && !lying) {
-      const w = f.weapon === 'pipe' ? px * 0.7 : px * 0.35
-      g.fillStyle(f.weapon === 'pipe' ? 0x9aa3b8 : 0x2f9e5a, 1)
-      g.fillRect(
-        Math.round(hand.x - (face === -1 ? w : 0)),
-        Math.round(hand.y - px * 0.25),
-        Math.round(w),
-        5,
-      )
+  }
+
+  // The weapon in hand: a pipe, bat or bottle raised at rest and swung down through the punch (from
+  // the grip, at the hand); a fuel can hugged at the chest (gone the moment it's thrown).
+  private paintWeapon(
+    view: View,
+    held: BrawlWeapon | null,
+    action: BrawlAction,
+    face: 1 | -1,
+    ms: number,
+    p: { x: number; y: number },
+    lying: boolean,
+  ): void {
+    const img = view.weapon
+    if (!held || lying || (held === 'fuel' && action === 'punch')) {
+      img.setVisible(false)
+      return
     }
+    const px = this.fighterPx
+    img.setVisible(true).setDepth(view.avatar.image.depth + 0.5)
+    if (held === 'fuel') {
+      img
+        .setTexture(this.itemKeys.fuel ?? '')
+        .setOrigin(0.5, 0.5)
+        .setFlipX(face === -1)
+        .setAngle(0)
+        .setPosition(Math.round(p.x + face * px * 0.28), Math.round(p.y - px * 0.4))
+      return
+    }
+    const spec = HELD[held]
+    let deg = HOLD_DEG
+    if (action === 'punch') {
+      const t = Math.min(1, ms / SWING_MS)
+      deg = WIND_DEG + (STRIKE_DEG - WIND_DEG) * (1 - (1 - t) ** 2)
+    } else if (action === 'hurt') deg = HOLD_DEG + 25
+    img
+      .setTexture(this.heldKeys[held] ?? '')
+      .setFlipX(face === -1)
+      .setOrigin(face === 1 ? spec.grip : 1 - spec.grip, 0.5)
+      .setAngle(face * deg)
+      .setPosition(Math.round(p.x + face * px * 0.3), Math.round(p.y - px * 0.45))
+  }
+
+  // The PUNCH button names what it does now: PUNCH, the weapon and its swings left, or THROW!
+  private updatePunchButton(me: BrawlFighter | undefined): void {
+    const btn = this.punchBtn
+    const weapon = me && me.action !== 'ko' ? me.weapon : null
+    const key = `${weapon}:${me?.uses ?? 0}`
+    if (!btn || key === this.punchKey) return
+    const armed = this.punchKey !== '' && weapon !== null && !this.punchKey.startsWith(`${weapon}:`)
+    this.punchKey = key
+    const name = weapon ? this.t(`game.brawl.weapon.${weapon}`) : ''
+    const text =
+      weapon === 'fuel'
+        ? this.t('game.brawl.throw')
+        : weapon === 'bottle'
+          ? name
+          : weapon
+            ? this.t('game.brawl.swing', { weapon: name, n: me?.uses ?? 0 })
+            : this.t('game.brawl.punch')
+    btn.label
+      .setText(text)
+      .setFontSize(fitFontSize(text, btn.w - 10, this.compact ? 12 : 16))
+      .setColor(hexToCss(weapon ? PALETTE.amber : PALETTE.text))
+    if (armed) punch(this, btn.img, 0.12, 120)
+  }
+
+  // Weapon hits landed since the last snapshot, told by what the swinger lost: a swing off a pipe or
+  // bat, or the bottle that smashed. A pipe or bat swung for the last time stays in hand to the end
+  // of the swing.
+  private weaponHits(
+    snap: BrawlSnapshot,
+    before: Map<string, BrawlFighter>,
+  ): { id: string; kind: Swung; x: number; y: number; face: 1 | -1 }[] {
+    const hits: { id: string; kind: Swung; x: number; y: number; face: 1 | -1 }[] = []
+    for (const f of snap.fighters) {
+      const was = before.get(f.id)
+      const kind = was?.weapon
+      if (!was || !kind || kind === 'fuel' || f.action !== 'punch') continue
+      if (f.weapon === kind && f.uses >= was.uses) continue
+      hits.push({ id: f.id, kind, x: f.x, y: f.y, face: f.face })
+      const view = this.views.get(f.id)
+      if (view && kind !== 'bottle' && f.weapon === null) {
+        view.spent = { kind, until: this.time.now + SPENT_MS }
+      }
+    }
+    return hits
   }
 
   // HP bar overhead: drawn once per change at the origin, then just moved with the fighter.
@@ -597,6 +856,16 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
     const me = snap.fighters.find((f) => f.id === this.selfId)
     const up = snap.fighters.filter((f) => f.action !== 'ko').length
     if (me) this.hud?.setScore(this.t('game.brawl.kos', { n: me.kos }))
+    this.updatePunchButton(me)
+    // Explosions: each shown once (one already on the wire when this screen starts is skipped).
+    for (const [id, x, y] of snap.blasts) {
+      if (this.seenBlasts.has(id)) continue
+      this.seenBlasts.add(id)
+      if (!this.firstSnapshot) this.explosion(x, y)
+    }
+    for (const id of this.seenBlasts) {
+      if (!snap.blasts.some((b) => b[0] === id)) this.seenBlasts.delete(id)
+    }
     this.hud?.setCenter(
       this.t('game.common.left', { n: up, total: snap.fighters.length }),
       up <= 1 ? PALETTE.red : PALETTE.text,
@@ -611,19 +880,32 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
     )
     if (prev && !this.firstSnapshot) {
       const before = new Map(prev.fighters.map((f) => [f.id, f]))
+      const weaponHits = this.weaponHits(snap, before)
       for (const f of snap.fighters) {
         const was = before.get(f.id)
         if (!was) continue
         const p = this.toScreen(f.x, f.y)
         const head = p.y - this.fighterPx * 0.7
         if (f.hp < was.hp) {
-          burst(this, p.x, head, PALETTE.amber, 10, 180)
+          // Hit by a weapon swung at them: its own word ("CLANG!"), else POW! / WHAM!
+          const by = weaponHits.find((h) => {
+            const ahead = (f.x - h.x) * h.face
+            return h.id !== f.id && ahead > 0 && ahead <= 0.35 && Math.abs(f.y - h.y) <= 0.08
+          })
+          burst(this, p.x, head, by ? PALETTE.text : PALETTE.amber, by ? 14 : 10, 180)
+          if (by?.kind === 'bottle') burst(this, p.x, head, 0x8ef0b0, 12, 220)
           floatText(
             this,
             p.x,
             head - 8,
-            this.t(f.action === 'down' || f.action === 'ko' ? 'game.brawl.wham' : 'game.brawl.pow'),
-            PALETTE.amber,
+            this.t(
+              by
+                ? HIT_WORD[by.kind]
+                : f.action === 'down' || f.action === 'ko'
+                  ? 'game.brawl.wham'
+                  : 'game.brawl.pow',
+            ),
+            by ? PALETTE.text : PALETTE.amber,
             this.compact ? 12 : 16,
           )
           const now = this.time.now
@@ -636,7 +918,10 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
           ) {
             this.otherHitAt = now
             const heavy = f.action === 'down' || f.action === 'ko'
-            this.sfx.quiet(() => this.sfx.hit(heavy ? 1.2 : 0.8), RIVAL_LEVEL * 0.7)
+            this.sfx.quiet(() => {
+              this.sfx.hit(by ? 1.4 : heavy ? 1.2 : 0.8)
+              if (by?.kind === 'bottle') this.sfx.shatter()
+            }, RIVAL_LEVEL * 0.7)
           }
           if (f.action === 'down') shake(this, 0.006, 140)
         }
@@ -657,7 +942,18 @@ export class BrawlScene extends MiniGameScene<BrawlSnapshot> {
           const yours = f.id === this.selfId || this.time.now - this.ownHitAt <= OWN_HIT_ECHO_MS
           this.sfx.quiet(() => this.sfx.eliminated(), yours ? 1 : RIVAL_LEVEL)
         }
-        if (f.id === this.selfId && f.weapon && f.weapon !== was.weapon) this.sfx.powerUp()
+        if (f.id === this.selfId && f.weapon && f.weapon !== was.weapon) {
+          // Picked one up: say what it is (the PUNCH button now uses it).
+          this.sfx.powerUp()
+          floatText(
+            this,
+            p.x,
+            head - 24,
+            this.t('game.brawl.got', { weapon: this.t(`game.brawl.weapon.${f.weapon}`) }),
+            PALETTE.amber,
+            this.compact ? 12 : 16,
+          )
+        }
       }
     }
     if (this.state.final && me && this.banner && !this.banner.visible) {

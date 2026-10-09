@@ -10,12 +10,17 @@ import {
 import type { Random } from '../ports/Random'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
-const DEFAULT_DURATION_MS = 40_000
-const LEVELS = 8
+const DEFAULT_DURATION_MS = 20_000
+// More objects than a quick player clears before the clock runs out (the pool has more still, so a
+// round never repeats one): the timer, not the end of the line-up, is what hurries everyone.
+const LEVELS = 10
 // Points for a cut as balanced as the object allows. Worse cuts earn partial credit in proportion to how
 // close they are: the points fall off linearly with the extra imbalance (pixels on the wrong side beyond
 // the best cut's), reaching 0 at a 3:1 split — so one column off still scores about half, not nothing.
 const MAX_SCORE_PER = 10
+// The lazy answer — a cut straight down the middle of the object — may score at most this much on any
+// puzzle. Most of the shared art is left-right symmetric, where the middle IS the best cut (a free 10).
+const MIDDLE_CUT_MAX = 5
 
 interface Puzzle {
   object: PixelSplitObject
@@ -49,6 +54,58 @@ export function splitPoints(excess: number, total: number): number {
   return Math.floor(MAX_SCORE_PER * Math.max(0, 1 - excess / (total / 2)))
 }
 
+// An object turned a quarter (clockwise or not), cropped to its filled pixels. Rows become columns, so
+// a figure that's symmetric left-right (where the middle is the answer) turns into a lopsided one.
+export function quarterTurn(src: PixelObject, clockwise: boolean): PixelObject {
+  const xs = src.cells.map((c) => c.x)
+  const ys = src.cells.map((c) => c.y)
+  const [minX, maxX, minY, maxY] = [
+    Math.min(...xs),
+    Math.max(...xs),
+    Math.min(...ys),
+    Math.max(...ys),
+  ]
+  const cells = src.cells
+    .map((c) => (clockwise ? { x: maxY - c.y, y: c.x - minX } : { x: c.y - minY, y: maxX - c.x }))
+    .sort((a, b) => a.y - b.y || a.x - b.x)
+  return {
+    name: src.name,
+    cols: maxY - minY + 1,
+    rows: maxX - minX + 1,
+    cells,
+    count: cells.length,
+  }
+}
+
+// What a cut down the middle of the object's own width (either side of it on an odd width) scores.
+export function middleCutPoints(obj: PixelObject): number {
+  const xs = obj.cells.map((c) => c.x)
+  const minX = Math.min(...xs)
+  const cols = columnCounts(obj).slice(minX, Math.max(...xs) + 1)
+  const span = cols.length
+  if (span < 2) return MAX_SCORE_PER
+  const error = (cut: number): number => {
+    const left = cols.slice(0, cut).reduce((a, b) => a + b, 0)
+    return Math.abs(left - (obj.count - left))
+  }
+  let minError = obj.count
+  for (let cut = 1; cut < span; cut++) minError = Math.min(minError, error(cut))
+  const middles = [Math.floor(span / 2), Math.ceil(span / 2)].filter((c) => c >= 1 && c < span)
+  return Math.max(...middles.map((cut) => splitPoints(error(cut) - minError, obj.count)))
+}
+
+// Pixel Split's pool: each shared object with the ways it may be shown — as drawn (false) and/or a
+// quarter turn (true) — keeping only those where the middle cut scores at most MIDDLE_CUT_MAX. The
+// symmetric favourites (heart, house, ghost…) never qualify and stay Pixel Weight's; the lopsided art
+// does. Fixed by the art set, so worked out once.
+export const SPLIT_POOL: readonly { object: PixelObject; turns: readonly boolean[] }[] =
+  PIXEL_OBJECTS.flatMap((object) => {
+    const turns = [false, true].filter(
+      (turned) => middleCutPoints(turned ? quarterTurn(object, true) : object) <= MIDDLE_CUT_MAX,
+    )
+    return turns.length > 0 ? [{ object, turns }] : []
+  })
+
 export interface PixelSplitState {
   players: PlayerId[]
   puzzles: Puzzle[]
@@ -59,9 +116,10 @@ export interface PixelSplitState {
   lastClearMs: Map<PlayerId, number>
 }
 
-// Real-time FFA spatial estimation. A seeded sequence of pixel-art objects is shared by everyone; each
-// player drags a vertical cut to balance the pixel count on both sides, at their own pace. Pure domain
-// logic: object order comes from the injected Random port (seeded per round) and time arrives as `now`.
+// Real-time FFA spatial estimation. A seeded sequence of lopsided pixel-art objects (SPLIT_POOL) is
+// shared by everyone; each player drags a vertical cut to balance the pixel count on both sides, at their
+// own pace. Pure domain logic: object order, turn and placement come from the injected Random port
+// (seeded per round) and time arrives as `now`.
 export class PixelSplit implements MiniGame<PixelSplitState, PixelSplitInput> {
   readonly id = 'pixel-split'
   readonly format = 'ffa' as const
@@ -69,17 +127,20 @@ export class PixelSplit implements MiniGame<PixelSplitState, PixelSplitInput> {
   init(ctx: MiniGameInitCtx): PixelSplitState {
     const durationMs =
       typeof ctx.config?.durationMs === 'number' ? ctx.config.durationMs : DEFAULT_DURATION_MS
-    const order = PIXEL_OBJECTS.map((_, i) => i)
+    const order = SPLIT_POOL.map((_, i) => i)
     for (let i = order.length - 1; i > 0; i--) {
       const j = Math.floor(ctx.random.next() * (i + 1))
       ;[order[i], order[j]] = [order[j] as number, order[i] as number]
     }
     const puzzles: Puzzle[] = []
     for (let level = 0; level < LEVELS; level++) {
-      const shared = PIXEL_OBJECTS[order[level % order.length] as number]
-      if (!shared) continue
+      const entry = SPLIT_POOL[order[level % order.length] as number]
+      if (!entry) continue
+      // As drawn or turned (a coin flip when both qualify; either way round, it's the same cut).
+      const turned = entry.turns[Math.floor(ctx.random.next() * entry.turns.length)] === true
+      const shape = turned ? quarterTurn(entry.object, ctx.random.next() < 0.5) : entry.object
       // Everything the scoring compares against is derived from the placed (transformed) object.
-      const src = placeObject(shared, ctx.random)
+      const src = placeObject(shape, ctx.random)
       const cols = columnCounts(src)
       const total = src.count
       let minError = total

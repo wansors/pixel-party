@@ -5,6 +5,7 @@ import { burst, flash, floatText, punch, ring, shake } from '../fx'
 import {
   bodyStyle,
   ensurePixelGrid,
+  fitFontSize,
   headlineStyle,
   hexToCss,
   shade,
@@ -192,12 +193,13 @@ export class BombRelayScene extends MiniGameScene<BombRelaySnapshot> {
     const panel = this.add.graphics()
     const big = this.big
 
+    const name = this.t(`team.${team}`).toUpperCase()
     this.add
       .text(
         cx,
         y + (compact ? 16 : big ? 32 : 24),
-        this.t(`team.${team}`).toUpperCase(),
-        headlineStyle(big ? 24 : 16, color),
+        name,
+        headlineStyle(fitFontSize(name, w - 16, big ? 24 : 16), color),
       )
       .setOrigin(0.5)
     const statsY = y + (compact ? 34 : big ? 64 : 48)

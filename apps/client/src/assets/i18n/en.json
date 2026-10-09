@@ -214,8 +214,8 @@
     }
   },
   "team": {
-    "red": "Red",
-    "blue": "Blue"
+    "red": "Team Red",
+    "blue": "Team Blue"
   },
   "reason": {
     "room_not_found": "Room not found",
@@ -495,9 +495,9 @@
       },
       "brawl": {
         "name": "Street Brawl",
-        "blurb": "One street, everybody fighting: punch combos, kicks, throws, pipes and chicken. Last one up wins!",
+        "blurb": "One street, everybody fighting: punch combos, kicks, throws, pipes, bats, exploding fuel cans and chicken. Last one up wins!",
         "tagline": "Friendship ends where the bottle begins.",
-        "controls": "←↑↓→/WASD move · SPACE/J punch · K kick · L grab"
+        "controls": "←↑↓→/WASD move · SPACE/J punch or use item · K kick · L grab"
       },
       "rally-stage": {
         "name": "Rally Stage",
@@ -704,7 +704,20 @@
         "GHOST": "GHOST",
         "KEY": "KEY",
         "APPLE": "APPLE",
-        "CROWN": "CROWN"
+        "CROWN": "CROWN",
+        "FRYING_PAN": "FRYING PAN",
+        "BOOT": "BOOT",
+        "AXE": "AXE",
+        "MUG": "MUG",
+        "LOLLIPOP": "LOLLIPOP",
+        "DUCK": "RUBBER DUCK",
+        "HAMMER": "HAMMER",
+        "ICE_CREAM": "ICE CREAM",
+        "WATERING_CAN": "WATERING CAN",
+        "DOG": "SAUSAGE DOG",
+        "ROCKET": "ROCKET",
+        "GUITAR": "GUITAR",
+        "WHALE": "WHALE"
       },
       "keys": "Type the number · ← → ±1 · ↑ ↓ ±10 · ENTER to guess"
     },
@@ -716,7 +729,7 @@
     "tugOfWar": {
       "pull": "PULL!",
       "hint": "Tap / press SPACE to pull the rope your way",
-      "team": "Your team",
+      "team": "You are {{team}}",
       "spectator": "No team — watching this round",
       "leads": "{{team}} LEADS!",
       "almost": "ALMOST!",
@@ -1046,7 +1059,20 @@
       "wham": "WHAM!",
       "ko": "K.O.!",
       "standing": "STILL STANDING",
-      "hint": "←↑↓→ / WASD move · SPACE/J punch · K kick · L grab"
+      "hint": "←↑↓→ / WASD move · SPACE/J punch or use item · K kick · L grab",
+      "weapon": {
+        "pipe": "PIPE",
+        "bat": "BAT",
+        "bottle": "BOTTLE",
+        "fuel": "FUEL CAN"
+      },
+      "swing": "{{weapon}} ×{{n}}",
+      "throw": "THROW!",
+      "got": "{{weapon}}!",
+      "hitPipe": "CLANG!",
+      "hitBat": "HOME RUN!",
+      "hitBottle": "SMASH!",
+      "boom": "KABOOM!"
     },
     "courseRace": {
       "go": "GO!",

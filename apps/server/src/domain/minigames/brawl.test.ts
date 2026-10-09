@@ -215,4 +215,65 @@ describe('Brawl', () => {
     game.onInput(s, 'a', { kind: 'move', dx: 1, dy: 0 }, 20)
     expect(fighter(s, 'a').face).toBe(-1)
   })
+
+  test('a bat reaches past a fist and every swing knocks down, for four swings', () => {
+    const s = init(['a', 'b'])
+    square(s, 0.14)
+    const [a, b] = [fighter(s, 'a'), fighter(s, 'b')]
+    s.items = [{ id: 1, x: a.x, y: a.y, kind: 'bat' }]
+    run(s, 0, 50)
+    expect(a.weapon).toBe('bat')
+    expect(a.uses).toBe(4)
+    game.onInput(s, 'a', { kind: 'punch' }, 50)
+    expect(b.hp).toBe(BRAWL.hp - 18)
+    expect(b.action).toBe('down')
+    expect(b.x).toBeGreaterThan(1.14 + 0.1) // sent flying
+    expect(a.uses).toBe(3)
+    // A whiff costs no swing.
+    game.onInput(s, 'a', { kind: 'punch' }, 2000)
+    expect(a.uses).toBe(3)
+    a.uses = 1
+    Object.assign(b, { action: 'idle', actionUntil: 0, guardUntil: 0, x: 1.14 })
+    game.onInput(s, 'a', { kind: 'punch' }, 4000)
+    expect(a.weapon).toBeNull()
+  })
+
+  test('a thrown fuel can blows up on the first fighter in its path and floors the blast', () => {
+    const s = init(['a', 'b', 'c', 'd'])
+    const [a, b, c, d] = ['a', 'b', 'c', 'd'].map((id) => fighter(s, id))
+    Object.assign(a, { x: 0.5, y: 0.2, face: 1, weapon: 'fuel', uses: 1 })
+    Object.assign(d, { x: 0.45, y: 0.2 }) // right behind the thrower: never hit by its own throw
+    Object.assign(b, { x: 0.9, y: 0.21 }) // first in the can's path
+    Object.assign(c, { x: 1.02, y: 0.25 }) // caught in b's blast
+    s.items = [{ id: 9, x: 1, y: 0.12, kind: 'fuel' }] // a can lying in the blast goes up too
+    game.onInput(s, 'a', { kind: 'punch' }, 0)
+    expect(a.weapon).toBeNull()
+    expect(s.cans).toHaveLength(1)
+    expect(game.snapshot(s, 0).cans).toHaveLength(1)
+    const t = run(s, 0, 600)
+    expect(s.cans).toHaveLength(0)
+    expect(b.action).toBe('down')
+    expect(c.action).toBe('down')
+    expect(b.hp).toBeLessThan(BRAWL.hp)
+    expect(c.hp).toBeLessThan(BRAWL.hp)
+    expect(b.x).toBeGreaterThan(0.9) // blown clear, away from the centre
+    expect(a.hp).toBe(BRAWL.hp)
+    expect(d.hp).toBe(BRAWL.hp)
+    expect(s.items.some((i) => i.kind === 'fuel')).toBe(false)
+    expect(game.snapshot(s, t).blasts.length).toBeGreaterThanOrEqual(2) // the throw + the chained can
+    run(s, t, t + 1000)
+    expect(game.snapshot(s, t + 1000).blasts).toHaveLength(0)
+  })
+
+  test('a fuel can with nobody in its path blows up where it lands', () => {
+    const s = init(['a', 'b'])
+    const [a, b] = [fighter(s, 'a'), fighter(s, 'b')]
+    Object.assign(a, { x: 0.3, y: 0.05, face: 1, weapon: 'fuel', uses: 1 })
+    Object.assign(b, { x: 0.3 + BRAWL.fuel.range + 0.05, y: 0.3 }) // another lane, inside the blast
+    game.onInput(s, 'a', { kind: 'punch' }, 0)
+    run(s, 0, 2000)
+    expect(s.cans).toHaveLength(0)
+    expect(s.blasts).toHaveLength(0)
+    expect(b.hp).toBe(BRAWL.hp) // 0.25 across the street: outside the blast's depth
+  })
 })

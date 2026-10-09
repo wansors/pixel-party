@@ -1,8 +1,11 @@
 // Brawl wire shapes (Streets of Rage style). A real-time FFA beat 'em up: everyone in one side-view
 // street (walk along it and up/down its depth). PUNCH is quick (the third in a row knocks down), KICK
 // reaches further and shoves, GRAB throws whoever is right next to you. Items drop onto the street on a
-// seeded schedule: a pipe (harder, longer punches for a few swings), a bottle (one smashing hit) and roast
-// chicken (heals). Drop to 0 HP and you're knocked out for good. Last one standing wins; the rest rank by
+// seeded schedule: walk over a weapon to pick it up and PUNCH swings it instead of your fist — a pipe
+// (harder, longer hits for a few swings), a baseball bat (fewer swings, each one knocks down), a bottle
+// (one smashing hit) or a fuel can (thrown down the street; it blows up on the first fighter it reaches,
+// or where it lands, floors everyone in the blast and sets off any other can lying in it) — and roast
+// chicken heals. Drop to 0 HP and you're knocked out for good. Last one standing wins; the rest rank by
 // KO credit (the finisher takes half of each KO, the other half is split by the damage everyone dealt
 // that fighter), then how long they lasted. A fighter who leaves the round drops off the wire.
 //
@@ -28,9 +31,14 @@ export const BRAWL = {
   // How long a hit staggers (hurt) and a knock-down floors (down) a fighter.
   hurtMs: 260,
   downMs: 900,
+  // A thrown fuel can: how fast and how far it flies, and the blast's half-extents (along the street,
+  // across its depth) — shared so the client can fly it between snapshots and size the explosion.
+  fuel: { speed: 1.3, range: 0.75, blastX: 0.2, blastY: 0.12 },
 } as const
 
-export type BrawlItemKind = 'pipe' | 'bottle' | 'chicken'
+export type BrawlItemKind = 'pipe' | 'bat' | 'bottle' | 'fuel' | 'chicken'
+// What a fighter can carry (everything but the chicken, which is eaten on the spot).
+export type BrawlWeapon = Exclude<BrawlItemKind, 'chicken'>
 
 export type BrawlAction = 'idle' | 'walk' | 'punch' | 'kick' | 'grab' | 'hurt' | 'down' | 'ko'
 
@@ -44,8 +52,8 @@ export interface BrawlFighter {
   action: BrawlAction
   // Time spent in the current action (drives the client's animation).
   actionMs: number
-  weapon: 'pipe' | 'bottle' | null
-  // Swings left on the pipe.
+  weapon: BrawlWeapon | null
+  // Swings left on the pipe or bat (1 for a bottle or a fuel can).
   uses: number
   // Briefly untouchable after getting up.
   guard: boolean
@@ -60,6 +68,10 @@ export interface BrawlSnapshot {
   fighters: BrawlFighter[]
   // [id, x, y, kind]
   items: [number, number, number, BrawlItemKind][]
+  // Fuel cans in flight: [id, x, y, face].
+  cans: [number, number, number, 1 | -1][]
+  // Explosions of the last moment (each stays on the wire briefly so no client misses it): [id, x, y].
+  blasts: [number, number, number][]
   remainingMs: number
 }
 

@@ -250,6 +250,9 @@ seeded variants of the same content, because snapshots are broadcast to the whol
         author's name, and optionally delete the local `refs/original` backup.
 - [x] **`BASE_PATH`** (D38): the image can be served below a path (`https://host/pixel-party/`)
       behind a proxy that keeps or strips the prefix.
+- [x] **Playtest fixes** (D39): "Team Red" / "Team Blue" names, rivals pinned to the lane edge in the
+      sprints, a shorter and harder Pixel Split, Street Brawl weapons swung in hand plus a baseball
+      bat and an explosive fuel can.
 - [x] **PC first, also on screen** (D34): the mobile-friendly badges, the **Mobile** filter and the
       intro's device badge only show while someone in the room joined from a phone.
 

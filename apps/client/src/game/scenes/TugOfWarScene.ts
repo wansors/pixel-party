@@ -2,7 +2,14 @@ import { PALETTE, type TeamId, type TugOfWarSnapshot } from '@pp/shared'
 import Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
 import { addBanner, burst, floatText, punch, ring, showBanner } from '../fx'
-import { bodyStyle, ensurePixelGrid, headlineStyle, shade, teamColor } from '../pixelStyle'
+import {
+  bodyStyle,
+  ensurePixelGrid,
+  fitFontSize,
+  headlineStyle,
+  shade,
+  teamColor,
+} from '../pixelStyle'
 import { addShadow, type Shadow, YouMarker } from '../playerMarks'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -178,11 +185,12 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
     this.onKey('ENTER', () => this.pull())
   }
 
-  // Team plates: name over a "per head" caption + the team's average pulls per member, red top-left,
-  // blue top-right.
+  // Team plates: the team's name across the top, then a "per head" caption and the team's average
+  // pulls per member, red top-left, blue top-right.
   private drawPlates(compact: boolean, big: boolean): void {
     const { width } = this.scale
-    const w = Math.min(width * 0.4, big ? 320 : 240)
+    // A phone gets wider plates, so the caption and the average fit side by side.
+    const w = Math.min(width * (compact ? 0.46 : 0.4), big ? 320 : 240)
     const h = compact ? 48 : big ? 84 : 64
     const y = this.top + (compact ? 6 : 12)
     const margin = compact ? 10 : 24
@@ -198,26 +206,22 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
       g.strokeRect(x, y, w, h)
       const align = team === 'red' ? 0 : 1
       const tx = team === 'red' ? x + 12 : x + w - 12
+      const name = this.t(`team.${team}`).toUpperCase()
       this.add
-        .text(
-          tx,
-          y + h * 0.36,
-          this.t(`team.${team}`).toUpperCase(),
-          headlineStyle(big ? 24 : 16, color),
-        )
+        .text(tx, y + h * 0.3, name, headlineStyle(fitFontSize(name, w - 24, big ? 24 : 16), color))
         .setOrigin(align, 0.5)
       this.add
         .text(
           tx,
-          y + h * 0.36 + (compact ? 12 : big ? 20 : 16),
+          y + h * 0.68,
           this.t('game.tugOfWar.perHead'),
           bodyStyle(compact ? 11 : big ? 16 : 13, PALETTE.dim),
         )
-        .setOrigin(align, 0)
+        .setOrigin(align, 0.5)
       this.avgs[team] = this.add
         .text(
           team === 'red' ? x + w - 12 : x + 12,
-          y + h / 2,
+          y + h * 0.68,
           '0.0',
           headlineStyle(compact ? 16 : big ? 32 : 24, PALETTE.text),
         )
@@ -356,7 +360,7 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
   // Snapshot deltas → feedback: totals (pull pops), lurches, lead changes, near-win, the finish.
   private trackEvents(snap: TugOfWarSnapshot, time: number, team: TeamId | undefined): void {
     this.hud?.setScore(
-      team ? `${this.t('game.tugOfWar.team')}: ${this.t(`team.${team}`).toUpperCase()}` : '',
+      team ? this.t('game.tugOfWar.team', { team: this.t(`team.${team}`).toUpperCase() }) : '',
     )
     // First snapshot (fresh round or relayout restart): adopt the state as the baseline — the rope
     // sits where it is, the averages show, and no "RED LEADS!" / "ALMOST!" replays.
@@ -400,13 +404,14 @@ export class TugOfWarScene extends MiniGameScene<TugOfWarSnapshot> {
       snap.offset < -LEAD_DEADZONE ? 'red' : snap.offset > LEAD_DEADZONE ? 'blue' : this.leader
     if (leader && leader !== this.leader) {
       const x = this.cx + snap.offset * this.reach
+      const leads = this.t('game.tugOfWar.leads', { team: this.t(`team.${leader}`).toUpperCase() })
       floatText(
         this,
         x,
         this.ropeY - 12 * this.ps,
-        this.t('game.tugOfWar.leads', { team: this.t(`team.${leader}`).toUpperCase() }),
+        leads,
         teamColor(leader),
-        16,
+        fitFontSize(leads, this.scale.width - 16, 16),
       )
       // Your side takes the lead with a surge; losing it, the rope whips away from you.
       if (team) {

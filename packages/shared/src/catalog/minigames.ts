@@ -249,7 +249,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     players: { min: 1, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: true,
-    durationSec: 30,
+    durationSec: 20,
     blurb: 'Cut the object in two halves with the same number of pixels.',
     axes: ['precision'],
   },
@@ -623,7 +623,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     mobileFriendly: false,
     durationSec: 75,
     blurb:
-      'One street, everybody fighting: punch combos, kicks, throws, pipes and chicken. Last one up wins!',
+      'One street, everybody fighting: punch combos, kicks, throws, pipes, bats, exploding fuel cans and chicken. Last one up wins!',
     axes: ['reflexes', 'speed'],
   },
   {

@@ -1069,3 +1069,34 @@ misses — each would be speculative or gated, and the project rule is "nothing 
 - **Verified**: the image behind a real nginx on `/pixel-party`, with a pass-through rule and a
   stripping rule. Both served the page, assets, font, music, API and WebSocket, and a full browser
   session (join, lobby, skip, three games, podium) ran with no errors.
+
+### D39 — Playtest fixes: team names, track rivals, Pixel Split, Street Brawl weapons — DONE
+
+- **Date**: 2026-10-09. **Context**: a playtest report: the RED / BLUE tags weren't clear, the 100 m
+  dash didn't show the other players, Pixel Split was too long and some pictures too easy, and Street
+  Brawl's picked-up weapons didn't look used when hitting. The owner also asked for two new Street
+  Brawl items: an explosive fuel can and a baseball bat.
+- **What**:
+  - **Team names**: `team.red` / `team.blue` now read "Team Red" / "Team Blue" ("Equipo Rojo" /
+    "Equipo Azul") everywhere they show: the lobby tag, round intro, results and the team scenes. Tug
+    of War's plates put the name on its own line (fitted to the plate), and its HUD says "You are TEAM
+    RED"; Bomb Relay fits the name to its column; the Spanish lines that wrap the name got their
+    article ("¡GANA EL EQUIPO AZUL!").
+  - **100 m / 110 m hurdles**: a rival the camera has left behind or who is out ahead is pinned to the
+    edge of their own lane (avatar, name, the gap "+12m" / "-8m", or their place once finished).
+    The progress strip shows avatars instead of 6 px dots.
+  - **Pixel Split**: 20 s (was 30) for up to 10 objects (was 8). Most of the shared art is left-right
+    symmetric, so cutting down the middle scored a free 10. Pixel Split now draws only from 13 new
+    lopsided objects, each shown as drawn or turned 90°, whichever way a middle cut scores at most 5
+    of 10 (computed once from the art set). The symmetric favourites stay in Pixel Weight, which now
+    weighs 26 objects.
+  - **Street Brawl**: weapons are held in the hand and swung through the punch, the PUNCH button
+    turns into the weapon (`PIPE ×6`, `BAT ×4`, `BOTTLE`, `THROW!`), a pick-up names itself and
+    weapon hits pop their own word. New items: the **baseball bat** (18, longest reach, every swing
+    knocks down and sends them flying, 4 swings) and the **fuel can** (PUNCH throws it; it blows up on
+    the first fighter in its path or where it lands, floors everyone in the blast but the thrower for
+    26, and sets off any can lying in the blast). The snapshot gained `cans` and `blasts` (additive,
+    no protocol bump).
+- **Revert**: the four parts are independent: the two `team.*` strings; the edge markers in
+  `TrackRaceSceneBase`; `LEVELS`, the durations and the `SPLIT_POOL` filter in `pixelSplit.ts`; the
+  `bat` / `fuel` kinds, `DROPS`, `flyCans` / `explode` in `brawl.ts` and the scene's `HELD` weapons.

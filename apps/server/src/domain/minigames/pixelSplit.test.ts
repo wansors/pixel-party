@@ -3,18 +3,19 @@ import {
   columnCounts,
   PIXEL_OBJECTS,
   type PixelCell,
+  type PixelObject,
   type PixelSplitObject,
   packCells,
   unpackCells,
 } from '@pp/shared'
 import type { Random } from '../ports/Random'
-import { PixelSplit, splitPoints } from './pixelSplit'
+import { PixelSplit, quarterTurn, SPLIT_POOL, splitPoints } from './pixelSplit'
 
 // Deterministic seed; the exact object order doesn't matter — the tests read counts off the puzzle.
 const zero: Random = { next: () => 0 }
 const cellsOf = (o: PixelSplitObject) => unpackCells(o.cols, o.rows, o.bits)
 const init = (players: string[], now = 0, random: Random = zero) =>
-  new PixelSplit().init({ players, seed: 1, random, now, config: { durationMs: 40_000 } })
+  new PixelSplit().init({ players, seed: 1, random, now, config: { durationMs: 20_000 } })
 
 // Small seeded generator (mulberry32) so the variety tests walk many real, reproducible seeds.
 function seeded(seed: number): Random {
@@ -53,6 +54,24 @@ function signature(cells: readonly PixelCell[], mirror = false): string {
     .sort((a, b) => a.y - b.y || a.x - b.x)
     .map((c) => `${c.x},${c.y}`)
     .join(' ')
+}
+
+// The shapes a pool object may appear as on the board (as drawn and/or turned either way), each in the
+// orientation the signature would match unmirrored.
+function shapesOf(name: string): PixelObject[] {
+  const entry = SPLIT_POOL.find((e) => e.object.name === name)
+  if (!entry) throw new Error(`${name} is not in the Pixel Split pool`)
+  return entry.turns.flatMap((turned) =>
+    turned ? [quarterTurn(entry.object, true), quarterTurn(entry.object, false)] : [entry.object],
+  )
+}
+
+// The cut boundaries straight down the middle of the drawn object (both of them on an odd width).
+function middleCuts(cells: readonly PixelCell[]): number[] {
+  const xs = cells.map((c) => c.x)
+  const minX = Math.min(...xs)
+  const span = Math.max(...xs) - minX + 1
+  return [...new Set([Math.floor(span / 2), Math.ceil(span / 2)])].map((c) => minX + c)
 }
 
 describe('PixelSplit', () => {
@@ -145,31 +164,26 @@ describe('PixelSplit', () => {
   })
 
   test('seeded placement varies where the ideal cut falls between puzzles and rounds', () => {
-    // name -> distinct ideal cut positions (as a fraction of the frame) / orientations seen.
+    // name -> distinct ideal cut positions (as a fraction of the frame) / looks (shape signatures) seen.
     const cuts = new Map<string, Set<number>>()
-    const mirrored = new Map<string, Set<boolean>>()
+    const looks = new Map<string, Set<string>>()
     for (let seed = 1; seed <= 60; seed++) {
       for (const puzzle of init(['a'], 0, seeded(seed)).puzzles) {
         const { name, cols } = puzzle.object
         const pixels = cellsOf(puzzle.object)
-        const src = PIXEL_OBJECTS.find((o) => o.name === name)
-        if (!src) throw new Error(`unknown object ${name}`)
-        const flipped = signature(pixels) !== signature(src.cells)
         cuts.set(name, (cuts.get(name) ?? new Set()).add(bestCut(puzzle.cols).cut / cols))
-        mirrored.set(name, (mirrored.get(name) ?? new Set()).add(flipped))
+        looks.set(name, (looks.get(name) ?? new Set()).add(signature(pixels)))
       }
     }
-    expect(cuts.size).toBe(PIXEL_OBJECTS.length)
+    expect(cuts.size).toBe(SPLIT_POOL.length)
     // Every object shows up with its ideal cut in several different places on screen…
     expect([...cuts].filter(([, seen]) => seen.size < 3).map(([name]) => name)).toEqual([])
-    // …and asymmetric ones in both orientations (a mirrored symmetric shape looks the same).
-    const asymmetric = PIXEL_OBJECTS.filter((o) => {
-      const flipped = signature(o.cells, true)
-      return signature(o.cells) !== flipped
-    })
-    expect(asymmetric.length).toBeGreaterThan(0)
-    for (const { name } of asymmetric)
-      expect({ name, seen: mirrored.get(name)?.size }).toEqual({ name, seen: 2 })
+    // …and facing both ways (every pool object is lopsided, so its mirror image looks different).
+    for (const { object } of SPLIT_POOL)
+      expect({ name: object.name, twoWays: (looks.get(object.name)?.size ?? 0) >= 2 }).toEqual({
+        name: object.name,
+        twoWays: true,
+      })
     // Two different seeds don't just replay the same layout.
     const layout = (seed: number) =>
       init(['a'], 0, seeded(seed)).puzzles.map((p) => `${p.object.name}@${bestCut(p.cols).cut}`)
@@ -184,12 +198,13 @@ describe('PixelSplit', () => {
       s.puzzles.forEach((puzzle, index) => {
         const { name, cols, rows } = puzzle.object
         const pixels = cellsOf(puzzle.object)
-        const src = PIXEL_OBJECTS.find((o) => o.name === name)
-        if (!src) throw new Error(`unknown object ${name}`)
-        // Same pixels, same shape (possibly mirrored), all inside the frame.
+        // Same pixels, same shape (as drawn or turned, possibly mirrored), all inside the frame.
+        const src = shapesOf(name).find((o) =>
+          [signature(o.cells), signature(o.cells, true)].includes(signature(pixels)),
+        )
+        if (!src) throw new Error(`${name} placed in a shape it may not take`)
         expect(pixels.length).toBe(src.count)
         expect(puzzle.total).toBe(src.count)
-        expect([signature(src.cells), signature(src.cells, true)]).toContain(signature(pixels))
         for (const c of pixels) {
           expect(c.x).toBeGreaterThanOrEqual(0)
           expect(c.x).toBeLessThan(cols)
@@ -208,6 +223,31 @@ describe('PixelSplit', () => {
         expected += index % 2 === 0 ? 10 : splitPoints(error - puzzle.minError, puzzle.total)
         s = game.onInput(s, 'a', { kind: 'cut', index, cut }, 100 + index)
         expect(s.score.get('a')).toBe(expected)
+      })
+    }
+  })
+
+  test('no puzzle gives the lazy cut down the middle more than half marks', () => {
+    // The symmetric favourites (where the middle is the answer) are left out of the pool altogether.
+    const pool = SPLIT_POOL.map((e) => e.object.name)
+    for (const name of ['HEART', 'HOUSE', 'GHOST', 'CROWN', 'STAR'])
+      expect(pool).not.toContain(name)
+    expect(pool.length).toBeGreaterThanOrEqual(init(['a']).puzzles.length)
+    const game = new PixelSplit()
+    for (let seed = 1; seed <= 40; seed++) {
+      let s = init(['a'], 0, seeded(seed))
+      // Ten different objects, no repeats.
+      expect(new Set(s.puzzles.map((p) => p.object.name)).size).toBe(10)
+      s.puzzles.forEach((puzzle, index) => {
+        const middles = middleCuts(cellsOf(puzzle.object))
+        for (const cut of middles) {
+          const left = leftOf(puzzle.cols, cut)
+          const error = Math.abs(left - (puzzle.total - left))
+          expect(splitPoints(error - puzzle.minError, puzzle.total)).toBeLessThanOrEqual(5)
+        }
+        const before = s.score.get('a') ?? 0
+        s = game.onInput(s, 'a', { kind: 'cut', index, cut: middles[0] as number }, 100 + index)
+        expect((s.score.get('a') ?? 0) - before).toBeLessThanOrEqual(5)
       })
     }
   })

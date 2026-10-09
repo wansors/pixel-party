@@ -4,6 +4,7 @@ import {
   type BrawlInput,
   type BrawlItemKind,
   type BrawlSnapshot,
+  type BrawlWeapon,
 } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
@@ -14,7 +15,14 @@ const FINISHER_DMG = 14 // the third punch in a row (knocks down)
 const KICK = { dmg: 12, reach: 0.125, shove: 0.08, ...BRAWL.moves.kick }
 const GRAB = { dmg: 16, reach: 0.075, toss: 0.25, ...BRAWL.moves.grab }
 const PIPE = { dmg: 14, reach: 0.135, uses: 6 }
+// A home-run swing: fewer swings than the pipe, but every one knocks down and sends them flying.
+const BAT = { dmg: 18, reach: 0.15, uses: 4, shove: 0.12 }
 const BOTTLE_DMG = 22
+// A thrown fuel can blows up on the first fighter in its path (on about its lane) or where it lands:
+// everyone in the blast but the thrower takes the damage, hits the floor and is blown clear.
+const FUEL = { ...BRAWL.fuel, dmg: 26, hitY: 0.06, shove: 0.15 }
+// An explosion stays on the wire this long, so every client sees it whatever its snapshot timing.
+const BLAST_WIRE_MS = 600
 const CHICKEN_HEAL = 30
 const HURT_MS = BRAWL.hurtMs
 const DOWN_MS = BRAWL.downMs
@@ -23,6 +31,14 @@ const HURT_SHOVE = 0.025
 const ITEM_FIRST_MS = 5000
 const ITEM_GAP_MS = [5500, 8500] as const
 const MAX_ITEMS = 4
+// What drops (cumulative odds): pipe 22 %, bat 14 %, bottle 18 %, fuel can 14 %, chicken 32 %.
+const DROPS: readonly [number, BrawlItemKind][] = [
+  [0.22, 'pipe'],
+  [0.36, 'bat'],
+  [0.54, 'bottle'],
+  [0.68, 'fuel'],
+  [1, 'chicken'],
+]
 // A KO is worth 1: the finisher takes FINISHER_SHARE of it, the rest is split by the damage everyone
 // (finisher included) dealt to that fighter — softening someone up counts, stealing the last hit
 // isn't everything.
@@ -40,7 +56,7 @@ interface Fighter {
   nextAttackAt: number
   combo: number
   comboAt: number
-  weapon: 'pipe' | 'bottle' | null
+  weapon: BrawlWeapon | null
   uses: number
   guardUntil: number
   // KO credit (see FINISHER_SHARE).
@@ -61,9 +77,29 @@ interface Item {
   kind: BrawlItemKind
 }
 
+// A fuel can in flight, and how much further it may fly.
+interface Can {
+  id: number
+  x: number
+  y: number
+  face: 1 | -1
+  by: PlayerId
+  left: number
+}
+
+interface Blast {
+  id: number
+  x: number
+  y: number
+  at: number
+}
+
 export interface BrawlState {
   fighters: Fighter[]
   items: Item[]
+  cans: Can[]
+  blasts: Blast[]
+  // One id sequence for items, cans and blasts.
   nextItemId: number
   nextItemAt: number
   // mulberry32 state, seeded from the round's Random (item drops are drawn as the round unfolds).
@@ -128,6 +164,8 @@ export class Brawl implements MiniGame<BrawlState, BrawlInput> {
         dy: 0,
       })),
       items: [],
+      cans: [],
+      blasts: [],
       nextItemId: 0,
       nextItemAt: ctx.now + ITEM_FIRST_MS,
       rng: Math.floor(ctx.random.next() * 4294967296) | 0,
@@ -172,25 +210,43 @@ export class Brawl implements MiniGame<BrawlState, BrawlInput> {
     })
   }
 
+  // PUNCH swings whatever you carry: a fist (combo), a pipe or bat, a bottle — or throws the fuel can.
   private punch(state: BrawlState, f: Fighter, now: number): void {
     this.act(f, 'punch', PUNCH.ms, PUNCH.cooldownMs, now)
+    const weapon = f.weapon
+    if (weapon === 'fuel') {
+      f.combo = 0
+      f.weapon = null
+      f.uses = 0
+      state.cans.push({
+        id: state.nextItemId++,
+        x: f.x,
+        y: f.y,
+        face: f.face,
+        by: f.id,
+        left: FUEL.range,
+      })
+      return
+    }
     f.combo = now - f.comboAt <= COMBO_WINDOW_MS ? f.combo + 1 : 1
     f.comboAt = now
-    const weapon = f.weapon
-    const reach = weapon === 'pipe' ? PIPE.reach : PUNCH.reach
+    const reach = weapon === 'pipe' ? PIPE.reach : weapon === 'bat' ? BAT.reach : PUNCH.reach
     const targets = this.inFront(state, f, reach)
-    const finisher = f.combo >= 3 || weapon === 'bottle'
+    const finisher = f.combo >= 3 || weapon === 'bottle' || weapon === 'bat'
     const dmg =
       weapon === 'bottle'
         ? BOTTLE_DMG
-        : weapon === 'pipe'
-          ? PIPE.dmg
-          : finisher
-            ? FINISHER_DMG
-            : PUNCH.dmg
-    for (const t of targets) this.hit(state, t, f, dmg, now, finisher, HURT_SHOVE)
+        : weapon === 'bat'
+          ? BAT.dmg
+          : weapon === 'pipe'
+            ? PIPE.dmg
+            : finisher
+              ? FINISHER_DMG
+              : PUNCH.dmg
+    const shove = weapon === 'bat' ? BAT.shove : HURT_SHOVE
+    for (const t of targets) this.hit(state, t, f, dmg, now, finisher, shove)
     if (finisher && !weapon) f.combo = 0
-    if (weapon === 'pipe' && targets.length > 0) {
+    if ((weapon === 'pipe' || weapon === 'bat') && targets.length > 0) {
       f.uses -= 1
       if (f.uses <= 0) f.weapon = null
     }
@@ -220,6 +276,7 @@ export class Brawl implements MiniGame<BrawlState, BrawlInput> {
     if (target) this.hit(state, target, f, GRAB.dmg, now, true, GRAB.toss)
   }
 
+  // `dir` is the way the hit shoves (the attacker's facing; away from the centre for a blast).
   private hit(
     state: BrawlState,
     t: Fighter,
@@ -228,13 +285,14 @@ export class Brawl implements MiniGame<BrawlState, BrawlInput> {
     now: number,
     knockdown: boolean,
     shove: number,
+    dir: 1 | -1 = by.face,
   ): void {
     if (t.action === 'down' && now < t.actionUntil) return
     if (now < t.guardUntil) return
     const dealt = Math.min(t.hp, dmg)
     t.hp -= dealt
     t.hurtBy.set(by.id, (t.hurtBy.get(by.id) ?? 0) + dealt)
-    t.x = clampX(t.x + by.face * shove)
+    t.x = clampX(t.x + dir * shove)
     t.combo = 0
     if (t.hp <= 0) {
       this.knockOut(state, t, now)
@@ -279,7 +337,8 @@ export class Brawl implements MiniGame<BrawlState, BrawlInput> {
     return state
   }
 
-  // A knocked-down fighter lets go of their weapon (it lands next to them; a pipe keeps its swings).
+  // A knocked-down fighter lets go of their weapon (it lands next to them; a picked-up pipe or bat
+  // comes back with all its swings).
   private dropWeapon(state: BrawlState, f: Fighter): void {
     if (!f.weapon) return
     state.items.push({
@@ -289,6 +348,57 @@ export class Brawl implements MiniGame<BrawlState, BrawlInput> {
       kind: f.weapon,
     })
     f.weapon = null
+  }
+
+  // Flies each can along the street; it blows up on the first fighter its path crosses (on about its
+  // lane, not its thrower, not one lying on the floor) or where it runs out of range or street.
+  private flyCans(state: BrawlState, step: number, now: number): void {
+    const cans = state.cans
+    state.cans = []
+    for (const can of cans) {
+      const dist = Math.min(FUEL.speed * step, can.left)
+      const from = can.x
+      const to = clampX(from + can.face * dist)
+      const reach = BRAWL.bodyR * 1.5
+      // Leaving the thrower's hands it only flies forward (not into whoever stands at their back).
+      const back = can.left === FUEL.range ? 0 : reach
+      const struck = state.fighters
+        .filter(
+          (o) =>
+            o.id !== can.by &&
+            o.action !== 'ko' &&
+            o.action !== 'down' &&
+            Math.abs(o.y - can.y) <= FUEL.hitY &&
+            (o.x - from) * can.face >= -back &&
+            (o.x - to) * can.face <= reach,
+        )
+        .sort((a, b) => (a.x - b.x) * can.face)[0]
+      can.x = to
+      can.left -= dist
+      const landed = can.left <= 0 || to === BRAWL.bodyR || to === BRAWL.w - BRAWL.bodyR
+      if (struck) this.explode(state, struck.x, can.y, can.by, now)
+      else if (landed) this.explode(state, to, can.y, can.by, now)
+      else state.cans.push(can)
+    }
+  }
+
+  // Everyone in the blast but the thrower is floored and blown clear; a fuel can lying in it goes up
+  // too (credited to the same thrower).
+  private explode(state: BrawlState, x: number, y: number, by: PlayerId, now: number): void {
+    state.blasts.push({ id: state.nextItemId++, x, y, at: now })
+    const inBlast = (px: number, py: number): boolean =>
+      ((px - x) / FUEL.blastX) ** 2 + ((py - y) / FUEL.blastY) ** 2 <= 1
+    const thrower = state.fighters.find((f) => f.id === by)
+    if (thrower) {
+      for (const t of state.fighters) {
+        if (t === thrower || t.action === 'ko' || !inBlast(t.x, t.y)) continue
+        this.hit(state, t, thrower, FUEL.dmg, now, true, FUEL.shove, t.x < x ? -1 : 1)
+      }
+    }
+    const chained = state.items.filter((i) => i.kind === 'fuel' && inBlast(i.x, i.y))
+    if (chained.length === 0) return
+    state.items = state.items.filter((i) => !chained.includes(i))
+    for (const i of chained) this.explode(state, i.x, i.y, by, now)
   }
 
   tick(state: BrawlState, dt: number, now: number): BrawlState {
@@ -314,6 +424,8 @@ export class Brawl implements MiniGame<BrawlState, BrawlInput> {
       }
       this.pickUp(state, f)
     }
+    this.flyCans(state, step, now)
+    state.blasts = state.blasts.filter((b) => now - b.at < BLAST_WIRE_MS)
     if (now >= state.nextItemAt) {
       state.nextItemAt =
         now + ITEM_GAP_MS[0] + Math.round(nextRand(state) * (ITEM_GAP_MS[1] - ITEM_GAP_MS[0]))
@@ -323,7 +435,7 @@ export class Brawl implements MiniGame<BrawlState, BrawlInput> {
           id: state.nextItemId++,
           x: BRAWL.w * (0.1 + nextRand(state) * 0.8),
           y: BRAWL.depth * (0.15 + nextRand(state) * 0.7),
-          kind: roll < 0.4 ? 'pipe' : roll < 0.65 ? 'bottle' : 'chicken',
+          kind: DROPS.find(([odds]) => roll < odds)?.[1] ?? 'chicken',
         })
       }
     }
@@ -342,7 +454,7 @@ export class Brawl implements MiniGame<BrawlState, BrawlInput> {
     if (item.kind === 'chicken') f.hp = Math.min(BRAWL.hp, f.hp + CHICKEN_HEAL)
     else {
       f.weapon = item.kind
-      f.uses = item.kind === 'pipe' ? PIPE.uses : 1
+      f.uses = item.kind === 'pipe' ? PIPE.uses : item.kind === 'bat' ? BAT.uses : 1
     }
   }
 
@@ -387,6 +499,8 @@ export class Brawl implements MiniGame<BrawlState, BrawlInput> {
           dy: round(f.dy),
         })),
       items: state.items.map((i) => [i.id, round(i.x), round(i.y), i.kind]),
+      cans: state.cans.map((c) => [c.id, round(c.x), round(c.y), c.face]),
+      blasts: state.blasts.map((b) => [b.id, round(b.x), round(b.y)]),
       remainingMs: Math.max(0, state.endsAt - now),
     }
   }

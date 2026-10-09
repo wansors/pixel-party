@@ -419,15 +419,23 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
   seeded object set for everyone; server owns the per-column counts and scores the
   cut. Since 2026-09-26 each puzzle is also **placed with the seeded RNG** (mirrored on a coin flip and
   dropped at a random offset inside a wider frame), so the ideal cut is no longer always in the same
-  spot; counts and the best possible split are recomputed from the placed grid. FFA · drag, or ← → /
-  A D + CUT (ENTER / SPACE) · ~30 s (several objects) · low/medium effort · low latency · banter 💥💥.
+  spot; counts and the best possible split are recomputed from the placed grid. Since 2026-10-09 the
+  round is **20 s for up to 10 objects** (it was 30 s for 8: too much time to deliberate) and only
+  **lopsided objects** are dealt: most of the shared art is left-right symmetric, so a cut straight down
+  the middle of the object scored full marks. Pixel Split now draws from 13 lopsided objects (frying pan,
+  boot, axe, mug, lollipop, rubber duck, hammer, ice cream, watering can, dog, rocket, guitar, whale),
+  each shown as drawn and/or turned a quarter — whichever way a middle cut (either side of the middle on
+  an odd width) scores **at most 5 of 10**; the symmetric favourites stay Pixel Weight's. No object
+  repeats within a round. FFA · drag, or ← → / A D + CUT (ENTER / SPACE) · 20 s (up to 10 objects) ·
+  low/medium effort · low latency · banter 💥💥.
 - **E12. ✅ Pixel Weight ("guess the weight")** — implemented (`pixel-weight`): a pixel-art object
   flashes briefly, then hides; guess **how many filled pixels** it had — type the number, drag the
   slider, − / +, ← → ±1 or ↑ ↓ ±10 — and press GUESS (ENTER / SPACE). Points scale with
   closeness (`max(0, 10 − |error|)`); several objects. Seeded objects; server owns the counts. Every
   puzzle is a **seeded variant** of its object (`pixelVariant`: up to two inner rows/columns repeated, a
   few edge pixels nibbled off or grown on, mirrored on a coin flip), so a count learnt in one round is
-  no use in the next. *Pixel Balance variant not built.* FFA · type / slider · ~30 s · low effort · low
+  no use in the next. It weighs the whole shared set (26 objects since the lopsided ones were added for
+  Pixel Split on 2026-10-09). *Pixel Balance variant not built.* FFA · type / slider · ~30 s · low effort · low
   latency · banter 💥💥.
 - **E13. ✅ Quick Tetris** — a short, fast Tetris sprint (compact variant of **E10**): identical seeded
   piece sequence for all; clear as many lines as possible in a fixed short window (or reach N lines
@@ -805,9 +813,15 @@ avatar. See `implementation-decisions.md` D22.
   (← then PUNCH swings left, even before a tick has moved you). Punch 8 (quick;
   the third in a row within 0.65 s is a 14-damage knock-down), kick 12 (longer, shoves), grab: throw
   whoever is right next to you (16, knock-down, tossed 0.25 away). Knocked down = untouchable for
-  0.9 s, then 0.6 s of guard. Items drop on a seeded schedule (max 4 on the street): a pipe (14 damage,
-  longer reach, 6 swings), a bottle (one 22-damage knock-down, then it smashes), roast chicken (+30 HP).
-  Knocked down while armed, you drop it. 0 HP = K.O. for good. Spawn spots are evenly spaced and dealt
+  0.9 s, then 0.6 s of guard. Items drop on a seeded schedule (max 4 on the street; odds pipe 22 %,
+  bat 14 %, bottle 18 %, fuel can 14 %, chicken 32 %). Walk over a weapon to pick it up; **PUNCH uses
+  it** (kick and grab stay bare-handed, and the PUNCH button turns into the weapon: `BAT ×4`, `THROW!`):
+  a pipe (14 damage, longer reach, 6 swings), a baseball bat (18 damage, longest reach, every swing a
+  knock-down that sends them flying, 4 swings), a bottle (one 22-damage knock-down, then it smashes), a
+  fuel can (thrown down the street: it blows up on the first standing fighter in its path on about its
+  lane, or where it lands 0.75 away; everyone in the blast but the thrower takes 26, is floored and
+  blown clear, and any fuel can lying in the blast goes up too). Roast chicken: +30 HP. A swing that
+  misses costs nothing. Knocked down while armed, you drop it. 0 HP = K.O. for good. Spawn spots are evenly spaced and dealt
   in a seeded order (nobody owns the safer end seats by joining first); a fighter who leaves is out,
   crediting nobody.
 - **Win condition / Result**: last one standing; then K.O. credit — the finisher takes half of each
@@ -816,7 +830,9 @@ avatar. See `implementation-decisions.md` D22.
 - **Latency**: medium — attacks resolve on the server as they arrive. Your own fighter is predicted: it
   walks, turns and swings the moment you press (with the shared `BRAWL.moves` timings, so a press the
   server will refuse never swings), easing onto the server's position; the others are eased and
-  dead-reckoned.
+  dead-reckoned. A held weapon is drawn in the hand and swung through the punch (the fist only shows
+  bare-handed); weapon hits pop their own word (`CLANG!`, `HOME RUN!`, `SMASH!`), thrown cans fly on
+  between snapshots at the shared speed, and each explosion (on the wire for 0.6 s) shows once.
 
 ---
 

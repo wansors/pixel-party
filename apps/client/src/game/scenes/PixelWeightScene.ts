@@ -33,6 +33,19 @@ const OBJECT_COLORS: Record<string, number> = {
   KEY: PALETTE.amber,
   APPLE: PALETTE.red,
   CROWN: PALETTE.amber,
+  FRYING_PAN: PALETTE.dim,
+  BOOT: PALETTE.orange,
+  AXE: PALETTE.red,
+  MUG: PALETTE.cyan,
+  LOLLIPOP: PALETTE.magenta,
+  DUCK: PALETTE.amber,
+  HAMMER: PALETTE.orange,
+  ICE_CREAM: PALETTE.magenta,
+  WATERING_CAN: PALETTE.lime,
+  DOG: PALETTE.orange,
+  ROCKET: PALETTE.red,
+  GUITAR: 0xb06bff,
+  WHALE: PALETTE.cyan,
 }
 // Mirrors pixelWeight.ts scoring: a perfect guess is worth this much, minus one per pixel off.
 const MAX_POINTS = 10

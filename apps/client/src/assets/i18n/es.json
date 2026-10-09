@@ -217,8 +217,8 @@
     }
   },
   "team": {
-    "red": "Rojo",
-    "blue": "Azul"
+    "red": "Equipo Rojo",
+    "blue": "Equipo Azul"
   },
   "reason": {
     "room_not_found": "Esa sala no existe",
@@ -498,9 +498,9 @@
       },
       "brawl": {
         "name": "Repartiendo Tortas",
-        "blurb": "Una calle y todos contra todos: combos de puñetazos, patadas, llaves, tuberías y pollo asado. ¡Gana el último en pie!",
+        "blurb": "Una calle y todos contra todos: combos de puñetazos, patadas, llaves, tuberías, bates, bidones que revientan y pollo asado. ¡Gana el último en pie!",
         "tagline": "Aquí se reparten tortas gratis. Y botellazos.",
-        "controls": "←↑↓→/WASD: moverte · ESPACIO/J: puño · K: patada · L: llave"
+        "controls": "←↑↓→/WASD: moverte · ESPACIO/J: puño o arma · K: patada · L: llave"
       },
       "rally-stage": {
         "name": "Tramo de Rally",
@@ -710,7 +710,20 @@
         "GHOST": "el FANTASMA",
         "KEY": "la LLAVE",
         "APPLE": "la MANZANA",
-        "CROWN": "la CORONA"
+        "CROWN": "la CORONA",
+        "FRYING_PAN": "la SARTÉN",
+        "BOOT": "la BOTA",
+        "AXE": "el HACHA",
+        "MUG": "la TAZA",
+        "LOLLIPOP": "la PIRULETA",
+        "DUCK": "el PATITO DE GOMA",
+        "HAMMER": "el MARTILLO",
+        "ICE_CREAM": "el CUCURUCHO",
+        "WATERING_CAN": "la REGADERA",
+        "DOG": "el PERRO SALCHICHA",
+        "ROCKET": "el COHETE",
+        "GUITAR": "la GUITARRA",
+        "WHALE": "la BALLENA"
       },
       "keys": "Teclea la cifra · ← → ±1 · ↑ ↓ ±10 · INTRO y a ver"
     },
@@ -722,11 +735,11 @@
     "tugOfWar": {
       "pull": "¡TIRA!",
       "hint": "Pulsa la pantalla o ESPACIO para tirar de la cuerda",
-      "team": "Tu equipo",
+      "team": "Eres del {{team}}",
       "spectator": "Sin equipo: esta ronda te toca mirar",
-      "leads": "¡VA GANANDO {{team}}!",
+      "leads": "¡{{team}} EN CABEZA!",
       "almost": "¡QUE SE ESCAPA!",
-      "teamWins": "¡GANA {{team}}!",
+      "teamWins": "¡GANA EL {{team}}!",
       "perHead": "por cabeza",
       "hintPc": "Aporrea ESPACIO / INTRO o haz clic para tirar de la cuerda"
     },
@@ -771,7 +784,7 @@
       "hint": "Pulsa en aguas enemigas para disparar: primero manda el capi, luego cualquiera",
       "spectator": "Sin equipo: esta ronda te toca mirar",
       "yourTurn": "{{team}}: ¡FUEGO A DISCRECIÓN!",
-      "waitTurn": "Esperando a {{team}}...",
+      "waitTurn": "Esperando al {{team}}...",
       "won": "¡TOCADO Y HUNDIDO! GANA TU EQUIPO",
       "lost": "Os han hundido la flota…",
       "draw": "Se acabó el tiempo — empate",
@@ -780,7 +793,7 @@
       "hitsChip": "IMPACTOS {{n}}/{{total}}",
       "enemyWaters": "AGUAS ENEMIGAS",
       "ourFleet": "NUESTRA FLOTA",
-      "teamWins": "¡GANA {{team}}!",
+      "teamWins": "¡GANA EL {{team}}!",
       "yourShot": "¡DISPARAS TÚ, CAPI!",
       "captainAims": "APUNTA {{name}}...",
       "crewIn": "Tu tripulación dispara en {{s}} s",
@@ -1054,7 +1067,20 @@
       "wham": "¡ZAS!",
       "ko": "¡K.O.!",
       "standing": "SIGUES EN PIE",
-      "hint": "←↑↓→ / WASD: moverte · ESPACIO/J: puño · K: patada · L: llave"
+      "hint": "←↑↓→ / WASD: moverte · ESPACIO/J: puño o arma · K: patada · L: llave",
+      "weapon": {
+        "pipe": "TUBO",
+        "bat": "BATE",
+        "bottle": "BOTELLA",
+        "fuel": "BIDÓN"
+      },
+      "swing": "{{weapon}} ×{{n}}",
+      "throw": "¡LÁNZALO!",
+      "got": "¡{{weapon}}!",
+      "hitPipe": "¡CLONC!",
+      "hitBat": "¡ZASCA!",
+      "hitBottle": "¡CRASH!",
+      "boom": "¡CATAPUM!"
     },
     "courseRace": {
       "go": "¡YA!",

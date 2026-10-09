@@ -1,13 +1,14 @@
 import {
   ATHLETICS_STRIDE,
   type AthleticsFoot,
+  type AvatarId,
   athleticsStrideGain,
   PALETTE,
   type TrackRaceSnapshot,
   type TrackRunner,
 } from '@pp/shared'
 import type Phaser from 'phaser'
-import { AvatarSprite, avatarPx } from '../avatars'
+import { AvatarSprite, avatarPx, ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, flash, floatText, shake, showBanner } from '../fx'
 import { bodyStyle, ensureBevelPanel, fitFontSize, headlineStyle } from '../pixelStyle'
 import { nameTagStyle, YouMarker } from '../playerMarks'
@@ -40,16 +41,41 @@ const CHEER_GAP_MS = 1500
 // most this often.
 const RIVAL_LEVEL = 0.4
 const RIVAL_CRASH_MS = 250
+// A rival counts as off screen (and gets an edge marker) once at most this fraction of their avatar
+// still shows.
+const EDGE_SHOWING = 0.2
+// Names in an edge marker on a phone keep this many characters.
+const EDGE_NAME_CHARS = 6
+// Progress strip: every runner's avatar head, this big.
+const DOT_PX = 16
 
 // Each athlete is the player's lobby avatar in side view: two-frame strides tied to the distance run,
 // crouched in the blocks, tucked over a hurdle, wincing on a stumble, happy past the line.
 interface RunnerView {
   avatar: AvatarSprite
   label: Phaser.GameObjects.Text
+  // The label's text: the full name, and the one an edge marker shows (shortened on a phone).
+  name: string
+  edgeName: string
   color: number
   lane: number
   airStart: number // client time the current jump started (-1 = grounded)
   stumbleAt: number
+  // The runner on the progress strip.
+  dot: Phaser.GameObjects.Image
+  // Rivals only: the marker pinned to their lane's edge while they're off screen.
+  edge?: EdgeMarker
+}
+
+// A rival out of view, pinned to the screen edge of their own lane: ◀ -8m [avatar] NAME behind you,
+// NAME [avatar] +12m ▶ ahead (a finisher shows their place instead of the gap).
+interface EdgeMarker {
+  back: Phaser.GameObjects.Rectangle
+  icon: Phaser.GameObjects.Image
+  gap: Phaser.GameObjects.Text
+  // Which edge it's on (0 = the runner is on screen, no marker), and the gap text as last drawn.
+  side: -1 | 0 | 1
+  text: string
 }
 
 // Side-by-side track race canvas shared by the 100 m dash and the 110 m hurdles. A side-scrolling
@@ -103,6 +129,10 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     for (const v of this.views.values()) {
       v.avatar.destroy()
       v.label.destroy()
+      v.dot.destroy()
+      v.edge?.back.destroy()
+      v.edge?.icon.destroy()
+      v.edge?.gap.destroy()
     }
     this.views.clear()
     this.hurdleSprites = []
@@ -277,41 +307,68 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     return this.laneTop(lane) + Math.round(this.laneH * 0.84)
   }
 
+  private tagSize(): number {
+    return this.compact ? 8 : this.laneH >= 56 ? 12 : 10
+  }
+
   private viewOf(r: TrackRunner, lane: number): RunnerView {
     let v = this.views.get(r.id)
     if (!v) {
       const color = this.state.colorOf(r.id, PALETTE.cyan)
       const mine = r.id === this.selfId
-      const avatar = new AvatarSprite(
-        this,
-        this.state.avatarOf(r.id),
-        color,
-        this.avatarSize(),
-        'side',
-      )
+      const avatarId = this.state.avatarOf(r.id)
+      const avatar = new AvatarSprite(this, avatarId, color, this.avatarSize(), 'side')
       avatar.image
         .setOrigin(0.5, 1)
         .setPosition(0, this.footY(lane))
         .setDepth(101 + lane * 2)
+      const name = mine ? this.t('game.common.you') : this.state.nameOf(r.id)
+      const edgeName = this.compact ? name.slice(0, EDGE_NAME_CHARS) : name
       v = {
         avatar,
         label: this.add
-          .text(
-            0,
-            0,
-            mine ? this.t('game.common.you') : this.state.nameOf(r.id),
-            nameTagStyle(this.compact ? 8 : this.laneH >= 56 ? 12 : 10, color),
-          )
+          .text(0, 0, name, nameTagStyle(this.tagSize(), color))
           .setOrigin(1, 0.5)
           .setDepth(640),
+        name,
+        edgeName,
         color,
         lane,
         airStart: -1,
         stumbleAt: -1,
+        // Yours rides above the rivals' (drawn last, framed in drawProgress).
+        dot: this.add
+          .image(0, this.progressY, ensureAvatarTexture(this, avatarId, color, 1, 'side'))
+          .setDisplaySize(DOT_PX, DOT_PX)
+          .setDepth(mine ? 603 : 601),
+        edge: mine ? undefined : this.edgeMarker(avatarId, color, lane),
       }
       this.views.set(r.id, v)
     }
     return v
+  }
+
+  // Built hidden, once per rival; shown while they're out of view (placeEdge).
+  private edgeMarker(avatarId: AvatarId, color: number, lane: number): EdgeMarker {
+    const iconPx = this.laneH >= 40 ? 32 : 16
+    const y = this.laneTop(lane) + this.laneH / 2
+    return {
+      back: this.add
+        .rectangle(0, y, 0, Math.max(8, Math.min(this.laneH - 2, iconPx + 6)), PALETTE.bg, 0.78)
+        .setStrokeStyle(2, color)
+        .setDepth(636)
+        .setVisible(false),
+      icon: this.add
+        .image(0, y, ensureAvatarTexture(this, avatarId, color, iconPx / 16, 'side'))
+        .setDepth(638)
+        .setVisible(false),
+      gap: this.add
+        .text(0, y, '', nameTagStyle(this.tagSize(), color))
+        .setDepth(640)
+        .setVisible(false),
+      side: 0,
+      text: '',
+    }
   }
 
   // --- Input --------------------------------------------------------------------------------------
@@ -390,7 +447,10 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
       lead = Math.max(lead, x)
     }
     const me = this.own()
-    const camX = (me ? (shown.get(me.id) ?? 0) : lead) - this.anchorX / this.ppm
+    // Distances (the camera, the edge markers' gaps) are measured from you, or from the leader when
+    // you're watching.
+    const ref = me ? (shown.get(me.id) ?? 0) : lead
+    const camX = ref - this.anchorX / this.ppm
     const toX = (x: number): number => (x - camX) * this.ppm
 
     this.track?.setTilePosition(camX * this.ppm, 0)
@@ -416,7 +476,7 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
           )
         }
       })
-      this.renderRunner(snap, r, lane, shown.get(r.id) ?? r.x, toX, now)
+      this.renderRunner(snap, r, lane, shown.get(r.id) ?? r.x, toX, ref, now)
     })
 
     this.drawProgress(snap, shown)
@@ -432,6 +492,7 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     lane: number,
     x: number,
     toX: (x: number) => number,
+    ref: number,
     now: number,
   ): void {
     const v = this.viewOf(r, lane)
@@ -464,11 +525,14 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     const bob = running && stride === 1 ? -Math.max(1, Math.round(this.avatarSize() / 24)) : 0
     v.avatar.image.setPosition(sx, this.footY(lane) - lift + bob).setAngle(lean)
     const headY = this.footY(lane) - lift - this.avatarSize()
-    // Name tag trails the runner inside its own lane (the avatar's head pokes into the lane above).
-    v.label.setPosition(
-      Math.max(v.label.width + 4, sx - this.avatarSize() * 0.32),
-      this.footY(lane) - this.laneH * 0.4,
-    )
+    // Out of view: the marker on the lane's edge carries the name tag. Otherwise the tag trails the
+    // runner inside its own lane (the avatar's head pokes into the lane above).
+    if (!this.placeEdge(v, r, sx, x - ref)) {
+      v.label.setPosition(
+        Math.max(v.label.width + 4, sx - this.avatarSize() * 0.32),
+        this.footY(lane) - this.laneH * 0.4,
+      )
+    }
     if (mine) {
       // The ▼ never covers the progress strip: a packed field starts the track right under it, so
       // there's no marker in a lane without room for one, and a jump can't lift it into the strip.
@@ -480,7 +544,55 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     }
   }
 
-  // Top strip: the whole race at a glance — hurdles, finish flag and every runner's dot.
+  // A rival whose avatar has (mostly) left the screen is pinned to their lane's edge: ◀ the gap
+  // [avatar] NAME on the left, NAME [avatar] the gap ▶ on the right. Laid out only when the side or
+  // the text changes. Returns whether the marker is up (it then holds the name tag).
+  private placeEdge(v: RunnerView, r: TrackRunner, sx: number, gap: number): boolean {
+    const e = v.edge
+    if (!e) return false
+    const { width } = this.scale
+    const margin = this.avatarSize() * (0.5 - EDGE_SHOWING)
+    const side = sx < -margin ? -1 : sx > width + margin ? 1 : 0
+    const sideChanged = side !== e.side
+    if (sideChanged) {
+      e.side = side
+      for (const o of [e.back, e.icon, e.gap]) o.setVisible(side !== 0)
+      v.label.setText(side === 0 ? v.name : v.edgeName)
+      if (side === 0) return false
+    }
+    if (side === 0) return false
+    const metres = `${gap < 0 ? '-' : '+'}${Math.round(Math.abs(gap))}m`
+    const what = r.finishMs !== null ? this.t('game.athletics.place', { n: r.place ?? 0 }) : metres
+    const text = side < 0 ? `◀ ${what}` : `${what} ▶`
+    if (!sideChanged && text === e.text) return true
+    e.text = text
+    e.gap.setText(text)
+    const pad = 6
+    const iconW = e.icon.displayWidth
+    if (side < 0) {
+      e.gap.setOrigin(0, 0.5).setX(pad)
+      e.icon.setX(e.gap.x + e.gap.width + 4 + iconW / 2)
+      const right = e.icon.x + iconW / 2 + 4 + v.label.width
+      v.label.setPosition(right, e.gap.y)
+      e.back
+        .setOrigin(0, 0.5)
+        .setPosition(-2, e.gap.y)
+        .setSize(right + pad + 2, e.back.height)
+    } else {
+      e.gap.setOrigin(1, 0.5).setX(width - pad)
+      e.icon.setX(e.gap.x - e.gap.width - 4 - iconW / 2)
+      const left = e.icon.x - iconW / 2 - 4
+      v.label.setPosition(left, e.gap.y)
+      const backLeft = left - v.label.width - pad
+      e.back
+        .setOrigin(0, 0.5)
+        .setPosition(backLeft, e.gap.y)
+        .setSize(width + 2 - backLeft, e.back.height)
+    }
+    return true
+  }
+
+  // Top strip: the whole race at a glance — hurdles, finish flag and every runner's avatar head.
   private drawProgress(snap: TrackRaceSnapshot, shown: Map<string, number>): void {
     const g = this.progress
     if (!g) return
@@ -498,17 +610,17 @@ export abstract class TrackRaceSceneBase extends MiniGameScene<TrackRaceSnapshot
     g.fillStyle(PALETTE.text, 1)
     g.fillRect(x1 - 2, y - 7, 4, 14)
     for (const r of snap.runners) {
-      if (r.id === this.selfId) continue
-      g.fillStyle(this.state.colorOf(r.id, PALETTE.cyan), 1)
-      g.fillRect(at(shown.get(r.id) ?? r.x) - 3, y - 3, 6, 6)
+      this.views.get(r.id)?.dot.setPosition(Math.round(at(shown.get(r.id) ?? r.x)), y)
     }
+    // Yours sits in a white frame.
     const me = this.own()
     if (me) {
-      const x = at(shown.get(me.id) ?? me.x)
+      const x = Math.round(at(shown.get(me.id) ?? me.x))
+      const h = DOT_PX / 2 + 2
       g.fillStyle(PALETTE.text, 1)
-      g.fillRect(x - 5, y - 5, 10, 10)
-      g.fillStyle(this.state.colorOf(me.id, PALETTE.cyan), 1)
-      g.fillRect(x - 3, y - 3, 6, 6)
+      g.fillRect(x - h, y - h, h * 2, h * 2)
+      g.fillStyle(PALETTE.bg, 1)
+      g.fillRect(x - h + 2, y - h + 2, h * 2 - 4, h * 2 - 4)
     }
   }
 
