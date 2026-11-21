@@ -48,7 +48,9 @@ cd "$WORK" && timeout 180 bun shoot.ts <tag>-phone 390x844 fruit-catch
   joins as a phone and the lobby's mobile hints show (D34).
 - Party mode (the production build, as players get it): build the client, start the server with
   `NODE_ENV=production` (it serves the build on :3000) and point the driver at it with
-  `PP_CLIENT=http://localhost:3000 PP_SERVER=http://localhost:3000`. `shoot.ts` asks for one round
+  `PP_CLIENT=http://localhost:3000 PP_SERVER=http://localhost:3000`. The production server indexes (and gzips) the
+  build once at startup, so **restart it after every `build:client`** — otherwise it keeps serving
+  the previous build. `shoot.ts` asks for one round
   per listed game (a session takes up to 99 — D40), so a whole-catalog sweep fits one run.
 - Output: `$WORK/shots/<tag>/NNN-<phase>.png` — look at them with the Read tool.
 - Per game: `-intro` (≈1.8 s into the countdown), `-play1` (≈1.5 s into the round), `-play2` (after a

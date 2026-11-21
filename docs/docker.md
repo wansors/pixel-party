@@ -1,6 +1,6 @@
 # Pixel Party — Docker image
 
-**Pixel Party** is a party game for a LAN: one machine runs the server, and everyone plays 65
+**Pixel Party** is a party game for a LAN: one machine runs the server, and everyone plays 66
 mini-games in the browser of their own device (PC first, phones welcome). No accounts, no database, no
 internet needed during the party.
 

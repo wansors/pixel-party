@@ -1,6 +1,7 @@
 export * from './asteroids'
 export * from './athletics'
 export * from './balloonChicken'
+export * from './barRush'
 export * from './bomberExpress'
 export * from './bombRelay'
 export * from './brawl'

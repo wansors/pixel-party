@@ -785,6 +785,18 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     axes: ['reflexes', 'precision'],
   },
   {
+    id: 'bar-rush',
+    name: 'Bar Rush',
+    format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 12] },
+    realtime: true,
+    mobileFriendly: true,
+    durationSec: 60,
+    blurb:
+      'Four bars, a thirsty crowd: slide the drinks down to them, catch the empties coming back, and never let a glass smash.',
+    axes: ['speed', 'focus'],
+  },
+  {
     id: 'marbles-duel',
     name: 'Marbles Duel',
     format: 'duel',

@@ -103,6 +103,7 @@
 | `brick-buster` | 1–12 | 2–12 | OK (added 2026-11-21, D49) | Everyone plays their own board against the same walls; rivals show as mini boards (PC) or a score strip (phone) — up to 11 fit. |
 | `munch-maze` | 1–12 | 2–10 | OK (added 2026-11-21, D50) | One shared maze: 12 spread start cells; the pigeons scale with the room (2 + 1 per 4 players, +2 over the round) and seeds grow back faster in a crowd (12 s − 0.7 s per player, floor 4 s). Crowded at 11–12. |
 | `sky-joust` | 2–12 | 3–8 | OK (added 2026-11-21, D51) | A joust needs a rival (min 2). One shared sky with 12 spawn spots on the ledges (respawn picks the one farthest from everyone); crowded at 10+, where jousts get random. |
+| `bar-rush` | 1–12 | 2–12 | OK (added 2026-11-21, D52) | Everyone tends their own bar against the same crowd, so the headcount only fills the score strip (3 rows on a phone). |
 
 ### Racing & athletics
 

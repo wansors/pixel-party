@@ -628,6 +628,12 @@
         "blurb": "Aletea sobre la lava y justa: pilla a un rival desde arriba para descabalgarlo. Si chocáis a la misma altura rebotáis, la lava quema y el suelo se desmorona.",
         "controls": "← → / A D dirigir · ESPACIO / ↑ / W aletear",
         "tagline": "Quien está arriba, manda. Casi siempre."
+      },
+      "bar-rush": {
+        "name": "¡Marchando!",
+        "blurb": "Cuatro barras y una clientela con sed: desliza las cañas hasta ellos, recoge las jarras vacías que vuelven y que no se te rompa ni un vaso.",
+        "controls": "↑ ↓ / W S cambiar de barra · ESPACIO / ← / A servir · o toca una barra",
+        "tagline": "Aquí no se cierra hasta que se vacía el barril."
       }
     }
   },
@@ -1393,6 +1399,21 @@
         "MUY BAJITO, COLEGA",
         "¡TOMA!",
         "¡PINCHITO MORUNO!"
+      ]
+    },
+    "barRush": {
+      "hint": "↑ ↓ / W S cambiar de barra · ESPACIO / ← / A servir · recoge las jarras · que nadie llegue a la barra",
+      "hintShort": "Toca una barra para ir · toca la tuya para servir",
+      "ready": "¡PREPARADOS!",
+      "readySub": "¡Sirve cañas y recoge las jarras!",
+      "score": "★ {{n}}",
+      "angry": [
+        "¡¿Y MI CAÑA QUÉ?!",
+        "¡QUÉ SERVICIO!",
+        "¡HOJA DE RECLAMACIONES!",
+        "ME VOY AL DE ENFRENTE",
+        "¡QUE VENGA EL ENCARGADO!",
+        "¡ESTO ES UN CACHONDEO!"
       ]
     }
   }

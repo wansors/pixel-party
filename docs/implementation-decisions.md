@@ -1496,3 +1496,30 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   time judging, ranking, the snapshot copy). Bot `bots/sky-joust.ts`.
 - **Revert**: the four files, the registry / catalog / scene-map / i18n entries, the bot and the
   thumbnail.
+
+### D52 — Bar Rush: serve them, catch the empties — DONE
+
+- **Date**: 2026-11-21. **Context**: the arcade-classics wave (D48), fifth and last game: a
+  bar-serving rush — a genre the catalog didn't have (juggling two jobs: serving and catching).
+- **What**: `bar-rush`, FFA, 1–12 (best 2–12), 60 s, mobile-friendly.
+  - Own bar per player, the same seeded crowd for everyone (`buildArrivals`): never the same bar twice
+    running, the gap between arrivals easing 2.5 s → 0.85 s (±25 %), walking pace 0.075 → 0.15
+    bar-lengths/s, two drinks wanted 20 % → 55 % of the time (D40).
+  - A served drink slides at 1.3/s and is caught by the walking customer nearest your end that it
+    reaches (+1): pushed back 0.3 s (never past the door), 0.9 s drinking, then the empty slides back
+    at 0.5/s — caught at your end if you're on that bar (+1), else smashed (−2). Uncaught drinks smash
+    at the door (−2); a customer reaching your end is angry (−3). Serving has a 260 ms cooldown;
+    switching bars is instant. The score floors at 0.
+  - A first version gave a bonus for pushing a customer out of the door: every early serve did that,
+    so no empty ever came back and half the game never happened; customers now stop at the door.
+  - Netcode like Brick Buster (D49): the bar (`barStep` / `barRun`) is integrated on a 10 ms grid with
+    plain arithmetic in `@pp/shared`; commands (`lane` / `serve`) carry their press time and the server
+    judges 150 ms behind, so the client predicts its own bar bit for bit. Rivals: a score strip.
+  - Ranked by score (`48 pts`), then fewer smashes + angry customers. Bot simulations (4 bots, 4
+    seeds): 47–75 points with both serving and catching in play.
+- **Tests**: `barRush.test.ts` (arrivals on time, serving and the cooldown, the catch → push → drink
+  → empty cycle, catching or smashing empties, uncaught drinks, angry customers and the score floor,
+  the seeded crowd's ramp, commands before GO / press-time clamp / junk, behind-real-time judging,
+  ranking, the snapshot copy). Bot `bots/bar-rush.ts`.
+- **Revert**: the four files, the registry / catalog / scene-map / i18n entries, the bot and the
+  thumbnail.

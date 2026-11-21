@@ -65,7 +65,8 @@ Then (2026-11-21) K1 Neon Trails (`neon-trails`, D41), K2 Wing It (`wing-it`, D4
 Scissors (`rock-paper-scissors`, D43), K4 Sharpshooter (`sharpshooter`, D45), and the counter-intuitive
 pair K5 Spook Snatch (`spook-snatch`, D46) and K6 Hit, Pull, Twist (`hit-pull-twist`, D47). Then the
 arcade-classics wave: K7 Road Hop (`road-hop`, D48), K8 Brick Buster (`brick-buster`, D49), K9 Munch
-Maze (`munch-maze`, D50) and K10 Sky Joust (`sky-joust`, D51). **65 mini-games total.**
+Maze (`munch-maze`, D50), K10 Sky Joust (`sky-joust`, D51) and K11 Bar Rush (`bar-rush`, D52). **66
+mini-games total.**
 
 > **Difficulty curves (D40, 2026-11-21)**: about 26 games were retuned from linear or flat pacing to
 > non-linear ramps (the shared `easeIn` / `rampEase` / `rampExp` / `compound` helpers in
@@ -1046,6 +1047,21 @@ avatar. See `implementation-decisions.md` D22.
   carry their press time and the server judges 150 ms behind. Your own flight is predicted exactly;
   rivals ease into theirs; jousts show when the server has judged them (~150 ms).
 
+### K11. ✅ Bar Rush — implemented (`bar-rush`)
+- **Concept**: a bar-serving rush in the genre of the arcade bartender classics (own name and look:
+  the avatar set as customers in muted colours, you behind the taps), on everyone's own bar (D52).
+- **Type**: FFA, 1–12 (best 2–12) · **Input**: ↑ ↓ / W S change bar, SPACE / ← / A serve; or tap a
+  bar (tap yours to serve) · **Duration**: 60 s · **Banter**: 💥💥 · **Mobile-friendly**: yes
+- **Rules**: four bars; customers walk in from the doors toward your taps. A drink slid down a bar is
+  caught by the first customer in its way (+1), who is pushed back toward the door, drinks and slides
+  the empty back — catch it at your end (+1) or it smashes (−2). A drink nobody catches smashes at the
+  door (−2); a customer who reaches your end leaves angry (−3). The score never drops below 0. The
+  same seeded crowd for everyone: arrivals every 2.5 s → 0.85 s and walking pace ×2 on an ease-in
+  (D40); later customers want two drinks more often.
+- **Win condition / Result**: highest score (`48 pts`); fewer smashes and angry customers break ties.
+- **Latency**: low — the bar rules are shared and integrated on a fixed grid; commands carry their
+  press time and the server judges 150 ms behind, so the client predicts its own bar bit for bit.
+
 ---
 
 ## Variety coverage
@@ -1053,8 +1069,8 @@ avatar. See `implementation-decisions.md` D22.
 | Axis | Covered by |
 |------|------------|
 | Reflexes / reaction | A1, A6, B1, E7, F5, F7, G2, G5, I3, K2, K6, K8, K10 |
-| Attention / focus (inhibition) | E1, E3, E4, G1, K5, K6 |
-| Speed / endurance | A2, A9, C1, F1, F2, G3 |
+| Attention / focus (inhibition) | E1, E3, E4, G1, K5, K6, K11 |
+| Speed / endurance | A2, A9, C1, F1, F2, G3, K11 |
 | Knowledge | A3, J1 |
 | Mental math | E2 |
 | Memory | A4, A11, E8 |
@@ -1068,7 +1084,7 @@ avatar. See `implementation-decisions.md` D22.
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6, J1, K1, K2, K4–K6, K7, K8, K9, K10 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6, J1, K1, K2, K4–K6, K7, K8, K9, K10, K11 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7, G6, K3 |
 | Team | C1, C2, C3 |
 

@@ -625,6 +625,12 @@
         "blurb": "Flap over the lava and joust: hit a rival from above to unhorse them. Level clashes bounce, the lava bites, the ground crumbles.",
         "controls": "← → / A D steer · SPACE / ↑ / W flap",
         "tagline": "Height is might. Mostly."
+      },
+      "bar-rush": {
+        "name": "Bar Rush",
+        "blurb": "Four bars, a thirsty crowd: slide the drinks down to them, catch the empties coming back, and never let a glass smash.",
+        "controls": "↑ ↓ / W S change bar · SPACE / ← / A serve · or tap a bar",
+        "tagline": "Last orders are for quitters."
       }
     }
   },
@@ -1370,6 +1376,21 @@
         "TOO LOW, PAL",
         "BONK!",
         "SKEWERED"
+      ]
+    },
+    "barRush": {
+      "hint": "↑ ↓ / W S change bar · SPACE / ← / A serve · catch the empties · don’t let anyone reach you",
+      "hintShort": "Tap a bar to go there · tap yours to serve",
+      "ready": "GET READY!",
+      "readySub": "Serve them, catch the empties!",
+      "score": "★ {{n}}",
+      "angry": [
+        "WHERE’S MY DRINK?!",
+        "TERRIBLE SERVICE",
+        "ONE STAR!",
+        "I’LL GO ELSEWHERE",
+        "MANAGER!",
+        "UNBELIEVABLE"
       ]
     }
   }

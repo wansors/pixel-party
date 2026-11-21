@@ -1,6 +1,7 @@
 import type { MiniGameId } from '@pp/shared'
 import { Asteroids } from './asteroids'
 import { BalloonChicken } from './balloonChicken'
+import { BarRush } from './barRush'
 import { BomberExpress } from './bomberExpress'
 import { BombRelay } from './bombRelay'
 import { Brawl } from './brawl'
@@ -131,6 +132,7 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'brick-buster': () => new BrickBuster() as unknown as MiniGame<unknown, unknown>,
   'munch-maze': () => new MunchMaze() as unknown as MiniGame<unknown, unknown>,
   'sky-joust': () => new SkyJoust() as unknown as MiniGame<unknown, unknown>,
+  'bar-rush': () => new BarRush() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)
