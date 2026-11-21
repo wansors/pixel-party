@@ -1436,3 +1436,36 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   behind-real-time judging, ranking, the snapshot copy). Bot `bots/brick-buster.ts`.
 - **Revert**: the four files, the registry / catalog / scene-map / i18n entries, the bot and the
   thumbnail.
+
+### D50 — Munch Maze: a maze chase where everyone shares the maze — DONE
+
+- **Date**: 2026-11-21. **Context**: the arcade-classics wave (D48), third game: a maze chase, the
+  most famous arcade genre — here a park with seeds, pigeons and chillies, so nothing is borrowed but
+  the genre.
+- **What**: `munch-maze`, FFA, 1–12 (best 2–10), 60 s, mobile-friendly.
+  - One hand-made 19 × 17 maze (`MAZE_LAYOUT`): mirror-symmetric, connected, no dead ends (dead ends
+    are death traps in a chase), a tunnel on the middle row; 12 start cells spread out (none next to
+    a chilli); a nest for the pigeons in the middle.
+  - Seeds 1 point, growing back after max(4 s, 12 s − 0.7 s per player) so a crowded maze never runs
+    dry. A peck: −3, dazed 1.2 s, then back to your start, safe 1.5 s. A chilli (four, first at GO +
+    6 s, back 15 s after) gives 5 s SPICY: faster, pigeons flee (slower) — catch one for +5, it
+    roosts 3 s — and touching a non-spicy rival steals up to 5 seeds and dazes them.
+  - Pigeons pick the open way that gets nearest their target at each cell (never doubling back),
+    target = the nearest active runner (every third pigeon aims two cells ahead of them; away from
+    them when they're spicy). Count 2 + one per 4 players, +1 at 25 s and at 45 s (max 6); speed
+    3.8 → 5.6 cells/s on an ease-in (D40) against the runners' 5.5.
+  - Netcode: unlike the other grid games (per-player bodies), here everything interacts, so the whole
+    world is one deterministic simulation (`mazeStep` / `mazeRun`, 10 ms grid, integer units and
+    speeds in thousandths) in `@pp/shared`. Turns carry their press time; the server judges 150 ms
+    behind; the snapshot carries the judged world plus everyone's pending turns, and the client runs
+    it forward to now every frame (its own unacknowledged turns included) — your runner, your seeds
+    and the pigeons around you move on the frame.
+  - Ranked by score (`120 pts`), then fewer pecks and tackles taken. Bot simulations (2–12 bots): 80–
+    240 points, everyone in the game.
+  - The on-screen pad of Road Hop moved to a shared `game/dirPad.ts`, used by both.
+- **Tests**: `munchMaze.test.ts` (the maze's shape, the ramps, running speed and walls, buffered and
+  reversed turns, the tunnel, seeds and regrowth, the chilli's delay and effect, pecks, shoos,
+  tackles, safety after starting over, turns before GO / press-time clamp / mashing / junk,
+  behind-real-time judging, ranking, the snapshot copy, everyone leaving). Bot `bots/munch-maze.ts`.
+- **Revert**: the four files, the registry / catalog / scene-map / i18n entries, the bot and the
+  thumbnail (`dirPad.ts` can stay — Road Hop uses it).

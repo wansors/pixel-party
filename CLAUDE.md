@@ -17,14 +17,14 @@ D15–D17). Don't propose features that assume an internet-facing, multi-tenant,
 scaffolded and the game is playable end-to-end. Develop with `bun run dev`; play with `bun run start` (party mode: one optimized process on :3000 serving the client build + /api + /ws; see `README.md`). Live now:
 rooms + lobby (ready/host), host game selector + round count, server-authoritative session engine (intro
 countdown → play → per-round result → cumulative scoreboard → final), scoring/scoreboard/final ranking,
-**Phases 0–5 complete** (2026-08-21). **63 mini-games** — 55 FFA
+**Phases 0–5 complete** (2026-08-21). **64 mini-games** — 56 FFA
 (`button-masher`, `reaction-duel`, `color-trap`, `trivia`, `weird-trivia`, `balloon-chicken`, `number-rush`,
 `quick-math`, `odd-one-out`, `higher-lower`, `bug-smash`, `stop-clock`, `memory-flash`, `simon`,
 `pixel-hoops`, `pixel-weight`, `pixel-split`, `fruit-catch`, `pixel-rain`, `pixel-dash`, `snake-arena`,
 `sumo-push`, `match-pairs`, `pixel-roulette`, `sudoku-race`, `pixel-beat`, `maze-sprint`,
 `line-clear-sprint`, `quick-tetris`, `bubble-pop`, and the 2026-09-28 sports wave `dash-100m`,
 `hurdles-110m`, `long-jump`, `javelin-throw`, `micro-race` — D20, and the 2026-10-02 roadmap wave
-`glass-bridge`, `freeze-doll`, `room-rush`, `sumo-ice`, `pang`, `star-blaster`, `asteroids`, `bomber-express`, `brawl`, `rally-stage`, `speed-circuit`, `honeycomb-cut`, `jump-rope` — D22, `weird-trivia` — D24, `neon-trails` — D41, `wing-it` — D42, `sharpshooter` — D45, `spook-snatch` — D46, `hit-pull-twist` — D47, `road-hop` — D48, and `brick-buster` — D49) + 3 team (`tug-of-war`,
+`glass-bridge`, `freeze-doll`, `room-rush`, `sumo-ice`, `pang`, `star-blaster`, `asteroids`, `bomber-express`, `brawl`, `rally-stage`, `speed-circuit`, `honeycomb-cut`, `jump-rope` — D22, `weird-trivia` — D24, `neon-trails` — D41, `wing-it` — D42, `sharpshooter` — D45, `spook-snatch` — D46, `hit-pull-twist` — D47, `road-hop` — D48, `brick-buster` — D49, and `munch-maze` — D50) + 3 team (`tug-of-war`,
 `bomb-relay`, `fleet-battle`) + 5 duel (`sink-the-fleet`, `pixel-pong`, `quick-draw`, `marbles-duel`, `rock-paper-scissors` — D43) — with **seeded line-ups**
 (each game once per pass; sessions of up to 99 rounds start the line-up over, never the same game
 twice in a row; also avoids repeating a game's primary skill axis back-to-back when possible — D40),
@@ -51,7 +51,7 @@ further social/polish phase either: no "Phase 7" (chat/emotes/avatar customizati
 dropped; see D16 — audio and i18n already shipped in Phase 0). All ~35 candidates from
 `minigame-ideas.md` are now built — growing the catalog further means adding brand-new ideas, not
 picking up existing backlog rows (the sports wave, D20, was the first such batch; the 2026-10-02/03
-roadmap wave, D22, built every remaining game idea; Weird Trivia (D24), Neon Trails (D41), Wing It (D42), Rock Paper Scissors (D43), Sharpshooter (D45), Spook Snatch (D46), Hit, Pull, Twist (D47) and the arcade-classics wave — Road Hop (D48) and Brick Buster (D49) — followed — 43 of the 63 games are tagged mobile-friendly; D40 retuned ~26 games' difficulty onto the shared non-linear curves in `@pp/shared/difficulty`). Design decisions
+roadmap wave, D22, built every remaining game idea; Weird Trivia (D24), Neon Trails (D41), Wing It (D42), Rock Paper Scissors (D43), Sharpshooter (D45), Spook Snatch (D46), Hit, Pull, Twist (D47) and the arcade-classics wave — Road Hop (D48), Brick Buster (D49) and Munch Maze (D50) — followed — 44 of the 64 games are tagged mobile-friendly; D40 retuned ~26 games' difficulty onto the shared non-linear curves in `@pp/shared/difficulty`). Design decisions
 from the clear-out pass live in `docs/implementation-decisions.md`. See `docs/backlog.md` → *Current status* for the authoritative
 checklist.
 
@@ -75,7 +75,7 @@ Documentation lives in `docs/`:
 ## Code layout (implemented)
 
 - `apps/server` — hexagonal: `domain/` (entities `Room`/`Player`, `minigames/` pluggable contract +
-  `buttonMasher`/`reactionDuel`/`colorTrap`/`trivia`/`weirdTrivia`/`balloonChicken`/`numberRush`/`quickMath`/`oddOneOut`/`higherLower`/`bugSmash`/`stopClock`/`memoryFlash`/`simon`/`pixelHoops`/`pixelWeight`/`pixelSplit`/`tugOfWar`/`sinkTheFleet`/`bombRelay`/`fruitCatch`/`pixelRain`/`pixelDash`/`snakeArena`/`pong`/`sumo`/`matchPairs`/`quickDraw`/`roulette`/`sudokuRace`/`pixelBeat`/`fleetBattle`/`mazeSprint`/`lineClearSprint`/`quickTetris`/`bubblePop`/`trackRace`/`fieldEvent`/`microRace`/`glassBridge`/`freezeDoll`/`roomRush`/`sumoIce`/`pang`/`starBlaster`/`asteroids`/`bomberExpress`/`brawl`/`courseRace`/`honeycombCut`/`jumpRope`/`marblesDuel`/`neonTrails`/`wingIt`/`rockPaperScissors`/`sharpshooter`/`spookSnatch`/`hitPullTwist`/`roadHop`/`brickBuster`
+  `buttonMasher`/`reactionDuel`/`colorTrap`/`trivia`/`weirdTrivia`/`balloonChicken`/`numberRush`/`quickMath`/`oddOneOut`/`higherLower`/`bugSmash`/`stopClock`/`memoryFlash`/`simon`/`pixelHoops`/`pixelWeight`/`pixelSplit`/`tugOfWar`/`sinkTheFleet`/`bombRelay`/`fruitCatch`/`pixelRain`/`pixelDash`/`snakeArena`/`pong`/`sumo`/`matchPairs`/`quickDraw`/`roulette`/`sudokuRace`/`pixelBeat`/`fleetBattle`/`mazeSprint`/`lineClearSprint`/`quickTetris`/`bubblePop`/`trackRace`/`fieldEvent`/`microRace`/`glassBridge`/`freezeDoll`/`roomRush`/`sumoIce`/`pang`/`starBlaster`/`asteroids`/`bomberExpress`/`brawl`/`courseRace`/`honeycombCut`/`jumpRope`/`marblesDuel`/`neonTrails`/`wingIt`/`rockPaperScissors`/`sharpshooter`/`spookSnatch`/`hitPullTwist`/`roadHop`/`brickBuster`/`munchMaze`
   (`tetrisCore` holds the shared engine behind `lineClearSprint`/`quickTetris`; `athleticsCore` the
   sprint model behind `trackRace` (`Dash100m`, `Hurdles110m`) and `fieldEvent` (`LongJump`,
   `JavelinThrow`); `raceCore` the car engine behind `microRace` and `courseRace` (`RallyStage`,
@@ -105,7 +105,7 @@ Documentation lives in `docs/`:
   lobby avatar (`docs/visual-audit.md`),
   `scenes/MiniGameScene` (common base: own-snapshot guard, HUD, crash guard, relayout),
   `scenes/index` (`SCENES` id → scene map),
-  `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,WeirdTriviaScene,BalloonChickenScene,NumberRushScene,QuickMathScene,OddOneOutScene,HigherLowerScene,BugSmashScene,StopClockScene,MemoryFlashScene,SimonScene,PixelHoopsScene,PixelWeightScene,PixelSplitScene,TugOfWarScene,SinkTheFleetScene,BombRelayScene,FruitCatchScene,PixelRainScene,PixelDashScene,SnakeArenaScene,PongScene,SumoScene,MatchPairsScene,QuickDrawScene,RouletteScene,SudokuRaceScene,PixelBeatScene,FleetBattleScene,MazeSprintScene,LineClearSprintScene,QuickTetrisScene,BubblePopScene,Dash100mScene,Hurdles110mScene,LongJumpScene,JavelinThrowScene,MicroRaceScene,GlassBridgeScene,FreezeDollScene,RoomRushScene,SumoIceScene,PangScene,StarBlasterScene,AsteroidsScene,BomberExpressScene,BrawlScene,RallyStageScene,SpeedCircuitScene,HoneycombCutScene,JumpRopeScene,MarblesDuelScene,NeonTrailsScene,WingItScene,RockPaperScissorsScene,SharpshooterScene,SpookSnatchScene,HitPullTwistScene,RoadHopScene,BrickBusterScene}`
+  `scenes/{ButtonMasherScene,ReactionScene,ColorTrapScene,TriviaScene,WeirdTriviaScene,BalloonChickenScene,NumberRushScene,QuickMathScene,OddOneOutScene,HigherLowerScene,BugSmashScene,StopClockScene,MemoryFlashScene,SimonScene,PixelHoopsScene,PixelWeightScene,PixelSplitScene,TugOfWarScene,SinkTheFleetScene,BombRelayScene,FruitCatchScene,PixelRainScene,PixelDashScene,SnakeArenaScene,PongScene,SumoScene,MatchPairsScene,QuickDrawScene,RouletteScene,SudokuRaceScene,PixelBeatScene,FleetBattleScene,MazeSprintScene,LineClearSprintScene,QuickTetrisScene,BubblePopScene,Dash100mScene,Hurdles110mScene,LongJumpScene,JavelinThrowScene,MicroRaceScene,GlassBridgeScene,FreezeDollScene,RoomRushScene,SumoIceScene,PangScene,StarBlasterScene,AsteroidsScene,BomberExpressScene,BrawlScene,RallyStageScene,SpeedCircuitScene,HoneycombCutScene,JumpRopeScene,MarblesDuelScene,NeonTrailsScene,WingItScene,RockPaperScissorsScene,SharpshooterScene,SpookSnatchScene,HitPullTwistScene,RoadHopScene,BrickBusterScene,MunchMazeScene}`
   (`TetrisSprintSceneBase` is the shared base behind the two Tetris-style scenes; `QuizSceneBase` the
   quiz-show board behind the two quiz scenes; `TrackRaceSceneBase`
   / `FieldEventSceneBase` + `athleticsKit` behind the athletics scenes; `microRaceArt` paints the
@@ -116,6 +116,7 @@ Documentation lives in `docs/`:
   the lobby's visual `game-picker` (+ `game-sheet`, `shared/game-thumb` over `public/thumbs/<id>.webp`)
   and `profile-editor` (rename in the room, `SET_PROFILE`) — D40;
   `scenes/duelWatch` lets a duel's bye, a finished duellist or a late joiner watch a live duel;
+  `dirPad` is the on-screen four-way pad of the one-press grid games (Road Hop, Munch Maze);
   `scenes/raceNet` + `raceKit` are the racers' prediction/dead-reckoning and pooled race HUD.
   Rules the client predicts live in `@pp/shared` (the Tetris engine in `games/tetrisSprint`, the car
   integrator, `snakeStep`, `sumoStep`, `bomberStepDir`, `asteroidsFly`, …; D30).

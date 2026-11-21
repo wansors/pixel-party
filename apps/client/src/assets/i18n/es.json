@@ -616,6 +616,12 @@
         "blurb": "Tu pala, tu bola y la misma pared que todos: revienta ladrillos, pilla las cápsulas y despeja la pared para llevarte un extra. Gana quien más puntos haga.",
         "controls": "Ratón o ← → / A D mueven la pala · en el móvil, arrastra",
         "tagline": "La pared empezó."
+      },
+      "munch-maze": {
+        "name": "Zampapipas",
+        "blurb": "Zámpate las pipas del laberinto del parque antes de que te piquen las palomas. Pilla una guindilla para espantarlas… y placa a tus rivales para quitarles las pipas.",
+        "controls": "↑ ↓ ← → / WASD girar · o desliza / la cruceta en pantalla",
+        "tagline": "Las palomas llegaron antes. Y te lo van a recordar."
       }
     }
   },
@@ -1340,6 +1346,31 @@
         "NI DE LEJOS",
         "¡SE TE HA COLADO!",
         "GRAVEDAD 1, TÚ 0"
+      ]
+    },
+    "munchMaze": {
+      "hint": "↑ ↓ ← → / WASD: girar · pipa +1 · con guindilla vas PICANTE: espanta palomas +5 y placa rivales",
+      "hintShort": "Desliza o toca las flechas para girar",
+      "ready": "¡PREPARADOS!",
+      "readySub": "¡A por las pipas, ojo con las palomas!",
+      "score": "★ {{n}}",
+      "spicy": "PICANTE {{s}}",
+      "hot": "¡PICANTE!",
+      "pecked": [
+        "¡PICOTAZO!",
+        "¡LADRÓN DE PIPAS!",
+        "CURRUCUCÚ, PRINGAO",
+        "¡A PLUMAZOS!",
+        "GANAN LAS PALOMAS",
+        "¡AY, EL PICO!"
+      ],
+      "tackled": [
+        "¡PLACAJE!",
+        "¡ATRACO!",
+        "¡TE HAN BIRLADO LAS PIPAS!",
+        "¡AL SUELO!",
+        "¡MANOS PICANTES!",
+        "¡A DOS VELAS!"
       ]
     }
   }

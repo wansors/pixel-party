@@ -28,6 +28,7 @@ import { MazeSprintScene } from './MazeSprintScene'
 import { MemoryFlashScene } from './MemoryFlashScene'
 import { MicroRaceScene } from './MicroRaceScene'
 import type { SceneDeps } from './MiniGameScene'
+import { MunchMazeScene } from './MunchMazeScene'
 import { NeonTrailsScene } from './NeonTrailsScene'
 import { NumberRushScene } from './NumberRushScene'
 import { OddOneOutScene } from './OddOneOutScene'
@@ -128,6 +129,7 @@ export const SCENES: Readonly<Record<string, SceneCtor>> = {
   'hit-pull-twist': HitPullTwistScene,
   'road-hop': RoadHopScene,
   'brick-buster': BrickBusterScene,
+  'munch-maze': MunchMazeScene,
   'tug-of-war': TugOfWarScene,
   'bomb-relay': BombRelayScene,
   'fleet-battle': FleetBattleScene,

@@ -101,6 +101,7 @@
 | `hit-pull-twist` | 1–12 | 2–12 | OK (added 2026-11-21, D47) | Everyone plays the same orders at their own pace, so the headcount only fills the strip. |
 | `road-hop` | 1–12 | 2–12 | OK (added 2026-11-21, D48) | One shared field, no contact: everyone crosses the same traffic; 12 starting cells spread over 11 columns (two share one). |
 | `brick-buster` | 1–12 | 2–12 | OK (added 2026-11-21, D49) | Everyone plays their own board against the same walls; rivals show as mini boards (PC) or a score strip (phone) — up to 11 fit. |
+| `munch-maze` | 1–12 | 2–10 | OK (added 2026-11-21, D50) | One shared maze: 12 spread start cells; the pigeons scale with the room (2 + 1 per 4 players, +2 over the round) and seeds grow back faster in a crowd (12 s − 0.7 s per player, floor 4 s). Crowded at 11–12. |
 
 ### Racing & athletics
 

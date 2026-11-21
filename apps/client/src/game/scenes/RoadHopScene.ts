@@ -21,16 +21,10 @@ import {
 } from '@pp/shared'
 import type Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
+import { DirPad } from '../dirPad'
 import { addBanner, burst, floatText, ring, shake, showBanner } from '../fx'
 import { ServerClock } from '../netcode/ServerClock'
-import {
-  bodyStyle,
-  ensurePixelBlock,
-  fitFontSize,
-  fitText,
-  headlineStyle,
-  shade,
-} from '../pixelStyle'
+import { bodyStyle, fitFontSize, fitText, headlineStyle, shade } from '../pixelStyle'
 import { YouMarker } from '../playerMarks'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
@@ -38,7 +32,6 @@ const PENDING_TTL_MS = 2000
 const HOP_ANIM_MS = 110
 // Rivals' sounds are throttled to one per this long each (12 players stay readable).
 const RIVAL_SFX_MS = 160
-const GLYPH = ['▲', '▶', '▼', '◀'] as const
 
 const ASPHALT = 0x2c2f3a
 const WATER = 0x2a5fb0
@@ -79,12 +72,6 @@ interface PendingHop {
   sentAt: number
 }
 
-interface PadKey {
-  img: Phaser.GameObjects.Image
-  label: Phaser.GameObjects.Text
-  y: number
-}
-
 interface Thing {
   lane: HopLane
   idx: number
@@ -117,9 +104,7 @@ export class RoadHopScene extends MiniGameScene<RoadHopSnapshot> {
   private banner?: Phaser.GameObjects.Text
   private subline?: Phaser.GameObjects.Text
   private you?: YouMarker
-  private readonly pad = new Map<number, PadKey>()
-  private padKey = ''
-  private padDownKey = ''
+  private pad?: DirPad
   private shownScore = -1
 
   constructor(...deps: SceneDeps) {
@@ -131,7 +116,6 @@ export class RoadHopScene extends MiniGameScene<RoadHopSnapshot> {
     for (const h of this.hoppers.values()) h.avatar.destroy()
     this.hoppers = new Map()
     this.things = []
-    this.pad.clear()
     this.clock.reset()
     this.base = undefined
     this.pending = []
@@ -148,8 +132,7 @@ export class RoadHopScene extends MiniGameScene<RoadHopSnapshot> {
     const hintH = this.compact ? 20 : 26
     const btn = Math.round(this.compact ? Math.max(48, Math.min(64, width * 0.15)) : 64)
     const gap = this.compact ? 6 : 8
-    const padW = btn * 3 + gap * 2
-    const padH = btn * 2 + gap
+    const { w: padW, h: padH } = DirPad.size(btn, gap)
     const top = this.top + pad
     const bottom = height - hintH - pad
     let padX: number
@@ -176,7 +159,7 @@ export class RoadHopScene extends MiniGameScene<RoadHopSnapshot> {
     }
 
     this.paintField()
-    this.buildPad(padX, padY, btn, gap)
+    this.pad = new DirPad(this, padX, padY, btn, gap, this.compact, (dir) => this.hop(dir))
     this.you = new YouMarker(this, this.compact ? 10 : 14, 820)
 
     const hint = this.add
@@ -478,43 +461,6 @@ export class RoadHopScene extends MiniGameScene<RoadHopSnapshot> {
     ])
   }
 
-  private buildPad(cx: number, cy: number, btn: number, gap: number): void {
-    this.padKey = ensurePixelBlock(this, 'pp-hop-key', 16, PALETTE.panelAlt)
-    this.padDownKey = ensurePixelBlock(this, 'pp-hop-key-down', 16, shade(PALETTE.panelAlt, -0.35))
-    const step = btn + gap
-    const top = cy - (btn * 2 + gap) / 2 + btn / 2
-    const spots: [number, number, number][] = [
-      [HOP_UP, cx, top],
-      [HOP_LEFT, cx - step, top + step],
-      [HOP_DOWN, cx, top + step],
-      [HOP_RIGHT, cx + step, top + step],
-    ]
-    for (const [dir, x, y] of spots) {
-      const img = this.add
-        .image(x, y, this.padKey)
-        .setDisplaySize(btn, btn)
-        .setDepth(50)
-        .setInteractive({ useHandCursor: true })
-      img.on('pointerdown', () => this.hop(dir))
-      const label = this.add
-        .text(x, y, GLYPH[dir] as string, headlineStyle(this.compact ? 16 : 24, PALETTE.text))
-        .setOrigin(0.5)
-        .setDepth(51)
-      this.pad.set(dir, { img, label, y })
-    }
-  }
-
-  private pressKey(dir: number): void {
-    const key = this.pad.get(dir)
-    if (!key) return
-    key.img.setTexture(this.padDownKey).setY(key.y + 2)
-    key.label.setY(key.y + 2).setColor('#ffcf4b')
-    this.time.delayedCall(90, () => {
-      key.img.setTexture(this.padKey).setY(key.y)
-      key.label.setY(key.y).setColor('#eef1f7')
-    })
-  }
-
   // Round ms at scene time `now`, on the server's clock (frozen once the round is over).
   private roundNow(now: number): number {
     const base = this.base
@@ -530,7 +476,7 @@ export class RoadHopScene extends MiniGameScene<RoadHopSnapshot> {
   }
 
   private hop(dir: number): void {
-    this.pressKey(dir)
+    this.pad?.flash(dir)
     const base = this.base
     const view = base?.hoppers[this.selfId]
     if (!base || !view || this.state.final) return

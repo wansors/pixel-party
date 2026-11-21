@@ -64,8 +64,8 @@ Then (2026-10-03) J1 Weird Trivia (`weird-trivia`), the first brand-new idea aft
 Then (2026-11-21) K1 Neon Trails (`neon-trails`, D41), K2 Wing It (`wing-it`, D42), K3 Rock Paper
 Scissors (`rock-paper-scissors`, D43), K4 Sharpshooter (`sharpshooter`, D45), and the counter-intuitive
 pair K5 Spook Snatch (`spook-snatch`, D46) and K6 Hit, Pull, Twist (`hit-pull-twist`, D47). Then the
-arcade-classics wave: K7 Road Hop (`road-hop`, D48) and K8 Brick Buster (`brick-buster`, D49). **63
-mini-games total.**
+arcade-classics wave: K7 Road Hop (`road-hop`, D48), K8 Brick Buster (`brick-buster`, D49) and K9 Munch
+Maze (`munch-maze`, D50). **64 mini-games total.**
 
 > **Difficulty curves (D40, 2026-11-21)**: about 26 games were retuned from linear or flat pacing to
 > non-linear ramps (the shared `easeIn` / `rampEase` / `rampExp` / `compound` helpers in
@@ -1013,6 +1013,24 @@ avatar. See `implementation-decisions.md` D22.
   aim at a capped speed and aims carry the moment they were set, so the client predicts its own board
   bit for bit while the server judges 150 ms behind.
 
+### K9. ✅ Munch Maze — implemented (`munch-maze`)
+- **Concept**: a maze chase in the genre of the arcade dot-munchers (own name and look: a hedge maze
+  in a park, sunflower seeds, pigeons as the chasers, a chilli as the power-up), with everyone in the
+  same maze at once (D50).
+- **Type**: FFA, 1–12 (best 2–10) · **Input**: ↑ ↓ ← → / WASD turn (taken at the next opening), a
+  swipe, the on-screen pad, or a tap beside your avatar · **Duration**: 60 s · **Banter**: 💥💥💥 ·
+  **Mobile-friendly**: yes
+- **Rules**: one 19 × 17 maze (symmetric, no dead ends, a wrap-around tunnel). Seeds score 1 and grow
+  back (faster in a bigger room). Pigeons chase the nearest runner (every third one cuts you off) and
+  peck: −3, dazed for 1.2 s, then back to your start (safe for 1.5 s). The four chillies (from 6 s
+  after GO, back 15 s after being eaten) make you SPICY for 5 s: the pigeons flee — catch one for +5
+  — and touching a rival who isn't spicy tackles them for up to 5 of their seeds. Pigeons: 2 + one per
+  4 players, one more at 25 s and 45 s, faster on an ease-in (D40).
+- **Win condition / Result**: highest score (`120 pts`); fewer pecks and tackles taken break ties.
+- **Latency**: low — the whole world (runners, pigeons, seeds) is integrated on a fixed grid with
+  integer arithmetic; turns carry their press time and the server judges 150 ms behind, so every
+  client runs the same world forward from the snapshot (yours with your newest turns).
+
 ---
 
 ## Variety coverage
@@ -1026,16 +1044,16 @@ avatar. See `implementation-decisions.md` D22.
 | Mental math | E2 |
 | Memory | A4, A11, E8 |
 | Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4, F6, G4, I2, K4, K7, K8 |
-| Survival / dodging | A7, A8, B3, I1, I3, I5, K1, K2, K7 |
+| Survival / dodging | A7, A8, B3, I1, I3, I5, K1, K2, K7, K9 |
 | Nerve / chance | D1, D3, E5, G1, G2, G3, G6, K3 |
 | Teamwork | C1, C2, C3 |
-| Head-to-head rivalry | B1, B2, B3, E7, I4, I6, K1, K3 |
+| Head-to-head rivalry | B1, B2, B3, E7, I4, I6, K1, K3, K9 |
 
 ## Format mix
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6, J1, K1, K2, K4–K6, K7, K8 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6, J1, K1, K2, K4–K6, K7, K8, K9 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7, G6, K3 |
 | Team | C1, C2, C3 |
 

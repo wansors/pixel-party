@@ -26,6 +26,7 @@ import { MatchPairs } from './matchPairs'
 import { MazeSprint } from './mazeSprint'
 import { MemoryFlash } from './memoryFlash'
 import { MicroRace } from './microRace'
+import { MunchMaze } from './munchMaze'
 import { NeonTrails } from './neonTrails'
 import { NumberRush } from './numberRush'
 import { OddOneOut } from './oddOneOut'
@@ -127,6 +128,7 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'hit-pull-twist': () => new HitPullTwist() as unknown as MiniGame<unknown, unknown>,
   'road-hop': () => new RoadHop() as unknown as MiniGame<unknown, unknown>,
   'brick-buster': () => new BrickBuster() as unknown as MiniGame<unknown, unknown>,
+  'munch-maze': () => new MunchMaze() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

@@ -613,6 +613,12 @@
         "blurb": "Your paddle, your ball, the same wall as everyone: smash the bricks, catch the capsules, clear the wall for a bonus. Highest score wins.",
         "controls": "Mouse or ← → / A D move the paddle · on a phone, drag",
         "tagline": "The wall started it."
+      },
+      "munch-maze": {
+        "name": "Munch Maze",
+        "blurb": "Gobble the seeds in the park maze before the pigeons peck you. Grab a chilli to scare them off — and tackle your rivals for their seeds.",
+        "controls": "↑ ↓ ← → / WASD turn · or swipe / the on-screen pad",
+        "tagline": "The pigeons were here first. They will remind you."
       }
     }
   },
@@ -1325,6 +1331,24 @@
         "SLIPPED!",
         "GRAVITY 1, YOU 0"
       ]
+    },
+    "munchMaze": {
+      "hint": "↑ ↓ ← → / WASD: turn · seeds +1 · a chilli makes you SPICY: shoo pigeons +5, tackle rivals",
+      "hintShort": "Swipe or tap the arrows to turn",
+      "ready": "GET READY!",
+      "readySub": "Eat the seeds, dodge the pigeons!",
+      "score": "★ {{n}}",
+      "spicy": "SPICY {{s}}",
+      "hot": "SPICY!",
+      "pecked": [
+        "PECKED!",
+        "SEED THIEF!",
+        "COO-COO, LOSER",
+        "FEATHERED",
+        "THE PIGEONS WIN",
+        "OUCH, BEAK"
+      ],
+      "tackled": ["TACKLED!", "MUGGED!", "SEEDS STOLEN", "FLATTENED", "HOT HANDS!", "ROBBED BLIND"]
     }
   }
 }

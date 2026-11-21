@@ -761,6 +761,18 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     axes: ['reflexes', 'precision'],
   },
   {
+    id: 'munch-maze',
+    name: 'Munch Maze',
+    format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 10] },
+    realtime: true,
+    mobileFriendly: true,
+    durationSec: 60,
+    blurb:
+      'Gobble the seeds in the park maze before the pigeons peck you. Grab a chilli to scare them off — and tackle your rivals for their seeds.',
+    axes: ['reflexes', 'speed'],
+  },
+  {
     id: 'marbles-duel',
     name: 'Marbles Duel',
     format: 'duel',
