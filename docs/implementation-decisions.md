@@ -1469,3 +1469,30 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   behind-real-time judging, ranking, the snapshot copy, everyone leaving). Bot `bots/munch-maze.ts`.
 - **Revert**: the four files, the registry / catalog / scene-map / i18n entries, the bot and the
   thumbnail (`dirPad.ts` can stay — Road Hop uses it).
+
+### D51 — Sky Joust: flap, steer, hit them from above — DONE
+
+- **Date**: 2026-11-21. **Context**: the arcade-classics wave (D48), fourth game: a flap-and-joust
+  arena, re-using Wing It's flap feel (D42) but player against player.
+- **What**: `sky-joust`, FFA, 2–12 (best 3–8), 60 s, mobile-friendly.
+  - One wrap-around sky (1.6 × 1) with six fixed floating ledges (one-way: land on top, fly up
+    through) and two ground ledges over a lava pit that crumble from 0.62 to 0.26 of the width each on
+    an ease-in over 50 s (D40, written as p·p instead of `**` so every engine computes the same bits).
+  - Flight: gravity 1.5, a flap adds 0.5 up (capped at 0.9), steering accelerates to 0.55/s (faster
+    on the ground, momentum kept in the air). A collision: the higher rider (by more than 0.005)
+    unhorses the lower (+1) and bounces up; level clashes push both apart. Unhorsed or in the lava
+    (−1): out 1.5 s, back on the spawn spot farthest from everyone, safe 1.5 s.
+  - Netcode: one deterministic world (`joustStep` / `joustRun`, 10 ms grid) like Munch Maze (D50),
+    commands (`flap` / `steer`) carrying their press time, judged 150 ms behind. Here a rival's newest
+    flap changes their path at once and reaches us late, so the client runs the world forward
+    **without rider-on-rider hits** (`pvp: false`): your own flight stays exact, rivals ease into
+    their predicted spot (30 % a frame), and jousts / clashes / lava dips are shown from the server's
+    judged world, never guessed.
+  - Ranked by score (`9 pts`), then fewer falls. Bot simulations (2–12 bots): 6–23 points, decisive
+    jousts once level clashes needed a 0.005 margin (at 0.014 most collisions were draws).
+- **Tests**: `skyJoust.test.ts` (the crumbling ground, gravity and capped flaps, landing and flying
+  up through a ledge, steering and the wrap, the lava and the respawn, unhorsing and level clashes,
+  safety and `pvp: false`, commands before GO / press-time clamp / mashed flaps / junk, behind-real-
+  time judging, ranking, the snapshot copy). Bot `bots/sky-joust.ts`.
+- **Revert**: the four files, the registry / catalog / scene-map / i18n entries, the bot and the
+  thumbnail.

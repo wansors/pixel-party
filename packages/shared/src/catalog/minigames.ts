@@ -773,6 +773,18 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     axes: ['reflexes', 'speed'],
   },
   {
+    id: 'sky-joust',
+    name: 'Sky Joust',
+    format: 'ffa',
+    players: { min: 2, max: 12, best: [3, 8] },
+    realtime: true,
+    mobileFriendly: true,
+    durationSec: 60,
+    blurb:
+      'Flap over the lava and joust: hit a rival from above to unhorse them. Level clashes bounce, the lava bites, the ground crumbles.',
+    axes: ['reflexes', 'precision'],
+  },
+  {
     id: 'marbles-duel',
     name: 'Marbles Duel',
     format: 'duel',

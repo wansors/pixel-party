@@ -49,6 +49,7 @@ import { Roulette } from './roulette'
 import { Sharpshooter } from './sharpshooter'
 import { Simon } from './simon'
 import { SinkTheFleet } from './sinkTheFleet'
+import { SkyJoust } from './skyJoust'
 import { SnakeArena } from './snakeArena'
 import { SpookSnatch } from './spookSnatch'
 import { StarBlaster } from './starBlaster'
@@ -129,6 +130,7 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'road-hop': () => new RoadHop() as unknown as MiniGame<unknown, unknown>,
   'brick-buster': () => new BrickBuster() as unknown as MiniGame<unknown, unknown>,
   'munch-maze': () => new MunchMaze() as unknown as MiniGame<unknown, unknown>,
+  'sky-joust': () => new SkyJoust() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

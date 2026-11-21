@@ -6,14 +6,14 @@ session-wide ranking.
 
 <p align="center">
   <a href="docs/promo/pixel-party-promo-share.mp4">
-    <img src="docs/promo/preview.gif" alt="Pixel Party — a quick look at some of the 64 mini-games" width="640">
+    <img src="docs/promo/preview.gif" alt="Pixel Party — a quick look at some of the 65 mini-games" width="640">
   </a>
   <br>
   <sub>▶ <a href="docs/promo/pixel-party-promo-share.mp4">Watch the 42-second trailer</a> (with sound) ·
   made with HTML, see <a href="docs/promo/README.md"><code>docs/promo/</code></a></sub>
 </p>
 
-> Current status: **feature-complete for its LAN-party scope** — 64 mini-games (free-for-all, team and
+> Current status: **feature-complete for its LAN-party scope** — 65 mini-games (free-for-all, team and
 > 1v1 duels) for rooms of up to 12 players, each tagged with the player counts it suits, lobby + host
 > setup, server-authoritative sessions with a cumulative ranking, post-match
 > skill radar, catch-up handicap, reconnect, EN/ES, chiptune audio and a retro arcade look. See

@@ -64,8 +64,8 @@ Then (2026-10-03) J1 Weird Trivia (`weird-trivia`), the first brand-new idea aft
 Then (2026-11-21) K1 Neon Trails (`neon-trails`, D41), K2 Wing It (`wing-it`, D42), K3 Rock Paper
 Scissors (`rock-paper-scissors`, D43), K4 Sharpshooter (`sharpshooter`, D45), and the counter-intuitive
 pair K5 Spook Snatch (`spook-snatch`, D46) and K6 Hit, Pull, Twist (`hit-pull-twist`, D47). Then the
-arcade-classics wave: K7 Road Hop (`road-hop`, D48), K8 Brick Buster (`brick-buster`, D49) and K9 Munch
-Maze (`munch-maze`, D50). **64 mini-games total.**
+arcade-classics wave: K7 Road Hop (`road-hop`, D48), K8 Brick Buster (`brick-buster`, D49), K9 Munch
+Maze (`munch-maze`, D50) and K10 Sky Joust (`sky-joust`, D51). **65 mini-games total.**
 
 > **Difficulty curves (D40, 2026-11-21)**: about 26 games were retuned from linear or flat pacing to
 > non-linear ramps (the shared `easeIn` / `rampEase` / `rampExp` / `compound` helpers in
@@ -1031,13 +1031,28 @@ avatar. See `implementation-decisions.md` D22.
   integer arithmetic; turns carry their press time and the server judges 150 ms behind, so every
   client runs the same world forward from the snapshot (yours with your newest turns).
 
+### K10. ✅ Sky Joust — implemented (`sky-joust`)
+- **Concept**: a flap-and-joust arena in the genre of the arcade flying-knight classics (own name and
+  look: the players' avatars with a wing and a lance, a dusk sky over a lava pit), as a 60-second
+  points brawl (D51).
+- **Type**: FFA, 2–12 (best 3–8) · **Input**: ← → / A D steer, SPACE / ↑ / W (or a click) flap; on
+  phones, ◀ ▶ and a FLAP button · **Duration**: 60 s · **Banter**: 💥💥💥 · **Mobile-friendly**: yes
+- **Rules**: one wrap-around sky with six floating ledges (land on top, fly up through) and two
+  ground ledges over a lava pit. Colliding, the higher rider unhorses the lower (+1); level clashes
+  bounce apart. The unhorsed tumble and come back on the free-est ledge after 1.5 s (safe for 1.5 s);
+  the lava costs a point. The ground ledges crumble toward the walls on an ease-in (D40).
+- **Win condition / Result**: highest score (`9 pts`); fewer falls (unhorsed + lava) break ties.
+- **Latency**: low/medium — the world is integrated on a fixed grid with plain arithmetic; commands
+  carry their press time and the server judges 150 ms behind. Your own flight is predicted exactly;
+  rivals ease into theirs; jousts show when the server has judged them (~150 ms).
+
 ---
 
 ## Variety coverage
 
 | Axis | Covered by |
 |------|------------|
-| Reflexes / reaction | A1, A6, B1, E7, F5, F7, G2, G5, I3, K2, K6, K8 |
+| Reflexes / reaction | A1, A6, B1, E7, F5, F7, G2, G5, I3, K2, K6, K8, K10 |
 | Attention / focus (inhibition) | E1, E3, E4, G1, K5, K6 |
 | Speed / endurance | A2, A9, C1, F1, F2, G3 |
 | Knowledge | A3, J1 |
@@ -1047,13 +1062,13 @@ avatar. See `implementation-decisions.md` D22.
 | Survival / dodging | A7, A8, B3, I1, I3, I5, K1, K2, K7, K9 |
 | Nerve / chance | D1, D3, E5, G1, G2, G3, G6, K3 |
 | Teamwork | C1, C2, C3 |
-| Head-to-head rivalry | B1, B2, B3, E7, I4, I6, K1, K3, K9 |
+| Head-to-head rivalry | B1, B2, B3, E7, I4, I6, K1, K3, K9, K10 |
 
 ## Format mix
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6, J1, K1, K2, K4–K6, K7, K8, K9 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6, J1, K1, K2, K4–K6, K7, K8, K9, K10 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7, G6, K3 |
 | Team | C1, C2, C3 |
 

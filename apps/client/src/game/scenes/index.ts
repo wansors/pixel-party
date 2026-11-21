@@ -52,6 +52,7 @@ import { RouletteScene } from './RouletteScene'
 import { SharpshooterScene } from './SharpshooterScene'
 import { SimonScene } from './SimonScene'
 import { SinkTheFleetScene } from './SinkTheFleetScene'
+import { SkyJoustScene } from './SkyJoustScene'
 import { SnakeArenaScene } from './SnakeArenaScene'
 import { SpeedCircuitScene } from './SpeedCircuitScene'
 import { SpookSnatchScene } from './SpookSnatchScene'
@@ -130,6 +131,7 @@ export const SCENES: Readonly<Record<string, SceneCtor>> = {
   'road-hop': RoadHopScene,
   'brick-buster': BrickBusterScene,
   'munch-maze': MunchMazeScene,
+  'sky-joust': SkyJoustScene,
   'tug-of-war': TugOfWarScene,
   'bomb-relay': BombRelayScene,
   'fleet-battle': FleetBattleScene,

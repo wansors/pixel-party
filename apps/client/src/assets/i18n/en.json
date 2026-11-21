@@ -619,6 +619,12 @@
         "blurb": "Gobble the seeds in the park maze before the pigeons peck you. Grab a chilli to scare them off — and tackle your rivals for their seeds.",
         "controls": "↑ ↓ ← → / WASD turn · or swipe / the on-screen pad",
         "tagline": "The pigeons were here first. They will remind you."
+      },
+      "sky-joust": {
+        "name": "Sky Joust",
+        "blurb": "Flap over the lava and joust: hit a rival from above to unhorse them. Level clashes bounce, the lava bites, the ground crumbles.",
+        "controls": "← → / A D steer · SPACE / ↑ / W flap",
+        "tagline": "Height is might. Mostly."
       }
     }
   },
@@ -1349,6 +1355,22 @@
         "OUCH, BEAK"
       ],
       "tackled": ["TACKLED!", "MUGGED!", "SEEDS STOLEN", "FLATTENED", "HOT HANDS!", "ROBBED BLIND"]
+    },
+    "skyJoust": {
+      "hint": "← → / A D steer · SPACE / ↑ / W flap · hit rivals from above (+1) · lava −1",
+      "hintShort": "◀ ▶ steer · FLAP to climb · hit them from above",
+      "ready": "GET READY!",
+      "readySub": "Stay above them. Stay out of the lava.",
+      "flap": "FLAP",
+      "score": "★ {{n}}",
+      "unhorsed": [
+        "UNHORSED!",
+        "LANCED!",
+        "FROM ABOVE, OBVIOUSLY",
+        "TOO LOW, PAL",
+        "BONK!",
+        "SKEWERED"
+      ]
     }
   }
 }

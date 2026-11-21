@@ -622,6 +622,12 @@
         "blurb": "Zámpate las pipas del laberinto del parque antes de que te piquen las palomas. Pilla una guindilla para espantarlas… y placa a tus rivales para quitarles las pipas.",
         "controls": "↑ ↓ ← → / WASD girar · o desliza / la cruceta en pantalla",
         "tagline": "Las palomas llegaron antes. Y te lo van a recordar."
+      },
+      "sky-joust": {
+        "name": "Justa en el Aire",
+        "blurb": "Aletea sobre la lava y justa: pilla a un rival desde arriba para descabalgarlo. Si chocáis a la misma altura rebotáis, la lava quema y el suelo se desmorona.",
+        "controls": "← → / A D dirigir · ESPACIO / ↑ / W aletear",
+        "tagline": "Quien está arriba, manda. Casi siempre."
       }
     }
   },
@@ -1371,6 +1377,22 @@
         "¡AL SUELO!",
         "¡MANOS PICANTES!",
         "¡A DOS VELAS!"
+      ]
+    },
+    "skyJoust": {
+      "hint": "← → / A D dirigir · ESPACIO / ↑ / W aletear · pilla a los rivales desde arriba (+1) · lava −1",
+      "hintShort": "◀ ▶ dirigir · ALETEA para subir · pilla desde arriba",
+      "ready": "¡PREPARADOS!",
+      "readySub": "Por encima de ellos y lejos de la lava.",
+      "flap": "ALETEA",
+      "score": "★ {{n}}",
+      "unhorsed": [
+        "¡A TIERRA!",
+        "¡BROCHETA!",
+        "DESDE ARRIBA, CLARO",
+        "MUY BAJITO, COLEGA",
+        "¡TOMA!",
+        "¡PINCHITO MORUNO!"
       ]
     }
   }
