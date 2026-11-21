@@ -1381,3 +1381,33 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   Bot `bots/hit-pull-twist.ts`; the browser capture plays its own orders right.
 - **Revert** (both): each game's four files and its registry, catalog, scene-map and i18n entries,
   the bot and the thumbnail.
+
+### D48 — Road Hop: a crossing race on one shared field — DONE
+
+- **Date**: 2026-11-21. **Context**: the owner asked which classic arcade genres the catalog still
+  lacked and to build them all, one after another: a road-and-river crossing game (this one), a brick
+  breaker, a maze chase, a flap-and-joust arena and a bar-serving game (D48–D52). Each takes the genre
+  only — own name, own look, the players' avatars.
+- **What**: `road-hop`, FFA, 1–12 (best 2–12), 60 s, mobile-friendly.
+  - One shared field, 11 × 13: pavement, five road lanes, a verge, five river lanes, the far bank.
+    Seeded lanes: each loops a row of things (cars, tractors, sports cars, vans, lorries / logs and
+    rafts) with random gaps over a loop longer than the field, so they wrap off screen; neighbouring
+    lanes run opposite ways. Positions are a pure function of the round clock (`hopLaneTime`, the
+    integral of a pace easing ×1 → ×1.8 over 50 s, D40).
+  - One cell per press (arrows / WASD, SPACE = up, an on-screen pad, a tap beside your avatar),
+    110 ms apart at most. On a log or raft you ride it (off-grid); solid ground snaps you back to a
+    cell. A vehicle squashes, open water or a ride off the edge soaks; either way you're out of play
+    for 1 s and start over on your own cell of the pavement. The far bank scores a crossing (+0.6 s
+    of cheering, then back to the start). No eliminations, no contact.
+  - Netcode like Wing It (D42): the run (`hopStep` / `hopRun`) is integrated on a 10 ms grid with
+    plain arithmetic in `@pp/shared`; hops carry their press time (`at`, clamped to what is already
+    judged and to now) and the server judges 150 ms behind, so the client predicts its own hopper bit
+    for bit; rivals are carried forward from their judged state without collisions.
+  - Ranked by crossings (`5 crossed`), then the furthest row on the run in progress at the bell, then
+    fewer mishaps. Bot simulations (4 bots, 6 seeds) cross 5–12 times a round.
+- **Tests**: `roadHop.test.ts` (the pace integral, wrapping, squash / ride / splash, respawn and hops
+  ignored while out, swept off the edge, grid snapping, crossings, start cells, seeded field shape,
+  hops before GO, the press-time clamp, mashing and junk, behind-real-time judging, ranking, the
+  snapshot, everyone leaving). Bot `bots/road-hop.ts`.
+- **Revert**: the four files, the registry / catalog / scene-map / i18n / stat-word entries, the bot
+  and the thumbnail.

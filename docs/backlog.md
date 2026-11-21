@@ -10,16 +10,16 @@ analysis…) phase by phase. Nothing is built "just in case".
 ## Current status (2026-10-03)
 
 **Phases 0–5 are complete, and that's the whole roadmap.** The game is playable end-to-end (`bun run dev`
-→ server :3000 + client :4200, LAN-accessible; see [`../README.md`](../README.md)) with **61
+→ server :3000 + client :4200, LAN-accessible; see [`../README.md`](../README.md)) with **62
 mini-games** — the full `minigame-ideas.md` backlog is built, plus a sports wave (track & field +
 Micro Race, 2026-09-28, D20), the roadmap wave (elimination rounds, arcade classics, racers,
-2026-10-02/03, D22), Weird Trivia (2026-10-03, D24), Neon Trails, Wing It, Rock Paper Scissors and Sharpshooter (2026-11-21, D41–D45), and the counter-intuitive pair Spook Snatch and Hit, Pull, Twist (D46–D47). The deployment target is a **local LAN
+2026-10-02/03, D22), Weird Trivia (2026-10-03, D24), Neon Trails, Wing It, Rock Paper Scissors and Sharpshooter (2026-11-21, D41–D45), the counter-intuitive pair Spook Snatch and Hit, Pull, Twist (D46–D47), and the arcade-classics wave: Road Hop (D48). The deployment target is a **local LAN
 party with friends** — one process, on one local network, no accounts — which is why the project is
 permanently **stateless, anonymous, and single-instance by design**: no database (D15), no further
 social/polish phase (D16), no multi-instance scaling (D17). What remains open-ended is growing the
 mini-game catalog with brand-new ideas. Design decisions from the clear-out pass are logged in
-[`implementation-decisions.md`](implementation-decisions.md) (D1–D32). The game is **PC-first**; 41
-of the 61 games are tagged `mobileFriendly` (lobby badge + filter, D21, shown only while a phone is in
+[`implementation-decisions.md`](implementation-decisions.md) (D1–D32). The game is **PC-first**; 42
+of the 62 games are tagged `mobileFriendly` (lobby badge + filter, D21, shown only while a phone is in
 the room, D34). Rooms hold up to **12
 players** (usually 4–8) and every game declares the headcounts it supports (D27); the per-game
 player-fit & balance audit ([`player-fit-audit.md`](player-fit-audit.md)) and its fixes (D28, D29)
@@ -50,15 +50,15 @@ below.
   card, unfit games greyed out and skipped by the engine, a "Best for N" filter, START refused when no
   picked game fits.
 
-### Mini-games — 61 (pluggable domain module + Phaser scene each)
-- **53 FFA**: `reaction-duel`, `button-masher`, `color-trap`, `trivia`, `weird-trivia`,
+### Mini-games — 62 (pluggable domain module + Phaser scene each)
+- **54 FFA**: `reaction-duel`, `button-masher`, `color-trap`, `trivia`, `weird-trivia`,
   `balloon-chicken`, `number-rush`, `quick-math`, `odd-one-out`, `higher-lower`, `bug-smash`,
   `stop-clock`, `memory-flash`, `simon`, `pixel-hoops`, `pixel-weight`, `pixel-split`, `fruit-catch`,
   `pixel-rain`, `pixel-dash`, `snake-arena`, `sumo-push`, `match-pairs`, `pixel-roulette`,
   `sudoku-race`, `pixel-beat`, `maze-sprint`, `line-clear-sprint`, `quick-tetris`, `bubble-pop`,
   `micro-race`, `dash-100m`, `hurdles-110m`, `long-jump`, `javelin-throw`, `glass-bridge`,
   `freeze-doll`, `room-rush`, `sumo-ice`, `pang`, `star-blaster`, `asteroids`, `bomber-express`,
-  `brawl`, `rally-stage`, `speed-circuit`, `honeycomb-cut`, `jump-rope`, `neon-trails`, `wing-it`, `sharpshooter`, `spook-snatch`, `hit-pull-twist`.
+  `brawl`, `rally-stage`, `speed-circuit`, `honeycomb-cut`, `jump-rope`, `neon-trails`, `wing-it`, `sharpshooter`, `spook-snatch`, `hit-pull-twist`, `road-hop`.
 - **3 team**: `tug-of-war`, `bomb-relay`, `fleet-battle`. **5 duel**: `sink-the-fleet`, `pixel-pong`,
   `quick-draw`, `marbles-duel`, `rock-paper-scissors`.
 
@@ -278,6 +278,8 @@ seeded variants of the same content, because snapshots are broadcast to the whol
       Pull, Twist (called-out moves with colour tricks, upside-down stretches and FREEZE). A
       "press when two symbols match" game was weighed and dropped: on screen it repeats Reaction Duel
       / Quick Draw, and its best part (grabbing the totem) doesn't translate.
+- [x] **More arcade classics** (D48): the genres the catalog still lacked, each with its own name
+      and look — Road Hop (a road-and-river crossing race).
 
 ## Maintenance — dependencies (reviewed 2026-10-04) — DONE
 

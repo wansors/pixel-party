@@ -737,6 +737,18 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     axes: ['reflexes', 'focus'],
   },
   {
+    id: 'road-hop',
+    name: 'Road Hop',
+    format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 12] },
+    realtime: true,
+    mobileFriendly: true,
+    durationSec: 60,
+    blurb:
+      'Hop across the traffic, then ride the logs over the river. Every crossing scores — squashed or soaked, you start again.',
+    axes: ['reflexes', 'precision'],
+  },
+  {
     id: 'marbles-duel',
     name: 'Marbles Duel',
     format: 'duel',

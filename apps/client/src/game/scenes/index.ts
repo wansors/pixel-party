@@ -43,6 +43,7 @@ import { QuickMathScene } from './QuickMathScene'
 import { QuickTetrisScene } from './QuickTetrisScene'
 import { RallyStageScene } from './RallyStageScene'
 import { ReactionScene } from './ReactionScene'
+import { RoadHopScene } from './RoadHopScene'
 import { RockPaperScissorsScene } from './RockPaperScissorsScene'
 import { RoomRushScene } from './RoomRushScene'
 import { RouletteScene } from './RouletteScene'
@@ -124,6 +125,7 @@ export const SCENES: Readonly<Record<string, SceneCtor>> = {
   sharpshooter: SharpshooterScene,
   'spook-snatch': SpookSnatchScene,
   'hit-pull-twist': HitPullTwistScene,
+  'road-hop': RoadHopScene,
   'tug-of-war': TugOfWarScene,
   'bomb-relay': BombRelayScene,
   'fleet-battle': FleetBattleScene,

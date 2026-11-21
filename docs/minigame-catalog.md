@@ -63,8 +63,8 @@ Then (2026-10-03) J1 Weird Trivia (`weird-trivia`), the first brand-new idea aft
 **55 mini-games total.**
 Then (2026-11-21) K1 Neon Trails (`neon-trails`, D41), K2 Wing It (`wing-it`, D42), K3 Rock Paper
 Scissors (`rock-paper-scissors`, D43), K4 Sharpshooter (`sharpshooter`, D45), and the counter-intuitive
-pair K5 Spook Snatch (`spook-snatch`, D46) and K6 Hit, Pull, Twist (`hit-pull-twist`, D47). **61
-mini-games total.**
+pair K5 Spook Snatch (`spook-snatch`, D46) and K6 Hit, Pull, Twist (`hit-pull-twist`, D47). Then the
+arcade-classics wave: K7 Road Hop (`road-hop`, D48). **62 mini-games total.**
 
 > **Difficulty curves (D40, 2026-11-21)**: about 26 games were retuned from linear or flat pacing to
 > non-linear ramps (the shared `easeIn` / `rampEase` / `rampExp` / `compound` helpers in
@@ -981,6 +981,22 @@ avatar. See `implementation-decisions.md` D22.
   locally; the server keeps each player's clock from the arrival of their answers (the trip cancels
   out) and confirms every move, timeout and FREEZE.
 
+### K7. ✅ Road Hop — implemented (`road-hop`)
+- **Concept**: a road-and-river crossing race in the genre of the arcade crossing classics (own name
+  and look: the players' avatars, pixel traffic, logs and inflatable rafts), as a 60-second race (D48).
+- **Type**: FFA, 1–12 (best 2–12) · **Input**: ↑ ↓ ← → / WASD hop one cell (SPACE = up), the
+  on-screen pad, or a tap beside your avatar · **Duration**: 60 s · **Banter**: 💥💥 · **Mobile-friendly**: yes
+- **Rules**: one shared field, 11 cells wide: the pavement, five lanes of traffic (cars, tractors,
+  sports cars, vans, lorries), a grass verge, five lanes of river (logs and rafts) and the far bank.
+  Reaching the bank scores a crossing and starts you over; a vehicle squashes you, the water (or a
+  ride off the edge) soaks you — back to the pavement after a second. Players never touch. The
+  traffic speeds up ×1 → ×1.8 on an ease-in over 50 s (D40).
+- **Win condition / Result**: most crossings (`5 crossed`); then the furthest row on the run in
+  progress at the bell, then fewer mishaps.
+- **Latency**: low — the traffic is a pure function of the round clock; the hop rules are shared and
+  integrated on a fixed grid, so your hopper is predicted bit for bit; hops carry the moment they were
+  pressed and the server judges 150 ms behind.
+
 ---
 
 ## Variety coverage
@@ -993,8 +1009,8 @@ avatar. See `implementation-decisions.md` D22.
 | Knowledge | A3, J1 |
 | Mental math | E2 |
 | Memory | A4, A11, E8 |
-| Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4, F6, G4, I2, K4 |
-| Survival / dodging | A7, A8, B3, I1, I3, I5, K1, K2 |
+| Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4, F6, G4, I2, K4, K7 |
+| Survival / dodging | A7, A8, B3, I1, I3, I5, K1, K2, K7 |
 | Nerve / chance | D1, D3, E5, G1, G2, G3, G6, K3 |
 | Teamwork | C1, C2, C3 |
 | Head-to-head rivalry | B1, B2, B3, E7, I4, I6, K1, K3 |
@@ -1003,7 +1019,7 @@ avatar. See `implementation-decisions.md` D22.
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6, J1, K1, K2, K4–K6 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6, J1, K1, K2, K4–K6, K7 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7, G6, K3 |
 | Team | C1, C2, C3 |
 

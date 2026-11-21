@@ -99,6 +99,7 @@
 | `sharpshooter` | 1–12 | 2–12 | OK (added 2026-11-21, D45) | Every player gets every target (no stealing); rivals only show as holes in their colors. |
 | `spook-snatch` | 2–12 | 3–10 | OK (added 2026-11-21, D46) | A race per card: the first right answers score (half the room, at least three, can); a wrong grab locks you out. |
 | `hit-pull-twist` | 1–12 | 2–12 | OK (added 2026-11-21, D47) | Everyone plays the same orders at their own pace, so the headcount only fills the strip. |
+| `road-hop` | 1–12 | 2–12 | OK (added 2026-11-21, D48) | One shared field, no contact: everyone crosses the same traffic; 12 starting cells spread over 11 columns (two share one). |
 
 ### Racing & athletics
 

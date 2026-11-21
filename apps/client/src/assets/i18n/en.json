@@ -203,7 +203,8 @@
       "solved": "solved",
       "off": "off",
       "steps": "steps",
-      "survivor": "survivor"
+      "survivor": "survivor",
+      "crossed": "crossed"
     },
     "skip": {
       "button": "SKIP GAME",
@@ -600,6 +601,12 @@
         "blurb": "Do what it says, faster and faster — but obey the word, not the colour, flip it when it says UPSIDE DOWN and touch nothing on FREEZE. One slip and you are out.",
         "controls": "↑ W hit · → D pull · ← A twist · ↓ S shake · or tap the buttons",
         "tagline": "Your hands know what to do. Your brain disagrees."
+      },
+      "road-hop": {
+        "name": "Road Hop",
+        "blurb": "Hop across the traffic, then ride the logs over the river. Every crossing scores — squashed or soaked, you start again.",
+        "controls": "↑ ↓ ← → / WASD hop (SPACE = up) · or the on-screen pad",
+        "tagline": "Look both ways. Then look again. Then run."
       }
     }
   },
@@ -1278,6 +1285,22 @@
       "wrong": "That was not it!",
       "moved": "You moved on FREEZE!",
       "slow": "Too slow!"
+    },
+    "roadHop": {
+      "hint": "↑ ↓ ← → / WASD to hop · dodge the traffic, ride the logs, reach the far bank",
+      "hintShort": "Tap the arrows (or beside you) to hop",
+      "ready": "GET READY!",
+      "readySub": "Cross the road and the river!",
+      "score": "★ {{n}}",
+      "squashed": [
+        "SQUASHED!",
+        "FLAT AS A PANCAKE",
+        "ROADKILL",
+        "NO BRAKES!",
+        "TYRE TRACKS!",
+        "THAT’S GONNA DENT"
+      ],
+      "splashed": ["GLUG GLUG", "SPLASH!", "SWIM, THEN", "SOAKED!", "FISH FOOD", "WRONG LOG"]
     }
   }
 }

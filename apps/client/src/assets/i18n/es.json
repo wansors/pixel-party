@@ -206,7 +206,8 @@
       "solved": "¡resuelto!",
       "off": "de error",
       "steps": "pasos",
-      "survivor": "superviviente"
+      "survivor": "superviviente",
+      "crossed": "cruces"
     },
     "skip": {
       "button": "SALTAR JUEGO",
@@ -603,6 +604,12 @@
         "blurb": "Haz lo que te dice, cada vez más rápido. Pero ojo: haz caso a la palabra y no al color, al revés cuando diga AL REVÉS, y quieto parao cuando diga QUIETO. Un fallo y a la calle.",
         "controls": "↑ W dale · → D tira · ← A gira · ↓ S agita · o toca los botones",
         "tagline": "Tus manos saben lo que hacer. Tu cerebro no está de acuerdo."
+      },
+      "road-hop": {
+        "name": "Cruza si Puedes",
+        "blurb": "Esquiva el tráfico y cruza el río subido a los troncos. Cada cruce suma; si te atropellan o te caes al agua, vuelta a empezar.",
+        "controls": "↑ ↓ ← → / WASD saltar (ESPACIO = arriba) · o la cruceta en pantalla",
+        "tagline": "Mira a los dos lados. Y otra vez. Y luego corre."
       }
     }
   },
@@ -1287,6 +1294,29 @@
       "wrong": "¡Eso no era!",
       "moved": "¡Te has movido!",
       "slow": "¡Demasiado lento!"
+    },
+    "roadHop": {
+      "hint": "↑ ↓ ← → / WASD para saltar · esquiva los coches, súbete a los troncos y llega a la otra orilla",
+      "hintShort": "Toca las flechas (o a tu lado) para saltar",
+      "ready": "¡PREPARADOS!",
+      "readySub": "¡Cruza la carretera y el río!",
+      "score": "★ {{n}}",
+      "squashed": [
+        "¡CHOF!",
+        "¡MODO TORTILLA!",
+        "¡ATROPELLO!",
+        "NI HA FRENADO",
+        "¡MARCAS DE RUEDA!",
+        "¡BESANDO EL ASFALTO!"
+      ],
+      "splashed": [
+        "GLU GLU GLU",
+        "¡AL AGUA, PATOS!",
+        "¡A NADAR!",
+        "¡AGUA HASTA LAS CEJAS!",
+        "COMIDA PARA PECES",
+        "ESE TRONCO NO ERA"
+      ]
     }
   }
 }
