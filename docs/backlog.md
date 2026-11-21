@@ -10,16 +10,16 @@ analysis…) phase by phase. Nothing is built "just in case".
 ## Current status (2026-10-03)
 
 **Phases 0–5 are complete, and that's the whole roadmap.** The game is playable end-to-end (`bun run dev`
-→ server :3000 + client :4200, LAN-accessible; see [`../README.md`](../README.md)) with **55
+→ server :3000 + client :4200, LAN-accessible; see [`../README.md`](../README.md)) with **59
 mini-games** — the full `minigame-ideas.md` backlog is built, plus a sports wave (track & field +
 Micro Race, 2026-09-28, D20), the roadmap wave (elimination rounds, arcade classics, racers,
-2026-10-02/03, D22) and Weird Trivia (2026-10-03, D24). The deployment target is a **local LAN
+2026-10-02/03, D22), Weird Trivia (2026-10-03, D24), and Neon Trails, Wing It, Rock Paper Scissors and Sharpshooter (2026-11-21, D41–D45). The deployment target is a **local LAN
 party with friends** — one process, on one local network, no accounts — which is why the project is
 permanently **stateless, anonymous, and single-instance by design**: no database (D15), no further
 social/polish phase (D16), no multi-instance scaling (D17). What remains open-ended is growing the
 mini-game catalog with brand-new ideas. Design decisions from the clear-out pass are logged in
-[`implementation-decisions.md`](implementation-decisions.md) (D1–D32). The game is **PC-first**; 37
-of the 55 games are tagged `mobileFriendly` (lobby badge + filter, D21, shown only while a phone is in
+[`implementation-decisions.md`](implementation-decisions.md) (D1–D32). The game is **PC-first**; 39
+of the 59 games are tagged `mobileFriendly` (lobby badge + filter, D21, shown only while a phone is in
 the room, D34). Rooms hold up to **12
 players** (usually 4–8) and every game declares the headcounts it supports (D27); the per-game
 player-fit & balance audit ([`player-fit-audit.md`](player-fit-audit.md)) and its fixes (D28, D29)
@@ -50,17 +50,17 @@ below.
   card, unfit games greyed out and skipped by the engine, a "Best for N" filter, START refused when no
   picked game fits.
 
-### Mini-games — 55 (pluggable domain module + Phaser scene each)
-- **48 FFA**: `reaction-duel`, `button-masher`, `color-trap`, `trivia`, `weird-trivia`,
+### Mini-games — 59 (pluggable domain module + Phaser scene each)
+- **51 FFA**: `reaction-duel`, `button-masher`, `color-trap`, `trivia`, `weird-trivia`,
   `balloon-chicken`, `number-rush`, `quick-math`, `odd-one-out`, `higher-lower`, `bug-smash`,
   `stop-clock`, `memory-flash`, `simon`, `pixel-hoops`, `pixel-weight`, `pixel-split`, `fruit-catch`,
   `pixel-rain`, `pixel-dash`, `snake-arena`, `sumo-push`, `match-pairs`, `pixel-roulette`,
   `sudoku-race`, `pixel-beat`, `maze-sprint`, `line-clear-sprint`, `quick-tetris`, `bubble-pop`,
   `micro-race`, `dash-100m`, `hurdles-110m`, `long-jump`, `javelin-throw`, `glass-bridge`,
   `freeze-doll`, `room-rush`, `sumo-ice`, `pang`, `star-blaster`, `asteroids`, `bomber-express`,
-  `brawl`, `rally-stage`, `speed-circuit`, `honeycomb-cut`, `jump-rope`.
-- **3 team**: `tug-of-war`, `bomb-relay`, `fleet-battle`. **4 duel**: `sink-the-fleet`, `pixel-pong`,
-  `quick-draw`, `marbles-duel`.
+  `brawl`, `rally-stage`, `speed-circuit`, `honeycomb-cut`, `jump-rope`, `neon-trails`, `wing-it`, `sharpshooter`.
+- **3 team**: `tug-of-war`, `bomb-relay`, `fleet-battle`. **5 duel**: `sink-the-fleet`, `pixel-pong`,
+  `quick-draw`, `marbles-duel`, `rock-paper-scissors`.
 
 ### Epics
 - **Phase 0/1** — MVP + individual-game catalog + robustness/observability. **Complete.**
@@ -255,6 +255,25 @@ seeded variants of the same content, because snapshots are broadcast to the whol
       bat and an explosive fuel can.
 - [x] **PC first, also on screen** (D34): the mobile-friendly badges, the **Mobile** filter and the
       intro's device badge only show while someone in the room joined from a phone.
+
+## Owner requests (2026-11-21) — DONE
+
+- [x] **Rename in the room** (D40): a pencil on your own lobby row changes your name, avatar and color
+      (`SET_PROFILE`, lobby only, unique names).
+- [x] **More than 20 rounds** (D40): up to 99; AUTO (one per picked game, up to 20), presets 10/20/30/50,
+      an ≈ minutes estimate; past the line-up size games come round again (never back-to-back).
+- [x] **A visual game picker** (D40): screenshot cards, a game sheet, search, format / picked filters,
+      Surprise me; thumbnails regenerated with the playtest skill's `thumbs.ts`.
+- [x] **Difficulty that ramps** (D40): ~26 games moved from linear / flat pacing to the shared
+      non-linear curves (`@pp/shared/difficulty`).
+- [x] **Rally drifts, racers get a turbo** (D40): a drift model + handbrake in Rally Stage, a turbo in
+      Micro Race and Speed Circuit.
+- [x] **A light-trail game** (D41): Neon Trails.
+- [x] **A tap-to-flap game** (D42): Wing It — the genre, with its own name and look.
+- [x] **Rock paper scissors** (D43): a 1v1 duel, first to 3.
+- [x] **Language only in the lobby** (D44): the EN|ES toggle left the room footer; it sits in the
+      lobby's title bar (and on the join screen) — never during a session.
+- [x] **A Western shooting gallery with a breathing crosshair** (D45): Sharpshooter.
 
 ## Maintenance — dependencies (reviewed 2026-10-04) — DONE
 

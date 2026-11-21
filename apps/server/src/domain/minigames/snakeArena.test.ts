@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { SNAKE, type SnakeSim, snakeCell, snakeStep } from '@pp/shared'
+import { SNAKE, type SnakeSim, snakeCell, snakeStep, snakeStepsAt } from '@pp/shared'
 import type { Random } from '../ports/Random'
 import { SnakeArena } from './snakeArena'
 
@@ -226,11 +226,42 @@ describe('SnakeArena', () => {
     expect(snap.step).toBe(1)
     expect(snap.stepMs).toBe(STEP_MS)
     expect(snap.t).toBe(STEP_MS + 40)
+    expect(snap.rampMs).toBe(45_000)
     expect(snap.snakes.p?.body).toEqual([at(8, 7), at(7, 7), at(6, 7)])
     expect(snap.snakes.p?.waiting).toBe(false)
     expect(snap.progress.p).toBe(3)
     expect(snap.food.p).toBe(0)
     expect(snap.remainingMs).toBe(45_000 - STEP_MS - 40)
+  })
+})
+
+describe('snakeStepsAt (the speed-up, shared with the client prediction)', () => {
+  test('starts at the opening pace and quickens non-linearly to the end pace', () => {
+    const D = 45_000
+    expect(snakeStepsAt(0, D)).toBe(0)
+    expect(snakeStepsAt(STEP_MS * 5, D)).toBe(5) // the opening steps run at stepMs
+    // Steps per second over a 2 s window: a hair faster after the first quarter, much faster at the end.
+    const rate = (t: number): number => (snakeStepsAt(t + 2000, D) - snakeStepsAt(t, D)) / 2
+    const firstQuarter = rate(D / 4 - 2000) - rate(0)
+    const lastQuarter = rate(D - 2000) - rate((3 * D) / 4 - 2000)
+    expect(lastQuarter).toBeGreaterThan(firstQuarter * 3)
+    expect(rate(D - 2000)).toBeCloseTo(1000 / SNAKE.endStepMs, 0)
+    // Monotonic, one step at a time.
+    let prev = 0
+    for (let t = 0; t <= D; t += 7) {
+      const k = snakeStepsAt(t, D)
+      expect(k - prev).toBeGreaterThanOrEqual(0)
+      expect(k - prev).toBeLessThanOrEqual(1)
+      prev = k
+    }
+  })
+
+  test('the server steps on that schedule', () => {
+    const game = new SnakeArena()
+    const s = go(game, init(['p'], { next: () => 0.5 }))
+    game.tick(s, 0, 40_000)
+    expect(s.stepsTaken).toBe(snakeStepsAt(40_000, 45_000))
+    expect(s.stepsTaken).toBeGreaterThan(40_000 / STEP_MS)
   })
 })
 

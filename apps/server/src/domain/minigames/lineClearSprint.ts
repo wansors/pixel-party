@@ -7,6 +7,7 @@ import {
   COLS,
   createPlayerBoard,
   createQueue,
+  gravityMs,
   isTetrisInput,
   type PlayerBoardState,
   ROWS,
@@ -20,6 +21,8 @@ const QUEUE_LENGTH = 300
 // then the board starts over empty.
 const TOPOUT_PENALTY = 2
 const RESTART_MS = 1500
+// Gravity eases in from the opening 550 ms a row to this at the buzzer (see gravityMs).
+export const FASTEST_FALL_MS = 170
 
 export interface LineClearSprintState {
   players: PlayerId[]
@@ -34,7 +37,8 @@ export interface LineClearSprintState {
   endsAt: number
 }
 
-// FFA real-time: maximize lines cleared in a fixed time window. Topping out isn't the end: it costs a
+// FFA real-time: maximize lines cleared in a fixed time window, under gravity that speeds up for
+// everyone as the clock runs down (gently, then steeply). Topping out isn't the end: it costs a
 // couple of lines and a short freeze, then the board starts over — nobody sits out the rest of the
 // round. Most lines wins; fewer top-outs breaks ties.
 export class LineClearSprint implements MiniGame<LineClearSprintState, TetrisSprintInput> {
@@ -72,9 +76,11 @@ export class LineClearSprint implements MiniGame<LineClearSprintState, TetrisSpr
   }
 
   tick(state: LineClearSprintState, dt: number, now: number): LineClearSprintState {
+    const fallMs = gravityMs(state.startedAt, state.endsAt, now, FASTEST_FALL_MS)
     for (const pid of state.players) {
       const p = state.boards.get(pid)
       if (!p) continue
+      p.fallMs = fallMs
       const restartAt = state.restartAt.get(pid)
       if (restartAt !== undefined && now >= restartAt) {
         restartBoard(p, state.queue)

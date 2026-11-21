@@ -1,0 +1,135 @@
+// Tiny pixel icons (same as the picker's cards).
+.phone {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.7rem;
+  border: 2px solid currentColor;
+  border-bottom-width: 3px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+.clock {
+  position: relative;
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  flex-shrink: 0;
+  &::before {
+    content: '';
+    position: absolute;
+    left: calc(50% - 1px);
+    top: 1px;
+    width: 2px;
+    height: calc(50% - 1px);
+    background: currentColor;
+  }
+}
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(8, 9, 14, 0.72);
+}
+.sheet {
+  position: fixed;
+  z-index: 41;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(calc(100vw - 2rem), 30rem);
+  max-height: calc(100dvh - 2rem);
+  display: flex;
+  flex-direction: column;
+
+  .arcade-titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    text-transform: uppercase;
+  }
+  .close {
+    padding: 0 0.3rem;
+    font-family: var(--font-pixel);
+    font-size: var(--fs-md);
+    line-height: 1;
+    color: var(--c-text);
+    background: none;
+    border: none;
+    cursor: pointer;
+    &:hover {
+      color: var(--c-amber);
+    }
+  }
+}
+.sheet-body {
+  overflow-y: auto;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+
+  .big {
+    border: 3px solid var(--c-frame);
+  }
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.4rem;
+    font-size: var(--fs-xs);
+    text-transform: uppercase;
+    color: var(--c-text);
+    background: var(--c-bg);
+    border: 2px solid var(--c-frame);
+    &.mobile {
+      color: var(--c-cyan);
+    }
+  }
+  p {
+    margin: 0;
+  }
+  .tagline {
+    color: var(--c-amber);
+    font-size: var(--fs-xs);
+    line-height: 1.6;
+  }
+  .how {
+    font-family: monospace;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    color: var(--c-text);
+  }
+  .controls {
+    font-family: monospace;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: var(--c-dim);
+    .label {
+      margin-right: 0.5rem;
+      font-family: var(--font-pixel);
+      font-size: var(--fs-xs);
+      text-transform: uppercase;
+      color: var(--c-cyan);
+    }
+  }
+  .sheet-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .needs {
+    color: var(--c-red);
+    font-size: var(--fs-xs);
+    text-transform: uppercase;
+  }
+}
+

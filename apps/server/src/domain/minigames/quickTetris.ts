@@ -8,6 +8,7 @@ import {
   COLS,
   createPlayerBoard,
   createQueue,
+  gravityMs,
   isTetrisInput,
   type PlayerBoardState,
   ROWS,
@@ -17,6 +18,9 @@ import {
 const DEFAULT_DURATION_MS = 45_000
 export const TARGET_LINES = 8
 const QUEUE_LENGTH = 300
+// Gravity eases in from the opening 550 ms a row to this at the buzzer (see gravityMs): whoever is
+// still short of the target late in the race plays it much faster.
+export const FASTEST_FALL_MS = 210
 
 export interface QuickTetrisState {
   players: PlayerId[]
@@ -78,10 +82,12 @@ export class QuickTetris implements MiniGame<QuickTetrisState, TetrisSprintInput
   }
 
   tick(state: QuickTetrisState, dt: number, now: number): QuickTetrisState {
+    const fallMs = gravityMs(state.startedAt, state.endsAt, now, FASTEST_FALL_MS)
     for (const pid of state.players) {
       if ((state.doneAt.get(pid) ?? 0) > 0) continue
       const p = state.boards.get(pid)
       if (!p) continue
+      p.fallMs = fallMs
       tetrisFall(p, dt, shapeAtOf(state.queue))
       this.markDoneIfReached(state, pid, now)
     }

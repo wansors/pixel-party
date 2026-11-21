@@ -7,22 +7,26 @@ import {
   type MicroRacePoint,
   type MicroRaceSnapshot,
   type MicroRaceTrackDef,
-  RACE_DRAFT_TUNING,
   RACE_WALL_BOUNCE,
   sampleMicroRaceTrack,
 } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 import {
+  carTuning,
   clamp1,
   collideCars,
   followRoad,
   formatRaceTime,
   type GridSlot,
   gridSlots,
+  held,
   inSlipstream,
   integrateCar,
+  meter3,
   type RaceCar,
   retireCar,
+  stepTurbo,
+  toMs,
   worldWalls,
 } from './raceCore'
 
@@ -46,7 +50,8 @@ const RESTITUTION = 1.1 // >1 gives bumps a punchy, Micro Machines feel
 // gets a little more top speed and pull — the way back up from the back of the grid.
 const DRAFT_RANGE = 110
 const DRAFT_CONE = 0.3
-const DRAFT = RACE_DRAFT_TUNING
+// The turbo (RACE_TURBO in @pp/shared): a meter that fills while you drive on the road (faster in a
+// slipstream) and a key that lights it for a burst of top speed once it's full.
 const HIT_MIN_SPEED = 60 // approach speed that counts as a bump for feedback
 const WALL_BOUNCE = RACE_WALL_BOUNCE
 // Progress tracking (see raceCore.followRoad): a car that strays lostFactor × halfWidth from its own
@@ -75,7 +80,8 @@ export interface MicroRaceState {
 // Real-time FFA top-down racer (Micro Machines style). Deterministic: the seeded Random only picks the
 // track and the grid order; everything after that is pure physics from `dt`/`now`. Cars lap a closed
 // spline circuit on a tabletop; progress follows the road sample by sample (no shortcuts), the first
-// car to complete LAPS laps opens a short finish window, and the race order ranks everyone.
+// car to complete LAPS laps opens a short finish window, and the race order ranks everyone. A turbo
+// meter charges as you drive; the turbo key spends a full one on a burst of speed.
 export class MicroRace implements MiniGame<MicroRaceState, MicroRaceInput> {
   readonly id = 'micro-race'
   readonly format = 'ffa' as const
@@ -124,6 +130,9 @@ export class MicroRace implements MiniGame<MicroRaceState, MicroRaceInput> {
         resets: 0,
         gone: false,
         draft: false,
+        turbo: false,
+        turboMeter: 0,
+        turboS: 0,
       })
     })
     return {
@@ -153,6 +162,7 @@ export class MicroRace implements MiniGame<MicroRaceState, MicroRaceInput> {
     if (!Number.isFinite(steer) || !Number.isFinite(throttle)) return state
     car.steer = clamp1(steer)
     car.throttle = clamp1(throttle)
+    car.turbo = held(input.turbo)
     return state
   }
 
@@ -167,7 +177,10 @@ export class MicroRace implements MiniGame<MicroRaceState, MicroRaceInput> {
         inSlipstream(car, cars, CAR_R, DRAFT_RANGE, DRAFT_CONE)
     }
     for (let s = 0; s < SUB_STEPS; s++) {
-      for (const car of cars) integrateCar(car, h, PHYSICS, car.draft ? DRAFT : {})
+      for (const car of cars) {
+        const burning = !car.gone && stepTurbo(car, h, car.draft)
+        integrateCar(car, h, PHYSICS, carTuning(car.draft, burning))
+      }
       for (let i = 0; i < cars.length; i++) {
         for (let j = i + 1; j < cars.length; j++) {
           collideCars(cars[i] as Car, cars[j] as Car, CAR_R, RESTITUTION, HIT_MIN_SPEED)
@@ -264,6 +277,8 @@ export class MicroRace implements MiniGame<MicroRaceState, MicroRaceInput> {
         gone: c.gone,
         vx: Math.round(c.vx * 10) / 10,
         vy: Math.round(c.vy * 10) / 10,
+        turbo: meter3(c.turboMeter),
+        turboMs: toMs(c.turboS),
       }
     })
     return {

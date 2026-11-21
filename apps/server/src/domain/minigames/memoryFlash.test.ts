@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { MEMORY_FLASH_COLORS } from '@pp/shared'
 import type { Random } from '../ports/Random'
-import { MemoryFlash, type MemoryFlashState } from './memoryFlash'
+import { MemoryFlash, type MemoryFlashState, memoryFlashFill, memoryFlashMs } from './memoryFlash'
 
 const half: Random = { next: () => 0.5 }
 const init = (players: string[]): MemoryFlashState =>
@@ -67,6 +67,29 @@ describe('MemoryFlash', () => {
     const r = game.getResult(s)
     expect(r.placements).toEqual(['a', 'b'])
     expect(r.ranks).toEqual({ a: 0, b: 1 })
+  })
+
+  test('the ramp bends upwards: bursts grow and flashes shrink by more each level', () => {
+    // A warm-up start (the old opening board)…
+    expect(memoryFlashFill(0)).toBe(4)
+    expect(memoryFlashMs(0)).toBe(1700)
+    // …and the late levels bite: by level 10 the burst is six times bigger, flashed for half the time.
+    expect(memoryFlashFill(8)).toBeGreaterThanOrEqual(16)
+    expect(memoryFlashFill(10)).toBeGreaterThanOrEqual(24)
+    expect(memoryFlashMs(10)).toBeLessThan(900)
+    // Non-linear: level 8 → 9 adds more pixels and takes more flash time away than 1 → 2 did.
+    expect(memoryFlashFill(9) - memoryFlashFill(8)).toBeGreaterThan(
+      memoryFlashFill(2) - memoryFlashFill(1),
+    )
+    expect(memoryFlashMs(8) - memoryFlashMs(9)).toBeGreaterThan(memoryFlashMs(1) - memoryFlashMs(2))
+    // Floors hold past the ramp, and every burst still fits its grid.
+    expect(memoryFlashMs(19)).toBe(480)
+    const s = init(['a'])
+    for (const board of s.boards) {
+      expect(board.cells.replaceAll('.', '').length).toBeLessThanOrEqual(board.cols * board.rows)
+      expect(board.cols).toBeLessThanOrEqual(8)
+    }
+    expect(s.boards.map((b) => b.flashMs)).toEqual(s.boards.map((_, l) => memoryFlashMs(l)))
   })
 
   test('a leaver is skipped to the end so the round finishes once the rest are done', () => {

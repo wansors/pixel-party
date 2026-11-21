@@ -1,7 +1,8 @@
 {
   "common": {
     "copyLink": "Copy link",
-    "copied": "Copied!"
+    "copied": "Copied!",
+    "close": "Close"
   },
   "lang": {
     "en": "EN",
@@ -201,7 +202,8 @@
       "pulls": "pulls",
       "solved": "solved",
       "off": "off",
-      "steps": "steps"
+      "steps": "steps",
+      "survivor": "survivor"
     },
     "skip": {
       "button": "SKIP GAME",
@@ -211,6 +213,34 @@
       "doneSelf": "You skipped {{game}}: no points this round",
       "short": "SKIP",
       "failed": "{{game}} broke down and was skipped: no points this round"
+    },
+    "profile": {
+      "title": "Your player",
+      "edit": "Edit name & look",
+      "save": "Save",
+      "cancel": "Cancel"
+    },
+    "rounds": {
+      "auto": "Auto",
+      "autoHint": "One round per picked game (up to {{n}})",
+      "less": "One round less",
+      "more": "One round more",
+      "eta": "≈ {{n}} min",
+      "repeat": "Games repeat",
+      "repeatHint": "More rounds than picked games: the line-up starts over (never the same game twice in a row)",
+      "session": "Session"
+    },
+    "picker": {
+      "search": "Search games…",
+      "surprise": "Surprise me",
+      "surpriseHint": "Deal a random line-up from the games shown that fit this room",
+      "pickedOnly": "Picked",
+      "length": "Round length",
+      "about": "About this game",
+      "noMatch": "No game matches these filters.",
+      "clearFilters": "Clear filters",
+      "add": "Add to line-up",
+      "remove": "Remove from line-up"
     }
   },
   "team": {
@@ -223,7 +253,9 @@
     "session_in_progress": "Session already in progress",
     "name_taken": "That name is taken",
     "no_games_fit": "No picked game fits this many players",
-    "invalid_name": "Pick a name with some letters in it"
+    "invalid_name": "Pick a name with some letters in it",
+    "not_in_lobby": "You can only change that in the lobby",
+    "unknown_player": "Your seat is gone — rejoin the room"
   },
   "catalog": {
     "axis": {
@@ -265,7 +297,7 @@
       },
       "number-rush": {
         "name": "Number Rush",
-        "blurb": "Tap the numbers 1 to 25 in order as fast as you can.",
+        "blurb": "Tap the numbers 1 to 25 in order as fast as you can — the ones left keep shuffling as you go.",
         "controls": "Click 1 → 25 in order · wrong number = 0.5 s freeze"
       },
       "quick-math": {
@@ -363,7 +395,7 @@
       },
       "bubble-pop": {
         "name": "Bubble Pop",
-        "blurb": "Shoot color-matched bubbles to pop groups of three or more. Most bubbles popped wins; a full clear beats them all.",
+        "blurb": "Shoot color-matched bubbles to pop groups of three or more — the ceiling keeps dropping, faster and faster. Most popped wins; a full clear beats them all.",
         "controls": "MOUSE or ← → aim · CLICK / SPACE fire"
       },
       "fruit-catch": {
@@ -422,8 +454,8 @@
       },
       "micro-race": {
         "name": "Micro Race",
-        "blurb": "Tiny cars, tabletop tracks. Three laps, bump your rivals, first across the line wins.",
-        "controls": "← → A D steer · ↑ W gas · ↓ S SPACE brake · or mouse"
+        "blurb": "Tiny cars, tabletop tracks. Three laps, bump your rivals, fire your turbo, first across the line wins.",
+        "controls": "← → A D steer · ↑ W gas · ↓ S brake · SPACE turbo · or mouse"
       },
       "dash-100m": {
         "name": "100m Dash",
@@ -501,13 +533,13 @@
       },
       "rally-stage": {
         "name": "Rally Stage",
-        "blurb": "Point-to-point against the clock: gravel slides, tarmac grips, split times. Fastest stage wins.",
-        "controls": "← → A D steer · ↑ W gas · ↓ S SPACE brake · or mouse"
+        "blurb": "Point-to-point against the clock: drift the gravel (pull the handbrake!), grip the tarmac, beat the splits. Fastest stage wins.",
+        "controls": "← → A D steer · ↑ W gas · ↓ S brake · SPACE handbrake · or mouse"
       },
       "speed-circuit": {
         "name": "Speed Circuit",
-        "blurb": "Two laps wheel-to-wheel: tuck into the slipstream, hit the boost pads, take the flag first.",
-        "controls": "← → A D steer · ↑ W gas · ↓ S SPACE brake · or mouse"
+        "blurb": "Two laps wheel-to-wheel: tuck into the slipstream, hit the boost pads, fire your turbo, take the flag first.",
+        "controls": "← → A D steer · ↑ W gas · ↓ S brake · SPACE turbo · or mouse"
       },
       "honeycomb-cut": {
         "name": "Honeycomb Cut",
@@ -532,6 +564,30 @@
         "blurb": "Strange but true: pick the real answer among the absurd ones. Fast answers score more.",
         "tagline": "Everything here is true. Sadly.",
         "controls": "A–D or 1–4 · or click an answer"
+      },
+      "neon-trails": {
+        "name": "Neon Trails",
+        "blurb": "Your bike leaves a wall of light behind it, and it keeps speeding up. Box rivals in, never crash: last rider wins.",
+        "controls": "← ↑ → ↓ or W A S D: turn · swipe on a phone",
+        "tagline": "The wall behind you is yours. So is the blame."
+      },
+      "wing-it": {
+        "name": "Wing It",
+        "blurb": "Tap to flap through the gaps between the towers — it speeds up and the gaps shrink. Last one in the air wins.",
+        "controls": "SPACE / ↑ / W or click / tap: flap",
+        "tagline": "Gravity always wins. Make it wait."
+      },
+      "rock-paper-scissors": {
+        "name": "Rock Paper Scissors",
+        "blurb": "The classic, 1 vs 1: throw at the same time, first to 3 wins — and every throw gives you less time to think.",
+        "controls": "1 2 3 / ← ↓ → / A S D or the buttons: rock · paper · scissors",
+        "tagline": "Science says rock. Your rival read it too."
+      },
+      "sharpshooter": {
+        "name": "Sharpshooter",
+        "blurb": "Bandits in the windows, bottles on the fence, cans in the air — and your aim sways with every breath. Hold it, squeeze, but spare the townsfolk.",
+        "controls": "MOUSE or ← ↑ → ↓ / WASD aim · CLICK / SPACE shoot · hold SHIFT / right-click: steady your breath · R reload",
+        "tagline": "This town ain’t big enough for your aim."
       }
     }
   },
@@ -636,7 +692,8 @@
       "done": "DONE!",
       "find": "Find {{n}}",
       "hint": "Click 1 → {{n}} in order · a wrong one costs 0.5 s",
-      "cooldown": "Wrong number! Wait…"
+      "cooldown": "Wrong number! Wait…",
+      "shuffle": "SHUFFLE!"
     },
     "higherLower": {
       "higher": "▲ HIGHER",
@@ -912,8 +969,8 @@
       "hint": "Type the answer (or click it)"
     },
     "microRace": {
-      "hint": "← → / A D steer · ↑ / W gas · ↓ / S / SPACE brake · or hold the mouse where you want to go",
-      "hintTouch": "Hold where you want to drive",
+      "hint": "← → / A D steer · ↑ / W gas · ↓ / S brake · SPACE / SHIFT turbo · or hold the mouse where you want to go (right-click: turbo)",
+      "hintTouch": "Hold where you want to drive · tap TURBO when it is full",
       "status": "LAP {{lap}}/{{laps}} · P{{pos}}",
       "lap": "LAP {{n}}",
       "finalLap": "FINAL LAP!",
@@ -924,7 +981,9 @@
       "rescued": "OFF TRACK!",
       "wrongWay": "WRONG WAY!",
       "bump": "BUMP!",
-      "outOfTime": "OUT OF TIME"
+      "outOfTime": "OUT OF TIME",
+      "turbo": "TURBO",
+      "actionKey": "SPACE / SHIFT"
     },
     "athletics": {
       "set": "SET...",
@@ -1082,7 +1141,12 @@
       "stageStatus": "SPLIT {{cp}}/{{cps}} · {{pct}}%",
       "split": "SPLIT {{time}}",
       "circuitStatus": "LAP {{lap}}/{{laps}} · P{{pos}}",
-      "lap": "LAP {{lap}}!"
+      "lap": "LAP {{lap}}!",
+      "hintRally": "← → / A D steer · ↑ / W gas · ↓ / S brake · SPACE / SHIFT handbrake · or hold the mouse where you want to go (right-click: handbrake)",
+      "hintRallyTouch": "Hold where you want to drive · HANDBRAKE to drift",
+      "handbrake": "HANDBRAKE",
+      "drift": "DRIFT {{s}}s",
+      "driftBoost": "DRIFT BOOST!"
     },
     "honeycomb": {
       "pressure": "PRESSURE",
@@ -1131,6 +1195,51 @@
       "nobody": "NOBODY KNEW!",
       "everybody": "TOO EASY!",
       "fooled": "{{n}} FELL FOR IT!"
+    },
+    "neonTrails": {
+      "hint": "← ↑ → ↓ / W A S D to turn (swipe on a phone) · don’t hit any wall",
+      "ready": "GET READY!",
+      "readySub": "Turn with the arrows or WASD",
+      "speed": "SPEED {{n}}",
+      "speedUp": "SPEED UP!",
+      "lastRider": "LAST RIDER!"
+    },
+    "wingIt": {
+      "hint": "SPACE / ↑ / W or click / tap to flap · don’t touch the towers or the ground",
+      "ready": "GET READY!",
+      "readySub": "Tap to flap · SPACE / ↑ / W",
+      "score": "★ {{n}}",
+      "lastFlying": "LAST ONE FLYING!"
+    },
+    "rps": {
+      "keys": "1 / ← / A rock · 2 / ↓ / S paper · 3 / → / D scissors",
+      "rock": "ROCK",
+      "paper": "PAPER",
+      "scissors": "SCISSORS",
+      "chant0": "ROCK…",
+      "chant1": "PAPER…",
+      "chant2": "SCISSORS…",
+      "ready": "READY",
+      "throwNo": "Throw {{n}} · first to 3",
+      "waiting": "Locked in! Waiting for {{name}}…",
+      "youWinThrow": "YOU WIN THE THROW!",
+      "theyWinThrow": "THEY WIN THE THROW",
+      "drawThrow": "DRAW — AGAIN!",
+      "youWinThrowShort": "wins the throw",
+      "theyWinThrowShort": "loses the throw",
+      "drawThrowShort": "draw",
+      "watchThrow": "{{name}}: {{outcome}}",
+      "tooSlow": "Too slow — no throw, no point",
+      "bye": "No opponent this round — you bank a draw"
+    },
+    "sharpshooter": {
+      "hint": "Aim with the mouse or arrows · CLICK / SPACE shoots · hold SHIFT / right-click to steady · R reload · don’t shoot the townsfolk",
+      "ready": "GET READY…",
+      "draw": "DRAW!",
+      "reloading": "RELOADING",
+      "oops": "A CIVILIAN!",
+      "saloon": "SALOON",
+      "store": "GENERAL STORE"
     }
   }
 }

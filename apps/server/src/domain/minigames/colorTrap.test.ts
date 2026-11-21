@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { Random } from '../ports/Random'
-import { COLOR_TRAP_LATE_GRACE_MS, ColorTrap } from './colorTrap'
+import { COLOR_TRAP_LATE_GRACE_MS, ColorTrap, colorTrapPromptMs } from './colorTrap'
 
 // next() = 0 -> word = 0 (RED), ink = (0 + 1 + 0) % 4 = 1 (GREEN) for every prompt.
 const zero: Random = { next: () => 0 }
@@ -114,6 +114,36 @@ describe('ColorTrap', () => {
     expect(r.placements[0]).toBe('a')
     expect(r.ranks?.a).toBe(0)
     expect(r.ranks?.b).toBe(1)
+  })
+
+  test('by default the windows shrink on an ease-in, a little more every prompt', () => {
+    const game = new ColorTrap()
+    const s = game.init({ players: ['a'], seed: 1, random: zero, now: 0 })
+    const w = s.windows
+    expect(w).toHaveLength(12)
+    expect(w).toEqual(w.map((_, i) => colorTrapPromptMs(i, 12)))
+    expect(w[0]).toBe(2300)
+    expect(w[11]).toBe(1050)
+    // Non-linear: the late prompts tighten by more ms per step than the early ones.
+    expect((w[9] as number) - (w[10] as number)).toBeGreaterThan(
+      (w[1] as number) - (w[2] as number),
+    )
+    // The round as a whole stays about as long as the old flat 12 × 1.8 s.
+    const total = w.reduce((a, b) => a + b, 0)
+    expect(total).toBeGreaterThan(20_000)
+    expect(total).toBeLessThan(23_000)
+    // The prompt live at a time is found along the uneven schedule, and the wire says how long it is.
+    const t = (s.starts[10] as number) + 50
+    expect(game.snapshot(s, t)).toMatchObject({
+      index: 10,
+      promptMs: w[10],
+      promptRemainingMs: (w[10] as number) - 50,
+    })
+    expect(game.snapshot(s, t).remainingMs).toBe(total - t)
+    game.onInput(s, 'a', { kind: 'answer', prompt: 10, color: 1 }, t)
+    expect(s.correct.get('a')).toBe(1)
+    expect(game.isFinished(s, total + COLOR_TRAP_LATE_GRACE_MS - 1)).toBe(false)
+    expect(game.isFinished(s, total + COLOR_TRAP_LATE_GRACE_MS)).toBe(true)
   })
 
   test('finishes at the end of the last prompt window plus the grace period', () => {

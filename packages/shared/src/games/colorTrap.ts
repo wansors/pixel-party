@@ -28,6 +28,11 @@ export interface ColorTrapSnapshot {
   ink: number | null
   // ms left in the current prompt window.
   promptRemainingMs: number
+  // The live prompt's whole window (ms; 0 between/after prompts). Windows shrink prompt by prompt, so
+  // the client reads the length here instead of assuming one.
+  promptMs?: number
+  // ms left until the last prompt closes.
+  remainingMs?: number
   // playerId -> points so far (right answers minus wrong ones; can go negative).
   scores: Record<string, number>
   // players who already locked an answer for the current prompt.

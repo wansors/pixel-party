@@ -140,7 +140,8 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
-    blurb: 'Tap the numbers 1 to 25 in order as fast as you can.',
+    blurb:
+      'Tap the numbers 1 to 25 in order as fast as you can — the ones left keep shuffling as you go.',
     axes: ['focus', 'speed'],
   },
   {
@@ -463,7 +464,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     mobileFriendly: true,
     durationSec: 60,
     blurb:
-      'Shoot color-matched bubbles to pop groups of three or more. Most bubbles popped wins; a full clear beats them all.',
+      'Shoot color-matched bubbles to pop groups of three or more — the ceiling keeps dropping, faster and faster. Most popped wins; a full clear beats them all.',
     axes: ['precision'],
   },
   {
@@ -474,7 +475,8 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     realtime: true,
     mobileFriendly: false,
     durationSec: 90,
-    blurb: 'Tiny cars, tabletop tracks. Three laps, bump your rivals, first across the line wins.',
+    blurb:
+      'Tiny cars, tabletop tracks. Three laps, bump your rivals, fire your turbo, first across the line wins.',
     axes: ['reflexes', 'precision'],
   },
   {
@@ -635,7 +637,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     mobileFriendly: false,
     durationSec: 70,
     blurb:
-      'Point-to-point against the clock: gravel slides, tarmac grips, split times. Fastest stage wins.',
+      'Point-to-point against the clock: drift the gravel (pull the handbrake!), grip the tarmac, beat the splits. Fastest stage wins.',
     axes: ['precision', 'speed'],
   },
   {
@@ -647,7 +649,7 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     mobileFriendly: false,
     durationSec: 100,
     blurb:
-      'Two laps wheel-to-wheel: tuck into the slipstream, hit the boost pads, take the flag first.',
+      'Two laps wheel-to-wheel: tuck into the slipstream, hit the boost pads, fire your turbo, take the flag first.',
     axes: ['precision', 'reflexes'],
   },
   {
@@ -675,6 +677,42 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     axes: ['reflexes', 'focus'],
   },
   {
+    id: 'neon-trails',
+    name: 'Neon Trails',
+    format: 'ffa',
+    players: { min: 2, max: 12, best: [3, 8] },
+    realtime: true,
+    mobileFriendly: false,
+    durationSec: 60,
+    blurb:
+      'Your bike leaves a wall of light behind it, and it keeps speeding up. Box rivals in, never crash: last rider wins.',
+    axes: ['reflexes', 'nerve'],
+  },
+  {
+    id: 'wing-it',
+    name: 'Wing It',
+    format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 12] },
+    realtime: true,
+    mobileFriendly: true,
+    durationSec: 60,
+    blurb:
+      'Tap to flap through the gaps between the towers — it speeds up and the gaps shrink. Last one in the air wins.',
+    axes: ['reflexes', 'precision'],
+  },
+  {
+    id: 'sharpshooter',
+    name: 'Sharpshooter',
+    format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 12] },
+    realtime: true,
+    mobileFriendly: false,
+    durationSec: 45,
+    blurb:
+      'Bandits in the windows, bottles on the fence, cans in the air — and your aim sways with every breath. Hold it, squeeze, but spare the townsfolk.',
+    axes: ['precision', 'reflexes'],
+  },
+  {
     id: 'marbles-duel',
     name: 'Marbles Duel',
     format: 'duel',
@@ -685,6 +723,18 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     blurb:
       'Odd or even? Hide marbles in your fist, bet on your rival’s. Win them all to win the duel.',
     axes: ['nerve', 'focus'],
+  },
+  {
+    id: 'rock-paper-scissors',
+    name: 'Rock Paper Scissors',
+    format: 'duel',
+    players: { min: 2, max: 12, best: [2, 8] },
+    realtime: false,
+    mobileFriendly: true,
+    durationSec: 45,
+    blurb:
+      'The classic, 1 vs 1: throw at the same time, first to 3 wins — and every throw gives you less time to think.',
+    axes: ['nerve', 'reflexes'],
   },
 ]
 

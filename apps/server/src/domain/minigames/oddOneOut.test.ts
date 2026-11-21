@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { ODD_ONE_OUT_WRONG_COOLDOWN_MS } from '@pp/shared'
 import type { Random } from '../ports/Random'
-import { OddOneOut, type OddOneOutState } from './oddOneOut'
+import { OddOneOut, type OddOneOutState, oddOneOutDelta, oddOneOutSide } from './oddOneOut'
 
 const zero: Random = { next: () => 0 }
 const game = new OddOneOut()
@@ -34,16 +34,53 @@ describe('OddOneOut', () => {
 
   test('tapping every tile in turn is slower than finding the odd one', () => {
     let s = init(['spammer'])
-    // A 6x6 board late in the run: spam cells 35, 34, … every 50 ms until it clears.
+    // A 7x7 board late in the run: spam cells 48, 47, … every 50 ms until it clears.
     s.level.set('spammer', 20)
+    // 48 misses at a second each outlast the round: give the spammer all the time they need.
+    s.endsAt = 120_000
+    const last = (s.boards[20]?.cols ?? 0) * (s.boards[20]?.rows ?? 0) - 1
+    expect(last).toBe(48)
     let t = 0
-    for (let cell = 35; s.level.get('spammer') === 20; t += 50) {
+    for (let cell = last; s.level.get('spammer') === 20; t += 50) {
       const before = s.cooldownUntil.get('spammer') ?? 0
       s = tap(s, 'spammer', cell, t)
       if ((s.cooldownUntil.get('spammer') ?? 0) !== before) cell--
     }
-    const misses = 35 - odd(s, 'spammer')
+    const misses = last - odd(s, 'spammer')
     expect(t).toBeGreaterThanOrEqual(misses * ODD_ONE_OUT_WRONG_COOLDOWN_MS)
+  })
+
+  test('the odd tile gets subtler by a steady percentage, with no plateau', () => {
+    // How hard the odd tile is to see ~ 1 / its brightness gap.
+    const subtlety = (level: number): number => 1 / oddOneOutDelta(level)
+    expect(oddOneOutDelta(0)).toBe(72)
+    for (let level = 1; level < 30; level++) {
+      // Strictly subtler every level until the gap is down to single digits (where rounding can hold
+      // a value for a level), never wider again.
+      if (level <= 19) expect(oddOneOutDelta(level)).toBeLessThan(oddOneOutDelta(level - 1))
+      else expect(oddOneOutDelta(level)).toBeLessThanOrEqual(oddOneOutDelta(level - 1))
+    }
+    // Non-linear: level 8 → 9 is a bigger jump in subtlety than 1 → 2 (and 15 → 16 bigger still).
+    expect(subtlety(9) - subtlety(8)).toBeGreaterThan(subtlety(2) - subtlety(1))
+    expect(subtlety(16) - subtlety(15)).toBeGreaterThan(subtlety(9) - subtlety(8))
+    // The old schedule went flat at a gap of 14 from level 14; this one keeps going to 5.
+    expect(oddOneOutDelta(16)).toBeLessThan(10)
+    expect(oddOneOutDelta(29)).toBe(5)
+    // The grid grows to 7x7 and stops there.
+    expect([0, 2, 4, 6, 8, 10, 29].map(oddOneOutSide)).toEqual([2, 3, 4, 5, 6, 7, 7])
+    // Odd tiles come both lighter and darker than the rest.
+    let x = 7
+    const lcg: Random = {
+      next: () => {
+        x = (Math.imul(x, 1664525) + 1013904223) >>> 0
+        return x / 2 ** 32
+      },
+    }
+    const s = game.init({ players: ['a'], seed: 7, random: lcg, now: 0 })
+    const lum = (c: number): number => (c >> 16) + ((c >> 8) & 0xff) + (c & 0xff)
+    const lighter = s.boards.filter((b) => lum(b.odd) > lum(b.base)).length
+    expect(lighter).toBeGreaterThan(0)
+    expect(lighter).toBeLessThan(s.boards.length)
   })
 
   test('a player gone mid-round no longer holds the early finish', () => {

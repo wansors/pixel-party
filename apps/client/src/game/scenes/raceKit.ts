@@ -1,21 +1,28 @@
 import { type AvatarId, type MicroRacePoint, PALETTE, raceWrapAngle } from '@pp/shared'
 import Phaser from 'phaser'
 import { ensureAvatarTexture } from '../avatars'
-import { bodyStyle, hexToCss } from '../pixelStyle'
+import { bodyStyle, ensureBevelPanel, fitText, headlineStyle, hexToCss, shade } from '../pixelStyle'
 
 // UI kit for the top-down racers (Micro Race, Rally Stage, Speed Circuit); the netcode is in raceNet:
-//  - DriveControls: arrows / WASD (+ SPACE to brake) or a held pointer → steer + throttle, sent on
-//    change only (key changes at once, pointer steering at most every 50 ms) — never an idle heartbeat.
+//  - DriveControls: arrows / WASD or a held pointer → steer + throttle, plus the game's extra key
+//    (SPACE / SHIFT / right mouse button / the on-screen button: the rally's handbrake, the others'
+//    turbo), sent on change only (key changes at once, pointer steering at most every 50 ms) — never
+//    an idle heartbeat.
+//  - ActionButton: that extra key on screen (bottom right) — a touch button that is also the turbo
+//    meter or the drift gauge.
 //  - RaceMinimap: the whole course in a corner with a dot per car.
 //  - RaceStandings: the race order as a pooled column of rows.
+//  - ensureRacePuff: the white square the dust, smoke and skid marks are made of.
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v))
 
 // --- Controls ------------------------------------------------------------------------------------------
 
+// Steer and throttle, plus the game's extra key held (`action`: the rally's handbrake, the turbo).
 export interface Drive {
   steer: number
   throttle: number
+  action: boolean
 }
 
 const POINTER_SEND_MS = 50
@@ -25,8 +32,13 @@ export class DriveControls {
   private readonly wasd?: Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>
   private aim?: { x: number; y: number }
   private aimPointer = -1
+  // The extra key held through the right mouse button or a finger on the on-screen button.
+  private rightHeld = false
+  private actionPointer = -1
+  // The on-screen button's area (screen space): a press inside it is the extra key, not steering.
+  private zone?: { x: number; y: number; w: number; h: number }
   // What the server holds (it starts every car parked).
-  readonly sent: Drive = { steer: 0, throttle: 0 }
+  readonly sent: Drive = { steer: 0, throttle: 0, action: false }
   private sentAt = 0
 
   constructor(scene: Phaser.Scene) {
@@ -34,7 +46,18 @@ export class DriveControls {
     this.cursors = kb?.createCursorKeys()
     if (kb)
       this.wasd = { W: kb.addKey('W'), A: kb.addKey('A'), S: kb.addKey('S'), D: kb.addKey('D') }
+    // The right mouse button is the extra key, so it must not open the browser's menu.
+    scene.input.mouse?.disableContextMenu()
     scene.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      if (p.button === 2) {
+        this.rightHeld = true
+        return
+      }
+      const z = this.zone
+      if (z && p.x >= z.x && p.x <= z.x + z.w && p.y >= z.y && p.y <= z.y + z.h) {
+        this.actionPointer = p.id
+        return
+      }
       this.aimPointer = p.id
       this.aim = { x: p.x, y: p.y }
     })
@@ -42,23 +65,37 @@ export class DriveControls {
       if (p.id === this.aimPointer && p.isDown) this.aim = { x: p.x, y: p.y }
     })
     scene.input.on('pointerup', (p: Phaser.Input.Pointer) => {
-      if (p.id !== this.aimPointer) return
-      this.release()
+      if (p.button === 2) {
+        this.rightHeld = false
+        return
+      }
+      if (p.id === this.actionPointer) this.actionPointer = -1
+      else if (p.id === this.aimPointer) this.releaseAim()
     })
     // Phaser lets go of held keys when the window loses focus; a held pointer must let go too.
-    const onBlur = (): void => this.release()
+    const onBlur = (): void => {
+      this.releaseAim()
+      this.rightHeld = false
+      this.actionPointer = -1
+    }
     scene.game.events.on(Phaser.Core.Events.BLUR, onBlur)
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
       scene.game.events.off(Phaser.Core.Events.BLUR, onBlur),
     )
   }
 
-  private release(): void {
+  // Where the on-screen button for the extra key sits (screen space).
+  setActionZone(zone: { x: number; y: number; w: number; h: number }): void {
+    this.zone = zone
+  }
+
+  private releaseAim(): void {
     this.aimPointer = -1
     this.aim = undefined
   }
 
-  // Keys win over a held pointer. `car` is your car on screen (for steering toward the pointer).
+  // Keys win over a held pointer; the extra key goes with either. `car` is your car on screen (for
+  // steering toward the pointer).
   read(car: { x: number; y: number; a: number } | null): { drive: Drive; keys: boolean } {
     const c = this.cursors
     const w = this.wasd
@@ -66,12 +103,14 @@ export class DriveControls {
     const right = c?.right.isDown || w?.D.isDown
     const up = c?.up.isDown || w?.W.isDown
     const down = c?.down.isDown || w?.S.isDown
-    const brake = c?.space.isDown
-    if (left || right || up || down || brake) {
+    const action =
+      !!(c?.space.isDown || c?.shift.isDown) || this.rightHeld || this.actionPointer >= 0
+    if (left || right || up || down) {
       return {
         drive: {
           steer: (right ? 1 : 0) - (left ? 1 : 0),
-          throttle: brake ? -1 : (up ? 1 : 0) - (down ? 1 : 0),
+          throttle: (up ? 1 : 0) - (down ? 1 : 0),
+          action,
         },
         keys: true,
       }
@@ -85,26 +124,149 @@ export class DriveControls {
         drive: {
           steer: Math.round(clamp(diff / 0.5, -1, 1) * 10) / 10,
           throttle: Math.abs(diff) > 2.3 ? 0.45 : dist < 36 ? 0.3 : 1,
+          action,
         },
         keys: false,
       }
     }
-    return { drive: { steer: 0, throttle: 0 }, keys: true }
+    return { drive: { steer: 0, throttle: 0, action }, keys: true }
   }
 
   // Sends a changed drive (key changes at once, pointer steering at most every 50 ms) and returns what
   // the server now holds — the drive the local prediction must use.
   sync(read: { drive: Drive; keys: boolean }, now: number, send: (d: Drive) => void): Drive {
     const d = read.drive
-    const changed = d.steer !== this.sent.steer || d.throttle !== this.sent.throttle
-    if (changed && (read.keys || now - this.sentAt >= POINTER_SEND_MS)) {
+    const steered = d.steer !== this.sent.steer || d.throttle !== this.sent.throttle
+    const pressed = d.action !== this.sent.action
+    if (pressed || (steered && (read.keys || now - this.sentAt >= POINTER_SEND_MS))) {
       this.sent.steer = d.steer
       this.sent.throttle = d.throttle
+      this.sent.action = d.action
       this.sentAt = now
-      send({ steer: d.steer, throttle: d.throttle })
+      send({ steer: d.steer, throttle: d.throttle, action: d.action })
     }
     return this.sent
   }
+}
+
+// --- The extra key's button / gauge -------------------------------------------------------------------
+
+export type ActionLook = 'idle' | 'charging' | 'ready' | 'lit' | 'held'
+
+// The extra key on screen, bottom right over the view: a beveled button with a gauge bar and a label
+// ("TURBO", "HANDBRAKE") over the key's name. Touch it (or click it) to hold the key. The scene feeds
+// it a fill (0…1) and a look each frame; it redraws only when the gauge moves a visible step.
+export class ActionButton {
+  readonly zone: { x: number; y: number; w: number; h: number }
+  private readonly panel: Phaser.GameObjects.Image
+  private readonly gauge: Phaser.GameObjects.Graphics
+  private readonly title: Phaser.GameObjects.Text
+  private readonly keyHint?: Phaser.GameObjects.Text
+  private readonly bar: { x: number; y: number; w: number; h: number }
+  private key = ''
+
+  constructor(
+    scene: Phaser.Scene,
+    right: number,
+    bottom: number,
+    compact: boolean,
+    big: boolean,
+    label: string,
+    keyName: string,
+    depth: number,
+  ) {
+    // Wide enough for the longest label ("FRENO DE MANO") at the font size it gets.
+    const w = compact ? 120 : big ? 216 : 176
+    const h = compact ? 52 : big ? 76 : 64
+    const x = Math.round(right - w)
+    const y = Math.round(bottom - h)
+    this.zone = { x, y, w, h }
+    this.panel = scene.add
+      .image(x, y, ensureBevelPanel(scene, w, h, PALETTE.panelAlt, 3, true))
+      .setOrigin(0, 0)
+      .setDepth(depth)
+    const pad = compact ? 7 : 10
+    this.bar = {
+      x: x + pad,
+      y: y + h - pad - (compact ? 8 : 10),
+      w: w - pad * 2,
+      h: compact ? 8 : 10,
+    }
+    this.gauge = scene.add.graphics().setDepth(depth + 1)
+    const size = compact ? 8 : big ? 16 : 12
+    this.title = scene.add
+      .text(
+        x + w / 2,
+        y + pad + size / 2 + (compact ? 2 : 0),
+        label,
+        headlineStyle(size, PALETTE.text),
+      )
+      .setOrigin(0.5)
+      .setDepth(depth + 2)
+    fitText(this.title, w - pad * 2, size)
+    if (!compact) {
+      this.keyHint = scene.add
+        .text(
+          x + w / 2,
+          this.title.y + size / 2 + 4,
+          keyName,
+          bodyStyle(big ? 13 : 11, PALETTE.dim),
+        )
+        .setOrigin(0.5, 0)
+        .setDepth(depth + 2)
+    }
+  }
+
+  // `fill` 0…1 of the gauge; the look picks its color (and pulses a ready one).
+  set(fill: number, look: ActionLook, time: number): void {
+    const f = Math.round(clamp(fill, 0, 1) * 48)
+    const pulse = look === 'ready' || look === 'lit' ? Math.floor(time / 140) % 2 : 0
+    const key = `${f}|${look}|${pulse}`
+    if (key === this.key) return
+    this.key = key
+    const color =
+      look === 'lit'
+        ? pulse
+          ? PALETTE.orange
+          : PALETTE.amber
+        : look === 'ready'
+          ? pulse
+            ? PALETTE.lime
+            : shade(PALETTE.lime, 0.35)
+          : look === 'held'
+            ? PALETTE.cyan
+            : PALETTE.amber
+    const b = this.bar
+    this.gauge.clear()
+    this.gauge.fillStyle(0x10121c, 1).fillRect(b.x - 2, b.y - 2, b.w + 4, b.h + 4)
+    if (f > 0) this.gauge.fillStyle(color, 1).fillRect(b.x, b.y, Math.round((b.w * f) / 48), b.h)
+    if (look === 'ready' || look === 'held')
+      this.gauge
+        .lineStyle(2, color, 1)
+        .strokeRect(this.zone.x + 1, this.zone.y + 1, this.zone.w - 2, this.zone.h - 2)
+    this.title.setColor(hexToCss(look === 'idle' || look === 'charging' ? PALETTE.text : color))
+    // Pressed: the panel dips a little while the key is held.
+    this.panel.setTint(look === 'held' || look === 'lit' ? 0xb8c0d8 : 0xffffff)
+  }
+
+  setVisible(on: boolean): void {
+    this.panel.setVisible(on)
+    this.gauge.setVisible(on)
+    this.title.setVisible(on)
+    this.keyHint?.setVisible(on)
+  }
+}
+
+// A 4×4 white square (tinted per use) for dust, smoke, sparks and skid-mark stamps.
+export function ensureRacePuff(scene: Phaser.Scene): string {
+  const key = 'pp-race-puff'
+  if (!scene.textures.exists(key)) {
+    const g = scene.make.graphics({ x: 0, y: 0 })
+    g.fillStyle(0xffffff, 1).fillRect(0, 0, 4, 4)
+    g.generateTexture(key, 4, 4)
+    g.destroy()
+  }
+  return key
 }
 
 // --- Minimap ---------------------------------------------------------------------------------------------

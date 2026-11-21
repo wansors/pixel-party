@@ -1,13 +1,16 @@
 // Snake Arena wire shapes and the step rule shared by the server and the client's prediction. Classic
 // grid snake: every player has their own independent board of the same size and the same seeded food
 // sequence, and turns their snake with direction inputs. Eating food grows the snake; crashing into a
-// wall or your own body kills it. The server owns the timeline (one step per SNAKE.stepMs since the
-// round started) and the boards; the client predicts its OWN snake with the same `snakeStep`, so a turn
-// shows on the very next step instead of a snapshot later, and draws the rivals from the snapshot.
+// wall or your own body kills it. The server owns the timeline (`snakeStepsAt`: steps come quicker and
+// quicker over the round) and the boards; the client predicts its OWN snake with the same `snakeStep`
+// and `snakeStepsAt`, so a turn shows on the very next step instead of a snapshot later, and draws the
+// rivals from the snapshot.
 
 export const SNAKE = {
   grid: 15,
+  // A step's length at the start of the round, and by its end: the snake speeds up ~1.6×.
   stepMs: 160,
+  endStepMs: 100,
   startLen: 3,
   // Turns buffered ahead of the next steps: two quick taps inside one step (a U-turn) both apply.
   turnQueue: 2,
@@ -52,6 +55,18 @@ export interface SnakeSim {
 }
 
 export type SnakeStepResult = 'idle' | 'moved' | 'ate' | 'crashed'
+
+// Steps taken by round time `t` (ms) in a round of `durationMs`. The step rate climbs on an ease-in,
+// rampEase(1 / stepMs, 1 / endStepMs, t / durationMs) — barely faster at first, sharply so in the last
+// stretch — and this is its integral, so both sides count the very same steps for the same `t`.
+export function snakeStepsAt(t: number, durationMs: number): number {
+  const d = Math.max(1, durationMs)
+  const x = Math.max(0, Math.min(t, d))
+  const r0 = 1 / SNAKE.stepMs
+  const r1 = 1 / SNAKE.endStepMs
+  const steps = r0 * x + ((r1 - r0) * x ** 3) / (3 * d * d) + Math.max(0, t - d) * r1
+  return Math.floor(steps + 1e-9)
+}
 
 export const snakeCell = (i: number, grid: number = SNAKE.grid): Cell => ({
   x: i % grid,
@@ -122,11 +137,14 @@ export interface SnakeSnapshot {
   food: Record<string, number>
   // Board side length (grid is grid x grid).
   grid: number
-  // Steps taken so far, the step length, and the round's elapsed ms at this snapshot: the client keeps
-  // stepping its own snake on the server's clock between snapshots.
+  // Steps taken so far, the opening step length, and the round's elapsed ms at this snapshot: the
+  // client keeps stepping its own snake on the server's clock between snapshots.
   step: number
   stepMs: number
   t: number
+  // The round length the speed-up spans: steps due by `t` are snakeStepsAt(t, rampMs). Absent = a
+  // constant step of `stepMs`.
+  rampMs?: number
   // playerId -> length, for the live standings.
   progress: Record<string, number>
   remainingMs: number

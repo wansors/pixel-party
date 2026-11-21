@@ -1,8 +1,7 @@
-import type { FruitCatchInput, FruitCatchSnapshot, FruitKind } from '@pp/shared'
+import { type FruitCatchInput, type FruitCatchSnapshot, type FruitKind, rampEase } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 30_000
-const BOMB_CHANCE = 0.22
 // The basket sits near the bottom; an item is resolved (caught or missed) once it reaches this line.
 const CATCH_Y = 0.9
 // Half-width of the basket's catch zone in normalized x.
@@ -15,6 +14,13 @@ const SPAWN_MIN_MS = 420
 const SPAWN_JITTER_MS = 360
 const FALL_MIN_MS = 2200
 const FALL_JITTER_MS = 1200
+// Difficulty ramp, on an ease-in over the round: a gentle shower at first, then by the end items come
+// twice as often (gaps × SPAWN_RAMP), fall twice as fast (fall time × FALL_RAMP) and more of them are
+// bombs — the basket can no longer take everything, so picking what to chase separates players.
+const SPAWN_RAMP = 0.5
+const FALL_RAMP = 0.5
+const BOMB_CHANCE_START = 0.18
+const BOMB_CHANCE_END = 0.34
 const X_MIN = 0.08
 const X_SPAN = 0.84
 
@@ -46,7 +52,8 @@ export interface FruitCatchState {
 // Real-time FFA fruit catcher. One seeded stream of falling items is shared by everyone; each player
 // catches on their own device. Pure domain logic: the timeline comes from the injected Random port and
 // time arrives as `now`. Item y is a linear function of time (each item ships its fall speed), so the
-// client renders it on the server's clock — what you see reaching the basket is what gets judged.
+// client renders it on the server's clock — what you see reaching the basket is what gets judged. The
+// shower picks up over the round (denser, faster, more bombs).
 export class FruitCatch implements MiniGame<FruitCatchState, FruitCatchInput> {
   readonly id = 'fruit-catch'
   readonly format = 'ffa' as const
@@ -59,14 +66,15 @@ export class FruitCatch implements MiniGame<FruitCatchState, FruitCatchInput> {
     let t = 500
     let id = 0
     while (t < durationMs - 500) {
+      const p = t / durationMs
       items.push({
         id: id++,
         spawnAt: t,
         x: X_MIN + r.next() * X_SPAN,
-        fallMs: FALL_MIN_MS + Math.floor(r.next() * FALL_JITTER_MS),
-        kind: r.next() < BOMB_CHANCE ? 'bomb' : 'fruit',
+        fallMs: Math.round((FALL_MIN_MS + r.next() * FALL_JITTER_MS) * rampEase(1, FALL_RAMP, p)),
+        kind: r.next() < rampEase(BOMB_CHANCE_START, BOMB_CHANCE_END, p) ? 'bomb' : 'fruit',
       })
-      t += SPAWN_MIN_MS + Math.floor(r.next() * SPAWN_JITTER_MS)
+      t += Math.round((SPAWN_MIN_MS + r.next() * SPAWN_JITTER_MS) * rampEase(1, SPAWN_RAMP, p))
     }
     return {
       players: [...ctx.players],

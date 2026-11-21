@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { Random } from '../ports/Random'
-import { ReactionDuel } from './reactionDuel'
+import { foreperiodMs, ReactionDuel } from './reactionDuel'
 
 // random.next() = 0 -> delay = MIN_DELAY_MS (1500), so greenAt = now + 1500.
 const zero: Random = { next: () => 0 }
@@ -13,6 +13,25 @@ describe('ReactionDuel', () => {
     expect(s.greenAt).toBe(1500)
     expect(new ReactionDuel().snapshot(s, 0).light).toBe('red')
     expect(new ReactionDuel().snapshot(s, 1500).light).toBe('green')
+  })
+
+  test('the red-light wait is memoryless: green never gets more predictable the longer it waits', () => {
+    // 3000 evenly spread draws of the Random port, as the game makes them (1.5 s + up to 4.5 s more).
+    const waits = Array.from({ length: 3000 }, (_, i) => foreperiodMs(i / 3000, 1500, 4500, 1400))
+    const uniform = Array.from({ length: 3000 }, (_, i) => 1500 + (i / 3000) * 4500)
+    expect(Math.min(...waits)).toBe(1500)
+    expect(Math.max(...waits)).toBeLessThan(6000)
+    // The chance green comes within the next 500 ms, given it hasn't yet.
+    const hazard = (ws: number[], from: number): number => {
+      const pending = ws.filter((w) => w >= from)
+      return pending.filter((w) => w < from + 500).length / pending.length
+    }
+    // A uniform wait climbs steadily towards certainty (jumping it on rhythm pays off late); this one
+    // stays flat over the first two seconds and more.
+    expect(hazard(uniform, 3500)).toBeGreaterThan(1.5 * hazard(uniform, 1500))
+    for (const from of [2000, 2500, 3000, 3500]) {
+      expect(Math.abs(hazard(waits, from) - hazard(waits, 1500))).toBeLessThan(0.06)
+    }
   })
 
   test('a tap before green is a false start', () => {

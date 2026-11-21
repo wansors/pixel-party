@@ -1,4 +1,4 @@
-import type { PongInput, PongSnapshot } from '@pp/shared'
+import { type PongInput, type PongSnapshot, rampEase } from '@pp/shared'
 import { type DuelOutcome, rankDuels } from '../services/duelRanking'
 import { pairPlayers } from '../services/pairing'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
@@ -10,7 +10,11 @@ const OVERTIME_MS = 10_000
 const LEFT_X = 0.04
 const RIGHT_X = 0.96
 const PAD_HALF = 0.13
-const BALL_START_VX = 0.55 // normalized units per second
+// Serve speed (normalized units per second): it climbs over the round on an ease-in, so late points
+// open quicker (0.55 → 0.82 by the bell; golden points keep the bell's pace). Each paddle hit then
+// compounds it by SPEEDUP (the client mirrors SPEEDUP/MAX_VX to predict bounces), capped at MAX_VX.
+const BALL_START_VX = 0.55
+const BALL_END_VX = 0.82
 const BALL_MAX_VY = 0.5
 const SPEEDUP = 1.05
 const MAX_VX = 1.4
@@ -120,12 +124,14 @@ export class Pong implements MiniGame<PongState, PongInput> {
         }
         duel.golden = true
       }
-      this.advance(duel, step)
+      const progress = (now - state.startedAt) / Math.max(1, state.endsAt - state.startedAt)
+      this.advance(duel, step, rampEase(BALL_START_VX, BALL_END_VX, progress))
     }
     return state
   }
 
-  private advance(duel: Duel, step: number): void {
+  // `serveVx` is the serve speed in force now, for a point scored on this step.
+  private advance(duel: Duel, step: number, serveVx: number): void {
     const ball = duel.ball
     ball.x += ball.vx * step
     ball.y += ball.vy * step
@@ -145,14 +151,14 @@ export class Pong implements MiniGame<PongState, PongInput> {
         ball.x = LEFT_X
         this.bounce(duel, ball, left, +1)
       } else {
-        this.scorePoint(duel, right)
+        this.scorePoint(duel, right, serveVx)
       }
     } else if (ball.x >= RIGHT_X) {
       if (Math.abs(ball.y - (duel.padY.get(right) ?? 0.5)) <= PAD_HALF) {
         ball.x = RIGHT_X
         this.bounce(duel, ball, right, -1)
       } else {
-        this.scorePoint(duel, left)
+        this.scorePoint(duel, left, serveVx)
       }
     }
   }
@@ -165,22 +171,22 @@ export class Pong implements MiniGame<PongState, PongInput> {
     ball.vy = offset * BALL_MAX_VY
   }
 
-  private scorePoint(duel: Duel, scorer: PlayerId): void {
+  private scorePoint(duel: Duel, scorer: PlayerId, serveVx: number): void {
     duel.score.set(scorer, (duel.score.get(scorer) ?? 0) + 1)
     if (duel.golden || (duel.score.get(scorer) ?? 0) >= WIN_SCORE) {
       duel.done = true
       duel.winner = scorer
       return
     }
-    this.serve(duel)
+    this.serve(duel, serveVx)
   }
 
   // Deterministic serve: alternate direction + vertical angle by the serve counter (no RNG in tick).
-  private serve(duel: Duel): void {
+  private serve(duel: Duel, vx: number): void {
     duel.serves += 1
     const toRight = duel.serves % 2 === 0
     const vy = (((duel.serves % 3) - 1) / 1) * (BALL_MAX_VY * 0.5) // -0.5,0,+0.5 pattern
-    duel.ball = { x: 0.5, y: 0.5, vx: toRight ? BALL_START_VX : -BALL_START_VX, vy }
+    duel.ball = { x: 0.5, y: 0.5, vx: toRight ? vx : -vx, vy }
   }
 
   // A player who leaves forfeits: their opponent wins on the spot.

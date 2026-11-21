@@ -9,7 +9,7 @@ import type {
   TeamId,
   TeamRoundResult,
 } from '@pp/shared'
-import { MINIGAMES_BY_ID } from '@pp/shared'
+import { effectiveRounds, MINIGAMES_BY_ID } from '@pp/shared'
 import type { Room } from '../../domain/entities/Room'
 import type { MiniGame, NormalizedResult, PlayerId } from '../../domain/minigames/MiniGame'
 import { createMiniGame } from '../../domain/minigames/registry'
@@ -107,27 +107,38 @@ export class SessionEngine {
   }
 
   start(): void {
-    // No-repeat within a session: draw distinct games from the pool and cap the round count at the
-    // number of distinct games (a game never plays twice in one session). Games that don't fit the room
-    // (player range, empty team — D27/D28) sit the session out; Button Masher fits any room.
+    // Draw the line-up from the playable pool (games that fit the room — player range, empty team,
+    // D27/D28; Button Masher fits any room). Each game plays once per pass; a session longer than the
+    // pool (D40: up to MAX_ROUNDS) starts another pass, never repeating a game back-to-back.
     const playable = playableLineup(this.room)
     const pool = playable.length ? playable : ['button-masher']
-    const requested = this.room.rounds > 0 ? this.room.rounds : pool.length
-    this.sequence = this.orderPool(pool, Math.min(requested, pool.length)) as MiniGameId[]
+    // The fallback (nothing picked) is a single round, whatever the round count says.
+    const total = playable.length ? effectiveRounds(this.room.rounds, pool.length) : 1
+    const sequence: string[] = []
+    while (sequence.length < total) {
+      sequence.push(...this.orderPool(pool, total - sequence.length, sequence.at(-1)))
+    }
+    this.sequence = sequence as MiniGameId[]
     this.roundIndex = 0
     this.beginIntro(this.clock.now())
   }
 
-  // Seeded draw (via the Random port) that avoids placing two games with the same primary skill axis
-  // back-to-back — e.g. two `knowledge` games in a row — unless every remaining candidate would repeat
-  // it, in which case the constraint is dropped rather than stalling the draw.
-  private orderPool(pool: readonly string[], count: number): string[] {
+  // One pass over the pool (at most `count` games, each once): a seeded draw (via the Random port)
+  // that avoids placing two games with the same primary skill axis back-to-back — e.g. two `knowledge`
+  // games in a row — unless every remaining candidate would repeat it, in which case the constraint is
+  // dropped rather than stalling the draw. `after` is the game just before this pass (a repeat pass):
+  // it never opens the pass, and its axis counts as the previous one.
+  private orderPool(pool: readonly string[], count: number, after?: string): string[] {
     const remaining = [...pool]
     const sequence: string[] = []
-    let prevAxis: SkillAxis | undefined
+    let prevAxis: SkillAxis | undefined = after === undefined ? undefined : primaryAxis(after)
     while (sequence.length < count && remaining.length > 0) {
-      const candidates = remaining.filter((id) => primaryAxis(id) !== prevAxis)
-      const drawFrom = candidates.length > 0 ? candidates : remaining
+      const fresh =
+        sequence.length === 0 && remaining.length > 1
+          ? remaining.filter((id) => id !== after)
+          : remaining
+      const candidates = fresh.filter((id) => primaryAxis(id) !== prevAxis)
+      const drawFrom = candidates.length > 0 ? candidates : fresh
       const pick = drawFrom[Math.floor(this.random.next() * drawFrom.length)] as string
       sequence.push(pick)
       remaining.splice(remaining.indexOf(pick), 1)

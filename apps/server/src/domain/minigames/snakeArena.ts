@@ -7,6 +7,7 @@ import {
   type SnakeView,
   snakeCanTurn,
   snakeStep,
+  snakeStepsAt,
 } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
@@ -36,8 +37,9 @@ export interface SnakeArenaState {
 
 // Real-time FFA grid snake. Every player has their own independent board (same size) and the same seeded
 // food sequence; a wrong turn or a crash only affects that player. Movement is time-driven: a shared
-// step counter advances each snake once per stepMs elapsed since start, so the simulation is
-// deterministic and reconnect-safe (the food stream comes from the injected Random port; time is `now`).
+// step counter advances each snake as `snakeStepsAt` says (steps quicken on an ease-in over the
+// round, ~1.6× by the end), so the simulation is deterministic and reconnect-safe (the food stream
+// comes from the injected Random port; time is `now`).
 // A snake holds still until its player picks a first direction (at most SNAKE.autoStartMs), so nobody
 // hits a wall before touching a key. The step rule itself is shared with the client (@pp/shared), which
 // predicts its own snake; a turn names the step it was meant for, so the two agree on where it turned.
@@ -131,7 +133,7 @@ export class SnakeArena implements MiniGame<SnakeArenaState, SnakeInput> {
   }
 
   tick(state: SnakeArenaState, _dt: number, now: number): SnakeArenaState {
-    const due = Math.floor((now - state.startedAt) / state.stepMs)
+    const due = snakeStepsAt(now - state.startedAt, state.endsAt - state.startedAt)
     while (state.stepsTaken < due) {
       const k = state.stepsTaken + 1
       for (const snake of state.snakes.values()) this.step(state, snake, k)
@@ -203,6 +205,7 @@ export class SnakeArena implements MiniGame<SnakeArenaState, SnakeInput> {
       step: state.stepsTaken,
       stepMs: state.stepMs,
       t: now - state.startedAt,
+      rampMs: state.endsAt - state.startedAt,
       progress,
       remainingMs: Math.max(0, state.endsAt - now),
     }

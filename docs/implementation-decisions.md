@@ -1100,3 +1100,233 @@ misses — each would be speculative or gated, and the project rule is "nothing 
 - **Revert**: the four parts are independent: the two `team.*` strings; the edge markers in
   `TrackRaceSceneBase`; `LEVELS`, the durations and the `SPLIT_POOL` filter in `pixelSplit.ts`; the
   `bat` / `fuel` kinds, `DROPS`, `flyCans` / `explode` in `brawl.ts` and the scene's `HELD` weapons.
+
+### D40 — Owner requests: rename in the room, 99 rounds, a visual game picker, harder ramps, drift & turbo — DONE
+
+- **Date**: 2026-11-21. **Context**: five requests from the owner after playing: change your name once
+  you're in a room; allow more than 20 rounds; make the game selector more visual ("a mini photo of
+  each game"); difficulty that ramps up instead of staying linear (jumping/dodging games, Simon…, some
+  games too easy); and stop the rally feeling like Micro Race (drifts in the rally, maybe a turbo in
+  the other one).
+- **Rename / re-skin from the lobby**:
+  - New intent `SET_PROFILE { name, avatar?, color? }` (additive — no protocol bump), handled by
+    `UpdateProfileUseCase`: lobby only, the name cleaned like JOIN and unique in the room
+    (case-insensitive, re-spelling your own name is fine; refusals come back as `ACK` with
+    `name_taken` / `invalid_name` / `not_in_lobby`), an avatar/color outside the offered sets keeps
+    the current one. `Player` gained `setProfile`; `Room.hasName` an `exceptId`.
+  - Client: a pencil button on your own roster row opens `ProfileEditorComponent` (name, avatar,
+    color — the join screen's pickers); it closes when the server accepts, shows the refusal inline
+    otherwise, and the URL's `name/avatar/color` follow so a reload that lost its seat rejoins with the
+    new look.
+- **Up to 99 rounds**:
+  - `MAX_ROUNDS = 99`, `AUTO_ROUNDS_CAP = 20` and `effectiveRounds(rounds, playable)` in
+    `@pp/shared`. `rounds: 0` is now **AUTO** (one round per playable game, capped at 20 — what a
+    select-all line-up always played); an explicit count may exceed the line-up.
+  - The engine draws the line-up in **passes**: each game once per pass, the next pass never opening
+    with the game that closed the previous one (the primary-axis rule still applies across the
+    seam). The "nothing picked" fallback stays one round of Button Masher.
+  - Changing the picks no longer resets the round count: AUTO keeps following them, a number the host
+    set stays put. Lobby: AUTO toggle, −/+ stepper, 10/20/30/50 presets, an "≈ N min" estimate (the
+    line-up's average length + ~15 s of screens per round) and a "games repeat" hint when the count
+    passes the line-up. The header swaps its per-round pips for a bar past 24 rounds; the final
+    screen's per-round list scrolls.
+- **Visual game picker** (`lobby/game-picker`, `game-sheet`, `shared/game-thumb`):
+  - Each card is an in-play **screenshot** (`public/thumbs/<id>.webp`, 384×240, 5–15 KB, lazy-loaded)
+    with the name, recommended players and round length under it, the skill axes as a color strip,
+    and TEAM/DUEL badges. Picked games are in full color with a lime frame; the rest are greyed until
+    hovered, so the line-up reads at a glance. Hovering shows how to play (PC); the card's **(i)**
+    opens the game's sheet (bigger picture, format/skills/players/length, intro joke, how to play,
+    controls, ADD / REMOVE for the host). A game without a thumbnail gets a pixel placeholder.
+  - Filters: search (accent-insensitive, name or blurb), skills, format (FFA / team / duel), "Best for
+    N", Mobile (only while a phone is in the room), and "Picked" to review the line-up. **Surprise me**
+    deals a random line-up from the games shown that fit (as many as the round count, 10 on AUTO).
+  - The session setup (rounds, catch-up, skill coverage) moved to a panel under the roster, so the
+    picker gets the whole right column. On phones the filter rows swipe sideways.
+  - Thumbnails are regenerated with `.claude/skills/playtest-screenshots/thumbs.ts` (bots run the
+    catalog as one session, the canvas is captured ~4.5 s into each round, then the round is skipped).
+- **Difficulty that ramps instead of plodding** (26 games):
+  - Shared curves in `packages/shared/src/difficulty.ts`: `easeIn(p, power)`, `rampEase(from, to, p,
+    power)`, `rampExp(from, to, p)` (geometric) and `compound(base, factor, step, min, max)` (per level
+    / turn / wave). Pure functions, so a server schedule and a client prediction compute the same
+    numbers; every change below is additive on the wire (optional snapshot fields, no protocol bump).
+  - **Action**: Jump Rope (turn rate eases in over the whole round: a gap of 1397 ms at 5 s → 497 ms at
+    the end, never under the 480 ms jump; it used to plateau at 620 ms after 30 s); Pixel Dash (scroll
+    lead 1200 → 760 ms, ~1.6× faster by the end, and gaps 700–1300 → 560–780 ms; `leadMs` on the wire);
+    Pixel Rain (spawn gaps ×0.36, fall times ×0.5 by the end, eased); Fruit Catch and Bug Smash (no ramp
+    before: gaps/stay-up times halve and bomb odds rise ~18 → 32–34 %); Bubble Pop (new: the ceiling
+    drops a seeded row from 10 s in, gaps 10.6 → 4.8 s; a drop with a bubble on the bottom row jams the
+    board); Freeze Doll (every knob eased, ending harsher: chant 1500 ms, sudden spins 45 %, fake-outs
+    60 %, twitch window 400 ms); Pixel Beat (beat 650 → 440 ms between 4 and 38 s, plus a syncopated
+    pattern tier from 31 s); Snake Arena (steps 160 → 100 ms on a closed-form integral the client shares,
+    `snakeStepsAt`); Star Blaster (drone speed, fire odds, formation gaps, gunner volleys and the boss
+    spiral all eased); Asteroids (late rocks up to 1.7× faster, field density ×1.5); Pang (balloon
+    speed ×1.07 per wave, capped ×1.7); Pixel Hoops (tolerance 0.16 → 0.05 by shot 20 — the old floor
+    came after most players' last shot); Pixel Pong (serve speed 0.55 → 0.82; the ×1.05 per hit stays);
+    Room Rush (time to get in ×0.88 per call, floor 3.5 s); Bomb Relay (fuse ×1 → ×0.55, eased).
+  - **Puzzle / memory / reaction**: Simon (playback compounds per level — lit 440 ms ×0.93^L, floor 200;
+    ~1.6 → 3 pads/s by level 10; shared `simonPlayback`); Memory Flash (pixels 4×1.2^L up to 40, flash
+    eases 1700 → 480 ms, grid follows); Color Trap (per-prompt window 2300 → 1050 ms); Quick Math
+    (operands grow ×1.1 per question, times tables to ×12, two-step sums from question 8, decoys that
+    share the last digit); Number Rush (the numbers left reshuffle after 10, 16, 20 and 23 — the board
+    used to get easier as it emptied); Odd One Out (grid to 7×7, colour gap 72×0.88^L down to 5);
+    Reaction Duel / Quick Draw (an exponential wait — a flat hazard — so counting down the wait no
+    longer helps); Line Clear Sprint / Quick Tetris (gravity 550 → 170 / 210 ms over the round, in the
+    shared engine); Stop Clock (needle 1600 ms ×0.7 per try); Pixel Weight (smallest object first, flash
+    2400 → 800 ms).
+  - **Left alone on purpose** (each with a reason in the session notes): Higher or Lower and Balloon
+    Chicken (risk already grows; a ramp would be hidden luck), Match Pairs / Sudoku Race / Maze Sprint
+    (one board, no progression), Pixel Split, Tug of War, Marbles Duel, Sumo Push and Sumo ICE (their
+    shrinking rings already accelerate), Honeycomb Cut (self-paced), Bomber Express / Street Brawl
+    (rivals are the difficulty), Glass Bridge (its ★ maths assumes a flat risk).
+- **Rally ≠ Micro Race: drift and turbo**:
+  - **Rally Stage drifts** (`RALLY_DRIFT`, opt-in per course kind): the direction of travel catches up
+    with the nose at a traction rate (tarmac 14/s, gravel 6/s, off-road 3/s, handbrake 1.2/s), so the
+    body visibly points away from where the car goes (~10° on tarmac at full lock, ~30° held through
+    gravel). The handbrake cuts the drive and swings the nose (0.15 s ≈ 40°); counter-steer recovers in
+    ~0.1 s. A clean drift (slip ≥ 0.3 rad at speed, ≥ 0.2 s, no spin, on the road) banks an exit boost
+    of 0.8 s per drift second, capped at 1 s (+15 % top speed). A slide can't add speed. Skid marks stay
+    on the stage (pooled), gravel dust / tyre smoke, a DRIFT meter and a DRIFT BOOST! pop.
+  - **Turbo in Micro Race and Speed Circuit** (`RACE_TURBO`): the meter fills in 7 s of driving on the
+    road at speed (×2 in a slipstream, nothing off the road); full, it burns 1.2 s at ×1.3 top speed /
+    ×2 pull; with a boost pad the stronger counts. Overspeed now sheds at 450 u/s² instead of snapping
+    back, so a turbo / pad / slipstream ends smoothly.
+  - Controls, the same in the three games: SPACE / SHIFT / right-click / a bottom-right button that
+    doubles as the meter = handbrake (rally) or turbo (the others); ↓ / S is the only brake now. Inputs
+    gained optional `handbrake` / `turbo` (only a literal `true` holds them), snapshots optional
+    `turbo`, `turboMs`, `driftMs`, `kickMs`; the client predicts both with the same shared integrator.
+- **Tests**: `difficulty.test.ts`, `effectiveRounds` in `protocol.test.ts`, engine passes/auto rounds,
+  socket `SET_PROFILE` / round clamp, every retuned game's suite (a test per game that the ramp is
+  non-linear), drift/turbo in `microRace` / `courseRace` / `raceNet.spec`, `game-facts.spec`.
+- **Verified**: the whole gate green; browser shots of the lobby (desktop + phone, EN/ES, rename, the
+  sheet, rounds past 20), the three racers, the retuned scenes, and thumbnails for every game.
+- **Revert**: independent pieces — `SET_PROFILE` (+ `UpdateProfileUseCase`, the editor); the round
+  constants + engine passes + lobby panel; `game-picker` / `game-sheet` / `game-thumb` + `public/thumbs`;
+  each game's ramp in its own module; `RALLY_DRIFT` / `RACE_TURBO` and their scene code.
+
+### D41 — Neon Trails: a light-trail arena — DONE
+
+- **Date**: 2026-11-21. **Context**: the owner asked for a light-cycle game. Built as an original
+  take on the genre (own name, look and rules), not a copy of any particular game.
+- **What**: `neon-trails`, FFA, 2–12 players (best 3–8), 60 s cap, not mobile-friendly (fine timing on a
+  big shared board).
+  - One **shared arena** sized by headcount (36×24 → 54×36). Riders start on both flanks, interleaved
+    so nobody faces a rider on its own row, wait 1.2 s (GET READY) and ride one cell per step.
+  - **Pace** = an integer table (`TRAILS.stepMs`, 120 → 55 ms, a notch every 40 cells, ~−8 % each;
+    top speed ~35 s in), so every engine schedules the same steps; `trailStepsAt` / `trailStepTime`
+    convert both ways. This is the D40 ramp built in from day one.
+  - **Judging**: each step for everyone at once; off the arena, into any trail, or two riders into one
+    cell = out (same-step crashes tie). A crashed rider's trail is cleared ("derez") so the survivors
+    get room back. Last rider standing wins; the rest rank by how long they lasted. A leaver is out on
+    the spot; the round ends as soon as one rider (or none) is left.
+  - **Netcode**: like Snake Arena — the rider rules (`trailNext`, `trailCanTurn`, `trailMove`) live in
+    `@pp/shared`; the client predicts its own rider on the server clock, a turn names its step, rivals
+    are carried along their heading + queued turns. Nobody is predicted through a wall; crashes come
+    from the server. Trails travel as vertices (start, corners, head): a 12-rider snapshot is ~1–2 KB.
+  - **Scene** (`NeonTrailsScene`): a dark pixel grid in a neon frame, trails as glowing spans in each
+    rider's identity color with a white-hot head, the rider's avatar on the head facing its heading, the
+    YOU marker; crashes get the elimination stamp and the trail flickers out; the HUD shows SPEED n (a
+    SPEED UP! pop per notch) and riders left; GET READY / OUT! / LAST RIDER! banners. Arrows / WASD,
+    swipe on touch. Smart bot `bots/neon-trails.ts` (turns toward the side with the most free room).
+- **Tests**: `neonTrails.test.ts` (pace inverse + acceleration, seating, riding, turns incl. late ones,
+  wall / trail / head-on crashes, ties, early end, solo, leave, snapshot size); `inputFuzz` picks it up.
+- **Verified**: browser runs at 1280×800 (4 players), 1920×1080 with 12 and a phone in Spanish; perf
+  probe ~2 ms per frame, spikes only on multi-crash frames (the side-view KO face is pre-warmed).
+- **Revert**: delete the game's four files (domain module + test, shared wire file, scene), its registry,
+  catalog, scene-map and i18n entries, the bot and its thumbnail.
+
+### D42 — Wing It: a tap-to-flap course — DONE
+
+- **Date**: 2026-11-21. **Context**: the owner asked for a "Flappy Bird". Built as the genre (tap to
+  flap through gaps) with its own name, look and party rules — not a copy of that game's name, bird,
+  pipes or art.
+- **What**: `wing-it`, FFA, 1–12 (best 2–12), 60 s cap, mobile-friendly (one control).
+  - Everyone flies the **same seeded course at once, as ghosts** (no contact): your avatar with a
+    little flapping wing, tilted by its speed, under a dusk sky with parallax clouds and hills; brick
+    towers with lit gold caps frame each gap. Rivals are half-transparent.
+  - **Flight** (`packages/shared/src/games/wingIt.ts`): gravity 2.9, a flap sets −0.82 (heights/s), the
+    fall caps at 1.5, the ceiling stops you, the floor or a tower ends the flight. Integrated on a
+    5 ms grid with plain arithmetic only, so the server and every client compute bit-identical paths.
+  - **Ramp (D40)**: over 45 s the scroll eases 0.42 → 0.78 heights/s (its integral `wingDistance` is
+    closed-form), columns close in 1.05 → 0.72 apart and gaps shrink 0.36 → 0.25; a gap moves at most
+    0.3 from one column to the next, so it's always reachable. A test autopilot flies 40 s.
+  - **Netcode**: a flap carries `at` (ms after GO on the client's estimate of the server clock); the
+    server accepts it anywhere in the last 150 ms and judges crashes that far behind real time, so a
+    flap counts when it was pressed (an older one counts at the judged edge; flaps < 70 ms apart are
+    dropped). The client predicts its own bird (and its own crash) from the judged state + its flaps;
+    rivals fly on from their judged state.
+  - Last bird flying wins (the round ends once one is left); the rest rank by how long they flew
+    (`12 cleared`, `survivor`). A leaver drops out. GET READY / OUT! / LAST ONE FLYING! banners, ★
+    column counter with a coin per column, the elimination stamp where a rival went down. Portrait
+    phones zoom out so the next column shows, with storm clouds and soil filling the letterbox.
+- **Tests**: `wingIt.test.ts` (flight determinism, ceiling, ease-in + integral, the seeded course,
+  floor and tower crashes, flap timing — a 120 ms-late arrival flies the same path —, the judging
+  window, mashing, pre-GO flaps, an autopilot through the fast part, ranking, solo, leave, snapshot
+  size). Smart bot `bots/wing-it.ts` (flies with the shared rules).
+- **Revert**: the game's files (domain module + test, shared wire file, scene), its registry, catalog,
+  scene-map and i18n entries, the bot and its thumbnail.
+
+### D43 — Rock Paper Scissors: the classic as a 1v1 duel — DONE
+
+- **Date**: 2026-11-21. **Context**: owner request.
+- **What**: `rock-paper-scissors`, duel format (seeded simultaneous pairs, an odd player out gets the
+  bye and watches a duel via `duelWatch`), 2–12 (best 2–8), 45 s cap, mobile-friendly.
+  - Every throw both pick in secret — a pick is final — and the hands are revealed together the moment
+    both have picked. Not picking in time loses the throw (both idle = a draw). First to 3 wins; at the
+    bell, more throws won wins (level = draw). A leaver forfeits.
+  - **Ramp (D40)**: the pick window shrinks per throw, 4 s × 0.88, never under 1.8 s (`rpsChooseMs`).
+  - The snapshot is public (spectators read it), so a hand never travels before its reveal — only
+    `theyChose` (READY).
+  - **Scene**: rival at the top, you at the bottom, each with their avatar, a glove in their identity
+    colour (procedural 16×16 hand masks: fist, rock, paper, scissors) and three win pips. Gloves pump
+    to the chant (ROCK… PAPER… SCISSORS…) over a draining bar; your pick shows on your glove at once;
+    the reveal punches the winning glove and shakes the loser; a strip of past throws helps read your
+    rival. Keys 1 2 3 / ← ↓ → / A S D or the buttons.
+  - Ranked across the room with `rankDuels` (wins, draws + bye, losses), each by throws won (`3-1`).
+- **Tests**: `rockPaperScissors.test.ts` (the rules, idle throws, the shrinking window, pairing + bye,
+  resolve-on-both-picks, first to 3, no hand on the wire before the reveal, final picks, junk input,
+  timeouts, the bell, forfeits). Bot `bots/rock-paper-scissors.ts`.
+- **Revert**: as D42 — the game's four files and its entries.
+
+### D44 — The language changes only in the lobby — DONE
+
+- **Date**: 2026-11-21. **Context**: owner request: no switching the language mid-game, only in the room
+  (lobby); remove the footer toggle.
+- **What**: the room's footer (EN|ES under the intro, results and final screens) is gone. The toggle now
+  sits in the lobby's title bar, the only place in a room where the language can change — a scene
+  never has to re-render its texts mid-round. The join screen keeps its own toggle (before entering).
+- **Revert**: put `<footer><app-language-toggle /></footer>` back in `room.component.html` (+ its import
+  and style) and drop it from the lobby title bar.
+
+### D45 — Sharpshooter: a Western shooting gallery with a breathing crosshair — DONE
+
+- **Date**: 2026-11-21. **Context**: owner request: a Wild West aiming game whose crosshair moves as if
+  breathing.
+- **What**: `sharpshooter`, FFA, 1–12 (best 2–12), 45 s, not mobile-friendly (precision aim + a breath
+  key).
+  - **Stage** (one 16:9 world, letterboxed): a sunset street — saloon (left), general store (right), a
+    fence between; front layers (the wall under each sill, batwing doors, the boardwalk) hide the
+    pop-ups until they rise. Cardboard bandits and civilians, bottles, tin cans — pixel grids.
+  - **Schedule** (seeded, shared by everyone; `SHOOT_SPOTS` + `shootTargetAt` in `@pp/shared`): pop-ups
+    in 5 windows/doors, bottles on 4 fence spots (never two targets in one spot), cans on arcs from
+    12 s. Points: bandit 100, bottle 150, can 250, civilian −200. Everyone may hit each target once.
+    Ramp (D40): stays 1.7 → 0.75 s, gaps 850 → 420 ms, civilians 10 → 28 %, eased over 40 s.
+  - **Breathing aim** (`shootSway`): a slow figure-eight per breath (3.6 s) with a lazy drift, scaled
+    by the nerves (×1 → ×1.4 over the round); hold SHIFT / right-click to steady it to 15 % for up to
+    2.6 s, then a 1.2 s gasp (wider) while the lungs refill (3.2 s). Every shot kicks the aim up.
+    Each player breathes to their own rhythm (a phase from their id). Lungs meter on screen.
+  - **Six-shooter**: 6 shots ≥ 230 ms apart, then a 1.3 s reload (R reloads early); bullets on screen.
+  - **Netcode**: targets are pure functions of time (rendered on `ServerClock`); a shot carries where
+    the crosshair was and when (ms after GO, accepted up to 250 ms late); the server checks ammo,
+    cadence and reload, then judges with the shared `shootHit` (the smaller target wins an overlap).
+    Your hit drops the target at once (cardboard flips, bottle shatters, can flies off); rivals' hits
+    show as holes in their colors (their shots heard faintly, at most one per 150 ms).
+  - Most points wins; accuracy breaks ties (`1350 pts`). The system cursor hides over the stage and
+    comes back when the scene ends.
+- **Tests**: `sharpshooter.test.ts` (pop-up hittable only when up, can arcs, overlap rule, the sway's
+  shape / breath hold / gasp / nerves, the seeded schedule incl. no spot clashes and the ramp,
+  once-per-player hits for everyone, civilian penalty, late shots, ammo + cadence + reloads, ignored
+  junk, ranking, snapshot size). Smart bot `bots/sharpshooter.ts`.
+- **Verified**: browser runs at 1280×800 (EN/ES), 1920×1080 with 12 players (perf probe ~4–5 ms per
+  frame steady) and a phone.
+- **Revert**: the game's four files and its registry, catalog, scene-map, music-mood and i18n entries,
+  the bot and its thumbnail.

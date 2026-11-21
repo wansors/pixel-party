@@ -2,10 +2,14 @@ import type { QuickDrawInput, QuickDrawSnapshot } from '@pp/shared'
 import { type DuelOutcome, rankDuels } from '../services/duelRanking'
 import { pairPlayers } from '../services/pairing'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
+import { foreperiodMs } from './reactionDuel'
 
 const DEFAULT_DURATION_MS = 20_000
 const MIN_DELAY_MS = 2000
-const DELAY_SPREAD_MS = 3000
+const DELAY_SPREAD_MS = 4500
+// The wait past MIN_DELAY_MS is a memoryless (truncated exponential) draw with this mean, so the signal
+// can't be timed by counting (see foreperiodMs).
+const DELAY_MEAN_MS = 1400
 // A standoff nobody draws in this long after the signal is over (both lose): two players who froze
 // don't hold the whole room until the bell.
 const DRAW_WINDOW_MS = 4000
@@ -63,7 +67,7 @@ export class QuickDraw implements MiniGame<QuickDrawState, QuickDrawInput> {
       const idx = duels.length
       playerDuel.set(a, idx)
       if (b) playerDuel.set(b, idx)
-      const delay = MIN_DELAY_MS + Math.floor(ctx.random.next() * DELAY_SPREAD_MS)
+      const delay = foreperiodMs(ctx.random.next(), MIN_DELAY_MS, DELAY_SPREAD_MS, DELAY_MEAN_MS)
       duels.push({
         a,
         b,

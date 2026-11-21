@@ -8,7 +8,8 @@ import {
   type MicroRaceSnapshot,
   type MicroRaceTheme,
   PALETTE,
-  RACE_DRAFT_TUNING,
+  RACE_TURBO,
+  raceTuning,
   sampleMicroRaceTrack,
 } from '@pp/shared'
 import type Phaser from 'phaser'
@@ -34,7 +35,14 @@ import {
   TRACK_TEX_H,
   TRACK_TEX_W,
 } from './microRaceArt'
-import { DriveControls, LabelDeclutter, RaceMinimap, RaceStandings } from './raceKit'
+import {
+  ActionButton,
+  type Drive,
+  DriveControls,
+  LabelDeclutter,
+  RaceMinimap,
+  RaceStandings,
+} from './raceKit'
 import { type CarPose, OwnCar, RivalCars, RoadIndex, raceClock } from './raceNet'
 
 // World units shown across the view's shorter side (bigger = more zoomed out).
@@ -56,7 +64,9 @@ const CHEER_GAP_MS = 1500
 // often — a twelve-car pile-up is one crunch.
 const RIVAL_LEVEL = 0.4
 const RIVAL_BUMP_MS = 400
-const NO_TUNING = {}
+// Rivals' turbos light with a quieter roar, at most this often.
+const RIVAL_TURBO_MS = 700
+const IDLE: Drive = { steer: 0, throttle: 0, action: false }
 
 interface CarView {
   sprite: Phaser.GameObjects.Image
@@ -70,15 +80,18 @@ interface CarView {
   a: number
   hits: number
   resets: number
+  // Its turbo burning as of the last snapshot.
+  lit: boolean
 }
 
 // Micro Race canvas. A camera-follow view of a pixel tabletop circuit (painted once per track from the
 // shared spline). Your own car is predicted locally with the server's integrator (it turns the frame
 // you press a key; snapshots only nudge it back in line), every other car is dead-reckoned to the
-// server's present. Steer with the arrows / WASD (SPACE brakes) or by holding the pointer where you
-// want to go. A minimap, a standings column and the race clock show the whole race; start lights,
-// laps (with lap times), bumps, rescues, the flag and the finish window are all derived from snapshot
-// deltas. Wind lines trail a car in a slipstream; a driver who left fades to a ghost.
+// server's present. Steer with the arrows / WASD or by holding the pointer where you want to go;
+// SPACE / SHIFT / right-click / the TURBO button fires the turbo once its meter (that button) is full.
+// A minimap, a standings column and the race clock show the whole race; start lights, laps (with lap
+// times), bumps, rescues, the flag and the finish window are all derived from snapshot deltas. Wind
+// lines trail a car in a slipstream, a flame one burning its turbo; a driver who left fades to a ghost.
 export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
   private readonly clock = new ServerClock()
   private readonly rivals = new RivalCars()
@@ -122,6 +135,9 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
   private subline?: Phaser.GameObjects.Text
   private bannerUntil = 0
   private controls?: DriveControls
+  private action?: ActionButton
+  private ownLit = false
+  private lastRivalTurboAt = Number.NEGATIVE_INFINITY
   private readonly tags = new LabelDeclutter()
   private lastLap = 1
   private lapStartMs = 0
@@ -179,6 +195,8 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     this.lastDustAt = 0
     this.selfSpeed = 0
     this.selfPrev = undefined
+    this.ownLit = false
+    this.lastRivalTurboAt = Number.NEGATIVE_INFINITY
 
     const { width, height } = this.scale
     this.compact = Math.min(width, height) < 520
@@ -194,7 +212,7 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
       .setOrigin(0, 0)
       .setDepth(700)
     this.add.rectangle(0, this.top, width, 2, PALETTE.frame).setOrigin(0, 0).setDepth(701)
-    this.add
+    const hint = this.add
       .text(
         width / 2,
         height - hintH / 2,
@@ -203,6 +221,7 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
       )
       .setOrigin(0.5)
       .setDepth(701)
+    if (hint.width > width - 8) hint.setScale((width - 8) / hint.width)
 
     // Minimap (top-right, built with the track) and standings (top-left), laid over the view.
     const pad = this.compact ? 6 : 10
@@ -278,6 +297,19 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
       .setVisible(false)
 
     this.controls = new DriveControls(this)
+    // The turbo: its meter and, on a touch screen, its button (bottom right).
+    this.action = new ActionButton(
+      this,
+      width - pad - 6,
+      height - hintH - pad - 4,
+      this.compact,
+      big,
+      this.t('game.microRace.turbo'),
+      this.t('game.microRace.actionKey'),
+      712,
+    )
+    this.action.setVisible(false)
+    this.controls.setActionZone(this.action.zone)
   }
 
   // --- world ↔ screen -------------------------------------------------------------------------------
@@ -398,6 +430,7 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
         a: c.a,
         hits: c.hits,
         resets: c.resets,
+        lit: (c.turboMs ?? 0) > 0,
       }
       this.cars.set(c.id, v)
     }
@@ -430,6 +463,7 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     this.drive(snap, now, fresh)
     this.render(snap, now, delta)
     this.paintClock(snap, now)
+    this.paintTurbo(snap, now)
   }
 
   // Your controls → the server (on change only), and your car's local prediction.
@@ -446,17 +480,20 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     const at = shown ? this.toScreen(shown.wx, shown.wy) : null
     const read = this.controls?.read(at && shown ? { x: at.x, y: at.y, a: shown.a } : null)
     const held = read
-      ? (this.controls?.sync(read, now, (d) => this.sendInput({ kind: 'drive', ...d })) ??
-        read.drive)
-      : { steer: 0, throttle: 0 }
+      ? (this.controls?.sync(read, now, (d) =>
+          this.sendInput({ kind: 'drive', steer: d.steer, throttle: d.throttle, turbo: d.action }),
+        ) ?? read.drive)
+      : IDLE
     if (!this.ownActive) {
       this.own.snapTo(me)
       this.ownResets = me.resets
       this.ownActive = true
+      this.ownLit = (me.turboMs ?? 0) > 0
     }
     const body = this.own.body
     body.steer = held.steer
     body.throttle = held.throttle
+    body.turbo = held.action
     body.finishMs = null
     const goIn = snap.goInMs - this.clock.since(snap.remainingMs, now)
     if (goIn > 0) {
@@ -472,16 +509,30 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     const vy0 = body.vy
     this.own.step(now, {
       physics: MICRO_RACE_PHYSICS,
-      tuning: me.draft ? RACE_DRAFT_TUNING : NO_TUNING,
+      tuning: raceTuning(me.draft, false),
       world: MICRO_RACE_WORLD,
       carR: MICRO_RACE_CAR_R,
+      turbo: { draft: me.draft, boosted: raceTuning(me.draft, true) },
     })
     this.wallHit(vx0, vy0, now)
     if (fresh) {
       if (me.resets > this.ownResets) this.own.snapTo(me)
-      else this.own.reconcile(me, this.snapAt)
+      else {
+        this.own.reconcile(me, this.snapAt)
+        this.own.syncTurbo(me, now - this.snapAt, now, me.draft)
+      }
     }
     this.ownResets = me.resets
+    // Your turbo lighting, the frame it does: a roar, a kick of the camera, a puff of flame.
+    const lit = (body.turboS ?? 0) > 0
+    if (lit && !this.ownLit) {
+      this.sfx.turbo()
+      shake(this, 0.004, 140)
+      const p = this.own.pose()
+      const s = this.toScreen(p.x - Math.cos(p.a) * 14, p.y - Math.sin(p.a) * 14)
+      burst(this, s.x, s.y, PALETTE.orange, 10, 160)
+    }
+    this.ownLit = lit
     // Bumps happen on your screen right away (the server's verdict follows a snapshot later).
     for (const c of snap.cars) {
       if (c.id === me.id || c.gone) continue
@@ -595,6 +646,13 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
       }
       v.hits = c.hits
       v.resets = c.resets
+      // A rival lights a turbo: a softer roar (yours played the frame you fired it).
+      const lit = (c.turboMs ?? 0) > 0 && !v.lit
+      if (lit && !mine && now - this.lastRivalTurboAt >= RIVAL_TURBO_MS) {
+        this.lastRivalTurboAt = now
+        this.sfx.quiet(() => this.sfx.turbo(), RIVAL_LEVEL * 0.6)
+      }
+      v.lit = (c.turboMs ?? 0) > 0
       // Someone else takes the flag: the crowd roars (yours plays with your own finish).
       if (c.finishMs !== null && !this.finishSeen.has(c.id)) {
         this.finishSeen.add(c.id)
@@ -801,6 +859,11 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
       v.pilot.setAlpha(alpha)
       v.label.setAlpha(alpha)
       v.shadow.setAlpha(c.gone ? 0.1 : 0.35)
+      const lit =
+        c.id === this.selfId && this.ownActive
+          ? (this.own.body.turboS ?? 0) > 0
+          : (c.turboMs ?? 0) > 0
+      if (lit && trails) this.flame(trails, p, heading, now)
       if (c.draft && trails) {
         const back = CAR_COLS * TEXEL * this.zoom * 0.55
         const bx = p.x - Math.cos(heading) * back
@@ -828,6 +891,54 @@ export class MicroRaceScene extends MiniGameScene<MicroRaceSnapshot> {
     }
     const mine = this.cars.get(this.selfId)
     if (mine) mm.self(mine.wx, mine.wy, mine.color)
+  }
+
+  // A burning turbo: a flickering flame with a hot core out of the car's tail (screen space).
+  private flame(
+    g: Phaser.GameObjects.Graphics,
+    p: { x: number; y: number },
+    heading: number,
+    now: number,
+  ): void {
+    const car = CAR_COLS * TEXEL * this.zoom
+    const cos = Math.cos(heading)
+    const sin = Math.sin(heading)
+    const bx = p.x - cos * car * 0.5
+    const by = p.y - sin * car * 0.5
+    const len = car * (0.7 + (Math.floor(now / 45) % 3) * 0.15)
+    const w = car * 0.22
+    g.fillStyle(Math.floor(now / 60) % 2 ? PALETTE.amber : PALETTE.orange, 1)
+    g.fillTriangle(
+      bx - cos * len,
+      by - sin * len,
+      bx - sin * w,
+      by + cos * w,
+      bx + sin * w,
+      by - cos * w,
+    )
+    g.fillStyle(0xfff3a0, 1)
+    g.fillTriangle(
+      bx - cos * len * 0.55,
+      by - sin * len * 0.55,
+      bx - sin * w * 0.45,
+      by + cos * w * 0.45,
+      bx + sin * w * 0.45,
+      by - cos * w * 0.45,
+    )
+  }
+
+  // The turbo button / meter: your meter filling, flashing READY when full, the burn draining.
+  private paintTurbo(snap: MicroRaceSnapshot, now: number): void {
+    const btn = this.action
+    if (!btn) return
+    const me = snap.cars.find((c) => c.id === this.selfId)
+    btn.setVisible(!!me && !me.gone)
+    if (!me) return
+    const b = this.own.body
+    const burn = this.ownActive ? (b.turboS ?? 0) : (me.turboMs ?? 0) / 1000
+    const meter = this.ownActive ? (b.turboMeter ?? 0) : (me.turbo ?? 0)
+    if (burn > 0) btn.set(burn / RACE_TURBO.burnS, 'lit', now)
+    else btn.set(meter, meter >= 1 ? 'ready' : 'charging', now)
   }
 
   // Your speed on screen (the camera's look-ahead): the predicted car's own, else from its motion.

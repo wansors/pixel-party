@@ -14,12 +14,13 @@ import {
 import { addShadow, type Shadow } from '../playerMarks'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
-// Mirrors the server's pixelDash.ts: an obstacle's `t` is its time-to-arrival over LEAD_MS (1 = just
-// entering from the right, 0 = at the runner). Obstacles are drawn so t = 0 lands exactly on the runner.
+// Mirrors the server's pixelDash.ts: an obstacle's `t` is its time-to-arrival over the snapshot's
+// `leadMs` (1 = just entering from the right, 0 = at the runner). The lead shrinks over the round, so
+// the world scrolls faster and faster. Obstacles are drawn so t = 0 lands exactly on the runner.
 // A jump is AIR_MS in the air (it clears an obstacle arriving meanwhile, LATE_MS of grace included);
 // the runner can jump again LAND_MS after landing, WASTED_MS later still after a jump that cleared
 // nothing. The server waits a little less, so a jump this scene allows is never refused.
-const LEAD_MS = 1200
+const START_LEAD_MS = 1200
 const AIR_MS = 380
 const LATE_MS = 60
 const LAND_MS = 150
@@ -113,7 +114,9 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
   private groundY = 0
   private runnerH = 0
   private obstacleH = 0
-  private speed = 0 // px per ms, identical for obstacles and the ground layer
+  // Pixels from where an obstacle enters to the runner: it covers them in one lead window, so the
+  // scroll speed (px per ms, the same for obstacles and the ground layer) is span / leadMs.
+  private span = 0
 
   constructor(...deps: SceneDeps) {
     super('pixel-dash', ...deps)
@@ -148,7 +151,7 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
     this.runnerX = Math.round(width * (compact ? 0.22 : 0.18))
     this.runnerH = avatarPx(Math.max(32, Math.min(128, (this.groundY - this.top) * 0.26)))
     this.obstacleH = Math.round(this.runnerH * 0.55)
-    this.speed = (width + this.obstacleH - this.runnerX) / LEAD_MS
+    this.span = width + this.obstacleH - this.runnerX
 
     this.buildWorld(width, height)
 
@@ -313,9 +316,7 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
     this.sendInput({ kind: 'jump' })
     this.sfx.jump()
     // Airborne until now + AIR_MS: does an obstacle arrive meanwhile? (The server judges it the same.)
-    const wasted = !this.obstacleTimes(now).some(
-      (t) => t * LEAD_MS >= -LATE_MS && t * LEAD_MS <= AIR_MS,
-    )
+    const wasted = !this.obstacleTimes(now).some((ms) => ms >= -LATE_MS && ms <= AIR_MS)
     this.readyAt = now + AIR_MS + LAND_MS + (wasted ? WASTED_MS : 0)
     this.setReady(false)
     if (this.button) {
@@ -377,12 +378,13 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
     if (ready) punch(this, this.button, 0.08, 80)
   }
 
-  // Every obstacle's time-to-arrival right now (in `t` units), on the server clock.
+  // Every obstacle's time-to-arrival right now (ms), on the server clock.
   private obstacleTimes(now: number): number[] {
     const snap = this.snap
     if (!snap) return []
-    const shift = this.state.final ? 0 : this.clock.since(snap.remainingMs, now) / LEAD_MS
-    return snap.obstacles.map((o) => o.t - shift)
+    const lead = snap.leadMs ?? START_LEAD_MS
+    const since = this.state.final ? 0 : this.clock.since(snap.remainingMs, now)
+    return snap.obstacles.map((o) => o.t * lead - since)
   }
 
   protected frame(snap: PixelDashSnapshot | null, _time: number, delta: number): void {
@@ -395,8 +397,9 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
     if (!this.ready && now >= this.readyAt) this.setReady(true)
     const moving = snap !== null && snap.remainingMs > 0
     if (moving) {
+      const speed = this.span / (snap.leadMs ?? START_LEAD_MS)
       for (const layer of this.layers) {
-        layer.sprite.tilePositionX += (this.speed * delta * layer.factor) / layer.sprite.tileScaleX
+        layer.sprite.tilePositionX += (speed * delta * layer.factor) / layer.sprite.tileScaleX
       }
     }
     const runner = this.runner
@@ -520,10 +523,11 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
 
   // Each obstacle extrapolated from the last snapshot on the server clock (frozen on the final frame).
   private renderObstacles(snap: PixelDashSnapshot, now: number): void {
-    const shift = this.state.final ? 0 : this.clock.since(snap.remainingMs, now) / LEAD_MS
+    const lead = snap.leadMs ?? START_LEAD_MS
+    const since = this.state.final ? 0 : this.clock.since(snap.remainingMs, now)
     const live = new Set<number>()
     for (const o of snap.obstacles) {
-      const x = this.runnerX + (o.t - shift) * this.speed * LEAD_MS
+      const x = this.runnerX + ((o.t * lead - since) * this.span) / lead
       if (x < -this.obstacleH) continue
       this.drawObstacle(o.id, x)
       live.add(o.id)

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { NUMBER_RUSH_WRONG_COOLDOWN_MS } from '@pp/shared'
+import { NUMBER_RUSH_SHUFFLES, NUMBER_RUSH_WRONG_COOLDOWN_MS, numberRushStage } from '@pp/shared'
 import type { Random } from '../ports/Random'
 import { NumberRush, type NumberRushState } from './numberRush'
 
@@ -16,10 +16,13 @@ const lcg = (seed: number): Random => {
 const game = new NumberRush()
 const init = (players: string[]) =>
   game.init({ players, seed: 1, random: zero, now: 0, config: { durationMs: 40_000 } })
+// The cell holding `n` for a player about to tap it (the layout reshuffles at milestones).
+const cellOf = (s: NumberRushState, n: number): number =>
+  s.layouts[numberRushStage(n)]?.indexOf(n) as number
 // Taps every number in order for `id`, finishing at `now`.
 const clear = (s: NumberRushState, id: string, now: number) => {
   for (let n = 1; n <= s.grid.length; n++)
-    game.onInput(s, id, { kind: 'tap', cell: s.grid.indexOf(n) }, now)
+    game.onInput(s, id, { kind: 'tap', cell: cellOf(s, n) }, now)
   return s
 }
 
@@ -81,12 +84,42 @@ describe('NumberRush', () => {
     let now = 0
     while (now < 40_000 && (s.progress.get('a') ?? 1) <= s.grid.length) {
       for (let cell = 0; cell < s.grid.length && now < 40_000; cell++) {
-        if ((s.grid[cell] as number) < (s.progress.get('a') ?? 1)) continue
+        const next = s.progress.get('a') ?? 1
+        if ((s.layouts[numberRushStage(next)]?.[cell] as number) < next) continue
         game.onInput(s, 'a', { kind: 'tap', cell }, now)
         now += 100
       }
     }
     expect(s.progress.get('a') as number).toBeLessThan(s.grid.length / 2)
+  })
+
+  test('the open numbers reshuffle at milestones that come closer and closer', () => {
+    // Gaps of 10, 6, 4, 3 cleared numbers: shrinking, by less each time but never growing.
+    expect(NUMBER_RUSH_SHUFFLES).toEqual([10, 16, 20, 23])
+    const s = game.init({ players: ['a'], seed: 1, random: lcg(9), now: 0 })
+    expect(s.layouts).toHaveLength(NUMBER_RUSH_SHUFFLES.length + 1)
+    expect(s.layouts[0]).toEqual(s.grid)
+    NUMBER_RUSH_SHUFFLES.forEach((cleared, k) => {
+      const [before, after] = [s.layouts[k] as number[], s.layouts[k + 1] as number[]]
+      // Still a permutation of 1..25; cleared cells keep their numbers, the open ones move.
+      expect([...after].sort((x, y) => x - y)).toEqual([...s.grid].sort((x, y) => x - y))
+      before.forEach((n, cell) => {
+        if (n <= cleared) expect(after[cell]).toBe(n)
+        else expect(after[cell] as number).toBeGreaterThan(cleared)
+      })
+      if (25 - cleared > 3) expect(after).not.toEqual(before)
+    })
+    // Taps are judged on the layout of the player's stage: right after the 10th number, 11 is where
+    // the reshuffled layout put it — not where it was.
+    for (let n = 1; n <= 10; n++) game.onInput(s, 'a', { kind: 'tap', cell: cellOf(s, n) }, 100)
+    expect(game.snapshot(s, 100).layouts?.[1]).toEqual(s.layouts[1])
+    const moved = s.grid.indexOf(11) !== cellOf(s, 11)
+    if (moved) {
+      game.onInput(s, 'a', { kind: 'tap', cell: s.grid.indexOf(11) }, 200)
+      expect(s.progress.get('a')).toBe(11)
+    }
+    game.onInput(s, 'a', { kind: 'tap', cell: cellOf(s, 11) }, 1000)
+    expect(s.progress.get('a')).toBe(12)
   })
 
   test('the round ends early once everybody cleared the grid', () => {

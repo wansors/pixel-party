@@ -1,0 +1,54 @@
+@let g = game();
+<div class="sheet-backdrop" (click)="closed.emit()" aria-hidden="true"></div>
+<section class="sheet arcade-window" role="dialog" aria-modal="true" [attr.aria-label]="catalog.minigameName(g.id)">
+  <div class="arcade-titlebar">
+    <span>{{ catalog.minigameName(g.id) }}</span>
+    <button type="button" class="close" [attr.aria-label]="'common.close' | transloco" (click)="closed.emit()">×</button>
+  </div>
+  <div class="sheet-body">
+    <app-game-thumb class="big" [id]="g.id" [alt]="catalog.minigameName(g.id)" />
+    <div class="facts">
+      <span class="badge">{{ 'room.format.' + g.format | transloco }}</span>
+      @for (a of g.axes; track a) {
+        <span class="badge" [style.color]="axisColor(a)">{{ catalog.axisLabel(a) }}</span>
+      }
+      <span class="badge">
+        <i class="people" aria-hidden="true"></i>
+        {{
+          'room.lobby.playersHint'
+            | transloco: { best: range(g.players.best[0], g.players.best[1]), range: range(g.players.min, g.players.max) }
+        }}
+      </span>
+      @if (g.durationSec > 0) {
+        <span class="badge"><i class="clock" aria-hidden="true"></i>{{ duration(g.durationSec) }}</span>
+      }
+      @if (g.mobileFriendly) {
+        <span class="badge mobile"><i class="phone" aria-hidden="true"></i>{{ 'room.intro.mobileFriendly' | transloco }}</span>
+      }
+    </div>
+    @if (catalog.minigameTagline(g.id); as tagline) {
+      <p class="tagline">{{ tagline }}</p>
+    }
+    <p class="how">{{ catalog.minigameBlurb(g.id) }}</p>
+    @if (catalog.minigameControls(g.id); as controls) {
+      <p class="controls"><span class="label">{{ 'room.intro.controls' | transloco }}</span>{{ controls }}</p>
+    }
+    @if (store.isHost()) {
+      <div class="sheet-actions">
+        @if (!store.fits(g.id)) {
+          <span class="needs">
+            @if (unfitReason(g) === 'teams') {
+              {{ 'room.lobby.needsTeams' | transloco }}
+            } @else {
+              {{ 'room.lobby.needsPlayers' | transloco: { range: range(g.players.min, g.players.max) } }}
+            }
+          </span>
+        } @else {
+          <button type="button" class="arcade-btn" [class.primary]="!picked(g)" (click)="store.toggleGame(g.id)">
+            {{ (picked(g) ? 'room.picker.remove' : 'room.picker.add') | transloco }}
+          </button>
+        }
+      </div>
+    }
+  </div>
+</section>

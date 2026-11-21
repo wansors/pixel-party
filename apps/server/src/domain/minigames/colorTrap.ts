@@ -1,8 +1,17 @@
-import { COLOR_TRAP_COLOR_COUNT, type ColorTrapInput, type ColorTrapSnapshot } from '@pp/shared'
+import {
+  COLOR_TRAP_COLOR_COUNT,
+  type ColorTrapInput,
+  type ColorTrapSnapshot,
+  rampEase,
+} from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_PROMPTS = 12
-const DEFAULT_PROMPT_MS = 1800
+// The prompt window shrinks along an ease-in (D40): a relaxed first card, barely quicker through the
+// first third, then steeply tighter — the last cards leave little more than a Stroop reaction time.
+// 12 prompts still add up to about the old 12 × 1.8 s.
+const FIRST_PROMPT_MS = 2300
+const LAST_PROMPT_MS = 1050
 // An answer to the previous prompt still counts this long after it closed: the client stops taking
 // taps the moment its own clock says the prompt is over, so all that's left in flight is a tap made
 // just before that, still on its way (the round trip). Without it the client cheered a "+1" the server
@@ -15,11 +24,18 @@ interface Prompt {
   ink: number
 }
 
+// The window of prompt `index` out of `total`.
+export function colorTrapPromptMs(index: number, total: number): number {
+  return Math.round(rampEase(FIRST_PROMPT_MS, LAST_PROMPT_MS, total > 1 ? index / (total - 1) : 0))
+}
+
 export interface ColorTrapState {
   players: PlayerId[]
   prompts: Prompt[]
   startedAt: number
-  promptMs: number
+  // Each prompt's window (ms), and when it opens (ms after startedAt; one extra entry = the end).
+  windows: number[]
+  starts: number[]
   answered: Map<PlayerId, Set<number>>
   correct: Map<PlayerId, number>
   wrong: Map<PlayerId, number>
@@ -30,8 +46,8 @@ export interface ColorTrapState {
 }
 
 // Real-time FFA Stroop test. The word/ink sequence is drawn from the injected Random port (seeded per
-// round) so it is identical for everyone; time arrives as `now`. Each prompt has a short window and
-// takes one answer: the ink color scores +1, a wrong color costs a point (so a blind guess loses on
+// round) so it is identical for everyone; time arrives as `now`. Each prompt has a short window — a
+// little shorter every prompt — and takes one answer: the ink color scores +1, a wrong color costs a point (so a blind guess loses on
 // average), a timeout scores nothing. Pure domain logic.
 export class ColorTrap implements MiniGame<ColorTrapState, ColorTrapInput> {
   readonly id = 'color-trap'
@@ -39,8 +55,11 @@ export class ColorTrap implements MiniGame<ColorTrapState, ColorTrapInput> {
 
   init(ctx: MiniGameInitCtx): ColorTrapState {
     const count = typeof ctx.config?.prompts === 'number' ? ctx.config.prompts : DEFAULT_PROMPTS
-    const promptMs =
-      typeof ctx.config?.promptMs === 'number' ? ctx.config.promptMs : DEFAULT_PROMPT_MS
+    // A fixed `promptMs` (tests) overrides the shrinking schedule.
+    const fixedMs = typeof ctx.config?.promptMs === 'number' ? ctx.config.promptMs : null
+    const windows = Array.from({ length: count }, (_, i) => fixedMs ?? colorTrapPromptMs(i, count))
+    const starts = [0]
+    for (const w of windows) starts.push((starts.at(-1) as number) + w)
     const n = COLOR_TRAP_COLOR_COUNT
     const prompts: Prompt[] = []
     for (let i = 0; i < count; i++) {
@@ -53,7 +72,8 @@ export class ColorTrap implements MiniGame<ColorTrapState, ColorTrapInput> {
       players: [...ctx.players],
       prompts,
       startedAt: ctx.now,
-      promptMs,
+      windows,
+      starts,
       answered: new Map(ctx.players.map((id) => [id, new Set()])),
       correct: new Map(ctx.players.map((id) => [id, 0])),
       wrong: new Map(ctx.players.map((id) => [id, 0])),
@@ -62,8 +82,17 @@ export class ColorTrap implements MiniGame<ColorTrapState, ColorTrapInput> {
     }
   }
 
+  // The live prompt's index: -1 before the first, prompts.length once the last has closed.
   private currentIndex(state: ColorTrapState, now: number): number {
-    return Math.floor((now - state.startedAt) / state.promptMs)
+    const t = now - state.startedAt
+    if (t < 0) return -1
+    let i = 0
+    while (i < state.prompts.length && t >= (state.starts[i + 1] as number)) i++
+    return i
+  }
+
+  private promptStart(state: ColorTrapState, idx: number): number {
+    return state.startedAt + (state.starts[idx] as number)
   }
 
   private score(state: ColorTrapState, id: PlayerId): number {
@@ -84,16 +113,17 @@ export class ColorTrap implements MiniGame<ColorTrapState, ColorTrapInput> {
     if (idx < 0 || idx >= state.prompts.length || answered.has(idx)) return state
     // Only the live prompt takes answers — plus the one before it, for a grace period after it closed
     // (drops stale/duplicate taps, never an answer to a prompt not shown yet).
-    const promptStart = state.startedAt + idx * state.promptMs
+    const promptStart = this.promptStart(state, idx)
+    const window = state.windows[idx] as number
     const live = idx === this.currentIndex(state, now)
-    const late = now >= promptStart + state.promptMs
-    if (!live && !(late && now < promptStart + state.promptMs + COLOR_TRAP_LATE_GRACE_MS)) {
+    const late = now >= promptStart + window
+    if (!live && !(late && now < promptStart + window + COLOR_TRAP_LATE_GRACE_MS)) {
       return state
     }
     answered.add(idx)
-    if (input.color === state.prompts[idx].ink) {
+    if (input.color === state.prompts[idx]?.ink) {
       state.correct.set(playerId, (state.correct.get(playerId) ?? 0) + 1)
-      const ms = Math.min(now - promptStart, state.promptMs)
+      const ms = Math.min(now - promptStart, window)
       state.totalMs.set(playerId, (state.totalMs.get(playerId) ?? 0) + ms)
     } else {
       state.wrong.set(playerId, (state.wrong.get(playerId) ?? 0) + 1)
@@ -107,7 +137,7 @@ export class ColorTrap implements MiniGame<ColorTrapState, ColorTrapInput> {
   }
 
   isFinished(state: ColorTrapState, now: number): boolean {
-    const end = state.startedAt + state.prompts.length * state.promptMs
+    const end = this.promptStart(state, state.prompts.length)
     if (now >= end + COLOR_TRAP_LATE_GRACE_MS) return true
     // Early out once everyone still here has locked an answer for every prompt.
     for (const [id, set] of state.answered) {
@@ -145,7 +175,9 @@ export class ColorTrap implements MiniGame<ColorTrapState, ColorTrapInput> {
     const idx = this.currentIndex(state, now)
     const live = idx >= 0 && idx < state.prompts.length
     const prompt = live ? state.prompts[idx] : null
-    const promptStart = state.startedAt + idx * state.promptMs
+    const window = live ? (state.windows[idx] as number) : 0
+    const promptEnd = live ? this.promptStart(state, idx) + window : 0
+    const roundEnd = this.promptStart(state, state.prompts.length)
     const answeredCurrent = live
       ? state.players.filter((id) => state.answered.get(id)?.has(idx))
       : []
@@ -154,7 +186,9 @@ export class ColorTrap implements MiniGame<ColorTrapState, ColorTrapInput> {
       total: state.prompts.length,
       word: prompt?.word ?? null,
       ink: prompt?.ink ?? null,
-      promptRemainingMs: live ? Math.max(0, promptStart + state.promptMs - now) : 0,
+      promptRemainingMs: live ? Math.max(0, promptEnd - now) : 0,
+      promptMs: window,
+      remainingMs: Math.max(0, roundEnd - now),
       scores: Object.fromEntries(state.players.map((id) => [id, this.score(state, id)])),
       answeredCurrent,
     }

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { PIXEL_OBJECTS, type PixelWeightObject, pixelVariant, unpackCells } from '@pp/shared'
 import type { Random } from '../ports/Random'
-import { PixelWeight } from './pixelWeight'
+import { PixelWeight, pixelWeightFlashMs } from './pixelWeight'
 
 // Deterministic seed; the exact object order doesn't matter — the tests read the answer off the puzzle.
 const zero: Random = { next: () => 0 }
@@ -28,6 +28,21 @@ describe('PixelWeight', () => {
     expect(s.puzzles).toHaveLength(8)
     expect(s.puzzles[0]?.answer).toBe((s.puzzles[0] ? cellsOf(s.puzzles[0].object) : []).length)
     expect(s.puzzles[0]?.answer).toBeGreaterThan(0)
+  })
+
+  test('the line-up ramps: smallest objects first, the flash shrinking by more each object', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const answers = init(['a'], 0, seeded(seed)).puzzles.map((p) => p.answer)
+      expect(answers).toEqual([...answers].sort((x, y) => x - y))
+    }
+    const flash = init(['a']).puzzles.map((p) => p.object.flashMs)
+    expect(flash).toEqual(flash.map((_, level) => pixelWeightFlashMs(level)))
+    expect(flash[0]).toBe(2400)
+    expect(flash[7]).toBe(800)
+    // Non-linear: the last step takes more flash time away than the first.
+    expect((flash[6] as number) - (flash[7] as number)).toBeGreaterThan(
+      (flash[0] as number) - (flash[1] as number),
+    )
   })
 
   test('exact guess scores full points; error reduces points and floors at zero', () => {

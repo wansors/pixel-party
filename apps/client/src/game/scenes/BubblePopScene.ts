@@ -56,6 +56,9 @@ const CANNON = [
   '_oooooooooooo_',
 ]
 
+// The ceiling rumbles this long before it drops a row.
+const RUMBLE_MS = 1200
+
 // This player's board as the screen predicts it.
 interface Predicted {
   grid: number[]
@@ -84,7 +87,8 @@ interface RivalRow {
 // bubblePop): the shot flies up its lane, sticks, pops and loads the next colour without waiting for
 // the server, and each snapshot (the server's word) is the base the unacknowledged shots are replayed
 // on. Rivals' scores sit beside the board. A board blocked in every column is jammed: done for the
-// round.
+// round. The ceiling drops a new row in ever more often (the server's board already carries it): it
+// rumbles in the second before and lands with a thud.
 export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
   private orbs: Phaser.GameObjects.Image[] = []
   private laneGfx?: Phaser.GameObjects.Graphics
@@ -98,6 +102,9 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
   private hint?: Phaser.GameObjects.Text
   private waitText?: Phaser.GameObjects.Text
   private banner?: Phaser.GameObjects.Text
+  private ceiling?: Phaser.GameObjects.Graphics
+  // Ceiling drops seen so far (-1 until the first snapshot syncs it).
+  private drops = -1
   private built = false
   private rows = 0
   private cols = 0
@@ -136,6 +143,8 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
   override create(): void {
     super.create()
     this.built = false
+    this.ceiling = undefined
+    this.drops = -1
     this.orbs = []
     this.shown = []
     this.queue = []
@@ -251,6 +260,7 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
     // Playfield: dark lanes (one per column) under a riveted ceiling bar.
     this.laneGfx = this.add.graphics()
     const ceiling = this.add.graphics()
+    this.ceiling = ceiling
     const barH = compact ? 8 : 10
     ceiling.fillStyle(0x8d95b5, 1).fillRect(this.gridX0 - 6, this.gridTop - barH, gridW + 12, barH)
     ceiling.fillStyle(0xdfe8f3, 1).fillRect(this.gridX0 - 6, this.gridTop - barH, gridW + 12, 2)
@@ -501,6 +511,7 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
   protected frame(snap: BubblePopSnapshot | null, time: number): void {
     if (!snap) return
     if (!this.built) this.build(snap)
+    this.watchCeiling(snap, time)
     this.gunner?.tick(time)
     this.repeatAim(this.time.now)
     this.renderRivals(snap)
@@ -533,6 +544,25 @@ export class BubblePopScene extends MiniGameScene<BubblePopSnapshot> {
       this.ghost?.setVisible(false)
       this.blocked?.setVisible(false)
     }
+  }
+
+  // The ceiling over a board still in play: it rumbles before a drop and lands with a thud (punching
+  // the new top row) when the drop counter moves.
+  private watchCeiling(snap: BubblePopSnapshot, time: number): void {
+    const drops = snap.drops ?? 0
+    const mine = snap.boards[this.selfId]
+    const inPlay = mine !== undefined && !mine.done && !mine.jammed && !this.state.final
+    if (this.drops >= 0 && drops > this.drops && inPlay) {
+      this.sfx.crash()
+      shake(this, 0.008, 180)
+      for (let c = 0; c < this.cols; c++) {
+        const orb = this.orbs[c]
+        if (orb) punch(this, orb, 0.25, 110)
+      }
+    }
+    this.drops = drops
+    const warn = inPlay && snap.nextDropMs !== undefined && snap.nextDropMs < RUMBLE_MS
+    this.ceiling?.setY(warn ? Math.round(Math.sin(time / 25) * 2) : 0)
   }
 
   // A fresh snapshot of this player's board: the new base to predict from.

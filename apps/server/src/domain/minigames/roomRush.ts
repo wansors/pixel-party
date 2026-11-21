@@ -1,4 +1,5 @@
 import {
+  compound,
   ROOM_RUSH,
   type RoomRushInput,
   type RoomRushPhase,
@@ -23,7 +24,11 @@ const SUBSTEPS = 4 // keeps a dashing body (≤ 0.011 per substep) from tunnelli
 const OMEGA = 0.45 // carousel spin (rad/s)
 const FIRST_MUSIC_MS = 4000
 const MUSIC_MS = [3800, 5600] as const
+// The call window (time to get into a room) shrinks by CALL_SHRINK every call, compounding: 6.5 s for
+// the first scramble, ~3.9 s by the fifth, never under MIN_CALL_MS.
 const CALL_MS = 6500
+const CALL_SHRINK = 0.88
+const MIN_CALL_MS = 3500
 const REVEAL_MS = 1600
 // Survivors respawn on a ring around the hub, widened for a big field so nobody starts overlapping.
 const SPAWN_R = 0.1
@@ -269,7 +274,8 @@ export class RoomRush implements MiniGame<RoomRushState, RoomRushInput> {
     if (state.phase === 'music') {
       this.openCall(state)
       state.phase = 'call'
-      state.phaseEndsAt = now + CALL_MS
+      state.phaseEndsAt =
+        now + Math.round(compound(CALL_MS, CALL_SHRINK, state.call - 1, MIN_CALL_MS))
     } else if (state.phase === 'call') {
       this.buzzer(state, now)
       state.phase = 'reveal'

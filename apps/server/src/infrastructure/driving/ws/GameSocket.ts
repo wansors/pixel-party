@@ -1,5 +1,5 @@
 import type { ClientMsg, PlayerDto, ServerMsg } from '@pp/shared'
-import { MINIGAMES_BY_ID, PROTOCOL_VERSION, TEAM_IDS } from '@pp/shared'
+import { MAX_ROUNDS, MINIGAMES_BY_ID, PROTOCOL_VERSION, TEAM_IDS } from '@pp/shared'
 import type { ServerWebSocket } from 'bun'
 import type { Clock } from '../../../application/ports/Clock'
 import type { LiveRoomRegistry } from '../../../application/ports/LiveRoomRegistry'
@@ -8,6 +8,7 @@ import type { SessionConfig } from '../../../application/session/SessionEngine'
 import { SessionManager } from '../../../application/session/SessionManager'
 import type { CreateRoomUseCase } from '../../../application/use-cases/CreateRoomUseCase'
 import type { JoinRoomUseCase } from '../../../application/use-cases/JoinRoomUseCase'
+import { UpdateProfileUseCase } from '../../../application/use-cases/UpdateProfileUseCase'
 import { config } from '../../../config'
 import type { Player } from '../../../domain/entities/Player'
 import type { Room } from '../../../domain/entities/Room'
@@ -99,6 +100,7 @@ export function startGameServer(deps: GameSocketDeps) {
   // Assigned right after Bun.serve returns (synchronously, before any socket message can arrive), so
   // the handlers below can close over it. The publisher fans engine output over the room topic.
   let manager: SessionManager
+  const updateProfile = new UpdateProfileUseCase(deps.rooms)
 
   const send = (ws: ServerWebSocket<SocketData>, msg: ServerMsg): void => {
     ws.send(JSON.stringify(msg))
@@ -242,6 +244,30 @@ export function startGameServer(deps: GameSocketDeps) {
     broadcastLobby(room)
   }
 
+  const handleSetProfile = (
+    ws: ServerWebSocket<SocketData>,
+    msg: Extract<ClientMsg, { type: 'SET_PROFILE' }>,
+  ): void => {
+    if (!ws.data.playerId) return
+    const result = updateProfile.execute({
+      code: ws.data.roomCode,
+      playerId: ws.data.playerId,
+      name: msg.name,
+      avatar: msg.avatar,
+      color: msg.color,
+    })
+    if (!result.ok) {
+      send(ws, { type: 'ACK', intent: 'SET_PROFILE', ok: false, reason: result.reason })
+      return
+    }
+    send(ws, { type: 'ACK', intent: 'SET_PROFILE', ok: true })
+    const room = deps.rooms.get(ws.data.roomCode)
+    if (result.changed && room) {
+      deps.logger.info('profile_changed', { room: room.code, playerId: ws.data.playerId })
+      broadcastLobby(room)
+    }
+  }
+
   const handleHostConfig = (
     ws: ServerWebSocket<SocketData>,
     msg: Extract<ClientMsg, { type: 'HOST_CONFIG' }>,
@@ -251,11 +277,11 @@ export function startGameServer(deps: GameSocketDeps) {
       send(ws, { type: 'ACK', intent: 'HOST_CONFIG', ok: false, reason: 'not_host' })
       return
     }
-    // Domain refinement at the boundary: keep only known distinct games and clamp the round count. With
-    // no-repeat sessions a game never plays twice, so rounds is capped at the number of distinct games.
+    // Domain refinement at the boundary: keep only known distinct games and clamp the round count to
+    // 0 (auto) or 1..MAX_ROUNDS. More rounds than playable games is fine: the line-up starts over (D40).
     const ids = [...new Set(msg.minigameIds.filter((id) => MINIGAMES_BY_ID.has(id)))]
-    const cap = ids.length > 0 ? Math.min(20, ids.length) : 20
-    const rounds = Math.max(1, Math.min(cap, Math.floor(msg.rounds) || 1))
+    const asked = Number.isFinite(msg.rounds) ? Math.floor(msg.rounds) : 0
+    const rounds = asked <= 0 ? 0 : Math.min(MAX_ROUNDS, asked)
     room.configure(ids, rounds, msg.handicap ?? room.handicap)
     ensureTeams(room)
     broadcastLobby(room)
@@ -432,6 +458,9 @@ export function startGameServer(deps: GameSocketDeps) {
         break
       case 'SET_READY':
         handleSetReady(ws, msg)
+        break
+      case 'SET_PROFILE':
+        handleSetProfile(ws, msg)
         break
       case 'HOST_CONFIG':
         handleHostConfig(ws, msg)

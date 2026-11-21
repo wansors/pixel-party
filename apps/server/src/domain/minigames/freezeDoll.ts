@@ -8,6 +8,7 @@ import {
   freezeDollMove,
   freezeDollSpeed,
   freezeDollSweepAt,
+  rampEase,
 } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
@@ -17,7 +18,9 @@ const HEARTS = 2
 const STUN_MS = 1000
 const KNOCKBACK = 0.15
 const OPENING_MS = 1200 // a breath before the first chant
-const TURN_MS = 500 // the head twitch: the reaction window before the laser starts its sweep
+// The head twitch: the reaction window before the laser starts its sweep (shorter late in the round).
+const TURN_MS = 500
+const TURN_END_MS = 400
 const FIRST_SONG_MIN_MS = 3200
 const SUDDEN_FROM_CYCLE = 2 // no sudden spins in the first cycles ("nobody is out in the first seconds")
 
@@ -61,7 +64,6 @@ export interface FreezeDollState {
   endsAt: number
 }
 
-const lerp = (a: number, b: number, t: number): number => a + (b - a) * t
 const MODES: readonly FreezeDollMode[] = ['stop', 'walk', 'run']
 
 // Real-time FFA "Red Light, Green Light". Deterministic: lanes and the whole doll timeline (chant
@@ -116,16 +118,19 @@ export class FreezeDoll implements MiniGame<FreezeDollState, FreezeDollInput> {
     out.push({ ...base, light: 'ready', from: start, to: start + OPENING_MS })
     let t = start + OPENING_MS
     for (let cycle = 0; t < endsAt; cycle++) {
+      // Every knob tightens on an ease-in (rampEase): the opening cycles stay calm and readable, the
+      // last third is quick chants, frequent sudden spins and fake-outs, and a shorter twitch.
       const p = Math.min(1, (t - start) / Math.max(1, endsAt - start))
+      const turnMs = Math.round(rampEase(TURN_MS, TURN_END_MS, p))
       // Chant: shorter as the round goes on, at a seeded tempo.
       const tempo = 0.65 + rng() * 0.65
-      let songMs = Math.round(Math.max(1100, Math.min(5200, lerp(4200, 1800, p) * tempo)))
+      let songMs = Math.round(Math.max(1100, Math.min(5200, rampEase(4200, 1500, p) * tempo)))
       if (cycle === 0) songMs = Math.max(songMs, FIRST_SONG_MIN_MS)
       // A sudden spin cuts the chant short; a fake-out is a head twitch that looks away again.
-      const sudden = cycle >= SUDDEN_FROM_CYCLE && rng() < lerp(0.05, 0.35, p)
+      const sudden = cycle >= SUDDEN_FROM_CYCLE && rng() < rampEase(0.05, 0.45, p)
       const cutAt = sudden ? Math.round(songMs * (0.45 + rng() * 0.35)) : songMs
-      const fakeAt = rng() < lerp(0.15, 0.55, p) ? Math.round(cutAt * (0.25 + rng() * 0.4)) : 0
-      const redMs = Math.round(lerp(2600, 1600, p) * (0.8 + rng() * 0.4))
+      const fakeAt = rng() < rampEase(0.12, 0.6, p) ? Math.round(cutAt * (0.25 + rng() * 0.4)) : 0
+      const redMs = Math.round(rampEase(2600, 1400, p) * (0.8 + rng() * 0.4))
       const sweepFrom = Math.floor(rng() * lanes)
       const dir = rng() < 0.5 ? 1 : -1
       if (fakeAt > 0 && fakeAt + 400 < cutAt) {
@@ -134,18 +139,18 @@ export class FreezeDoll implements MiniGame<FreezeDollState, FreezeDollInput> {
           ...base,
           light: 'turn',
           from: t + fakeAt,
-          to: t + fakeAt + TURN_MS,
+          to: t + fakeAt + turnMs,
           songMs,
           songFrozen: fakeAt,
         })
-        t += TURN_MS
+        t += turnMs
         out.push({ ...base, light: 'green', from: t + fakeAt, to: t + cutAt, songMs, songFrom: t })
       } else {
         out.push({ ...base, light: 'green', from: t, to: t + cutAt, songMs, songFrom: t })
       }
       t += cutAt
-      out.push({ ...base, light: 'turn', from: t, to: t + TURN_MS, songMs, songFrozen: cutAt })
-      t += TURN_MS
+      out.push({ ...base, light: 'turn', from: t, to: t + turnMs, songMs, songFrozen: cutAt })
+      t += turnMs
       out.push({ ...base, light: 'red', from: t, to: t + redMs, sweepFrom, dir })
       t += redMs
     }

@@ -1,5 +1,17 @@
 import { describe, expect, test } from 'bun:test'
-import { type CourseDef, inStretch, RALLY_STAGES, SPEED_CIRCUITS, sampleCourse } from '@pp/shared'
+import {
+  COURSE_GRAVEL_TUNING,
+  COURSE_PHYSICS,
+  type CourseDef,
+  inStretch,
+  integrateRaceCar,
+  RACE_TURBO,
+  RALLY_DRIFT,
+  RALLY_STAGES,
+  type RaceCarBody,
+  SPEED_CIRCUITS,
+  sampleCourse,
+} from '@pp/shared'
 import { SeededRandom } from '../../infrastructure/driven/random/SeededRandom'
 import type { Random } from '../ports/Random'
 import { type CourseRaceState, GO_DELAY_MS, RallyStage, SpeedCircuit } from './courseRace'
@@ -42,6 +54,36 @@ const autopilot = (
     },
     now,
   )
+}
+// Slip angle: the direction of travel against the car's nose (radians, signed).
+const slipOf = (c: { a: number; vx: number; vy: number }): number =>
+  Math.atan2(
+    -c.vx * Math.sin(c.a) + c.vy * Math.cos(c.a),
+    c.vx * Math.cos(c.a) + c.vy * Math.sin(c.a),
+  )
+const rallyCar = (over: Partial<RaceCarBody> = {}): RaceCarBody => ({
+  x: 0,
+  y: 0,
+  a: 0,
+  vx: 230,
+  vy: 0,
+  steer: 0,
+  throttle: 1,
+  off: false,
+  finishMs: null,
+  ...over,
+})
+// `seconds` of the rally car's integration on gravel, calling `each` after every sub-step.
+const slide = (
+  c: RaceCarBody,
+  seconds: number,
+  each: (c: RaceCarBody) => void = () => {},
+  tune = COURSE_GRAVEL_TUNING,
+): void => {
+  for (let t = 0; t < seconds - 1e-9; t += 0.0125) {
+    integrateRaceCar(c, 0.0125, COURSE_PHYSICS.stage, tune)
+    each(c)
+  }
 }
 const race = (
   game: Game,
@@ -163,6 +205,134 @@ describe('RallyStage', () => {
   })
 })
 
+describe('RallyStage drift', () => {
+  const game = new RallyStage()
+  test('the handbrake on gravel swings the tail out; let go, the slide straightens up', () => {
+    const c = rallyCar({ steer: 1, handbrake: true })
+    let peak = 0
+    slide(c, 0.15, (k) => {
+      peak = Math.max(peak, Math.abs(slipOf(k)))
+    })
+    // ~40° of slip from a short pull at speed.
+    expect(peak).toBeGreaterThan(0.55)
+    c.handbrake = false
+    c.steer = 0
+    slide(c, 0.6)
+    expect(Math.abs(slipOf(c))).toBeLessThan(0.1)
+    // Counter-steering catches the same slide faster than letting go of the wheel.
+    const settle = (steer: number): number => {
+      const k = rallyCar({ steer: 1, handbrake: true })
+      slide(k, 0.15)
+      Object.assign(k, { handbrake: false, steer })
+      let t = 0
+      while (Math.abs(slipOf(k)) > 0.1 && t < 2) {
+        slide(k, 0.0125)
+        t += 0.0125
+      }
+      return t
+    }
+    expect(settle(-1)).toBeLessThan(settle(0))
+  })
+
+  test('tarmac grips more than gravel: full lock opens a much smaller slip angle', () => {
+    const lockSlip = (tune: typeof COURSE_GRAVEL_TUNING): number => {
+      const c = rallyCar({ steer: 1 })
+      slide(c, 1.5, () => {}, tune)
+      return Math.abs(slipOf(c))
+    }
+    const tarmac = lockSlip({})
+    const gravel = lockSlip(COURSE_GRAVEL_TUNING)
+    expect(tarmac).toBeLessThan(RALLY_DRIFT.driftSlip)
+    expect(gravel).toBeGreaterThan(RALLY_DRIFT.driftSlip)
+    expect(gravel).toBeGreaterThan(tarmac * 2)
+  })
+
+  test('straightening out of a clean drift banks a boost in proportion, capped', () => {
+    const kickAfter = (seconds: number): RaceCarBody => {
+      const c = rallyCar({ steer: 1 })
+      slide(c, seconds)
+      expect(c.driftS ?? 0).toBeGreaterThan(seconds - 0.5)
+      c.steer = -1
+      let t = 0
+      while ((c.driftS ?? 0) > 0 && t < 1) {
+        slide(c, 0.0125)
+        t += 0.0125
+      }
+      return c
+    }
+    const short = kickAfter(0.6).kickS ?? 0
+    const long = kickAfter(4).kickS ?? 0
+    expect(short).toBeGreaterThan(0)
+    expect(long).toBeGreaterThan(short)
+    expect(long).toBeCloseTo(RALLY_DRIFT.maxKickS, 5)
+    // The boost lifts the top speed past the car's normal one.
+    const c = rallyCar({ vx: COURSE_PHYSICS.stage.maxSpeed, kickS: RALLY_DRIFT.maxKickS })
+    let top = 0
+    slide(
+      c,
+      0.5,
+      (k) => {
+        top = Math.max(top, Math.hypot(k.vx, k.vy))
+      },
+      {},
+    )
+    expect(top).toBeGreaterThan(COURSE_PHYSICS.stage.maxSpeed * 1.05)
+  })
+
+  test('a spin, a slide scrubbed to a crawl or a trip off the road banks nothing', () => {
+    // Mid-drift the car swaps ends (sliding tail first): the drift is gone.
+    const spun = rallyCar({ steer: 1 })
+    slide(spun, 1)
+    expect(spun.driftS ?? 0).toBeGreaterThan(0.5)
+    Object.assign(spun, { vx: -spun.vx, vy: -spun.vy, steer: 0 })
+    expect(Math.abs(slipOf(spun))).toBeGreaterThan(RALLY_DRIFT.spinSlip)
+    slide(spun, 0.0125)
+    expect(spun.driftS).toBe(0)
+    slide(spun, 1)
+    expect(spun.kickS ?? 0).toBe(0)
+    // The handbrake held through the bend: the car pivots, scrubs off its speed and banks nothing.
+    const held = rallyCar({ steer: 1, handbrake: true })
+    slide(held, 1.5)
+    expect(Math.hypot(held.vx, held.vy)).toBeLessThan(RALLY_DRIFT.driftSpeed / 2)
+    expect(held.driftS).toBe(0)
+    Object.assign(held, { handbrake: false, steer: 0 })
+    slide(held, 0.5)
+    expect(held.kickS ?? 0).toBe(0)
+    // Off the road mid-drift: the drift is gone.
+    const off = rallyCar({ steer: 1 })
+    slide(off, 1)
+    off.off = true
+    slide(off, 0.05)
+    expect(off.driftS).toBe(0)
+    off.off = false
+    off.steer = 0
+    slide(off, 1)
+    expect(off.kickS ?? 0).toBe(0)
+  })
+
+  test('the stage holds the handbrake, ignores the turbo key and reports the drift', () => {
+    const s = init(game, ['a'])
+    const c = car(s, 'a')
+    game.onInput(s, 'a', { kind: 'drive', steer: 1, throttle: 1, handbrake: true, turbo: true }, 0)
+    expect(c.handbrake).toBe(true)
+    expect(c.turbo).toBe(false)
+    for (const handbrake of ['yes', 1, null]) {
+      game.onInput(s, 'a', { kind: 'drive', steer: 1, throttle: 1, handbrake } as never, 0)
+      expect(c.handbrake).toBe(false)
+    }
+    Object.assign(c, { turboMeter: 1, driftS: 0.42, kickS: 0.3 })
+    game.onInput(s, 'a', { kind: 'drive', steer: 0, throttle: 1, turbo: true }, 0)
+    for (let t = GO_DELAY_MS + 50; t <= GO_DELAY_MS + 500; t += 50) game.tick(s, 50, t)
+    expect(c.turboS ?? 0).toBe(0)
+    Object.assign(c, { driftS: 0.42, kickS: 0.3 })
+    const snap = game.snapshot(s, GO_DELAY_MS + 500).cars[0]
+    expect(snap?.driftMs).toBe(420)
+    expect(snap?.kickMs).toBe(300)
+    expect(snap?.turbo).toBeUndefined()
+    expect(snap?.turboMs).toBeUndefined()
+  })
+})
+
 describe('SpeedCircuit', () => {
   const game = new SpeedCircuit()
   test('a staggered grid behind the line; cars race two laps and bump each other', () => {
@@ -230,6 +400,58 @@ describe('SpeedCircuit', () => {
     game.tick(s, 50, GO_DELAY_MS + 100)
     expect(b.draft).toBe(true)
     expect(a.draft).toBe(false)
+  })
+
+  test('the turbo charges as you drive, fires once full for a burst of speed, never on empty', () => {
+    const s = init(game, ['a'])
+    const c = car(s, 'a')
+    let t = 0
+    let fired = -1
+    let top = 0
+    while (t < GO_DELAY_MS + 12_000) {
+      t += 50
+      autopilot(game, s, 'a', t, true)
+      game.onInput(
+        s,
+        'a',
+        { kind: 'drive', steer: c.steer, throttle: 1, turbo: true, handbrake: true },
+        t,
+      )
+      game.tick(s, 50, t)
+      expect(c.handbrake).toBe(false)
+      if (fired < 0 && (c.turboS ?? 0) > 0) fired = t
+      if (fired < 0) expect(c.turboMeter ?? 0).toBeLessThan(1)
+      else if (t - fired <= RACE_TURBO.burnS * 1000) top = Math.max(top, Math.hypot(c.vx, c.vy))
+    }
+    expect(fired - GO_DELAY_MS).toBeGreaterThan(RACE_TURBO.chargeS * 1000)
+    expect(top).toBeGreaterThan(COURSE_PHYSICS.circuit.maxSpeed * 1.1)
+    const snap = game.snapshot(s, t).cars[0]
+    expect(snap?.turbo).toBeGreaterThanOrEqual(0)
+    expect(snap?.driftMs).toBeUndefined()
+  })
+
+  test('a slipstream charges the turbo twice as fast; off the road it does not charge', () => {
+    const s = init(game, ['a', 'b'])
+    const [a, b] = [car(s, 'a'), car(s, 'b')]
+    const n = s.samples.length
+    const p = s.samples[10] as { x: number; y: number }
+    const q = s.samples[18] as { x: number; y: number }
+    const heading = Math.atan2(q.y - p.y, q.x - p.x)
+    const v = { vx: Math.cos(heading) * 200, vy: Math.sin(heading) * 200 }
+    // b leads, a tucks in behind; both cruising.
+    Object.assign(b, { x: q.x, y: q.y, a: heading, idx: 18, prog: 18, ...v })
+    Object.assign(a, { x: p.x, y: p.y, a: heading, idx: 10, prog: 10, ...v })
+    game.tick(s, 50, GO_DELAY_MS + 50)
+    expect(a.draft).toBe(true)
+    expect(a.turboMeter ?? 0).toBeCloseTo(2 * (b.turboMeter ?? 0), 2)
+    // Out in the fields (far from the course), the meter stays put.
+    const far = { x: 30, y: 30, vx: 200, vy: 0, a: 0, idx: n - 1 }
+    Object.assign(a, far)
+    game.tick(s, 50, GO_DELAY_MS + 100)
+    expect(a.off).toBe(true)
+    Object.assign(a, far, { turboMeter: 0.5 })
+    game.tick(s, 50, GO_DELAY_MS + 150)
+    expect(a.turboMeter).toBe(0.5)
   })
 
   test('snapshots carry every car velocity and the race clock (client prediction)', () => {

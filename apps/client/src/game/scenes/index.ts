@@ -26,6 +26,7 @@ import { MazeSprintScene } from './MazeSprintScene'
 import { MemoryFlashScene } from './MemoryFlashScene'
 import { MicroRaceScene } from './MicroRaceScene'
 import type { SceneDeps } from './MiniGameScene'
+import { NeonTrailsScene } from './NeonTrailsScene'
 import { NumberRushScene } from './NumberRushScene'
 import { OddOneOutScene } from './OddOneOutScene'
 import { PangScene } from './PangScene'
@@ -41,8 +42,10 @@ import { QuickMathScene } from './QuickMathScene'
 import { QuickTetrisScene } from './QuickTetrisScene'
 import { RallyStageScene } from './RallyStageScene'
 import { ReactionScene } from './ReactionScene'
+import { RockPaperScissorsScene } from './RockPaperScissorsScene'
 import { RoomRushScene } from './RoomRushScene'
 import { RouletteScene } from './RouletteScene'
+import { SharpshooterScene } from './SharpshooterScene'
 import { SimonScene } from './SimonScene'
 import { SinkTheFleetScene } from './SinkTheFleetScene'
 import { SnakeArenaScene } from './SnakeArenaScene'
@@ -55,6 +58,7 @@ import { SumoScene } from './SumoScene'
 import { TriviaScene } from './TriviaScene'
 import { TugOfWarScene } from './TugOfWarScene'
 import { WeirdTriviaScene } from './WeirdTriviaScene'
+import { WingItScene } from './WingItScene'
 
 export type SceneCtor = new (...deps: SceneDeps) => Phaser.Scene
 
@@ -112,6 +116,10 @@ export const SCENES: Readonly<Record<string, SceneCtor>> = {
   'honeycomb-cut': HoneycombCutScene,
   'jump-rope': JumpRopeScene,
   'marbles-duel': MarblesDuelScene,
+  'neon-trails': NeonTrailsScene,
+  'wing-it': WingItScene,
+  'rock-paper-scissors': RockPaperScissorsScene,
+  sharpshooter: SharpshooterScene,
   'tug-of-war': TugOfWarScene,
   'bomb-relay': BombRelayScene,
   'fleet-battle': FleetBattleScene,

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { AVATARS, PLAYER_COLORS, type ServerMsg } from '@pp/shared'
+import { AVATARS, MAX_ROUNDS, PLAYER_COLORS, type ServerMsg } from '@pp/shared'
 
 // The game socket end to end: seat reclaiming (REJOIN), start refusals, and what a hostile or broken
 // client may send without taking the server down.
@@ -202,5 +202,93 @@ describe('hostile messages never take the server down', () => {
     expect(seat?.color).toBe(PLAYER_COLORS[0])
     expect(seat?.avatar).toBe(AVATARS[0])
     long.ws.close()
+  })
+})
+
+// SET_PROFILE (D40): rename / re-skin yourself from the lobby, with JOIN's cleaning and uniqueness.
+describe('SET_PROFILE', () => {
+  type Lobby = Extract<ServerMsg, { type: 'LOBBY_STATE' }>
+  const lobbyAfter = async (c: Client): Promise<Lobby> => {
+    const m = await c.next('LOBBY_STATE')
+    if (m.type !== 'LOBBY_STATE') throw new Error('no lobby')
+    return m
+  }
+  // The first LOBBY_STATE (already received or still to come) that satisfies `ok`: broadcasts from
+  // earlier joins may still be in flight when the test acts.
+  const lobbyWhere = async (c: Client, ok: (m: Lobby) => boolean): Promise<Lobby> => {
+    for (;;) {
+      const hit = c.msgs.find((m): m is Lobby => m.type === 'LOBBY_STATE' && ok(m))
+      if (hit) return hit
+      await c.next('LOBBY_STATE')
+    }
+  }
+  const ack = async (c: Client): Promise<Extract<ServerMsg, { type: 'ACK' }>> => {
+    const m = await c.next('ACK')
+    if (m.type !== 'ACK') throw new Error('no ack')
+    return m
+  }
+
+  test('renames in the lobby and broadcasts it to everyone', async () => {
+    const code = await createRoom()
+    const host = await join(code, 'Host')
+    const ada = await join(code, 'Ada')
+    if (ada.welcome.type !== 'WELCOME') throw new Error('no welcome')
+    ada.client.ws.send(
+      JSON.stringify({
+        type: 'SET_PROFILE',
+        name: '  Grace​ ',
+        avatar: 'frog',
+        color: PLAYER_COLORS[3],
+      }),
+    )
+    expect(await ack(ada.client)).toMatchObject({ intent: 'SET_PROFILE', ok: true })
+    const seen = await lobbyWhere(host.client, (m) => m.players.some((p) => p.name === 'Grace'))
+    const me = seen.players.find((p) => p.id === (ada.welcome as { playerId: string }).playerId)
+    expect(me).toMatchObject({ name: 'Grace', avatar: 'frog', color: PLAYER_COLORS[3] })
+    host.client.ws.close()
+    ada.client.ws.close()
+  })
+
+  test("refuses another member's name and a blank one; keeps unknown avatar/color", async () => {
+    const code = await createRoom()
+    const host = await join(code, 'Host')
+    const ada = await join(code, 'Ada')
+    ada.client.ws.send(JSON.stringify({ type: 'SET_PROFILE', name: 'host' }))
+    expect(await ack(ada.client)).toMatchObject({ ok: false, reason: 'name_taken' })
+    ada.client.ws.send(JSON.stringify({ type: 'SET_PROFILE', name: ' ​ ' }))
+    expect(await ack(ada.client)).toMatchObject({ ok: false, reason: 'invalid_name' })
+    // Re-spelling your own name is fine; an unknown avatar/color keeps the current one.
+    ada.client.ws.send(
+      JSON.stringify({ type: 'SET_PROFILE', name: 'ADA', avatar: 'nope', color: 'url(x)' }),
+    )
+    expect(await ack(ada.client)).toMatchObject({ ok: true })
+    const seen = await lobbyWhere(host.client, (m) => m.players.some((p) => p.name === 'ADA'))
+    const me = seen.players.find((p) => p.name === 'ADA')
+    expect(me).toMatchObject({ avatar: 'owl', color: '#29d3f2' })
+    // A malformed shape is refused at the boundary without hurting the server.
+    ada.client.ws.send(JSON.stringify({ type: 'SET_PROFILE', name: 42 }))
+    expect(await ada.client.next('ERROR')).toMatchObject({ reason: 'malformed message' })
+    expect(await healthy()).toBe(true)
+    host.client.ws.close()
+    ada.client.ws.close()
+  })
+
+  test('HOST_CONFIG keeps 0 as auto and caps rounds at MAX_ROUNDS', async () => {
+    const code = await createRoom()
+    const host = await join(code, 'Host')
+    await host.client.next('LOBBY_STATE')
+    const config = (rounds: number) =>
+      host.client.ws.send(
+        JSON.stringify({ type: 'HOST_CONFIG', minigameIds: ['button-masher', 'pang'], rounds }),
+      )
+    config(40)
+    expect((await lobbyAfter(host.client)).rounds).toBe(40)
+    config(5000)
+    expect((await lobbyAfter(host.client)).rounds).toBe(MAX_ROUNDS)
+    config(0)
+    expect((await lobbyAfter(host.client)).rounds).toBe(0)
+    config(-3)
+    expect((await lobbyAfter(host.client)).rounds).toBe(0)
+    host.client.ws.close()
   })
 })

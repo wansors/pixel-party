@@ -1,8 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  integrateRaceCar,
+  MICRO_RACE_PHYSICS,
   MICRO_RACE_TRACKS,
   MICRO_RACE_WORLD,
   type MicroRaceTrackDef,
+  RACE_TURBO,
+  type RaceCarBody,
   sampleMicroRaceTrack,
 } from '@pp/shared'
 import { SeededRandom } from '../../infrastructure/driven/random/SeededRandom'
@@ -336,6 +340,108 @@ describe('MicroRace', () => {
     const b = nn(snap.cars.find((c) => c.id === 'b'))
     expect(b.vx).toBe(0)
     expect(b.vy).toBe(0)
+  })
+
+  test('the turbo meter charges while driving; a full one fires a burst of speed, an empty one cannot', () => {
+    const game = new MicroRace()
+    let s = init(['a'])
+    const car = nn(s.cars.get('a'))
+    // On the grid: nothing charges before the lights, and the key can't fire an empty meter.
+    s = game.onInput(s, 'a', { kind: 'drive', steer: 0, throttle: 1, turbo: true }, 0)
+    expect(car.turbo).toBe(true)
+    s = game.tick(s, 50, GO_DELAY_MS - 50)
+    expect(car.turboMeter).toBe(0)
+    let now = GO_DELAY_MS
+    let fired = -1
+    let topSpeed = 0
+    let shortOfFull = 1
+    while (now < GO_DELAY_MS + 12_000) {
+      s = drive(game, s, 'a', now)
+      s = game.onInput(s, 'a', { kind: 'drive', steer: car.steer, throttle: 1, turbo: true }, now)
+      now += 50
+      s = game.tick(s, 50, now)
+      if (fired < 0 && (car.turboS ?? 0) > 0) fired = now
+      if (fired < 0) shortOfFull = Math.min(shortOfFull, 1 - (car.turboMeter ?? 0))
+      if (fired >= 0 && now - fired <= RACE_TURBO.burnS * 1000)
+        topSpeed = Math.max(topSpeed, Math.hypot(car.vx, car.vy))
+    }
+    // The meter only fills after ~chargeS seconds of driving (held key or not), then lights at once.
+    expect(fired - GO_DELAY_MS).toBeGreaterThan(RACE_TURBO.chargeS * 1000)
+    expect(fired - GO_DELAY_MS).toBeLessThan(RACE_TURBO.chargeS * 1000 + 2500)
+    expect(shortOfFull).toBeGreaterThan(0)
+    // Lit: well past the car's normal top speed.
+    expect(topSpeed).toBeGreaterThan(MICRO_RACE_PHYSICS.maxSpeed * 1.15)
+    const snap = game.snapshot(s, now)
+    const a = nn(snap.cars.find((c) => c.id === 'a'))
+    expect(a.turbo).toBeGreaterThanOrEqual(0)
+    expect(a.turbo).toBeLessThanOrEqual(1)
+    expect(Number.isInteger(a.turboMs)).toBe(true)
+  })
+
+  test('firing spends the meter; letting go of the key keeps it full for later', () => {
+    const game = new MicroRace()
+    let s = init(['a'])
+    const car = nn(s.cars.get('a'))
+    Object.assign(car, { turboMeter: 1 })
+    s = game.onInput(s, 'a', { kind: 'drive', steer: 0, throttle: 1 }, GO_DELAY_MS)
+    s = game.tick(s, 50, GO_DELAY_MS + 50)
+    expect(car.turboS).toBe(0)
+    expect(car.turboMeter).toBe(1)
+    s = game.onInput(
+      s,
+      'a',
+      { kind: 'drive', steer: 0, throttle: 1, turbo: true },
+      GO_DELAY_MS + 50,
+    )
+    s = game.tick(s, 50, GO_DELAY_MS + 100)
+    expect(car.turboMeter).toBe(0)
+    expect(car.turboS).toBeGreaterThan(RACE_TURBO.burnS - 0.1)
+    // Burns out after burnS, and the meter starts over from empty.
+    let now = GO_DELAY_MS + 100
+    while (now < GO_DELAY_MS + 100 + RACE_TURBO.burnS * 1000 + 100) {
+      now += 50
+      s = game.tick(s, 50, now)
+    }
+    expect(car.turboS).toBe(0)
+    expect(car.turboMeter).toBeLessThan(0.1)
+  })
+
+  test('only a literal true holds the turbo key', () => {
+    const game = new MicroRace()
+    let s = init(['a'])
+    const car = nn(s.cars.get('a'))
+    for (const turbo of ['yes', 1, {}, [true], null]) {
+      s = game.onInput(s, 'a', { kind: 'drive', steer: 0, throttle: 1, turbo } as never, 0)
+      expect(car.turbo).toBe(false)
+    }
+    s = game.onInput(s, 'a', { kind: 'drive', steer: 0, throttle: 1, turbo: true }, 0)
+    expect(car.turbo).toBe(true)
+    // An old client (no turbo field) lets go of it.
+    s = game.onInput(s, 'a', { kind: 'drive', steer: 0, throttle: 1 }, 0)
+    expect(car.turbo).toBe(false)
+  })
+
+  test('tabletop cars stay on rails: steering never opens a slip angle (no rally drift here)', () => {
+    expect(MICRO_RACE_PHYSICS.drift).toBeUndefined()
+    const car: RaceCarBody = {
+      x: 0,
+      y: 0,
+      a: 0,
+      vx: 220,
+      vy: 0,
+      steer: 1,
+      throttle: 1,
+      off: false,
+      finishMs: null,
+    }
+    for (let i = 0; i < 80; i++) {
+      integrateRaceCar(car, 0.0125, MICRO_RACE_PHYSICS)
+      const slip = Math.atan2(
+        -car.vx * Math.sin(car.a) + car.vy * Math.cos(car.a),
+        car.vx * Math.cos(car.a) + car.vy * Math.sin(car.a),
+      )
+      expect(Math.abs(slip)).toBeLessThan(1e-6)
+    }
   })
 
   test('formats race times as m:ss.t', () => {

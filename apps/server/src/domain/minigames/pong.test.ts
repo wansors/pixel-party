@@ -55,6 +55,25 @@ describe('Pong', () => {
     expect(d.score.get('b')).toBe(1)
   })
 
+  test('serves get quicker over the round, on a curve that steepens toward the bell', () => {
+    const game = new Pong()
+    // The speed of the serve after a point scored at round time `at`.
+    const serveAt = (at: number): number => {
+      const s = init(['a', 'b'])
+      const d = nn(s.duels[0])
+      d.ball = { x: 0.05, y: 0.9, vx: -0.55, vy: 0 }
+      d.padY.set('a', 0.1) // a misses
+      game.tick(s, 1000, at)
+      expect(d.score.get('b')).toBe(1)
+      return Math.abs(d.ball.vx)
+    }
+    expect(serveAt(0)).toBeCloseTo(0.55)
+    expect(serveAt(44_999)).toBeCloseTo(0.82)
+    const firstQuarter = serveAt(11_250) - serveAt(0)
+    const lastQuarter = serveAt(44_999) - serveAt(33_750)
+    expect(lastQuarter).toBeGreaterThan(firstQuarter * 3)
+  })
+
   test('reaching WIN_SCORE ends the duel with a winner', () => {
     const game = new Pong()
     const s = init(['a', 'b'])

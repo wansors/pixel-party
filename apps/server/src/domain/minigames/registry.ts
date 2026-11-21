@@ -24,6 +24,7 @@ import { MatchPairs } from './matchPairs'
 import { MazeSprint } from './mazeSprint'
 import { MemoryFlash } from './memoryFlash'
 import { MicroRace } from './microRace'
+import { NeonTrails } from './neonTrails'
 import { NumberRush } from './numberRush'
 import { OddOneOut } from './oddOneOut'
 import { Pang } from './pang'
@@ -38,8 +39,10 @@ import { QuickDraw } from './quickDraw'
 import { QuickMath } from './quickMath'
 import { QuickTetris } from './quickTetris'
 import { ReactionDuel } from './reactionDuel'
+import { RockPaperScissors } from './rockPaperScissors'
 import { RoomRush } from './roomRush'
 import { Roulette } from './roulette'
+import { Sharpshooter } from './sharpshooter'
 import { Simon } from './simon'
 import { SinkTheFleet } from './sinkTheFleet'
 import { SnakeArena } from './snakeArena'
@@ -52,6 +55,7 @@ import { Dash100m, Hurdles110m } from './trackRace'
 import { Trivia } from './trivia'
 import { TugOfWar } from './tugOfWar'
 import { WeirdTrivia } from './weirdTrivia'
+import { WingIt } from './wingIt'
 
 // Mini-game registry: id -> factory. The session engine is agnostic — it looks up a factory by id and
 // runs the round. Adding a game = one domain module + one entry here (+ its client scene + catalog meta).
@@ -111,6 +115,10 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'honeycomb-cut': () => new HoneycombCut() as unknown as MiniGame<unknown, unknown>,
   'jump-rope': () => new JumpRope() as unknown as MiniGame<unknown, unknown>,
   'marbles-duel': () => new MarblesDuel() as unknown as MiniGame<unknown, unknown>,
+  'neon-trails': () => new NeonTrails() as unknown as MiniGame<unknown, unknown>,
+  'wing-it': () => new WingIt() as unknown as MiniGame<unknown, unknown>,
+  'rock-paper-scissors': () => new RockPaperScissors() as unknown as MiniGame<unknown, unknown>,
+  sharpshooter: () => new Sharpshooter() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

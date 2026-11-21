@@ -22,6 +22,30 @@ describe('FruitCatch', () => {
     expect(a.items[0]?.x).toBeCloseTo(0.5)
   })
 
+  test('the shower picks up non-linearly: the last quarter tightens far more than the first', () => {
+    // A constant RNG isolates the curve (every gap and fall time is the ramp multiplier at work).
+    const s = init(['p'])
+    const at = (ms: number) => {
+      const i = s.items.findIndex((o) => o.spawnAt >= ms)
+      const o = nn(s.items[i])
+      return { gap: o.spawnAt - nn(s.items[i - 1]).spawnAt, fall: o.fallMs }
+    }
+    const [q0, q1, q3, q4] = [at(1000), at(7500), at(22_500), at(29_000)]
+    expect(q3.gap - q4.gap).toBeGreaterThan(2 * (q0.gap - q1.gap))
+    expect(q3.fall - q4.fall).toBeGreaterThan(2 * (q0.fall - q1.fall))
+    expect(q4.fall).toBeLessThan(q0.fall * 0.6)
+    // More bombs late: a roll that is fruit at the start is a bomb at the end.
+    const late = new FruitCatch().init({
+      players: ['p'],
+      seed: 1,
+      random: { next: () => 0.25 },
+      now: 0,
+      config: { durationMs: 30_000 },
+    })
+    expect(late.items[0]?.kind).toBe('fruit')
+    expect(late.items.at(-1)?.kind).toBe('bomb')
+  })
+
   test('a bomb roll happens for a low RNG value', () => {
     const bombRng: Random = { next: () => 0 } // 0 < BOMB_CHANCE → bomb
     const s = new FruitCatch().init({ players: ['p'], seed: 1, random: bombRng, now: 0 })

@@ -10,7 +10,8 @@
 export const TETRIS = {
   cols: 6,
   rows: 12,
-  // Gravity: the falling piece drops one row per this many ms.
+  // Gravity: the falling piece drops one row per this many ms — at the start of a round; each game
+  // speeds it up as the round goes on and sends the live value with every board (TetrisBoard.fallMs).
   fallMs: 550,
   // Upcoming pieces each board carries on the wire: the NEXT preview, and enough for the client to
   // predict a few locks ahead of the next snapshot.
@@ -168,6 +169,8 @@ export interface TetrisState {
   current: TetrisPiece | null
   queueIndex: number // the queue slot `current` came from
   fallAccum: number // ms of gravity accumulated toward the next row
+  // The live gravity (ms per row); TETRIS.fallMs when absent. The server ramps it over the round.
+  fallMs?: number
   linesCleared: number
   toppedOut: boolean
 }
@@ -274,13 +277,15 @@ export function tetrisHardDrop(s: TetrisState, shapeAt: TetrisShapeAt): TetrisLo
   return tetrisLock(s, shapeAt)
 }
 
-// Gravity for `dt` ms: a row per TETRIS.fallMs; a piece that can't fall locks. Returns the locks.
+// Gravity for `dt` ms: a row per s.fallMs (TETRIS.fallMs by default); a piece that can't fall locks.
+// Returns the locks.
 export function tetrisFall(s: TetrisState, dt: number, shapeAt: TetrisShapeAt): TetrisLock[] {
   const locks: TetrisLock[] = []
   if (s.toppedOut) return locks
+  const step = s.fallMs && s.fallMs > 0 ? s.fallMs : TETRIS.fallMs
   s.fallAccum += dt
-  while (s.fallAccum >= TETRIS.fallMs && s.current && !s.toppedOut) {
-    s.fallAccum -= TETRIS.fallMs
+  while (s.fallAccum >= step && s.current && !s.toppedOut) {
+    s.fallAccum -= step
     const piece = s.current
     if (!tetrisCollides(s.board, piece, 0, 1)) s.current = { ...piece, y: piece.y + 1 }
     else locks.push(tetrisLock(s, shapeAt))
@@ -321,6 +326,9 @@ export interface TetrisBoard {
   next: string
   // Gravity accumulated toward the next row (ms), so the client keeps the fall in step.
   fall: number
+  // The live gravity (ms per row; TETRIS.fallMs when absent): it speeds up over the round, and the
+  // client predicts its own fall with it.
+  fallMs?: number
   // The last input `seq` the server has applied (0 = none): the client replays only the later ones.
   ack: number
   linesCleared: number
@@ -356,6 +364,7 @@ export function tetrisEncodeBoard(
     piece: p && !s.toppedOut ? [p.shape, p.x, p.y, p.rot] : null,
     next,
     fall: s.fallAccum,
+    ...(s.fallMs !== undefined ? { fallMs: s.fallMs } : {}),
     ack,
     linesCleared: s.linesCleared,
     toppedOut: s.toppedOut,
@@ -375,6 +384,7 @@ export function tetrisDecodeBoard(b: TetrisBoard): { state: TetrisState; shapeAt
     current: p ? { shape: p[0], x: p[1], y: p[2], rot: p[3] } : null,
     queueIndex: 0,
     fallAccum: Number(b.fall) || 0,
+    fallMs: Number(b.fallMs) > 0 ? Number(b.fallMs) : undefined,
     linesCleared: Number(b.linesCleared) || 0,
     toppedOut: b.toppedOut === true,
   }

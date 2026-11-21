@@ -30,6 +30,7 @@ const STAT_WORDS: Readonly<Record<string, string>> = {
   solved: 'solved',
   off: 'off',
   steps: 'steps',
+  survivor: 'survivor',
 }
 
 // One pass over the whole string (longest phrases first), so a translated word is never re-matched.

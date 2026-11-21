@@ -137,9 +137,26 @@ describe('PixelDash', () => {
 describe('PixelDash track ramp', () => {
   test('obstacles come closer together late in the round, never closer than a jump and a landing', () => {
     const game = new PixelDash()
-    const s = game.init({ players: ['p'], seed: 1, random: { next: () => 0.99 }, now: 0 })
-    const gaps = s.obstacles.slice(1).map((o, i) => o.arriveAt - (s.obstacles[i]?.arriveAt ?? 0))
-    expect(gaps.at(-1) ?? 0).toBeLessThan(gaps[0] ?? 0)
-    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(700)
+    for (const r of [0, 0.5, 0.99]) {
+      const s = game.init({ players: ['p'], seed: 1, random: { next: () => r }, now: 0 })
+      const gaps = s.obstacles.slice(1).map((o, i) => o.arriveAt - (s.obstacles[i]?.arriveAt ?? 0))
+      expect(gaps.at(-1) ?? 0).toBeLessThan(gaps[0] ?? 0)
+      // A jump (AIR_MS 380) plus a landing (150 ms) always fits between two obstacles.
+      expect(Math.min(...gaps)).toBeGreaterThanOrEqual(560)
+    }
+  })
+
+  test('the squeeze is non-linear: gaps and the lead window shrink most in the last quarter', () => {
+    const game = new PixelDash()
+    const s = game.init({ players: ['p'], seed: 1, random: { next: () => 0.5 }, now: 0 })
+    const gapAt = (ms: number): number => {
+      const i = s.obstacles.findIndex((o) => o.arriveAt >= ms)
+      return nn(s.obstacles[i]).arriveAt - nn(s.obstacles[i - 1]).arriveAt
+    }
+    expect(gapAt(30_000) - gapAt(38_000)).toBeGreaterThan(2 * (gapAt(2000) - gapAt(10_000)))
+    const leadAt = (ms: number): number => game.snapshot(s, ms).leadMs ?? 0
+    expect(leadAt(0)).toBe(1200)
+    expect(leadAt(40_000)).toBe(760)
+    expect(leadAt(30_000) - leadAt(40_000)).toBeGreaterThan(2 * (leadAt(0) - leadAt(10_000)))
   })
 })

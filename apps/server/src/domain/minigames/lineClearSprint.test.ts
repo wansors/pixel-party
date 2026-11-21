@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { Random } from '../ports/Random'
-import { LineClearSprint } from './lineClearSprint'
+import { FASTEST_FALL_MS, LineClearSprint } from './lineClearSprint'
 import { createPlayerBoard, FALL_INTERVAL_MS, ROWS } from './tetrisCore'
 
 const zero: Random = { next: () => 0 }
@@ -38,6 +38,26 @@ describe('LineClearSprint', () => {
     expect(after.current?.y).toBe(-1)
     expect(after.board.some((c) => c !== 0)).toBe(true)
     expect(after.toppedOut).toBe(false)
+  })
+
+  test('gravity speeds up for every board as the clock runs down, steepest at the end', () => {
+    const game = new LineClearSprint()
+    let state = init(['p', 'q'])
+    const fallAt = (t: number): number => {
+      state = game.tick(state, 0, t)
+      const ms = game.snapshot(state, t).boards.p?.fallMs as number
+      expect(game.snapshot(state, t).boards.q?.fallMs).toBe(ms)
+      return ms
+    }
+    const [start, quarter, threeQuarters, end] = [0, 15_000, 45_000, 60_000].map(fallAt) as [
+      number,
+      number,
+      number,
+      number,
+    ]
+    expect(start).toBe(FALL_INTERVAL_MS)
+    expect(end).toBe(FASTEST_FALL_MS)
+    expect(threeQuarters - end).toBeGreaterThan(3 * (start - quarter))
   })
 
   test('onInput move shifts the piece when not blocked, and no-ops at the walls', () => {

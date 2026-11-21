@@ -1,4 +1,4 @@
-import { PANG, type PangBalloon, type PangInput, type PangSnapshot } from '@pp/shared'
+import { compound, PANG, type PangBalloon, type PangInput, type PangSnapshot } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 50_000
@@ -10,6 +10,11 @@ const HARPOON_SPEED = PANG.harpoonSpeed
 const SHIELD_MS = 1500
 const WAVE_GAP_MS = 1200
 const WAVES = 12
+// Each wave's balloons drift sideways this much faster than the last one's (compounding), up to a cap:
+// the wave list stops adding balloons after a few waves, the speed keeps the climb going.
+const WAVE_SPEEDUP = 1.07
+const MAX_WAVE_SPEED = 1.7
+const waveVx = (wave: number): number => VX * compound(1, WAVE_SPEEDUP, wave, 1, MAX_WAVE_SPEED)
 const SPAWN_Y = 0.16
 
 interface Balloon {
@@ -106,7 +111,8 @@ export class Pang implements MiniGame<PangState, PangInput> {
     const def = state.waves[Math.min(wave, state.waves.length - 1)] ?? []
     a.wave = wave
     a.nextWaveAt = 0
-    a.balloons = def.map((b) => ({ x: b.x, y: SPAWN_Y, vx: VX * b.dir, vy: 0, size: b.size }))
+    const vx = waveVx(wave)
+    a.balloons = def.map((b) => ({ x: b.x, y: SPAWN_Y, vx: vx * b.dir, vy: 0, size: b.size }))
   }
 
   onInput(state: PangState, playerId: PlayerId, input: PangInput, now: number): PangState {
@@ -176,7 +182,13 @@ export class Pang implements MiniGame<PangState, PangInput> {
       a.balloons.splice(hit, 1)
       if (b.size > 1) {
         for (const dir of [-1, 1]) {
-          a.balloons.push({ x: b.x, y: b.y, vx: VX * dir, vy: SPLIT_VY, size: b.size - 1 })
+          a.balloons.push({
+            x: b.x,
+            y: b.y,
+            vx: waveVx(a.wave) * dir,
+            vy: SPLIT_VY,
+            size: b.size - 1,
+          })
         }
       }
       a.pops += 1

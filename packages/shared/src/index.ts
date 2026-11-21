@@ -1,4 +1,5 @@
 export * from './catalog'
+export * from './difficulty'
 export * from './games'
 export * from './names'
 export * from './protocol'

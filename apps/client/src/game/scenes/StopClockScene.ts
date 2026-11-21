@@ -1,11 +1,10 @@
-import { PALETTE, type StopClockSnapshot } from '@pp/shared'
+import { PALETTE, type StopClockSnapshot, stopClockPeriodMs } from '@pp/shared'
 import Phaser from 'phaser'
 import { addBanner, burst, floatText, punch, ring, shake, showBanner } from '../fx'
 import { bodyStyle, ensureBevelPanel, headlineStyle, hexToCss, shade } from '../pixelStyle'
 import { PlayerStrip } from '../playerStrip'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
-const PERIOD_MS = 1500
 const TRAIL = 4
 // The everyone strip (PlayerStrip) rebuilds every chip from scratch on any change — new Text objects,
 // each measuring its font again — which cost a frame per snapshot once a full room was playing. It
@@ -32,7 +31,7 @@ function grade(err: number): [string, number] | undefined {
 }
 
 // Stop the Clock (timing) canvas. A needle sweeps a ruler-marked gauge (triangle wave, animated
-// locally); hit STOP (click/tap, Space or Enter) to lock it on the flagged green target. The reported
+// locally, faster on every try — stopClockPeriodMs); hit STOP (click/tap, Space or Enter) to lock it on the flagged green target. The reported
 // position goes to the server, which scores the absolute error. Each stop leaves a pin + gap bracket
 // and a graded pop; three result cards track every attempt's error, and everyone's tries/error run
 // along the top (a player strip, so a full room never pushes the prompt into the gauge).
@@ -56,6 +55,10 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
   private lastAttempt = -1
   private lastError = 0
   private pendingAttempt = -1
+  // The needle's sweep: its phase (0..1) at `sweepAt` (scene clock) and the current try's period.
+  private sweepPhase = 0
+  private sweepAt = 0
+  private sweepMs = stopClockPeriodMs(0)
   // Per-attempt errors already on the cards, kept across a relayout restart (create() clears it only
   // for a fresh round) — the snapshot only carries the running total, so they can't be rebuilt.
   private errMemo: { round: number; errs: number[] } = { round: -1, errs: [] }
@@ -72,6 +75,9 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
     this.lastAttempt = -1
     this.lastError = 0
     this.pendingAttempt = -1
+    this.sweepPhase = 0
+    this.sweepAt = 0
+    this.sweepMs = stopClockPeriodMs(0)
     this.stripSnap = undefined
     this.labelsSnap = undefined
     this.stripAt = 0
@@ -193,10 +199,19 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
       .setY(gy)
   }
 
-  // Triangle sweep 0..1..0 over PERIOD_MS, driven by the scene clock.
+  // Triangle sweep 0..1..0 over the current try's period, driven by the scene clock.
   private needlePos(): number {
-    const phase = (this.time.now % PERIOD_MS) / PERIOD_MS
+    const phase = (this.sweepPhase + (this.time.now - this.sweepAt) / this.sweepMs) % 1
     return phase < 0.5 ? phase * 2 : 2 - phase * 2
+  }
+
+  // A new try sweeps faster: re-anchor the phase so the needle carries on from where it is.
+  private setSweep(ms: number): void {
+    if (ms === this.sweepMs) return
+    const now = this.time.now
+    this.sweepPhase = (this.sweepPhase + (now - this.sweepAt) / this.sweepMs) % 1
+    this.sweepAt = now
+    this.sweepMs = ms
   }
 
   private gaugeX(pos: number): number {
@@ -274,6 +289,7 @@ export class StopClockScene extends MiniGameScene<StopClockSnapshot> {
     const spectator = !(this.selfId in snap.attemptsDone)
     const attempt = snap.attemptsDone[this.selfId] ?? 0
     const done = spectator || attempt >= snap.attempts
+    if (!done) this.setSweep(stopClockPeriodMs(attempt))
     const totalError = snap.totalError[this.selfId] ?? 0
     if (attempt > this.pendingAttempt) this.pendingAttempt = -1
     this.onAttemptChange(snap, attempt, totalError)

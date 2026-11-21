@@ -1,4 +1,9 @@
-import { NUMBER_RUSH_WRONG_COOLDOWN_MS, type NumberRushSnapshot, PALETTE } from '@pp/shared'
+import {
+  NUMBER_RUSH_WRONG_COOLDOWN_MS,
+  type NumberRushSnapshot,
+  numberRushStage,
+  PALETTE,
+} from '@pp/shared'
 import Phaser from 'phaser'
 import { addBanner, burst, floatText, punch, ring, showBanner } from '../fx'
 import { bodyStyle, ensureBevelPanel, fitText, headlineStyle, hexToCss, shade } from '../pixelStyle'
@@ -31,7 +36,9 @@ interface Cell {
 // would only be slower). A right number counts at once (optimistic); cleared numbers sink into dark-lime
 // tiles; a wrong one wiggles red and costs a short cooldown (the board dims and a red bar drains under
 // the prompt), so sweeping every cell is slower than looking. Every 5th number pops a milestone, and a
-// strip of player chips shows how far everyone else has got.
+// strip of player chips shows how far everyone else has got. At the server's shuffle milestones (after
+// 10, 16, 20 and 23 numbers) the open numbers swap places: the labels jump to the next layout the
+// moment the milestone number counts, with a SHUFFLE! callout.
 export class NumberRushScene extends MiniGameScene<NumberRushSnapshot> {
   private cells: Cell[] = []
   private prompt?: Phaser.GameObjects.Text
@@ -62,6 +69,8 @@ export class NumberRushScene extends MiniGameScene<NumberRushSnapshot> {
   // Players already seen done (cheered once), and when the last cheer played.
   private readonly finishers = new Set<string>()
   private cheerAt = Number.NEGATIVE_INFINITY
+  // The layout stage the labels show (see numberRushStage).
+  private shownStage = 0
 
   constructor(...deps: SceneDeps) {
     super('number-rush', ...deps)
@@ -73,6 +82,7 @@ export class NumberRushScene extends MiniGameScene<NumberRushSnapshot> {
     this.localNext = 1
     this.localAt = 0
     this.lastNext = 1
+    this.shownStage = 0
     this.cooldownEndsAt = 0
     this.lastTick = -1
     this.cooling = false
@@ -120,6 +130,11 @@ export class NumberRushScene extends MiniGameScene<NumberRushSnapshot> {
     this.banner = addBanner(this).setFontSize(compact ? 24 : 32)
   }
 
+  // The layout a player whose next number is `next` taps on: it reshuffles at milestones.
+  private layout(snap: NumberRushSnapshot, next: number): number[] {
+    return snap.layouts?.[numberRushStage(next)] ?? snap.grid
+  }
+
   // The grid is built once, the first time a snapshot with a layout arrives.
   private build(snap: NumberRushSnapshot): void {
     const { width } = this.scale
@@ -144,13 +159,16 @@ export class NumberRushScene extends MiniGameScene<NumberRushSnapshot> {
     this.clearedKey = ensureBevelPanel(this, cell, cell, CLEARED_COLOR, 0, true)
     this.wrongKey = ensureBevelPanel(this, cell, cell, WRONG_COLOR, 4, true)
     const font = Math.max(8, Math.floor((cell * 0.36) / 8) * 8)
+    const next = this.next(snap)
+    const layout = this.layout(snap, next)
+    this.shownStage = numberRushStage(next)
     for (let i = 0; i < snap.grid.length; i++) {
       const x = left + pad + (i % n) * (cell + gap) + cell / 2
       const y = this.boardTop + pad + Math.floor(i / n) * (cell + gap) + cell / 2
       const image = this.add.image(x, y, this.openKey).setInteractive({ useHandCursor: true })
       image.on('pointerdown', () => this.tap(i))
       const label = this.add
-        .text(x, y, String(snap.grid[i]), headlineStyle(font, PALETTE.text))
+        .text(x, y, String(layout[i]), headlineStyle(font, PALETTE.text))
         .setOrigin(0.5)
       this.cells.push({ image, label, x, cleared: false })
     }
@@ -167,7 +185,7 @@ export class NumberRushScene extends MiniGameScene<NumberRushSnapshot> {
     const target = this.next(snap)
     if (target > snap.grid.length || cell.cleared || this.time.now < this.cooldownEndsAt) return
     this.sendInput({ kind: 'tap', cell: index })
-    if (snap.grid[index] === target) {
+    if (this.layout(snap, target)[index] === target) {
       this.localNext = target + 1
       this.localAt = this.time.now
       // The number clicks into place.
@@ -223,8 +241,11 @@ export class NumberRushScene extends MiniGameScene<NumberRushSnapshot> {
       this.lastNext = next
     }
 
+    const layout = this.layout(snap, next)
+    const stage = numberRushStage(next)
+    if (stage !== this.shownStage) this.onShuffle(layout, stage, fresh || done)
     this.cells.forEach((cell, i) => {
-      const isCleared = (snap.grid[i] ?? 0) < next
+      const isCleared = (layout[i] ?? 0) < next
       if (isCleared === cell.cleared) return
       cell.cleared = isCleared
       cell.image.setTexture(isCleared ? this.clearedKey : this.openKey)
@@ -316,6 +337,24 @@ export class NumberRushScene extends MiniGameScene<NumberRushSnapshot> {
     if (!p || p.text === text) return
     p.setText(text).setColor(hexToCss(color))
     fitText(p, this.scale.width - 32, this.promptSize)
+  }
+
+  // The open numbers swapped places: relabel the board (cleared cells keep theirs) and, live, call it
+  // out with a whoosh and a wobble of the moved labels.
+  private onShuffle(layout: number[], stage: number, quiet: boolean): void {
+    this.shownStage = stage
+    this.cells.forEach((cell, i) => {
+      const text = String(layout[i] ?? '')
+      if (cell.label.text === text) return
+      cell.label.setText(text)
+      if (!quiet) punch(this, cell.label, 0.35, 90)
+    })
+    if (quiet) return
+    this.sfx.whoosh()
+    // Over the middle of the board (the prompt line already carries the milestone count).
+    const mid = this.cells[Math.floor(this.cells.length / 2)]
+    if (mid)
+      floatText(this, mid.x, mid.image.y, this.t('game.numberRush.shuffle'), PALETTE.amber, 24)
   }
 
   private onAdvance(next: number, total: number): void {

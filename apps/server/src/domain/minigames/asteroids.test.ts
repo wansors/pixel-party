@@ -132,6 +132,23 @@ describe('Asteroids', () => {
     expect(ship(s, 'a').rot).toBe(0)
   })
 
+  test('the field heats up non-linearly: late rocks fly much faster, early ones barely', () => {
+    // A fresh big rock's speed when the field is topped up at a given time.
+    const speedAt = (ms: number): number => {
+      const s = init(['a'])
+      s.rocks = []
+      s.lastRefillAt = -Number.MAX_SAFE_INTEGER
+      game.tick(s, 50, ms)
+      const r = s.rocks[0]
+      if (!r) throw new Error('no refill')
+      return Math.hypot(r.vx, r.vy)
+    }
+    const firstQuarter = speedAt(15_000) - speedAt(0)
+    const lastQuarter = speedAt(60_000) - speedAt(45_000)
+    expect(lastQuarter).toBeGreaterThan(firstQuarter * 3)
+    expect(speedAt(60_000) / speedAt(0)).toBeCloseTo(1.7, 1)
+  })
+
   test('a bigger field gets a bigger rock supply; up to four pilots keep the tuned one', () => {
     const four = init(['a', 'b', 'c', 'd'])
     expect(four.rocks).toHaveLength(6)

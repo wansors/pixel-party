@@ -2,8 +2,9 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core'
 import { TranslocoPipe } from '@jsverse/transloco'
 import { LanguageService } from '../core/i18n/language.service'
 
-// Compact EN|ES segmented toggle for the active UI language. Placed beside the sound control on both the
-// join and room screens; switching is instant (reRenderOnLangChange) and persisted per device.
+// Compact EN|ES segmented toggle for the active UI language. On the join screen and in the lobby's title
+// bar only — never during a session (D44); switching is instant (reRenderOnLangChange) and persisted
+// per device.
 @Component({
   selector: 'app-language-toggle',
   imports: [TranslocoPipe],

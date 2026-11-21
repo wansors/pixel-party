@@ -69,6 +69,7 @@
 | `pixel-pong` | 2–12 | 2–8 | minor | Only 24–35 % of duels reach 5 points in 30 s, and draws score like wins. |
 | `quick-draw` | 2–12 | 2–8 | minor | **Bug**: two idle duellists "draw" and score like winners. One tap decides the round. |
 | `marbles-duel` | 2–12 | 2–8 | minor | Bluff and luck by design. The bye waits 50 s idle. |
+| `rock-paper-scissors` | 2–12 | 2–8 | OK (added 2026-11-21, D43) | Seeded 1v1 duels; an odd player out gets the bye (ranked with the draws) and watches a duel. |
 
 ### Real-time arcade
 
@@ -93,6 +94,9 @@
 | `bomber-express` | 2–12 | 3–8 | **real** at 11–12 | **Bug**: 10 spawn cells, so the 11th and 12th players stack on seats 0 and 1 (it was capped at 10 until fixed). Spawns follow join order. |
 | `brawl` | 2–12 | 3–8 | minor | The last hitter takes the KO. AFK seats are free KOs. Spawns follow join order. |
 | `jump-rope` | 1–12 | 2–12 | OK | Phone avatars overlap at 9+ (fixed 32 px). |
+| `neon-trails` | 2–12 | 3–8 | OK (added 2026-11-21, D41) | Last rider standing; the arena grows with the room (54×36 at 9–12). |
+| `wing-it` | 1–12 | 2–12 | OK (added 2026-11-21, D42) | Everyone flies the same course as ghosts, so the headcount changes nothing but the crowd. |
+| `sharpshooter` | 1–12 | 2–12 | OK (added 2026-11-21, D45) | Every player gets every target (no stealing); rivals only show as holes in their colors. |
 
 ### Racing & athletics
 

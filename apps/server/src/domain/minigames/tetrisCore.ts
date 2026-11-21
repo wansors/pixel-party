@@ -1,4 +1,5 @@
 import {
+  rampEase,
   TETRIS,
   TETRIS_SHAPES,
   type TetrisBoard,
@@ -20,6 +21,19 @@ import type { Random } from '../ports/Random'
 export const COLS = TETRIS.cols
 export const ROWS = TETRIS.rows
 export const FALL_INTERVAL_MS = TETRIS.fallMs
+
+// The gravity curve (D40): FALL_INTERVAL_MS at the start of the round, then an ease-in down to
+// `fastestMs` at the buzzer — the first half barely speeds up, the last quarter really drops. Set on
+// every board each tick (and sent with it, so the client predicts the same fall).
+export function gravityMs(
+  startedAt: number,
+  endsAt: number,
+  now: number,
+  fastestMs: number,
+): number {
+  const progress = endsAt > startedAt ? (now - startedAt) / (endsAt - startedAt) : 0
+  return Math.round(rampEase(FALL_INTERVAL_MS, fastestMs, progress))
+}
 
 // A seeded queue shared by every player in the round, dealt in shuffled bags of all seven pieces (no
 // drought of I pieces, no flood of S), long enough to outlast any round.

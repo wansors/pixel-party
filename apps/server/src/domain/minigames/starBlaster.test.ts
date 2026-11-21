@@ -38,6 +38,33 @@ describe('Star Blaster script', () => {
     expect(boss?.endAt ?? 0).toBeLessThanOrEqual(51_000)
   })
 
+  test('escalates non-linearly: drones speed up and the boss spiral quickens most at the end', () => {
+    // Drone descent speed averaged over seeds, by quarter of the run-up to the boss (34 s here).
+    const quarters = [0, 0, 0, 0].map(() => ({ vy: 0, n: 0 }))
+    for (let seed = 1; seed <= 30; seed++) {
+      for (const e of buildStarScript(seed, 50_000).enemies) {
+        if (e.kind !== 'drone' || e.path.type === 'hover') continue
+        const q = quarters[Math.min(3, Math.floor((e.spawnAt / 34_000) * 4))]
+        if (!q) continue
+        q.vy += e.path.vy
+        q.n++
+      }
+    }
+    const vy = quarters.map((q) => q.vy / q.n)
+    const [v0, v1, v2, v3] = vy as [number, number, number, number]
+    expect(v3 - v2).toBeGreaterThan(2 * (v1 - v0))
+    // The boss fires ever faster: the volley gaps shrink, the late ones far more than the early ones.
+    const boss = buildStarScript(5, 50_000).enemies.find((e) => e.kind === 'boss')
+    const gaps = (boss?.shots ?? []).slice(1).map((t, i) => t - (boss?.shots[i] ?? 0))
+    expect(gaps[0]).toBeGreaterThan(700)
+    expect(gaps.at(-1) ?? 0).toBeLessThan(500)
+    const n = gaps.length
+    const q = Math.floor(n / 4)
+    expect((gaps[n - q - 1] ?? 0) - (gaps[n - 1] ?? 0)).toBeGreaterThan(
+      (gaps[0] ?? 0) - (gaps[q] ?? 0),
+    )
+  })
+
   test('enemies exist only between spawn and exit; a hovering gunner settles on screen', () => {
     const s = buildStarScript(5, 50_000)
     const g = s.enemies.find((e) => e.kind === 'gunner')

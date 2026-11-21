@@ -1,10 +1,12 @@
 import {
   PIXEL_OBJECTS,
+  type PixelObject,
   type PixelWeightInput,
   type PixelWeightObject,
   type PixelWeightSnapshot,
   packCells,
   pixelVariant,
+  rampEase,
 } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
@@ -12,6 +14,15 @@ const DEFAULT_DURATION_MS = 40_000
 const LEVELS = 8
 // Points for a perfect guess; each unit of error off the true count costs one point (floored at 0).
 const MAX_SCORE_PER = 10
+// The ramp (D40): the objects come smallest first — a bigger count is harder to call to the pixel —
+// and the flash eases in, from a relaxed FLASH_MAX_MS to a snap FLASH_MIN_MS on the last object.
+const FLASH_MAX_MS = 2400
+const FLASH_MIN_MS = 800
+
+// How long object `level` (0-based) stays on the scale.
+export function pixelWeightFlashMs(level: number): number {
+  return Math.round(rampEase(FLASH_MAX_MS, FLASH_MIN_MS, level / (LEVELS - 1)))
+}
 
 interface Puzzle {
   object: PixelWeightObject
@@ -46,24 +57,25 @@ export class PixelWeight implements MiniGame<PixelWeightState, PixelWeightInput>
       const j = Math.floor(ctx.random.next() * (i + 1))
       ;[order[i], order[j]] = [order[j] as number, order[i] as number]
     }
-    const puzzles: Puzzle[] = []
+    const variants: PixelObject[] = []
     for (let level = 0; level < LEVELS; level++) {
       const base = PIXEL_OBJECTS[order[level % order.length] as number]
-      if (!base) continue
-      const src = pixelVariant(base, ctx.random)
-      puzzles.push({
-        object: {
-          index: level,
-          name: src.name,
-          cols: src.cols,
-          rows: src.rows,
-          bits: packCells(src.cols, src.rows, src.cells),
-          flashMs: Math.max(2200 - level * 120, 900),
-          maxGuess: src.cols * src.rows,
-        },
-        answer: src.count,
-      })
+      if (base) variants.push(pixelVariant(base, ctx.random))
     }
+    // Smallest count first (a stable sort: equal counts keep their seeded order).
+    variants.sort((a, b) => a.count - b.count)
+    const puzzles: Puzzle[] = variants.map((src, level) => ({
+      object: {
+        index: level,
+        name: src.name,
+        cols: src.cols,
+        rows: src.rows,
+        bits: packCells(src.cols, src.rows, src.cells),
+        flashMs: pixelWeightFlashMs(level),
+        maxGuess: src.cols * src.rows,
+      },
+      answer: src.count,
+    }))
     return {
       players: [...ctx.players],
       puzzles,

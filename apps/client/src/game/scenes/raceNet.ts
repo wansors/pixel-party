@@ -2,19 +2,23 @@ import {
   integrateRaceCar,
   type MicroRacePoint,
   RACE_STEP_S,
+  RACE_TURBO,
   RACE_WALL_BOUNCE,
   type RaceCarBody,
   type RaceCarPhysics,
   type RaceCarTuning,
   raceWorldWalls,
   raceWrapAngle,
+  stepRaceTurbo,
 } from '@pp/shared'
 
 // Netcode for the top-down racers (Micro Race, Rally Stage, Speed Circuit), framework-free like
 // netcode/SnapshotInterpolator:
 //  - OwnCar: the car you drive runs the server's own integrator (@pp/shared) locally, so it turns the
 //    frame a key goes down; each snapshot is compared with what was predicted for that moment and the
-//    difference folded in (smoothed on screen; a rescue or a big miss snaps).
+//    difference folded in (smoothed on screen; a rescue or a big miss snaps). The rally's drift state
+//    rides in the integrator; the turbo is predicted too (it lights the frame you press the key with a
+//    full meter) and its meter and burn follow the server's.
 //  - RivalCars: everyone else dead-reckoned from position + velocity + turn rate to the server's
 //    present (not ~100–250 ms behind as an interpolation buffer draws them), so contact, slipstream and
 //    "who's ahead" line up with your own predicted car.
@@ -27,6 +31,10 @@ export interface NetCar {
   a: number
   vx: number
   vy: number
+  driftMs?: number
+  kickMs?: number
+  turbo?: number
+  turboMs?: number
 }
 
 export interface CarPose {
@@ -44,6 +52,9 @@ const TELEPORT = 80
 const MAX_TURN = 4
 const HISTORY = 256
 const FIELDS = 6
+// A turbo you lit is yours for this long before the server's word on it counts (the key press is
+// still on its way, or the snapshot that shows it is).
+const TURBO_GRACE_MS = 400
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v))
 
@@ -190,6 +201,9 @@ export interface OwnCarEnv {
   tuning: RaceCarTuning
   world: { readonly w: number; readonly h: number }
   carR: number
+  // A game with a turbo: whether the car is in a slipstream (it charges faster) and the tuning while
+  // it burns.
+  turbo?: { draft: boolean; boosted: RaceCarTuning }
 }
 
 export class OwnCar {
@@ -203,7 +217,15 @@ export class OwnCar {
     throttle: 0,
     off: false,
     finishMs: null,
+    handbrake: false,
+    driftS: 0,
+    kickS: 0,
+    turbo: false,
+    turboMeter: 0,
+    turboS: 0,
   }
+  // Client time your own turbo last lit (−∞ = not this race).
+  firedAt = Number.NEGATIVE_INFINITY
   private acc = 0
   private lastAt = -1
   // Ring of [clientTime, x, y, a, vx, vy] after every frame's steps.
@@ -224,6 +246,10 @@ export class OwnCar {
     b.a = c.a
     b.vx = c.vx
     b.vy = c.vy
+    b.driftS = (c.driftMs ?? 0) / 1000
+    b.kickS = (c.kickMs ?? 0) / 1000
+    b.turboMeter = c.turbo ?? 0
+    b.turboS = (c.turboMs ?? 0) / 1000
     this.acc = 0
     this.head = 0
     this.count = 0
@@ -249,11 +275,16 @@ export class OwnCar {
     const dtMs = this.lastAt < 0 ? 0 : Math.min(100, Math.max(0, now - this.lastAt))
     this.lastAt = now
     this.acc += dtMs / 1000
+    const b = this.body
+    const lit = (b.turboS ?? 0) > 0
     while (this.acc >= RACE_STEP_S) {
-      integrateRaceCar(this.body, RACE_STEP_S, env.physics, env.tuning)
-      raceWorldWalls(this.body, env.world.w, env.world.h, env.carR, RACE_WALL_BOUNCE)
+      const t = env.turbo
+      const burning = t ? stepRaceTurbo(b, RACE_STEP_S, t.draft) : false
+      integrateRaceCar(b, RACE_STEP_S, env.physics, burning && t ? t.boosted : env.tuning)
+      raceWorldWalls(b, env.world.w, env.world.h, env.carR, RACE_WALL_BOUNCE)
       this.acc -= RACE_STEP_S
     }
+    if (!lit && (b.turboS ?? 0) > 0) this.firedAt = now
     this.record(now - this.acc * 1000)
     const k = Math.exp(-dtMs / OWN_TAU_MS)
     this.ox *= k
@@ -296,6 +327,24 @@ export class OwnCar {
     this.ox -= ex
     this.oy -= ey
     this.oa -= ea
+  }
+
+  // The server's turbo for this car (a snapshot `ageMs` old): its burn, and its meter plus what this car
+  // charged since — except right after you lit one yourself, while the server's word is still behind.
+  syncTurbo(c: NetCar, ageMs: number, now: number, draft: boolean): void {
+    if (c.turbo === undefined || now - this.firedAt < TURBO_GRACE_MS) return
+    const b = this.body
+    const burn = (c.turboMs ?? 0) / 1000 - ageMs / 1000
+    if (burn > 0) {
+      b.turboS = burn
+      b.turboMeter = 0
+      return
+    }
+    b.turboS = 0
+    const pace = b.off ? 0 : Math.min(1, this.speed / RACE_TURBO.fullSpeed)
+    const charged =
+      (pace * (draft ? RACE_TURBO.draftCharge : 1) * ageMs) / 1000 / RACE_TURBO.chargeS
+    b.turboMeter = Math.min(1, c.turbo + charged)
   }
 
   // Bouncy contact with another car (its server-present state): your car takes the whole push-out and

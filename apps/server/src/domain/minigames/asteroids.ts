@@ -5,6 +5,7 @@ import {
   type AsteroidsRock,
   type AsteroidsSnapshot,
   asteroidsFly,
+  rampEase,
 } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
@@ -21,6 +22,10 @@ const MIN_MASS = 16
 const REFILL_MS = 1800
 const START_ROCKS = 6
 const TUNED_SHIPS = 4
+// The field heats up on an ease-in over the round: rocks that spawn or split late fly up to
+// ROCK_PACE_END× faster, and the supply floor rises to MASS_END× — a calm start, a storm at the end.
+const ROCK_PACE_END = 1.7
+const MASS_END = 1.5
 const SPAWN_R = 0.28
 
 interface Ship {
@@ -74,6 +79,8 @@ export interface AsteroidsState {
   // Rock supply for this field size (see MIN_MASS).
   minMass: number
   refillMs: number
+  // How heated the field is right now (1 → ROCK_PACE_END): new rocks fly this much faster.
+  pace: number
   // mulberry32 state, seeded from the round's Random at init (splits and refills draw from it).
   rng: number
   startedAt: number
@@ -146,6 +153,7 @@ export class Asteroids implements MiniGame<AsteroidsState, AsteroidsInput> {
       lastRefillAt: ctx.now,
       minMass: Math.round(MIN_MASS * Math.sqrt(crowd)),
       refillMs: Math.round(REFILL_MS / crowd),
+      pace: 1,
       rng: Math.floor(ctx.random.next() * 4294967296) | 0,
       startedAt: ctx.now,
       endsAt: ctx.now + durationMs,
@@ -192,10 +200,13 @@ export class Asteroids implements MiniGame<AsteroidsState, AsteroidsInput> {
       r.x = wrap(r.x + r.vx * step, W)
       r.y = wrap(r.y + r.vy * step, H)
     }
+    const p = (now - state.startedAt) / Math.max(1, state.endsAt - state.startedAt)
+    state.pace = rampEase(1, ROCK_PACE_END, p)
     this.bullets(state, step, now)
     this.rams(state, now)
     const mass = state.rocks.reduce((m, r) => m + (r.size === 3 ? 4 : r.size === 2 ? 2 : 1), 0)
-    if (mass < state.minMass && now - state.lastRefillAt >= state.refillMs) {
+    const floor = state.minMass * rampEase(1, MASS_END, p)
+    if (mass < floor && now - state.lastRefillAt >= state.refillMs) {
       state.lastRefillAt = now
       this.spawnRock(state)
     }
@@ -309,7 +320,7 @@ export class Asteroids implements MiniGame<AsteroidsState, AsteroidsInput> {
     state.rocks = state.rocks.filter((r) => r !== rock)
     if (rock.size <= 1) return
     const heading = Math.atan2(rock.vy, rock.vx)
-    const speed = ROCK_SPEED[rock.size - 1] ?? 0.2
+    const speed = (ROCK_SPEED[rock.size - 1] ?? 0.2) * state.pace
     for (const side of [-1, 1]) {
       const a = heading + side * (0.5 + nextRand(state) * 0.5)
       state.rocks.push({
@@ -334,12 +345,13 @@ export class Asteroids implements MiniGame<AsteroidsState, AsteroidsInput> {
       if (d > best.d) best = { x, y, d }
     }
     const a = nextRand(state) * Math.PI * 2
+    const speed = (ROCK_SPEED[3] ?? 0.09) * state.pace
     state.rocks.push({
       id: state.nextRockId++,
       x: best.x,
       y: best.y,
-      vx: Math.cos(a) * (ROCK_SPEED[3] ?? 0.09),
-      vy: Math.sin(a) * (ROCK_SPEED[3] ?? 0.09),
+      vx: Math.cos(a) * speed,
+      vy: Math.sin(a) * speed,
       size: 3,
     })
   }

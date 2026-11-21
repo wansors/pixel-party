@@ -2,6 +2,8 @@
 // player shoots at their own pace. Charge the power meter and release to match the shot's target power
 // (further hoop = more power); consecutive baskets build a combo. The server owns the targets/scoring.
 
+import { rampEase } from '../difficulty'
+
 export interface PixelHoopsShot {
   // Index into the shared shot sequence; echoed back on shoot so the server drops stale taps.
   index: number
@@ -29,13 +31,14 @@ export interface PixelHoopsInput {
 
 // How close the released power must be to a shot's target to sink it, as a function of shot index —
 // shared by the server (scoring) and the client (drawing the green target band the same size the server
-// actually accepts). Starts generous and tightens with every shot, holding at a floor past SHOTS_TO_MIN
-// so the round doesn't become unwinnable, not just harder.
+// actually accepts). Starts generous and tightens on an ease-in: the first shots barely change, the
+// ones a quick shooter reaches late in the round (~shot 12–20) close in fast, holding at a floor past
+// SHOTS_TO_MIN so the round doesn't become unwinnable, not just harder.
 const MAX_TOLERANCE = 0.16
-const MIN_TOLERANCE = 0.07
-const SHOTS_TO_MIN = 24
+const MIN_TOLERANCE = 0.05
+const SHOTS_TO_MIN = 20
+const TIGHTEN_POWER = 1.5
 
 export function toleranceForShot(index: number): number {
-  const t = Math.min(1, Math.max(0, index) / SHOTS_TO_MIN)
-  return MAX_TOLERANCE - (MAX_TOLERANCE - MIN_TOLERANCE) * t
+  return rampEase(MAX_TOLERANCE, MIN_TOLERANCE, index / SHOTS_TO_MIN, TIGHTEN_POWER)
 }

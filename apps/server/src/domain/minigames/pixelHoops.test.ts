@@ -19,6 +19,16 @@ function play(game: PixelHoops, s: PixelHoopsState, id: string, shots: boolean[]
 }
 
 describe('PixelHoops', () => {
+  test('the tolerance tightens non-linearly: barely at first, fast for the late shots', () => {
+    const firstQuarter = toleranceForShot(0) - toleranceForShot(5)
+    const lastQuarter = toleranceForShot(15) - toleranceForShot(20)
+    expect(lastQuarter).toBeGreaterThan(firstQuarter * 2)
+    expect(toleranceForShot(0)).toBeCloseTo(0.16)
+    // Held at a floor: hard, never impossible.
+    expect(toleranceForShot(20)).toBeCloseTo(0.05)
+    expect(toleranceForShot(39)).toBeCloseTo(0.05)
+  })
+
   test('a basket needs the power inside the shot tolerance, which tightens with every shot', () => {
     const game = new PixelHoops()
     const s = init(['a', 'b'])

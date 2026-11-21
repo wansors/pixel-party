@@ -1,4 +1,4 @@
-import type { PixelRainInput, PixelRainSnapshot } from '@pp/shared'
+import { type PixelRainInput, type PixelRainSnapshot, rampEase } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 40_000
@@ -20,9 +20,10 @@ const SPAWN_JITTER_MS = 350
 const FALL_MIN_MS = 1600
 const FALL_JITTER_MS = 1200
 // Difficulty ramp: by the end of the round blocks come this much more often (gaps × SPAWN_RAMP) and
-// fall this much faster (fall time × FALL_RAMP), linearly from the start — the survivors get sorted.
-const SPAWN_RAMP = 0.45
-const FALL_RAMP = 0.6
+// fall this much faster (fall time × FALL_RAMP), on an ease-in — a calm drizzle while everyone finds
+// their feet, a downpour in the last stretch that sorts the survivors.
+const SPAWN_RAMP = 0.36
+const FALL_RAMP = 0.5
 
 interface Obstacle {
   id: number
@@ -66,11 +67,11 @@ export class PixelRain implements MiniGame<PixelRainState, PixelRainInput> {
         spawnAt: t,
         x: X_MIN + r.next() * (X_MAX - X_MIN),
         fallMs: Math.round(
-          (FALL_MIN_MS + r.next() * FALL_JITTER_MS) * (1 - (1 - FALL_RAMP) * progress),
+          (FALL_MIN_MS + r.next() * FALL_JITTER_MS) * rampEase(1, FALL_RAMP, progress),
         ),
       })
       t += Math.round(
-        (SPAWN_MIN_MS + r.next() * SPAWN_JITTER_MS) * (1 - (1 - SPAWN_RAMP) * progress),
+        (SPAWN_MIN_MS + r.next() * SPAWN_JITTER_MS) * rampEase(1, SPAWN_RAMP, progress),
       )
     }
     return {

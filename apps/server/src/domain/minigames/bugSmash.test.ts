@@ -39,6 +39,29 @@ describe('BugSmash', () => {
     expect(kinds).toEqual(new Set(['bug', 'bomb']))
   })
 
+  test('bugs speed up non-linearly: the last quarter shortens far more than the first', () => {
+    // A constant RNG isolates the curve: every window and gap is the ramp multiplier at work.
+    const s = new BugSmash().init({
+      players: ['a'],
+      seed: 1,
+      random: { next: () => 0.5 },
+      now: 0,
+      config: { durationMs: 30_000 },
+    })
+    const at = (ms: number) => {
+      const i = s.spawns.findIndex((sp) => sp.appearAt >= ms)
+      const sp = s.spawns[i]
+      const prev = s.spawns[i - 1]
+      if (!sp || !prev) throw new Error(`no spawn at ${ms}`)
+      return { show: sp.durationMs, gap: sp.appearAt - prev.appearAt }
+    }
+    const [q0, q1, q3, q4] = [at(1000), at(7500), at(22_500), at(29_000)]
+    expect(q3.show - q4.show).toBeGreaterThan(2 * (q0.show - q1.show))
+    expect(q3.gap - q4.gap).toBeGreaterThan(2 * (q0.gap - q1.gap))
+    // Still hittable at the end: a bug stays up for half a second or so.
+    expect(q4.show).toBeGreaterThan(400)
+  })
+
   test('smashing a live bug scores once; a second smash or an empty hole scores nothing', () => {
     const game = new BugSmash()
     let s = init(['a'])

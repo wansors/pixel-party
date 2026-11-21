@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { stopClockPeriodMs } from '@pp/shared'
 import type { Random } from '../ports/Random'
 import { StopClock, type StopClockState } from './stopClock'
 
@@ -12,6 +13,19 @@ describe('StopClock', () => {
   test('targets are seeded and kept inside the sweep', () => {
     const s = init(['a'])
     expect(s.targets).toEqual([0.5, 0.5, 0.5])
+  })
+
+  test('the needle speeds up every try, by more each try', () => {
+    // Sweeps per second on each of the three tries.
+    const speed = (attempt: number): number => 1000 / stopClockPeriodMs(attempt)
+    expect(stopClockPeriodMs(0)).toBe(1600)
+    expect(speed(1)).toBeGreaterThan(speed(0))
+    // Non-linear: the third try gains more speed over the second than the second did over the first.
+    expect(speed(2) - speed(1)).toBeGreaterThan(speed(1) - speed(0))
+    // The last try runs about twice as fast as the first, and the floor holds beyond.
+    expect(speed(2) / speed(0)).toBeGreaterThan(1.9)
+    expect(stopClockPeriodMs(10)).toBe(600)
+    expect(init(['a']).targets).toHaveLength(3)
   })
 
   test('each stop adds its absolute error; stale or duplicate stops are dropped', () => {

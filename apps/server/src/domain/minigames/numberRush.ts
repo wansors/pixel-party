@@ -1,16 +1,42 @@
 import {
+  NUMBER_RUSH_SHUFFLES,
   NUMBER_RUSH_WRONG_COOLDOWN_MS,
   type NumberRushInput,
   type NumberRushSnapshot,
+  numberRushStage,
 } from '@pp/shared'
+import type { Random } from '../ports/Random'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const SIZE = 5
 const DEFAULT_DURATION_MS = 40_000
 
+// The layouts after each reshuffle: from the previous layout, the numbers above the milestone (still to
+// find there) swap places among their own cells; cleared cells keep their numbers.
+function shuffledStages(grid: number[], random: Random): number[][] {
+  const layouts = [grid]
+  for (const cleared of NUMBER_RUSH_SHUFFLES) {
+    const prev = layouts.at(-1) as number[]
+    const open = prev.flatMap((n, cell) => (n > cleared ? [cell] : []))
+    const numbers = open.map((cell) => prev[cell] as number)
+    for (let i = numbers.length - 1; i > 0; i--) {
+      const j = Math.floor(random.next() * (i + 1))
+      ;[numbers[i], numbers[j]] = [numbers[j] as number, numbers[i] as number]
+    }
+    const next = [...prev]
+    open.forEach((cell, i) => {
+      next[cell] = numbers[i] as number
+    })
+    layouts.push(next)
+  }
+  return layouts
+}
+
 export interface NumberRushState {
   players: PlayerId[]
   grid: number[]
+  // layouts[stage]: the grid once the open numbers have reshuffled `stage` times (layouts[0] = grid).
+  layouts: number[][]
   startedAt: number
   endsAt: number
   // playerId -> next number to tap (1-based); grid.length + 1 once finished.
@@ -24,8 +50,9 @@ export interface NumberRushState {
 }
 
 // Real-time FFA Schulte grid. A single seeded number layout is shared by everyone; each player taps
-// 1..N in order at their own pace. A wrong number costs a short tap cooldown, so sweeping every cell in
-// reading order is slower than looking. Pure domain logic: the layout comes from the injected Random
+// 1..N in order at their own pace, and the numbers still to find reshuffle at milestones that come
+// closer and closer together (NUMBER_RUSH_SHUFFLES). A wrong number costs a short tap cooldown, so
+// sweeping every cell in reading order is slower than looking. Pure domain logic: the layout comes from the injected Random
 // port (seeded per round) and time arrives as `now`.
 export class NumberRush implements MiniGame<NumberRushState, NumberRushInput> {
   readonly id = 'number-rush'
@@ -43,6 +70,7 @@ export class NumberRush implements MiniGame<NumberRushState, NumberRushInput> {
     return {
       players: [...ctx.players],
       grid,
+      layouts: shuffledStages(grid, ctx.random),
       startedAt: ctx.now,
       endsAt: ctx.now + durationMs,
       progress: new Map(ctx.players.map((id) => [id, 1])),
@@ -63,7 +91,7 @@ export class NumberRush implements MiniGame<NumberRushState, NumberRushInput> {
     const next = state.progress.get(playerId)
     if (next === undefined || next > state.grid.length) return state
     if (now < (state.cooldownUntil.get(playerId) ?? 0)) return state
-    const n = state.grid[input.cell]
+    const n = state.layouts[numberRushStage(next)]?.[input.cell]
     // Off the grid, or a number already cleared (a double click): nothing happens.
     if (n === undefined || n < next) return state
     if (n !== next) {
@@ -121,6 +149,7 @@ export class NumberRush implements MiniGame<NumberRushState, NumberRushInput> {
   snapshot(state: NumberRushState, now: number): NumberRushSnapshot {
     return {
       grid: state.grid,
+      layouts: state.layouts,
       size: SIZE,
       progress: Object.fromEntries(state.progress),
       cooldowns: Object.fromEntries(

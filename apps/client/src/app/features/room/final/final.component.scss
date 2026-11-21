@@ -254,6 +254,9 @@ h3 {
   padding: 0;
   display: grid;
   gap: 0.2rem;
+  // Long sessions (up to 99 rounds, D40) scroll inside the panel instead of stretching the page.
+  max-height: 22rem;
+  overflow-y: auto;
 
   li {
     display: flex;

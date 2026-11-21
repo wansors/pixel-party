@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { Random } from '../ports/Random'
-import { QuickTetris, TARGET_LINES } from './quickTetris'
+import { FASTEST_FALL_MS, QuickTetris, TARGET_LINES } from './quickTetris'
+import { FALL_INTERVAL_MS } from './tetrisCore'
 
 // The exact shapes don't matter for these tests, which drive `doneAt`/`linesCleared` directly rather
 // than simulating a full clear sequence.
@@ -29,6 +30,24 @@ describe('QuickTetris', () => {
     expect(result.placements[0]).toBe('a')
     expect(result.placements[1]).toBe('b')
     expect(nn(result.stats).b).toBe(`3/${TARGET_LINES}`)
+  })
+
+  test('gravity eases in over the race: barely faster early, much faster for the stragglers late', () => {
+    const game = new QuickTetris()
+    let state = init(['a'])
+    const fallAt = (t: number): number => {
+      state = game.tick(state, 0, t)
+      return game.snapshot(state, t).boards.a?.fallMs as number
+    }
+    const [start, quarter, threeQuarters, end] = [0, 11_250, 33_750, 45_000].map(fallAt) as [
+      number,
+      number,
+      number,
+      number,
+    ]
+    expect(start).toBe(FALL_INTERVAL_MS)
+    expect(end).toBe(FASTEST_FALL_MS)
+    expect(threeQuarters - end).toBeGreaterThan(3 * (start - quarter))
   })
 
   test('isFinished becomes true once every player has a doneAt, even before endsAt', () => {

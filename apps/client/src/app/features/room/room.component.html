@@ -7,11 +7,19 @@
       <span class="round-info">
         <span class="round-no">{{ 'room.header.round' | transloco: { n: r.round, total: r.total } }}</span>
         <span class="round-game">{{ store.gameName(r.game) }}</span>
-        <span class="pips" aria-hidden="true">
-          @for (i of pips(r.total); track i) {
-            <span class="pip" [class.done]="i < r.round" [class.now]="i === r.round"></span>
-          }
-        </span>
+        @if (r.total > maxPips) {
+          <!-- Long sessions (D40): one bar instead of a pip per round. -->
+          <span class="pips bar" aria-hidden="true">
+            <span class="fill" [style.width.%]="((r.round - 1) / r.total) * 100"></span>
+            <span class="now" [style.left.%]="((r.round - 0.5) / r.total) * 100"></span>
+          </span>
+        } @else {
+          <span class="pips" aria-hidden="true">
+            @for (i of pips(r.total); track i) {
+              <span class="pip" [class.done]="i < r.round" [class.now]="i === r.round"></span>
+            }
+          </span>
+        }
       </span>
     }
     <span class="right">
@@ -72,7 +80,4 @@
     }
   }
 
-  @if (store.view() !== 'round') {
-    <footer><app-language-toggle /></footer>
-  }
 </main>

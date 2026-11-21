@@ -17,6 +17,7 @@ const BY_GAME: Partial<Record<MiniGameId, RoundMusic>> = {
   'pixel-roulette': 'tension',
   'marbles-duel': 'tension',
   'honeycomb-cut': 'tension',
+  sharpshooter: 'tension',
   'stop-clock': 'tension',
   'color-trap': 'think',
   'bubble-pop': 'think',

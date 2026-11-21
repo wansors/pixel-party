@@ -1,9 +1,19 @@
-import type { BugKind, BugSmashInput, BugSmashSnapshot } from '@pp/shared'
+import { type BugKind, type BugSmashInput, type BugSmashSnapshot, rampEase } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const HOLES = 9
 const DEFAULT_DURATION_MS = 30_000
-const BOMB_CHANCE = 0.22
+// Difficulty ramp, on an ease-in over the round: bugs peek out for 800–1400 ms at first, ~45% of that
+// by the end (SHOW_RAMP), pop up twice as often (SPAWN_RAMP) and more of them are bombs — the last
+// seconds are a frenzy where a careless tap costs.
+const SHOW_MIN_MS = 800
+const SHOW_JITTER_MS = 600
+const SPAWN_MIN_MS = 250
+const SPAWN_JITTER_MS = 300
+const SHOW_RAMP = 0.45
+const SPAWN_RAMP = 0.5
+const BOMB_CHANCE_START = 0.18
+const BOMB_CHANCE_END = 0.32
 
 interface Spawn {
   hole: number
@@ -24,8 +34,9 @@ export interface BugSmashState {
 
 // Real-time FFA whack-a-mole. One seeded spawn timeline is shared by everyone; each player smashes
 // independently. Bugs score, bombs cost a point — even at zero (a score can go negative), so a bomb
-// always hurts. Pure domain logic: the timeline is drawn from the injected Random port (seeded per
-// round) and time arrives as `now`.
+// always hurts. The bugs get quicker and busier over the round (an ease-in, not a straight line). Pure
+// domain logic: the timeline is drawn from the injected Random port (seeded per round) and time
+// arrives as `now`.
 export class BugSmash implements MiniGame<BugSmashState, BugSmashInput> {
   readonly id = 'bug-smash'
   readonly format = 'ffa' as const
@@ -39,14 +50,18 @@ export class BugSmash implements MiniGame<BugSmashState, BugSmashInput> {
     let t = 600
     while (t < durationMs - 400) {
       const free = holeFreeAt.flatMap((freeAt, hole) => (freeAt <= t ? [hole] : []))
+      const p = t / durationMs
       if (free.length > 0) {
         const hole = free[Math.floor(r.next() * free.length)] as number
-        const durMs = 800 + Math.floor(r.next() * 600)
-        const kind: BugKind = r.next() < BOMB_CHANCE ? 'bomb' : 'bug'
+        const durMs = Math.round(
+          (SHOW_MIN_MS + r.next() * SHOW_JITTER_MS) * rampEase(1, SHOW_RAMP, p),
+        )
+        const bombChance = rampEase(BOMB_CHANCE_START, BOMB_CHANCE_END, p)
+        const kind: BugKind = r.next() < bombChance ? 'bomb' : 'bug'
         spawns.push({ hole, appearAt: t, durationMs: durMs, kind })
         holeFreeAt[hole] = t + durMs + 150
       }
-      t += 250 + Math.floor(r.next() * 300)
+      t += Math.round((SPAWN_MIN_MS + r.next() * SPAWN_JITTER_MS) * rampEase(1, SPAWN_RAMP, p))
     }
     return {
       players: [...ctx.players],

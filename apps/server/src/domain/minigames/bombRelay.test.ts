@@ -58,6 +58,23 @@ describe('BombRelay', () => {
     expect(red?.holderId).toBe('b')
   })
 
+  test('fuses burn shorter as the round goes on, on a curve that steepens toward the bell', () => {
+    const game = new BombRelay()
+    // The fuse the next holder gets when a leg is passed at round time `at` (next() = 0: FUSE_MIN).
+    const fuseAt = (at: number): number => {
+      let state = game.init(ctx())
+      for (let i = 0; i < LEG_TAPS; i++) state = game.onInput(state, 'a', { kind: 'mash' }, at)
+      const red = state.teams.get('red')
+      if (!red) throw new Error('no red team')
+      return red.fuseEndsAt - at
+    }
+    expect(fuseAt(1)).toBe(2499)
+    expect(fuseAt(24_999)).toBeLessThan(1400)
+    const firstQuarter = fuseAt(1) - fuseAt(6250)
+    const lastQuarter = fuseAt(18_750) - fuseAt(24_999)
+    expect(lastQuarter).toBeGreaterThan(firstQuarter * 3)
+  })
+
   test('an idle holder is skipped: no relay, no boom, a fresh fuse for the next one', () => {
     const game = new BombRelay()
     let state = game.init(ctx())

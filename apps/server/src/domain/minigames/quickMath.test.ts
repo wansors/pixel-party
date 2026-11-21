@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import type { Random } from '../ports/Random'
-import { QUICK_MATH_WRONG_COOLDOWN_MS, QuickMath, type QuickMathState } from './quickMath'
+import {
+  QUICK_MATH_WRONG_COOLDOWN_MS,
+  QuickMath,
+  type QuickMathState,
+  quickMathLevel,
+} from './quickMath'
 
 // Small deterministic LCG: varied draws (a constant Random would never find 4 distinct distractors).
 const lcg = (seed: number): Random => {
@@ -120,6 +125,37 @@ describe('QuickMath', () => {
     expect(snap.cooldowns).toEqual({ p: 0, q: 0 })
   })
 
+  test('the pool ramps up: each stretch of questions is harder, by more each stretch', () => {
+    // Mean answer and share of two-step sums over questions [from, from + 5), across 200 seeds.
+    const stretch = (from: number): { mean: number; twoStep: number } => {
+      let sum = 0
+      let twoStep = 0
+      let n = 0
+      for (let seed = 1; seed <= 200; seed++) {
+        for (const q of init(['p'], seed).pool.slice(from, from + 5)) {
+          sum += q.choices[q.correct] as number
+          if (q.text.split(' ').length > 3) twoStep++
+          n++
+        }
+      }
+      return { mean: sum / n, twoStep: twoStep / n }
+    }
+    const [warmUp, middle, late] = [stretch(0), stretch(10), stretch(20)]
+    // A warm-up of one-step sums with small answers, growing stretch by stretch…
+    expect(warmUp.twoStep).toBe(0)
+    expect(warmUp.mean).toBeLessThan(20)
+    expect(middle.mean).toBeGreaterThan(warmUp.mean)
+    expect(late.mean).toBeGreaterThan(middle.mean)
+    // …and non-linearly: two-step sums pile on late, and the operand range compounds (question
+    // 18 → 19 widens it more than 1 → 2 did).
+    expect(late.twoStep - middle.twoStep).toBeGreaterThan(middle.twoStep - warmUp.twoStep)
+    expect(late.twoStep).toBeGreaterThan(0.25)
+    const add = (i: number): number => quickMathLevel(i).addMax
+    expect(add(19) - add(18)).toBeGreaterThan(add(2) - add(1))
+    expect(quickMathLevel(0)).toEqual({ addMax: 10, mulMax: 5, twoStepShare: 0 })
+    expect(quickMathLevel(59)).toEqual({ addMax: 99, mulMax: 12, twoStepShare: 0.5 })
+  })
+
   test("the answer's rank among the sorted choices is uniform (no 'pick a middle one')", () => {
     const counts = [0, 0, 0, 0]
     let total = 0
@@ -128,10 +164,11 @@ describe('QuickMath', () => {
         const answer = q.choices[q.correct] as number
         counts[[...q.choices].sort((a, b) => a - b).indexOf(answer)]++
         total++
-        // Near misses, never negative.
+        // Near misses (1..5 off, or 10 off once answers reach the tens), never negative.
         for (const c of q.choices) {
           expect(c).toBeGreaterThanOrEqual(0)
-          expect(Math.abs(c - answer)).toBeLessThanOrEqual(5)
+          const off = Math.abs(c - answer)
+          expect(off <= 5 || (off === 10 && answer >= 20)).toBe(true)
         }
       }
     }

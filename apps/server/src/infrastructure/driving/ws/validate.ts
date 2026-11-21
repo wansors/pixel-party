@@ -28,6 +28,10 @@ const VALIDATORS = {
     (m.touch === undefined || isBool(m.touch)),
   REJOIN: (m) => isStr(m.playerId) && isStr(m.token),
   SET_READY: (m) => isBool(m.ready),
+  SET_PROFILE: (m) =>
+    isStr(m.name) &&
+    (m.avatar === undefined || isStr(m.avatar)) &&
+    (m.color === undefined || isStr(m.color)),
   HOST_CONFIG: (m) =>
     isStrArray(m.minigameIds) &&
     isNum(m.rounds) &&

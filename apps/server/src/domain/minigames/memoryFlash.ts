@@ -1,8 +1,10 @@
 import {
+  compound,
   MEMORY_FLASH_COLORS,
   type MemoryFlashBoard,
   type MemoryFlashInput,
   type MemoryFlashSnapshot,
+  rampEase,
 } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
@@ -10,6 +12,32 @@ const DEFAULT_DURATION_MS = 40_000
 const LEVELS = 20
 const COLORS = MEMORY_FLASH_COLORS.length
 type FlashColor = (typeof MEMORY_FLASH_COLORS)[number]
+
+// The difficulty ramp (D40), over the levels a 30 s round actually reaches (≈ 8–11). The burst grows
+// ~20% a level (4 pixels → 17 by level 8 → 25 by level 10), and the flash eases in: barely shorter over
+// the first levels, then steeply down to FLASH_MIN_MS by level FLASH_RAMP_LEVELS. Both curves bend
+// upwards, so the opening boards are a warm-up and the late ones split the room.
+const FILL_BASE = 4
+const FILL_GROWTH = 1.2
+const FILL_MAX = 40
+const FLASH_MAX_MS = 1700
+const FLASH_MIN_MS = 480
+const FLASH_RAMP_LEVELS = 12
+
+// Pixels in a level's burst (before the per-board jitter of 0–2).
+export function memoryFlashFill(level: number): number {
+  return Math.round(compound(FILL_BASE, FILL_GROWTH, level, FILL_BASE, FILL_MAX))
+}
+
+// How long a level's burst stays on screen.
+export function memoryFlashMs(level: number): number {
+  return Math.round(rampEase(FLASH_MAX_MS, FLASH_MIN_MS, level / FLASH_RAMP_LEVELS))
+}
+
+// The grid side: roomy enough that the burst covers about half the cells (4×4 up to 8×8).
+function sideFor(fill: number): number {
+  return Math.max(4, Math.min(8, Math.ceil(Math.sqrt(fill * 2))))
+}
 
 export interface MemoryFlashState {
   players: PlayerId[]
@@ -40,11 +68,12 @@ export class MemoryFlash implements MiniGame<MemoryFlashState, MemoryFlashInput>
     const boards: MemoryFlashBoard[] = []
     const answers: number[] = []
     for (let level = 0; level < LEVELS; level++) {
-      const side = Math.min(4 + Math.floor(level / 3), 8)
+      const base = memoryFlashFill(level)
+      const side = sideFor(base + 2)
       const cellCount = side * side
       const target = MEMORY_FLASH_COLORS[Math.floor(r.next() * COLORS)] as FlashColor
       // Fill a growing share of the grid with random palette colours; count the target among them.
-      const fill = Math.min(cellCount, 4 + level + Math.floor(r.next() * 3))
+      const fill = Math.min(cellCount, base + Math.floor(r.next() * 3))
       const cells = Array.from({ length: cellCount }, (_, i) => i)
       for (let i = cells.length - 1; i > 0; i--) {
         const j = Math.floor(r.next() * (i + 1))
@@ -78,7 +107,7 @@ export class MemoryFlash implements MiniGame<MemoryFlashState, MemoryFlashInput>
         cells: burst.join(''),
         targetColor: target.hex,
         targetName: target.name,
-        flashMs: Math.max(1600 - level * 80, 550),
+        flashMs: memoryFlashMs(level),
         choices,
       })
       answers.push(trueCount)

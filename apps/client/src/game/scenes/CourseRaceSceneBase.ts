@@ -11,8 +11,10 @@ import {
   inStretch,
   type MicroRacePoint,
   PALETTE,
-  RACE_DRAFT_TUNING,
+  RACE_TURBO,
+  RALLY_DRIFT,
   type RaceCarTuning,
+  raceTuning,
   sampleCourse,
 } from '@pp/shared'
 import Phaser from 'phaser'
@@ -25,7 +27,15 @@ import { COURSE_TEXEL, paintCourse } from './courseArt'
 import type { SceneDeps } from './MiniGameScene'
 import { MiniGameScene } from './MiniGameScene'
 import { CAR_ROWS } from './microRaceArt'
-import { DriveControls, LabelDeclutter, RaceMinimap, RaceStandings } from './raceKit'
+import {
+  ActionButton,
+  type Drive,
+  DriveControls,
+  ensureRacePuff,
+  LabelDeclutter,
+  RaceMinimap,
+  RaceStandings,
+} from './raceKit'
 import { type CarPose, OwnCar, RivalCars, RoadIndex, raceClock } from './raceNet'
 
 // Shared scene for the course racers (Rally Stage, Speed Circuit). The course is bigger than the
@@ -34,8 +44,12 @@ import { type CarPose, OwnCar, RivalCars, RoadIndex, raceClock } from './raceNet
 // HUD, the start countdown, the race clock, the minimap and the standings column fixed on top. Cars are
 // Micro Race's top-down racer in the player's color with their lobby avatar at the wheel and a name
 // tag. Your own car is predicted locally with the server's integrator (it reacts the frame you press
-// a key), rivals are dead-reckoned to the server's present. Arrows/WASD drive (SPACE brakes), or hold
-// the pointer where you want to go. Subclasses supply the HUD line.
+// a key), rivals are dead-reckoned to the server's present. Arrows/WASD drive, or hold the pointer
+// where you want to go; SPACE / SHIFT / right-click / the button in the corner is the rally's handbrake
+// or the circuit's turbo. The rally's cars drift: the body swings out against the direction of travel,
+// tyres leave skid marks that stay on the stage, gravel dust or tyre smoke billows and a clean drift
+// pays a short boost (the DRIFT callout and the button's gauge). The circuit's turbo meter fills on
+// that button; a lit turbo throws a flame. Subclasses supply the HUD line.
 
 const VIEW_WORLD_W = 900 // world units across the view on a wide screen (zoom follows)
 const CAR_LEN = 34 // world units (16 × 10 sprite cells)
@@ -54,6 +68,26 @@ const CHEER_GAP_MS = 1500
 const RIVAL_LEVEL = 0.4
 const RIVAL_BUMP_MS = 400
 const NO_TUNING: RaceCarTuning = {}
+const IDLE: Drive = { steer: 0, throttle: 0, action: false }
+// Skid marks: stamped into one render texture over the stage at SKID_TEXEL world units per pixel (they
+// stay for the whole round at a fixed cost), from the rear wheels of a car sliding past SKID_SLIP rad
+// at SKID_SPEED or more. The rear axle sits REAR behind the car's centre, the wheels ±TRACK either side.
+const SKID_TEXEL = 2
+const SKID_SLIP = 0.22
+const SKID_SPEED = 60
+const REAR = 11
+const TRACK = 7
+const SKID_TARMAC = 0x15151a
+const SKID_GRAVEL = 0x4a3926
+// Dust / smoke puffs from a sliding car's wheels: yours this often (ms), rivals' less.
+const PUFF_MS = 40
+const RIVAL_PUFF_MS = 110
+const DUST = 0xc2a578
+const SMOKE = 0xd6d8e0
+// Your tyres' squeal is re-fired this often while you slide.
+const SKID_SFX_MS = 120
+// Rivals' turbos light with a quieter roar, at most this often.
+const RIVAL_TURBO_MS = 700
 
 interface CarView {
   body: Phaser.GameObjects.Image
@@ -63,6 +97,12 @@ interface CarView {
   x: number
   y: number
   a: number
+  // Rear wheels where the last skid stamp ended (NaN = not sliding last frame), and the last puff.
+  lx: number
+  ly: number
+  rx: number
+  ry: number
+  puffAt: number
 }
 
 export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapshot> {
@@ -112,6 +152,19 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
   private wrongWay = false
   private progressMs = 0
   private lastDustAt = 0
+  // The extra key's button / gauge, the DRIFT callout, the skid-mark layer and the pooled puffs.
+  private action?: ActionButton
+  private driftText?: Phaser.GameObjects.Text
+  private driftShown = ''
+  private skids?: Phaser.GameObjects.RenderTexture
+  private dust?: Phaser.GameObjects.Particles.ParticleEmitter
+  private smoke?: Phaser.GameObjects.Particles.ParticleEmitter
+  private flames?: Phaser.GameObjects.Particles.ParticleEmitter
+  // Your own turbo lit / exit boost as of the last frame (for the one-shot cues), and the squeal timer.
+  private ownLit = false
+  private ownKick = 0
+  private lastSkidSfxAt = 0
+  private lastRivalTurboAt = Number.NEGATIVE_INFINITY
 
   constructor(
     key: string,
@@ -158,6 +211,15 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
     this.progressMs = 0
     this.lastDustAt = 0
     this.bannerUntil = 0
+    this.skids = undefined
+    this.dust = undefined
+    this.smoke = undefined
+    this.flames = undefined
+    this.driftShown = ''
+    this.ownLit = false
+    this.ownKick = 0
+    this.lastSkidSfxAt = 0
+    this.lastRivalTurboAt = Number.NEGATIVE_INFINITY
 
     const hintH = this.compact ? 22 : 30
     this.view = { x: 0, y: this.top, w: width, h: height - this.top - hintH }
@@ -169,15 +231,24 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
       .setOrigin(0, 0)
       .setDepth(700)
     this.add.rectangle(0, this.top, width, 2, PALETTE.frame).setOrigin(0, 0).setDepth(701)
-    this.add
+    const rally = this.kind === 'stage'
+    const hint = rally
+      ? this.compact
+        ? 'game.courseRace.hintRallyTouch'
+        : 'game.courseRace.hintRally'
+      : this.compact
+        ? 'game.microRace.hintTouch'
+        : 'game.microRace.hint'
+    const hintText = this.add
       .text(
         width / 2,
         height - hintH / 2,
-        this.t(this.compact ? 'game.microRace.hintTouch' : 'game.microRace.hint'),
+        this.t(hint),
         bodyStyle(this.compact ? 11 : big ? 16 : 14, PALETTE.dim),
       )
       .setOrigin(0.5)
       .setDepth(701)
+    if (hintText.width > width - 8) hintText.setScale((width - 8) / hintText.width)
 
     const pad = this.compact ? 6 : 10
     this.mmBox = {
@@ -219,6 +290,19 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
       )
       .setOrigin(0.5)
       .setDepth(900)
+    this.driftText = this.add
+      .text(
+        width / 2,
+        this.top + pad + (this.compact ? 12 : big ? 24 : 16) + (this.compact ? 6 : 10),
+        '',
+        headlineStyle(this.compact ? 12 : big ? 24 : 16, PALETTE.orange, {
+          stroke: '#10121c',
+          strokeThickness: 4,
+        }),
+      )
+      .setOrigin(0.5, 0)
+      .setDepth(712)
+      .setVisible(false)
     this.marker = new YouMarker(this, this.compact ? 12 : 16, 640)
     this.banner = addBanner(this)
     this.subline = this.add
@@ -237,6 +321,18 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
       .setDepth(950)
       .setVisible(false)
     this.controls = new DriveControls(this)
+    this.action = new ActionButton(
+      this,
+      width - pad - 6,
+      height - hintH - pad - 4,
+      this.compact,
+      big,
+      this.t(rally ? 'game.courseRace.handbrake' : 'game.microRace.turbo'),
+      this.t('game.microRace.actionKey'),
+      712,
+    )
+    this.action.setVisible(false)
+    this.controls.setActionZone(this.action.zone)
   }
 
   // The course is known from the first snapshot: paint it once into a texture, build the world.
@@ -259,8 +355,49 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
     }
     const world = this.add.container(0, 0).setDepth(10)
     world.add(this.add.image(0, 0, key).setOrigin(0, 0).setScale(COURSE_TEXEL))
+    // The rally's skid marks: one texture over the whole stage that the sliding wheels draw into.
+    if (this.kind === 'stage') {
+      this.skids = this.add
+        .renderTexture(
+          0,
+          0,
+          Math.ceil(def.world.w / SKID_TEXEL),
+          Math.ceil(def.world.h / SKID_TEXEL),
+        )
+        .setOrigin(0, 0)
+        .setScale(SKID_TEXEL)
+      world.add(this.skids)
+    }
     this.trails = this.add.graphics()
     world.add(this.trails)
+    // Pooled puffs in world space, under the cars: gravel dust, tyre smoke, turbo exhaust.
+    const puff = ensureRacePuff(this)
+    const cloud = (
+      tint: number,
+      life: number,
+      grow: number,
+    ): Phaser.GameObjects.Particles.ParticleEmitter =>
+      this.add.particles(0, 0, puff, {
+        lifespan: { min: life * 0.6, max: life },
+        speed: { min: 4, max: 22 },
+        angle: { min: 0, max: 360 },
+        scale: { start: 1.1, end: grow },
+        alpha: { start: 0.6, end: 0 },
+        tint,
+        emitting: false,
+      })
+    this.dust = cloud(DUST, 760, 3.4)
+    this.smoke = cloud(SMOKE, 620, 3)
+    this.flames = this.add.particles(0, 0, puff, {
+      lifespan: { min: 140, max: 260 },
+      speed: { min: 10, max: 40 },
+      angle: { min: 0, max: 360 },
+      scale: { start: 1.6, end: 0.3 },
+      alpha: { start: 1, end: 0 },
+      tint: [PALETTE.amber, PALETTE.orange, 0xfff3a0],
+      emitting: false,
+    })
+    world.add([this.dust, this.smoke, this.flames])
     // No mask: the course always fills the view (the camera stays inside it) and the opaque HUD and
     // hint strips cover whatever spills over — one full-screen pass instead of three. For the same
     // reason the arcade backdrop under it never shows: skip drawing it.
@@ -315,7 +452,20 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
       .setOrigin(0.5, 1)
       .setDepth(630)
       .setVisible(false)
-    v = { body, pilot, label, color, x: c.x, y: c.y, a: c.a }
+    v = {
+      body,
+      pilot,
+      label,
+      color,
+      x: c.x,
+      y: c.y,
+      a: c.a,
+      lx: Number.NaN,
+      ly: Number.NaN,
+      rx: Number.NaN,
+      ry: Number.NaN,
+      puffAt: 0,
+    }
     this.views.set(c.id, v)
     return v
   }
@@ -336,6 +486,7 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
     if (this.state.final) this.timeUp(snap)
     this.drive(snap, now, fresh)
     this.paintCars(snap, time, delta)
+    this.paintAction(snap, time)
     this.follow(snap, delta)
     this.paintLights(snap, now)
     this.paintClock(snap, now)
@@ -360,17 +511,20 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
     const at = shown ? this.toScreen(shown.x, shown.y) : null
     const read = this.controls?.read(at && shown ? { x: at.x, y: at.y, a: shown.a } : null)
     const held = read
-      ? (this.controls?.sync(read, now, (d) => this.sendInput({ kind: 'drive', ...d })) ??
-        read.drive)
-      : { steer: 0, throttle: 0 }
+      ? (this.controls?.sync(read, now, (d) => this.sendDrive(d)) ?? read.drive)
+      : IDLE
     if (!this.ownActive) {
       this.own.snapTo(me)
       this.ownResets = me.resets
       this.ownActive = true
+      this.ownLit = (me.turboMs ?? 0) > 0
+      this.ownKick = (me.kickMs ?? 0) / 1000
     }
     const body = this.own.body
     body.steer = held.steer
     body.throttle = held.throttle
+    body.handbrake = this.kind === 'stage' && held.action
+    body.turbo = this.kind === 'circuit' && held.action
     body.finishMs = null
     if (snap.goInMs - this.clock.since(snap.remainingMs, now) > 0) {
       // On the line until the countdown ends.
@@ -393,18 +547,24 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
     this.onPad = pad
     const vx0 = body.vx
     const vy0 = body.vy
+    const circuit = this.kind === 'circuit'
     this.own.step(now, {
       physics: COURSE_PHYSICS[this.kind],
-      tuning: this.tuning(me),
+      tuning: this.tuning(me, false),
       world: def.world,
       carR: COURSE_CAR_R[this.kind],
+      turbo: circuit ? { draft: me.draft, boosted: this.tuning(me, true) } : undefined,
     })
     this.wallHit(vx0, vy0, def, now)
     if (fresh) {
       if (me.resets > this.ownResets) this.own.snapTo(me)
-      else this.own.reconcile(me, this.snapAt)
+      else {
+        this.own.reconcile(me, this.snapAt)
+        if (circuit) this.own.syncTurbo(me, now - this.snapAt, now, me.draft)
+      }
     }
     this.ownResets = me.resets
+    this.ownCues(now)
     if (this.kind !== 'circuit') return
     // Wheel-to-wheel: bumps happen on your screen right away (the server's verdict follows).
     for (const c of snap.cars) {
@@ -420,23 +580,74 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
     }
   }
 
+  // Your drive → the server, with the extra key under its game's name.
+  private sendDrive(d: Drive): void {
+    const key = this.kind === 'stage' ? 'handbrake' : 'turbo'
+    this.sendInput({ kind: 'drive', steer: d.steer, throttle: d.throttle, [key]: d.action })
+  }
+
   // The same per-step tweaks the server applies: rally gravel; the circuit's slipstream and boost
-  // (as the latest snapshot has them).
-  private tuning(me: CourseCar): RaceCarTuning {
-    if (this.kind === 'stage') {
-      const def = this.def
-      const idx = this.road?.idx ?? -1
-      return def && idx >= 0 && inStretch(def.gravel, idx, this.samples.length)
-        ? COURSE_GRAVEL_TUNING
-        : NO_TUNING
+  // (as the latest snapshot has them), with or without the turbo burning.
+  private tuning(me: CourseCar, turbo: boolean): RaceCarTuning {
+    if (this.kind === 'stage')
+      return this.onGravel(this.road?.idx ?? -1) ? COURSE_GRAVEL_TUNING : NO_TUNING
+    if (!me.draft && !me.boost && !turbo) return NO_TUNING
+    return raceTuning(me.draft, turbo, me.boost ? COURSE_BOOST : null)
+  }
+
+  private onGravel(idx: number): boolean {
+    return !!this.def && idx >= 0 && inStretch(this.def.gravel, idx, this.samples.length)
+  }
+
+  // One-shot moments of your own car, the frame they happen: the turbo lighting, a drift cashed in.
+  private ownCues(now: number): void {
+    const b = this.own.body
+    const p = this.own.pose()
+    const lit = (b.turboS ?? 0) > 0
+    if (lit && !this.ownLit) {
+      this.sfx.turbo()
+      shake(this, 0.004, 140)
+      const s = this.toScreen(p.x - Math.cos(p.a) * 20, p.y - Math.sin(p.a) * 20)
+      burst(this, s.x, s.y, PALETTE.orange, 10, 160)
     }
-    if (!me.draft && !me.boost) return NO_TUNING
-    const draft = me.draft ? RACE_DRAFT_TUNING : { maxSpeedScale: 1, accelScale: 1 }
-    const boost = me.boost ? COURSE_BOOST : { maxSpeedScale: 1, accelScale: 1 }
-    return {
-      maxSpeedScale: draft.maxSpeedScale * boost.maxSpeedScale,
-      accelScale: draft.accelScale * boost.accelScale,
+    this.ownLit = lit
+    const kick = b.kickS ?? 0
+    if (kick > this.ownKick + 0.05) {
+      this.sfx.powerUp()
+      const s = this.toScreen(p.x, p.y)
+      floatText(
+        this,
+        s.x,
+        s.y - 30,
+        this.t('game.courseRace.driftBoost'),
+        PALETTE.cyan,
+        this.compact ? 12 : 16,
+      )
+      burst(this, s.x, s.y, PALETTE.cyan, 8, 140)
     }
+    this.ownKick = kick
+    // Tyres squeal for as long as you slide.
+    if (
+      this.kind === 'stage' &&
+      this.sliding(b, this.own.speed) &&
+      now - this.lastSkidSfxAt >= SKID_SFX_MS
+    ) {
+      this.lastSkidSfxAt = now
+      const loose = this.onGravel(this.road?.idx ?? -1)
+      this.sfx.quiet(() => this.sfx.skid(loose), 0.7)
+    }
+  }
+
+  // Sliding enough to mark the road: the body angled away from the travel, or the handbrake on.
+  private sliding(
+    c: { a: number; vx: number; vy: number; handbrake?: boolean },
+    speed: number,
+  ): boolean {
+    if (speed < SKID_SPEED) return c.handbrake === true && speed > SKID_SPEED / 2
+    const fx = Math.cos(c.a)
+    const fy = Math.sin(c.a)
+    const slip = Math.atan2(-c.vx * fy + c.vy * fx, Math.abs(c.vx * fx + c.vy * fy))
+    return Math.abs(slip) > SKID_SLIP || c.handbrake === true
   }
 
   private bumpFx(at: { x: number; y: number }): void {
@@ -465,11 +676,14 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
     trails.clear()
     const now = this.time.now
     const freeze = this.state.final
+    let stamped = false
     for (const c of snap.cars) {
       const v = this.carView(c)
       const mine = c.id === this.selfId
-      const pose: CarPose | null =
-        mine && this.ownActive ? this.own.pose() : this.rivals.pose(c.id, now, delta, freeze)
+      const own = mine && this.ownActive
+      const pose: CarPose | null = own
+        ? this.own.pose()
+        : this.rivals.pose(c.id, now, delta, freeze)
       if (pose) {
         v.x = pose.x
         v.y = pose.y
@@ -483,44 +697,175 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
       const alpha = c.gone ? 0.3 : this.kind === 'stage' && !mine ? 0.55 : 1
       v.body.setAlpha(alpha)
       v.pilot.setAlpha(alpha)
-      // Trails: dust off-road, wind lines in a slipstream, a flame on boost.
-      const bx = v.x - Math.cos(v.a) * 18
-      const by = v.y - Math.sin(v.a) * 18
-      const off = mine && this.ownActive ? this.own.body.off : c.off
+      // Trails: dust off-road, wind lines in a slipstream, a flame on boost / turbo / drift boost.
+      const cos = Math.cos(v.a)
+      const sin = Math.sin(v.a)
+      const bx = v.x - cos * 18
+      const by = v.y - sin * 18
+      const off = own ? this.own.body.off : c.off
       if (off) {
-        trails.fillStyle(0xc2a578, 0.6)
+        trails.fillStyle(DUST, 0.6)
         trails.fillCircle(bx + Math.sin(time / 50) * 3, by + Math.cos(time / 60) * 3, 5)
       }
       if (c.draft) {
         trails.lineStyle(2, 0xffffff, 0.5)
         for (const o of [-8, 8]) {
-          const px = -Math.sin(v.a) * o
-          const py = Math.cos(v.a) * o
-          trails.lineBetween(
-            bx + px,
-            by + py,
-            bx + px - Math.cos(v.a) * 26,
-            by + py - Math.sin(v.a) * 26,
-          )
+          const px = -sin * o
+          const py = cos * o
+          trails.lineBetween(bx + px, by + py, bx + px - cos * 26, by + py - sin * 26)
         }
       }
-      if (c.boost) {
+      const turbo = own ? (this.own.body.turboS ?? 0) > 0 : (c.turboMs ?? 0) > 0
+      const kick = own ? (this.own.body.kickS ?? 0) > 0 : (c.kickMs ?? 0) > 0
+      if (turbo || c.boost) {
+        // The turbo's flame is longer, flickering, with a hot core.
+        const len = turbo ? 26 + (Math.floor(time / 45) % 3) * 6 : 18
         trails.fillStyle(Math.floor(time / 60) % 2 ? PALETTE.amber : PALETTE.orange, 1)
         trails.fillTriangle(
-          bx - Math.cos(v.a) * 18,
-          by - Math.sin(v.a) * 18,
-          bx - Math.sin(v.a) * 7,
-          by + Math.cos(v.a) * 7,
-          bx + Math.sin(v.a) * 7,
-          by - Math.cos(v.a) * 7,
+          bx - cos * len,
+          by - sin * len,
+          bx - sin * 7,
+          by + cos * 7,
+          bx + sin * 7,
+          by - cos * 7,
+        )
+        if (turbo) {
+          trails.fillStyle(0xfff3a0, 1)
+          trails.fillTriangle(
+            bx - cos * len * 0.55,
+            by - sin * len * 0.55,
+            bx - sin * 3,
+            by + cos * 3,
+            bx + sin * 3,
+            by - cos * 3,
+          )
+          if (own && now - v.puffAt >= PUFF_MS) {
+            v.puffAt = now
+            this.flames?.emitParticleAt(bx - cos * 6, by - sin * 6, 2)
+          }
+        }
+      } else if (kick) {
+        trails.fillStyle(Math.floor(time / 60) % 2 ? PALETTE.cyan : 0xffffff, 0.9)
+        trails.fillTriangle(
+          bx - cos * 16,
+          by - sin * 16,
+          bx - sin * 5,
+          by + cos * 5,
+          bx + sin * 5,
+          by - cos * 5,
         )
       }
-      if (mine && off && !this.compact && time - this.lastDustAt > 160 && this.own.speed > 60) {
+      if (this.skids) stamped = this.skidMarks(c, v, own, now) || stamped
+      if (mine && off && time - this.lastDustAt > 160 && this.own.speed > 60) {
         this.lastDustAt = time
-        const s = this.toScreen(bx, by)
-        burst(this, s.x, s.y, 0xc2a578, 3, 50)
+        this.dust?.emitParticleAt(bx, by, this.compact ? 2 : 3)
       }
     }
+    if (stamped) this.skids?.render()
+  }
+
+  // A sliding rally car: rubber (tarmac) or a groove (gravel) from each rear wheel into the skid layer,
+  // and a puff of dust or smoke. Returns whether anything was stamped.
+  private skidMarks(c: CourseCar, v: CarView, own: boolean, now: number): boolean {
+    const body = this.own.body
+    const speed = own ? this.own.speed : Math.hypot(c.vx, c.vy)
+    const off = own ? body.off : c.off
+    const slide = !off && !c.gone && c.finishMs === null && this.sliding(own ? body : c, speed)
+    if (!slide) {
+      v.lx = Number.NaN
+      return false
+    }
+    const cos = Math.cos(v.a)
+    const sin = Math.sin(v.a)
+    const ax = v.x - cos * REAR
+    const ay = v.y - sin * REAR
+    const lx = ax + sin * TRACK
+    const ly = ay - cos * TRACK
+    const rx = ax - sin * TRACK
+    const ry = ay + cos * TRACK
+    const n = this.samples.length
+    const idx = own ? (this.road?.idx ?? -1) : Math.round(c.progress * Math.max(0, n - 1))
+    const gravel = this.onGravel(idx)
+    let stamped = false
+    // Join up with last frame's wheels (unless the car jumped: a rescue, a snap).
+    if (!Number.isNaN(v.lx) && Math.hypot(lx - v.lx, ly - v.ly) < 40) {
+      const tint = gravel ? SKID_GRAVEL : SKID_TARMAC
+      const alpha = own ? 0.5 : 0.35
+      this.stamp(v.lx, v.ly, lx, ly, tint, alpha)
+      this.stamp(v.rx, v.ry, rx, ry, tint, alpha)
+      stamped = true
+    }
+    v.lx = lx
+    v.ly = ly
+    v.rx = rx
+    v.ry = ry
+    const every = (own ? PUFF_MS : RIVAL_PUFF_MS) * (this.compact ? 2 : 1)
+    if (now - v.puffAt >= every) {
+      v.puffAt = now
+      const cloud = gravel ? this.dust : this.smoke
+      if (own) {
+        cloud?.emitParticleAt(lx, ly, 1)
+        cloud?.emitParticleAt(rx, ry, 1)
+      } else cloud?.emitParticleAt(ax, ay, 1)
+    }
+    return stamped
+  }
+
+  // One tyre-wide strip from (x0, y0) to (x1, y1), world units, into the skid layer.
+  private stamp(x0: number, y0: number, x1: number, y1: number, tint: number, alpha: number): void {
+    const len = Math.hypot(x1 - x0, y1 - y0)
+    if (len < 0.5) return
+    this.skids?.stamp(
+      ensureRacePuff(this),
+      undefined,
+      (x0 + x1) / 2 / SKID_TEXEL,
+      (y0 + y1) / 2 / SKID_TEXEL,
+      {
+        rotation: Math.atan2(y1 - y0, x1 - x0),
+        // The puff is 4 px: a strip `len` long, 1.5 px (3 world units) wide.
+        scaleX: (len / SKID_TEXEL + 1) / 4,
+        scaleY: 1.5 / 4,
+        originX: 0.5,
+        originY: 0.5,
+        tint,
+        alpha,
+      },
+    )
+  }
+
+  // The extra key's button (the turbo meter / the drift gauge) and the DRIFT callout, from your car.
+  private paintAction(snap: CourseRaceSnapshot, time: number): void {
+    const btn = this.action
+    if (!btn) return
+    const me = snap.cars.find((c) => c.id === this.selfId)
+    btn.setVisible(!!me && !me.gone)
+    if (!me) return
+    const racing = this.ownActive && snap.goInMs <= 0
+    const b = this.own.body
+    let drift = ''
+    if (this.kind === 'stage') {
+      const kick = racing ? (b.kickS ?? 0) : 0
+      const sliding = racing ? (b.driftS ?? 0) : 0
+      if (kick > 0) btn.set(kick / RALLY_DRIFT.maxKickS, 'lit', time)
+      else if (sliding > 0)
+        btn.set((sliding * RALLY_DRIFT.kickPerS) / RALLY_DRIFT.maxKickS, 'charging', time)
+      else btn.set(0, racing && b.handbrake ? 'held' : 'idle', time)
+      if (sliding >= RALLY_DRIFT.minDriftS)
+        drift = this.t('game.courseRace.drift', { s: sliding.toFixed(1) })
+    } else {
+      const burn = racing ? (b.turboS ?? 0) : (me.turboMs ?? 0) / 1000
+      const meter = racing ? (b.turboMeter ?? 0) : (me.turbo ?? 0)
+      if (burn > 0) btn.set(burn / RACE_TURBO.burnS, 'lit', time)
+      else btn.set(meter, meter >= 1 ? 'ready' : 'charging', time)
+    }
+    const text = this.driftText
+    if (!text) return
+    if (drift !== this.driftShown) {
+      this.driftShown = drift
+      text.setText(drift).setVisible(drift !== '')
+    }
+    // The callout throbs while the drift goes on.
+    if (drift !== '') text.setScale(1 + 0.08 * Math.abs(Math.sin(time / 90)))
   }
 
   // Chase camera: the world container is placed so your car sits a little behind the view's centre.
@@ -691,6 +1036,12 @@ export abstract class CourseRaceSceneBase extends MiniGameScene<CourseRaceSnapsh
         if (done && now - this.lastCheerAt >= CHEER_GAP_MS) {
           this.lastCheerAt = now
           this.sfx.quiet(() => this.sfx.cheer(), RIVAL_LEVEL)
+        }
+        // A rival lights a turbo: a softer roar.
+        const lit = (c.turboMs ?? 0) > 0 && (was.turboMs ?? 0) === 0
+        if (lit && now - this.lastRivalTurboAt >= RIVAL_TURBO_MS) {
+          this.lastRivalTurboAt = now
+          this.sfx.quiet(() => this.sfx.turbo(), RIVAL_LEVEL * 0.6)
         }
         continue
       }

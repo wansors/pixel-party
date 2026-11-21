@@ -49,6 +49,43 @@ describe('FreezeDoll', () => {
     for (const t of reals.slice(0, 2)) expect(t.songFrozen).toBe(t.songMs)
   })
 
+  test('the doll speeds up non-linearly: chants and REDs shrink most in the last quarter', () => {
+    // Averaged over seeds (the tempo is seeded); each cycle is bucketed by when its chant starts.
+    const buckets = [0, 0, 0, 0].map(() => ({ song: 0, red: 0, twitch: 0, n: 0, reds: 0 }))
+    for (let seed = 1; seed <= 40; seed++) {
+      const s = init(['a', 'b', 'c'], seed, 60_000)
+      for (let i = 0; i < s.timeline.length; i++) {
+        const x = s.timeline[i] as FreezeDollState['timeline'][number]
+        const q = Math.min(3, Math.floor((x.from / 60_000) * 4))
+        const b = buckets[q] as (typeof buckets)[number]
+        if (x.light === 'turn' && s.timeline[i + 1]?.light === 'red') {
+          b.song += x.songMs
+          b.twitch += x.to - x.from
+          b.n++
+        }
+        if (x.light === 'red') {
+          b.red += x.to - x.from
+          b.reds++
+        }
+      }
+    }
+    const avg = buckets.map((b) => ({
+      song: b.song / b.n,
+      twitch: b.twitch / b.n,
+      red: b.red / b.reds,
+    }))
+    const [q0, q1, q2, q3] = avg as [
+      (typeof avg)[0],
+      (typeof avg)[0],
+      (typeof avg)[0],
+      (typeof avg)[0],
+    ]
+    expect(q2.song - q3.song).toBeGreaterThan(q0.song - q1.song)
+    expect(q2.red - q3.red).toBeGreaterThan(q0.red - q1.red)
+    expect(q3.twitch).toBeLessThan(q0.twitch)
+    expect(q3.twitch).toBeGreaterThanOrEqual(400)
+  })
+
   test('nobody moves during the opening; WALK moves, RUN moves faster', () => {
     const s = init(['a', 'b'])
     game.onInput(s, 'a', { kind: 'move', mode: 'walk' }, 0)

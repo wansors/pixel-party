@@ -61,6 +61,14 @@ and F7 Speed Circuit (`speed-circuit`); then the cluster's suggested extras, G4 
 total — every game idea on the roadmap is built.**
 Then (2026-10-03) J1 Weird Trivia (`weird-trivia`), the first brand-new idea after the roadmap.
 **55 mini-games total.**
+Then (2026-11-21) K1 Neon Trails (`neon-trails`, D41), K2 Wing It (`wing-it`, D42), K3 Rock Paper
+Scissors (`rock-paper-scissors`, D43) and K4 Sharpshooter (`sharpshooter`, D45). **59 mini-games
+total.**
+
+> **Difficulty curves (D40, 2026-11-21)**: about 26 games were retuned from linear or flat pacing to
+> non-linear ramps (the shared `easeIn` / `rampEase` / `rampExp` / `compound` helpers in
+> `@pp/shared/difficulty`). Where a card below quotes pace numbers (rope turns, gravity, flash times,
+> spawn gaps…), `implementation-decisions.md` D40 has the current ones.
 
 ---
 
@@ -355,7 +363,9 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
   (`number-rush`): one shared seeded 5×5 layout, self-paced; ranked by numbers cleared, finishers by
   time. A wrong number costs a 0.5 s tap cooldown (the board dims behind a draining bar), so sweeping
   every cell in reading order is slower than looking; a number already cleared (a double click) costs
-  nothing. A right number counts on the click; the server confirms it.* FFA · click / tap (mouse-only on
+  nothing. A right number counts on the click; the server confirms it. Since D40 the numbers still to
+  find **reshuffle** among the open cells after 10, 16, 20 and 23 are cleared ("SHUFFLE!"), the same
+  layout for everyone at the same milestone.* FFA · click / tap (mouse-only on
   PC) · 20–30 s · low effort · low latency · banter 💥💥.
 - **E5. ✅ Higher or Lower** — guess if the next pixel card is higher/lower to build a streak, and know
   when to stop. *Implemented (`higher-lower`): each player gets their own seeded deck (a shared one
@@ -469,7 +479,9 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
   A shot sticks under the lowest bubble in its column (at the ceiling in an empty one); a column filled
   to the bottom row takes no more shots, and once every column is, the board is **JAMMED** — out of
   shots for the round, ranked below a live board on equal points. The round ends early once every
-  board is cleared or jammed. The shot rules live in `@pp/shared` (`bubblePop`), so your board is
+  board is cleared or jammed. Since D40 the **ceiling drops** a seeded row from 10 s in, the gaps
+  shrinking 10.6 → 4.8 s (7 drops; the ceiling rumbles 1.2 s before each); a drop while a bubble sits on
+  the bottom row jams that board. The shot rules live in `@pp/shared` (`bubblePop`), so your board is
   predicted: a shot flies, sticks, pops and loads the next colour without waiting for the server.* FFA ·
   aim with the mouse or ← → / A D, fire with a click or SPACE / ENTER / ↑ (drag + release on touch) ·
   ~60 s · medium/high effort · low latency · banter 💥💥.
@@ -558,15 +570,18 @@ server's rule will count (`ATHLETICS_STRIDE`, shared) speeds your runner up on t
 ### F5. ✅ Micro Race — implemented (`micro-race`)
 - **Concept**: *Micro Machines*-style top-down racer on tabletop circuits — three seeded layouts (kitchen
   table, desk mat, pool table) with props, three laps, bumping encouraged.
-- **Type**: FFA · **Input**: arrows / WASD (↓ / S or SPACE brakes, then reverses), or hold where you
-  want to drive (touch/mouse) · **Duration**: ~40–60 s (90 s cap) · **Banter**: 💥💥💥
+- **Type**: FFA · **Input**: arrows / WASD (↓ / S brakes, then reverses; SPACE / SHIFT / right-click
+  or the TURBO button fires the turbo), or hold where you want to drive (touch/mouse) · **Duration**:
+  ~40–60 s (90 s cap) · **Banter**: 💥💥💥
 - **Rules**: start lights (2.4 s), staggered grid in seeded order. Arcade car physics: slight drift, much
   slower off the road, steering loosens at top speed (brake for hairpins), punchy car-to-car bumps.
   Lap progress only advances near the road you were on; straying for 1.5 s puts you back where you left
   it (no shortcuts). **Slipstream**: tucked in behind a car (≤ 110 units, in its wake, same heading)
   gives +10 % top speed / +15 % acceleration (wind lines) — the way back up from the back of the grid.
   A driver who leaves becomes a ghost (no contact, no slipstream) that no longer holds the race open
-  (likewise in F6/F7). Once the first car takes the flag the rest get 12 s.
+  (likewise in F6/F7). Once the first car takes the flag the rest get 12 s. **Turbo** (D40, also in
+  F7): a meter fills in ~7 s of driving on the road at speed (twice as fast in a slipstream, not at all
+  off the road); fired full, it burns 1.2 s at ×1.3 top speed / ×2 acceleration (a flame).
 - **Win condition / Result**: finishers by time (`1:02.3`), the rest by laps + progress (`LAP 2`).
 - **Latency**: high (continuous steering) — your own car is predicted with the server's integrator
   (shared in `@pp/shared`), so it turns the frame you press a key; rivals are dead-reckoned to the
@@ -578,12 +593,17 @@ chase camera) with a minimap of the whole course. Cars carry their driver's lobb
 
 ### F6. ✅ Rally Stage — implemented (`rally-stage`)
 - **Concept**: a point-to-point time trial on a twisty stage — two seeded layouts (forest, desert) of
-  gravel (loose: grip 4.2, 93 % top speed) and tarmac stretches.
+  gravel and tarmac stretches, driven with a **drift model** (D40) of its own.
 - **Type**: FFA, everyone at once as **ghosts** (no contact) · **Input**: as F5 · **Duration**: ~25–45 s
   (70 s cap; 15 s finish window after the first car) · **Banter**: 💥💥 · **Mobile-friendly**: no
 - **Rules**: start lights (everyone side by side, spread across the start line), then race to the stage
   end; three checkpoints pop split times. Off the road the car slows hard; straying from your stretch
-  for 1.5 s puts you back on the road.
+  for 1.5 s puts you back on the road. **Drift**: the direction of travel catches up with the nose at a
+  traction rate (tarmac 14/s, gravel 6/s, off-road 3/s, handbrake 1.2/s), so the car slides ~30° through
+  gravel bends and the **handbrake** (SPACE / SHIFT / right-click / the button) kicks the tail out;
+  counter-steer to catch it. A clean drift (≥ 0.2 s, no spin, on the road) banks a short exit boost
+  (0.8 s per drift second, capped at 1 s: +15 % top speed). Skid marks stay on the stage; gravel dust,
+  tyre smoke and a DRIFT meter. No turbo here.
 - **Win condition / Result**: finish time (`0:26.8`), unfinished by distance (`64%`).
 
 ### F7. ✅ Speed Circuit — implemented (`speed-circuit`)
@@ -593,7 +613,8 @@ chase camera) with a minimap of the whole course. Cars carry their driver's lobb
   **Banter**: 💥💥💥 · **Mobile-friendly**: no
 - **Rules**: staggered grid. **Slipstream**: tucked in behind a car (≤ 140 units, in its wake, same
   heading) gives +10 % top speed / +15 % acceleration (wind lines). **Boost pads** on two straights:
-  +25 % top speed and +60 % acceleration for 1.2 s (a flame). Contact is on.
+  +25 % top speed and +60 % acceleration for 1.2 s (a flame). **Turbo** as in F5 (the stronger of a pad
+  and the turbo counts). Contact is on.
 - **Win condition / Result**: finishing order (`0:53.3`), the rest by laps + distance (`LAP 2`).
 
 ## G. Elimination rounds — Squid Game-style (2026-10-02)
@@ -857,30 +878,100 @@ avatar. See `implementation-decisions.md` D22.
 - **Win condition / Result**: most points (`3/5 · 4210 pts`).
 - **Latency**: low. · **Complexity**: low (the Lightning Quiz board, `QuizSceneBase`, is shared).
 
+## K. Owner requests: arcade & party classics (2026-11-21)
+
+### K1. ✅ Neon Trails — implemented (`neon-trails`)
+- **Concept**: light-trail bikes on one shared arena: every rider leaves a solid wall of light behind;
+  box the others in, never crash. Last rider standing wins (D41).
+- **Type**: FFA, 2–12 players (best 3–8) · **Input**: arrows / WASD to turn (no reversing), swipe on
+  touch · **Duration**: 60 s cap, usually much shorter · **Banter**: 💥💥💥 · **Mobile-friendly**: no
+- **Rules**: the arena grows with the room (36×24 up to 54×36 cells). Riders start on both flanks,
+  interleaved so nobody shares a row with a rider facing them, hold still for 1.2 s (GET READY) and
+  then ride one cell per step. The pace quickens a notch every 40 cells, 120 → 55 ms per cell (about
+  −8 % a notch, top speed ~35 s in — the HUD shows SPEED 1…11). Every step is judged for everyone at
+  once: riding off the arena, into any trail (your own included) or into the same cell as another
+  rider is a crash; a crashed rider's trail fades away ("derez"), freeing room for the rest.
+- **Win condition / Result**: last rider standing (`survivor`); the rest by how long they lasted
+  (`57 steps`), same-step crashes tie. Survivors at the bell share 1st.
+- **Latency**: medium — the pace is a pure function of the step count (an integer table), so the
+  client predicts its own rider on the server's clock and a turn names the step it was meant for
+  (the server turns on the same cell); rivals are carried along their heading and queued turns until
+  the next snapshot. Trails travel as vertices (start, corners, head), so a 12-rider snapshot stays
+  small.
+
+### K2. ✅ Wing It — implemented (`wing-it`)
+- **Concept**: the tap-to-flap genre, party-sized and with its own look: your avatar with a little
+  wing flies a dusk course of brick towers; everyone flies the same seeded course at once as ghosts.
+  Last one in the air wins (D42).
+- **Type**: FFA, 1–12 (best 2–12) · **Input**: SPACE / ↑ / W / click / tap to flap · **Duration**: 60 s
+  cap, usually shorter · **Banter**: 💥💥💥 · **Mobile-friendly**: yes (one control)
+- **Rules**: 1.5 s GET READY, then gravity; a flap sets the upward speed. The ceiling stops you, the
+  floor or a tower ends the flight. The course is seeded (gap centres move ≤ 0.3 of the height column
+  to column) and eases in over 45 s: scroll speed 0.42 → 0.78 heights/s, column spacing 1.05 → 0.72,
+  gap 0.36 → 0.25 (D40).
+- **Win condition / Result**: last bird flying (`survivor`); the rest by how long they flew, with
+  columns cleared shown (`12 cleared`); same-moment crashes tie.
+- **Latency**: low — the flight is integrated on a 5 ms grid with plain arithmetic, so client and
+  server compute the same path bit for bit; a flap carries the moment it was pressed and the server
+  judges crashes 150 ms behind real time, so it counts when it was pressed (a flap older than that
+  counts at the judged edge).
+
+### K3. ✅ Rock Paper Scissors — implemented (`rock-paper-scissors`)
+- **Concept**: the classic as a 1v1 duel: throw at the same time, first to 3 (D43).
+- **Type**: Duel (seeded simultaneous pairs; an odd player out gets a bye and watches a duel, see §B) ·
+  **Input**: 1 2 3 / ← ↓ → / A S D or the three buttons · **Duration**: 45 s cap · **Banter**: 💥💥💥 ·
+  **Mobile-friendly**: yes
+- **Rules**: every throw both pick in secret (a pick is final) and the hands are revealed together as
+  soon as both have picked; not picking in time loses the throw (both idle = a draw). The window
+  shrinks every throw: 4 s × 0.88 per throw, never under 1.8 s (D40). The rival's hand never travels
+  before the reveal — only that they're READY.
+- **Win condition / Result**: first to 3 throws; at the bell more throws won (equal = draw). Duels rank
+  across the room in tiers (wins, draws + bye, losses), each by throws won (`3-1`).
+- **Latency**: low (turn-based).
+
+### K4. ✅ Sharpshooter — implemented (`sharpshooter`)
+- **Concept**: a Wild West shooting gallery at sunset: cardboard bandits pop up in the saloon's and the
+  store's windows and batwing doors, bottles stand on the fence, tin cans arc across the sky — and the
+  crosshair breathes (D45).
+- **Type**: FFA, 1–12 (best 2–12) · **Input**: mouse (or ← ↑ → ↓ / WASD) aims, CLICK / SPACE / ENTER
+  shoots, hold SHIFT / right-click to steady your breath, R reloads · **Duration**: 45 s ·
+  **Banter**: 💥💥💥 · **Mobile-friendly**: no (precision aim + a breath key)
+- **Rules**: one seeded schedule for everyone, and everyone may hit each target once (no stealing):
+  bandit 100, bottle 150, can 250 (from 12 s), civilian −200. Pop-ups can only be hit once fully up.
+  The crosshair sways in a slow figure-eight with each breath (3.6 s cycle), wider as the round's
+  nerves grow (×1 → ×1.4); holding your breath shrinks the sway to 15 % for up to 2.6 s, then you gasp
+  (wider for 1.2 s) while the lungs refill. A six-shooter: 6 shots (230 ms apart at best), then a
+  1.3 s reload (R reloads early); each shot kicks the aim up. Targets stay shorter (1.7 → 0.75 s),
+  come more often (gap 850 → 420 ms) and civilians crowd in (10 → 28 %) as the round goes on (D40).
+- **Win condition / Result**: most points (`1350 pts`); accuracy breaks ties.
+- **Latency**: low — targets are a pure function of time (rendered on the server clock); a shot
+  carries where the crosshair was and when (accepted up to 250 ms late) and the server judges it
+  against the target's position at that moment; your hit drops the target at once.
+
 ---
 
 ## Variety coverage
 
 | Axis | Covered by |
 |------|------------|
-| Reflexes / reaction | A1, A6, B1, E7, F5, F7, G2, G5, I3 |
+| Reflexes / reaction | A1, A6, B1, E7, F5, F7, G2, G5, I3, K2 |
 | Attention / focus (inhibition) | E1, E3, E4, G1 |
 | Speed / endurance | A2, A9, C1, F1, F2, G3 |
 | Knowledge | A3, J1 |
 | Mental math | E2 |
 | Memory | A4, A11, E8 |
-| Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4, F6, G4, I2 |
-| Survival / dodging | A7, A8, B3, I1, I3, I5 |
-| Nerve / chance | D1, D3, E5, G1, G2, G3, G6 |
+| Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4, F6, G4, I2, K4 |
+| Survival / dodging | A7, A8, B3, I1, I3, I5, K1, K2 |
+| Nerve / chance | D1, D3, E5, G1, G2, G3, G6, K3 |
 | Teamwork | C1, C2, C3 |
-| Head-to-head rivalry | B1, B2, B3, E7, I4, I6 |
+| Head-to-head rivalry | B1, B2, B3, E7, I4, I6, K1, K3 |
 
 ## Format mix
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6, J1 |
-| Duel (1v1 / bracket) | B1, B2, B3, E7, G6 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6, J1, K1, K2, K4 |
+| Duel (1v1 / bracket) | B1, B2, B3, E7, G6, K3 |
 | Team | C1, C2, C3 |
 
 ## MVP selection & shipping order

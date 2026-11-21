@@ -1,0 +1,542 @@
+:host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+// ── Header: title + count, search, bulk actions ─────────────────────────────
+.picker-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.8rem;
+
+  h3 {
+    margin: 0;
+    color: var(--c-text);
+    font-size: var(--fs-sm);
+    font-weight: normal;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+  }
+  .count {
+    margin-left: 0.5rem;
+    color: var(--c-lime);
+    font-size: var(--fs-xs);
+  }
+  .sit-out {
+    margin-left: 0.4rem;
+    color: var(--c-amber);
+  }
+}
+
+.search {
+  flex: 1 1 9rem;
+  min-width: 8rem;
+  max-width: 16rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.45rem;
+  background: var(--c-bg);
+  border: 2px solid var(--c-frame);
+  &:focus-within {
+    border-color: var(--c-frame-lit);
+  }
+  input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.4rem 0;
+    font-family: var(--font-pixel);
+    font-size: var(--fs-xs);
+    color: var(--c-text);
+    background: none;
+    border: none;
+    outline: none;
+    &::placeholder {
+      color: var(--c-dim);
+    }
+  }
+}
+
+// Pixel magnifier: a ring with a handle.
+.lens {
+  position: relative;
+  width: 0.55rem;
+  height: 0.55rem;
+  border: 2px solid var(--c-dim);
+  border-radius: 50%;
+  flex-shrink: 0;
+  &::after {
+    content: '';
+    position: absolute;
+    right: -4px;
+    bottom: -4px;
+    width: 4px;
+    height: 2px;
+    background: var(--c-dim);
+    transform: rotate(45deg);
+  }
+}
+
+.bulk {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--c-amber);
+    font-family: var(--font-pixel);
+    font-size: var(--fs-xs);
+    text-transform: uppercase;
+    cursor: pointer;
+    white-space: nowrap;
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+  .surprise {
+    padding: 0.3rem 0.45rem;
+    color: var(--c-bg);
+    background: var(--c-amber);
+    border: 2px solid var(--c-amber);
+    box-shadow: 0 2px 0 0 #6b4f12;
+    &:hover {
+      text-decoration: none;
+      filter: brightness(1.1);
+    }
+    &:active {
+      transform: translateY(2px);
+      box-shadow: none;
+    }
+  }
+}
+
+// Pixel die: a square with three pips on the diagonal.
+.die {
+  position: relative;
+  width: 0.6rem;
+  height: 0.6rem;
+  background: var(--c-bg);
+  flex-shrink: 0;
+  background-image:
+    radial-gradient(circle, var(--c-amber) 1px, transparent 1.5px),
+    radial-gradient(circle, var(--c-amber) 1px, transparent 1.5px),
+    radial-gradient(circle, var(--c-amber) 1px, transparent 1.5px);
+  background-size: 4px 4px;
+  background-position:
+    0 0,
+    3px 3px,
+    6px 6px;
+  background-repeat: no-repeat;
+}
+
+// ── Filters ─────────────────────────────────────────────────────────────────
+.filters {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.chip-row {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0;
+  margin: 0;
+}
+
+.push {
+  margin-left: auto;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-pixel);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  color: var(--c-dim);
+  background: var(--c-bg);
+  border: 2px solid var(--c-frame);
+  border-radius: 2px;
+  padding: 0.3rem 0.45rem;
+  cursor: pointer;
+
+  .dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    flex-shrink: 0;
+  }
+  .tick {
+    transform: scale(0.6);
+    margin: -2px -3px;
+  }
+  &:hover {
+    border-color: var(--c-frame-lit);
+    color: var(--c-text);
+  }
+  &.active {
+    color: var(--c-bg);
+    background: var(--chip-color, var(--c-lime));
+    border-color: var(--chip-color, var(--c-lime));
+    .dot {
+      outline: 2px solid var(--c-bg);
+    }
+  }
+}
+.format-chip {
+  --chip-color: var(--c-magenta);
+}
+.room-chip {
+  --chip-color: var(--c-cyan);
+}
+
+// Tiny pixel icons used on cards and chips.
+.phone {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.7rem;
+  border: 2px solid currentColor;
+  border-bottom-width: 3px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+.clock {
+  position: relative;
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  flex-shrink: 0;
+  &::before {
+    content: '';
+    position: absolute;
+    left: calc(50% - 1px);
+    top: 1px;
+    width: 2px;
+    height: calc(50% - 1px);
+    background: currentColor;
+  }
+}
+
+// ── Card grid ───────────────────────────────────────────────────────────────
+.grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+  align-content: start;
+  gap: 0.6rem;
+  padding: 0.15rem 0.3rem 0.4rem 0.15rem;
+  margin: 0;
+
+  .empty {
+    grid-column: 1 / -1;
+    color: var(--c-dim);
+    font-size: var(--fs-sm);
+    text-align: center;
+    padding: 1.5rem 0;
+    line-height: 2;
+  }
+  .link {
+    display: block;
+    margin: 0.4rem auto 0;
+    background: none;
+    border: none;
+    color: var(--c-amber);
+    font-family: var(--font-pixel);
+    font-size: var(--fs-xs);
+    text-transform: uppercase;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+}
+
+.card {
+  position: relative;
+  min-width: 0;
+}
+
+.pick {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  text-align: left;
+  font-family: var(--font-pixel);
+  color: var(--c-text);
+  background: var(--c-panel-alt);
+  border: 3px solid var(--c-frame);
+  border-radius: 2px;
+  box-shadow: 0 4px 0 0 var(--c-bg);
+  cursor: pointer;
+  overflow: hidden;
+  transition:
+    border-color 80ms steps(2),
+    transform 80ms steps(2);
+
+  &:hover:not(:disabled) {
+    border-color: var(--c-frame-lit);
+    transform: translateY(-2px);
+  }
+  &:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 0 var(--c-bg);
+  }
+  &:focus-visible {
+    outline: 3px solid var(--c-amber);
+    outline-offset: 2px;
+  }
+  &:disabled {
+    cursor: default;
+  }
+}
+
+.shot {
+  position: relative;
+  display: block;
+
+  app-game-thumb {
+    filter: grayscale(0.85) brightness(0.62);
+    transition: filter 120ms steps(3);
+  }
+}
+
+// Picked (and every read-only line-up card) in full color; the rest stay greyed until hovered.
+.card.selected .shot app-game-thumb,
+.card.readonly .shot app-game-thumb,
+.card:not(.unfit) .pick:hover .shot app-game-thumb {
+  filter: none;
+}
+.card.selected .pick {
+  border-color: var(--c-lime);
+  background: #1c2b1e;
+  box-shadow:
+    0 4px 0 0 #4c9a2a,
+    0 0 0 2px var(--c-bg),
+    0 0 12px rgba(139, 233, 75, 0.25);
+}
+.card.readonly .pick {
+  border-color: var(--c-frame-lit);
+}
+.card.unfit .pick {
+  opacity: 0.55;
+}
+
+.badge.format {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  max-width: calc(100% - 2.6rem);
+  padding: 0.15rem 0.3rem;
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  color: var(--c-text);
+  background: var(--c-magenta);
+  box-shadow: 0 2px 0 0 rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.check {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  background: rgba(16, 18, 28, 0.85);
+  box-shadow: 0 2px 0 0 rgba(0, 0, 0, 0.45);
+}
+
+// How-to-play overlay: slides over the screenshot on hover / keyboard focus (PC-first; on touch the
+// card's (i) sheet carries the same text).
+.blurb {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: 0.5rem 0.55rem 0.7rem;
+  font-family: monospace;
+  font-size: 0.74rem;
+  line-height: 1.3;
+  color: var(--c-text);
+  background: linear-gradient(to top, rgba(16, 18, 28, 0.95) 55%, rgba(16, 18, 28, 0.35));
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity 120ms steps(3),
+    transform 120ms steps(3);
+  pointer-events: none;
+}
+@media (hover: hover) {
+  .pick:hover .blurb,
+  .pick:focus-visible .blurb {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.unfit-note {
+  position: absolute;
+  inset: auto 0 0.6rem 0;
+  margin: 0 0.4rem;
+  padding: 0.25rem 0.3rem;
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--c-red);
+  background: rgba(16, 18, 28, 0.9);
+  border: 2px solid var(--c-red);
+}
+
+// Skill axes as a color strip along the bottom edge of the screenshot.
+.axes {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  display: flex;
+  span {
+    flex: 1;
+  }
+}
+
+.caption {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.45rem 0.55rem 0.5rem;
+}
+.gname {
+  font-size: var(--fs-sm);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 1.3rem; // clears the (i) button
+}
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: var(--fs-xs);
+  color: var(--c-dim);
+  white-space: nowrap;
+
+  .players,
+  .time {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .players.ideal {
+    color: var(--c-lime);
+  }
+  .mobile-tag {
+    display: inline-flex;
+    color: var(--c-cyan);
+  }
+}
+.card.unfit .meta .players {
+  color: var(--c-red);
+}
+
+.info {
+  position: absolute;
+  right: 0.4rem;
+  bottom: 0.45rem;
+  width: 1.35rem;
+  height: 1.35rem;
+  display: grid;
+  place-content: center;
+  padding: 0;
+  font-family: var(--font-pixel);
+  font-size: var(--fs-xs);
+  color: var(--c-cyan);
+  background: var(--c-bg);
+  border: 2px solid var(--c-frame-lit);
+  border-radius: 50%;
+  cursor: pointer;
+  &:hover,
+  &:focus-visible {
+    color: var(--c-bg);
+    background: var(--c-cyan);
+    border-color: var(--c-cyan);
+  }
+}
+
+// ── Narrow screens ──────────────────────────────────────────────────────────
+@media (max-width: 860px) {
+  .grid {
+    overflow: visible;
+    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .picker-header h3 {
+    flex-basis: 100%;
+    white-space: normal;
+    line-height: 1.6;
+  }
+  .bulk {
+    margin-left: 0;
+  }
+  // One swipeable row per filter group instead of five wrapped rows.
+  .chip-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    li {
+      flex-shrink: 0;
+    }
+  }
+  .search {
+    order: 3;
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .push {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+  .gname {
+    font-size: var(--fs-xs);
+  }
+  .meta .time {
+    display: none;
+  }
+  .badge.format {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pick,
+  .blurb,
+  .shot app-game-thumb {
+    transition: none;
+  }
+}

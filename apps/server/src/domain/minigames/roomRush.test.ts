@@ -226,6 +226,24 @@ describe('RoomRush', () => {
     expect(s.call).toBe(call + 1)
   })
 
+  test('every call gives less time to find a room: the window shrinks call after call', () => {
+    // Nobody moves, so every call is a wipeout that replays: the field stays the same.
+    const s = init(4, 2)
+    const windows: number[] = []
+    let t = 0
+    for (let k = 0; k < 4; k++) {
+      t = toCall(s, t)
+      windows.push(s.phaseEndsAt - s.phaseFrom)
+      while (s.phase === 'call') t = run(s, t, t + 50)
+    }
+    // Compounding: a fixed share off every call.
+    expect(windows).toEqual([0, 1, 2, 3].map((k) => Math.round(6500 * 0.88 ** k)))
+    // Held at a floor however long the round runs.
+    s.call = 30
+    toCall(s, t)
+    expect(s.phaseEndsAt - s.phaseFrom).toBe(3500)
+  })
+
   test('respawns spread a full room around the hub without overlaps', () => {
     const s = init(12, 9)
     for (let i = 0; i < s.bodies.length; i++) {

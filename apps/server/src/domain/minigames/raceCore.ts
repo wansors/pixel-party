@@ -5,16 +5,18 @@ import {
   type RaceCarPhysics,
   type RaceCarTuning,
   raceClamp1,
+  raceTuning,
   raceWorldWalls,
   raceWrapAngle,
+  stepRaceTurbo,
 } from '@pp/shared'
 
 // Shared top-down car racing engine behind Micro Race, Rally Stage and Speed Circuit: arcade car physics
-// (throttle/brake/reverse, drift that grip eats, understeer at speed, a slowed-down surface off the road —
-// the integrator itself lives in @pp/shared so the client can predict its own car with it), car-to-car
-// bumps, the slipstream and the road follower that turns a position into progress along a sampled
-// centreline (windowed, so the race line can't jump to another stretch of road), with the stray-car
-// rescue.
+// (throttle/brake/reverse, understeer at speed, a slowed-down surface off the road, the rally's drift
+// model and the turbo — the integrator itself lives in @pp/shared so the client can predict its own car
+// with it), car-to-car bumps, the slipstream and the road follower that turns a position into progress
+// along a sampled centreline (windowed, so the race line can't jump to another stretch of road), with
+// the stray-car rescue.
 
 export type CarPhysics = RaceCarPhysics
 export type CarTuning = RaceCarTuning
@@ -34,6 +36,15 @@ export const wrapAngle = raceWrapAngle
 export const clamp1 = raceClamp1
 export const integrateCar = integrateRaceCar
 export const worldWalls = raceWorldWalls
+export const stepTurbo = stepRaceTurbo
+export const carTuning = raceTuning
+
+// A drive input's optional held key: only a literal `true` holds it (missing or malformed = let go).
+export const held = (v: unknown): boolean => v === true
+
+// Snapshot rounding for the turbo meter and the ms timers.
+export const meter3 = (v: number | undefined): number => Math.round((v ?? 0) * 1000) / 1000
+export const toMs = (s: number | undefined): number => Math.round((s ?? 0) * 1000)
 
 // Bouncy car-to-car contact (ghosts of gone drivers pass through); counts a bump on both cars above
 // `hitMinSpeed`.
@@ -213,7 +224,8 @@ export function followRoad(
   car.idx = best
 }
 
-// Back on the road where it left it, pointing down the road, at rest.
+// Back on the road where it left it, pointing down the road, at rest (a rally drift and its boost are
+// gone with it).
 export function rescueCar(car: RaceCar, samples: readonly MicroRacePoint[], closed: boolean): void {
   const { x, y, tx, ty } = pointAt(samples, car.idx, closed)
   car.x = x
@@ -221,16 +233,21 @@ export function rescueCar(car: RaceCar, samples: readonly MicroRacePoint[], clos
   car.a = Math.atan2(ty, tx)
   car.vx = 0
   car.vy = 0
+  if (car.driftS !== undefined) car.driftS = 0
+  if (car.kickS !== undefined) car.kickS = 0
   car.off = false
   car.lostSince = null
   car.resets++
 }
 
-// The driver left mid-race: lift off and let go of the wheel; from now on the car is a ghost.
+// The driver left mid-race: lift off, let go of the wheel and every key; from now on the car is a
+// ghost.
 export function retireCar(car: RaceCar): void {
   car.gone = true
   car.steer = 0
   car.throttle = 0
+  car.handbrake = false
+  car.turbo = false
 }
 
 export function formatRaceTime(ms: number): string {

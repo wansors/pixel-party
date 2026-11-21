@@ -11,7 +11,6 @@ import { ActivatedRoute, Router } from '@angular/router'
 import { TranslocoPipe } from '@jsverse/transloco'
 import { AVATARS, type AvatarId, PLAYER_COLORS } from '@pp/shared'
 import { AudioControlsComponent } from '../../shared/audio-controls.component'
-import { LanguageToggleComponent } from '../../shared/language-toggle.component'
 import { FinalComponent } from './final/final.component'
 import { RoundIntroComponent } from './intro/round-intro.component'
 import { LiveBoardComponent } from './live-board/live-board.component'
@@ -28,7 +27,6 @@ const pick = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length
   selector: 'app-room',
   imports: [
     AudioControlsComponent,
-    LanguageToggleComponent,
     LobbyComponent,
     RoundIntroComponent,
     RoundResultComponent,
@@ -70,6 +68,9 @@ export class RoomComponent implements OnInit {
     this.skipArmed.set(true)
     this.disarmTimer = setTimeout(() => this.skipArmed.set(false), 3000)
   }
+
+  // Past this many rounds the header shows a progress bar instead of one pip per round.
+  readonly maxPips = 24
 
   // 1-based round indices for the header's progress pips.
   pips(total: number): number[] {

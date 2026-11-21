@@ -1,11 +1,17 @@
-import { JUMP_ROPE, type JumpRopeInput, type JumpRopeSnapshot } from '@pp/shared'
+import { JUMP_ROPE, type JumpRopeInput, type JumpRopeSnapshot, rampEase } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 50_000
 const FIRST_PASS_MS = 2200 // a moment to find the rhythm before the first sweep
-const START_PERIOD_MS = 1500
-const MIN_PERIOD_MS = 620
-const SPEEDUP = 0.965 // each turn this much shorter, down to the minimum
+// The rope's speed (turns per second) climbs on an ease-in over the whole round: an easy swing while
+// everyone finds the rhythm, about the old pace by the middle, then it keeps accelerating to the end —
+// no plateau. The last turns stay a hair longer than a jump (JUMP_ROPE.jumpMs), so a perfect rhythm
+// can always keep up.
+const START_PERIOD_MS = 1450
+const END_PERIOD_MS = 490
+const SPEED_POWER = 1.5
+const periodAt = (progress: number): number =>
+  Math.round(1000 / rampEase(1000 / START_PERIOD_MS, 1000 / END_PERIOD_MS, progress, SPEED_POWER))
 
 interface Jumper {
   id: PlayerId
@@ -26,7 +32,7 @@ export interface JumpRopeState {
 }
 
 // FFA rhythm elimination. Deterministic: the rope's whole schedule (every pass under the feet, each
-// turn a little faster) is fixed at init; tick only judges the passes that have come due.
+// turn faster, ever more so) is fixed at init; tick only judges the passes that have come due.
 export class JumpRope implements MiniGame<JumpRopeState, JumpRopeInput> {
   readonly id = 'jump-rope'
   readonly format = 'ffa' as const
@@ -36,10 +42,8 @@ export class JumpRope implements MiniGame<JumpRopeState, JumpRopeInput> {
       typeof ctx.config?.durationMs === 'number' ? ctx.config.durationMs : DEFAULT_DURATION_MS
     const endsAt = ctx.now + durationMs
     const passes: number[] = []
-    let period = START_PERIOD_MS
-    for (let t = ctx.now + FIRST_PASS_MS; t < endsAt; t += period) {
+    for (let t = ctx.now + FIRST_PASS_MS; t < endsAt; t += periodAt((t - ctx.now) / durationMs)) {
       passes.push(t)
-      if (passes.length > 1) period = Math.max(MIN_PERIOD_MS, Math.round(period * SPEEDUP))
     }
     const jumpers = new Map<PlayerId, Jumper>()
     for (const id of ctx.players) {

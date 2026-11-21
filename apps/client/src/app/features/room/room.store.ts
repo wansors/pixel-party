@@ -4,7 +4,9 @@ import { Router } from '@angular/router'
 import { TranslocoService } from '@jsverse/transloco'
 import {
   type AvatarId,
+  effectiveRounds,
   fitsPlayers,
+  MAX_ROUNDS,
   MINIGAMES,
   MINIGAMES_BY_ID,
   type MiniGameFormat,
@@ -137,6 +139,10 @@ export class RoomStore {
   // Phase 4 post-match analysis (on ROUND_RESULT so far, and on FINAL_RANKING).
   readonly radars = signal<PlayerRadarDto[]>([])
   readonly summary = signal<SessionSummaryDto | null>(null)
+  // Lobby profile editor (SET_PROFILE): the last refusal's copy ('' = none), and a counter bumped on
+  // every accepted change so the editor knows it can close.
+  readonly profileError = signal('')
+  readonly profileSaved = signal(0)
 
   private game?: GameClient
   private defaultConfigSent = false
@@ -145,6 +151,8 @@ export class RoomStore {
   // Consecutive round wins per player, used to bump a winner's callout to the "streak" tier.
   private readonly winStreak = new Map<string, number>()
   private identity: Identity = { name: '', color: NEUTRAL, avatar: 'cat' }
+  // The look a SET_PROFILE asked for, adopted as `identity` once the server accepts it.
+  private pendingProfile?: Identity
 
   // ── Derived state ──────────────────────────────────────────────────────────────────────────────
   readonly me = computed(() => this.players().find((p) => p.id === this.selfId()))
@@ -163,10 +171,26 @@ export class RoomStore {
   readonly playableGameIds = computed(() =>
     [...new Set(this.selectedGameIds())].filter((id) => this.fits(id)),
   )
-  // Rounds as the session will run them: the engine caps the count at the playable line-up.
+  // Rounds as the session will run them (D40): `rounds` 0 = auto (one per playable game, capped);
+  // an explicit count may exceed the line-up, which then starts over.
   readonly effectiveRounds = computed(() =>
-    Math.min(this.rounds() || this.playableGameIds().length, this.playableGameIds().length),
+    effectiveRounds(this.rounds(), this.playableGameIds().length),
   )
+  readonly autoRounds = computed(() => this.rounds() <= 0)
+  // More rounds than playable games: some games will come round again.
+  readonly roundsRepeat = computed(
+    () =>
+      this.effectiveRounds() > this.playableGameIds().length && this.playableGameIds().length > 0,
+  )
+  // Rough session length in minutes: the line-up's average game length per round, plus the intro,
+  // result and scoreboard screens around each one (~15 s).
+  readonly estimatedMinutes = computed(() => {
+    const ids = this.playableGameIds()
+    if (ids.length === 0) return 0
+    const avgSec =
+      ids.reduce((sum, id) => sum + (MINIGAMES_BY_ID.get(id)?.durationSec || 30), 0) / ids.length
+    return Math.max(1, Math.round((this.effectiveRounds() * (avgSec + 15)) / 60))
+  })
 
   // The round being played / just played, for the header ("ROUND 2/5 · FRUIT CATCH").
   readonly currentRound = computed(() => {
@@ -380,6 +404,21 @@ export class RoomStore {
           this.sendJoin()
           break
         }
+        if (msg.intent === 'SET_PROFILE') {
+          this.profileError.set(msg.ok ? '' : this.transloco.translate(`reason.${msg.reason}`))
+          if (msg.ok && this.pendingProfile) this.identity = this.pendingProfile
+          this.pendingProfile = undefined
+          if (msg.ok) {
+            this.profileSaved.update((n) => n + 1)
+            // Keep the URL's identity in step, so a reload that has lost its seat rejoins as the new look.
+            const { name, avatar, color } = this.identity
+            this.router.navigate(['/room', this.code()], {
+              queryParams: { name, avatar, color },
+              replaceUrl: true,
+            })
+          }
+          break
+        }
         if (msg.ok) break
         // A reason with its own copy reads as a sentence; the rest fall back to "INTENT rejected: x".
         if (msg.reason === 'no_games_fit') {
@@ -485,18 +524,21 @@ export class RoomStore {
   private maybeSendDefaultConfig(current: MiniGameId[]): void {
     if (this.defaultConfigSent || !this.isHost() || current.length > 0) return
     this.defaultConfigSent = true
-    this.configure(MINIGAMES.map((g) => g.id))
+    this.configure(
+      MINIGAMES.map((g) => g.id),
+      0,
+    )
   }
 
   // ── Intents ────────────────────────────────────────────────────────────────────────────────────
-  // No-repeat sessions play each selected game at most once, so the round count follows the selection
-  // size whenever the line-up changes (picking a game adds a round, dropping one removes it).
-  private configure(ids: MiniGameId[], rounds = ids.length, handicap?: boolean): void {
+  // Changing the line-up keeps the round setting: AUTO (0) keeps following the picks (one round per
+  // playable game, capped), while a count the host set stays put (D40).
+  private configure(ids: MiniGameId[], rounds = this.rounds(), handicap?: boolean): void {
     if (!this.isHost()) return
     this.net.send({
       type: 'HOST_CONFIG',
       minigameIds: ids,
-      rounds: Math.max(1, rounds),
+      rounds: Math.max(0, Math.min(MAX_ROUNDS, Math.round(rounds) || 0)),
       ...(handicap === undefined ? {} : { handicap }),
     })
   }
@@ -527,13 +569,34 @@ export class RoomStore {
     return this.teamSizes().every((n) => n > 0)
   }
 
+  // An explicit round count, 1..MAX_ROUNDS (past the line-up size games come round again).
   setRounds(value: number): void {
-    const max = Math.max(1, this.playableGameIds().length)
-    this.configure(this.selectedGameIds(), Math.max(1, Math.min(max, Math.round(value) || 1)))
+    this.configure(
+      this.selectedGameIds(),
+      Math.max(1, Math.min(MAX_ROUNDS, Math.round(value) || 1)),
+    )
+  }
+
+  // Back to AUTO: one round per playable game (capped), following the picks.
+  setAutoRounds(): void {
+    this.configure(this.selectedGameIds(), 0)
+  }
+
+  // Replace the whole line-up (the "surprise me" pick).
+  replaceGames(ids: readonly MiniGameId[]): void {
+    this.configure([...new Set(ids)])
   }
 
   toggleHandicap(on: boolean): void {
-    this.configure(this.selectedGameIds(), this.rounds() || this.selectedGameIds().length, on)
+    this.configure(this.selectedGameIds(), this.rounds(), on)
+  }
+
+  // Rename / re-skin yourself from the lobby. The server cleans and checks the name; the outcome comes
+  // back as an ACK (profileError / profileSaved). A later fresh JOIN (lost seat) reuses the new look.
+  setProfile(name: string, avatar: AvatarId, color: string): void {
+    this.profileError.set('')
+    this.pendingProfile = { name: name.trim() || this.identity.name, avatar, color }
+    this.net.send({ type: 'SET_PROFILE', name, avatar, color })
   }
 
   toggleReady(): void {

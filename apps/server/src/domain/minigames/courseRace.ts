@@ -11,7 +11,6 @@ import {
   type CourseRaceSnapshot,
   inStretch,
   type MicroRacePoint,
-  RACE_DRAFT_TUNING,
   RACE_WALL_BOUNCE,
   RALLY_STAGES,
   SPEED_CIRCUITS,
@@ -21,17 +20,22 @@ import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './Mi
 import {
   type CarPhysics,
   type CarTuning,
+  carTuning,
   clamp1,
   collideCars,
   followRoad,
   formatRaceTime,
   type GridSlot,
   gridSlots,
+  held,
   inSlipstream,
   integrateCar,
+  meter3,
   pointAt,
   type RaceCar,
   retireCar,
+  stepTurbo,
+  toMs,
   worldWalls,
 } from './raceCore'
 
@@ -51,10 +55,14 @@ interface CourseConfig {
   laps: number
   checkpoints: number
   finishWindowMs: number
+  // The driver's extra key: the rally's handbrake (its physics has the drift model) or the circuit's
+  // turbo.
+  handbrake: boolean
+  turbo: boolean
 }
 
-// Rally: a lively tarmac car that slides on gravel (physics in @pp/shared, shared with the client's
-// own-car prediction).
+// Rally: a car that drifts — grippy on tarmac, loose on gravel, with a handbrake and a boost for a
+// clean drift (physics in @pp/shared, shared with the client's own-car prediction).
 const STAGE: CourseConfig = {
   kind: 'stage',
   courses: RALLY_STAGES,
@@ -65,9 +73,11 @@ const STAGE: CourseConfig = {
   laps: 1,
   checkpoints: 3,
   finishWindowMs: 15_000,
+  handbrake: true,
+  turbo: false,
 }
 
-// Circuit: faster, grippier, and racing each other for real.
+// Circuit: faster, grippier, racing each other for real, with a turbo to fire.
 const CIRCUIT: CourseConfig = {
   kind: 'circuit',
   courses: SPEED_CIRCUITS,
@@ -78,13 +88,14 @@ const CIRCUIT: CourseConfig = {
   laps: 2,
   checkpoints: 0,
   finishWindowMs: 12_000,
+  handbrake: false,
+  turbo: true,
 }
 const RESTITUTION = 1
 const HIT_MIN_SPEED = 70
 // Slipstream: right behind another car (within range, in its wake, heading the same way).
 const DRAFT_RANGE = 140
 const DRAFT_CONE = 0.3
-const DRAFT = RACE_DRAFT_TUNING
 // Boost pads.
 const BOOST_MS = COURSE_BOOST_MS
 const BOOST = COURSE_BOOST
@@ -176,6 +187,12 @@ class CourseRace implements MiniGame<CourseRaceState, CourseRaceInput> {
         splitMs: null,
         draft: false,
         boostUntil: 0,
+        handbrake: false,
+        driftS: 0,
+        kickS: 0,
+        turbo: false,
+        turboMeter: 0,
+        turboS: 0,
       })
     })
     return {
@@ -217,6 +234,8 @@ class CourseRace implements MiniGame<CourseRaceState, CourseRaceInput> {
     if (!Number.isFinite(steer) || !Number.isFinite(throttle)) return state
     car.steer = clamp1(steer)
     car.throttle = clamp1(throttle)
+    car.handbrake = this.cfg.handbrake && held(input.handbrake)
+    car.turbo = this.cfg.turbo && held(input.turbo)
     return state
   }
 
@@ -242,7 +261,10 @@ class CourseRace implements MiniGame<CourseRaceState, CourseRaceInput> {
         car.boostUntil = now + BOOST_MS
     }
     for (let s = 0; s < SUB_STEPS; s++) {
-      for (const car of cars) integrateCar(car, h, this.cfg.physics, this.tuning(state, car, now))
+      for (const car of cars) {
+        const burning = this.cfg.turbo && !car.gone && stepTurbo(car, h, car.draft)
+        integrateCar(car, h, this.cfg.physics, this.tuning(state, car, now, burning))
+      }
       if (this.cfg.contact) {
         for (let i = 0; i < cars.length; i++) {
           for (let j = i + 1; j < cars.length; j++) {
@@ -275,18 +297,12 @@ class CourseRace implements MiniGame<CourseRaceState, CourseRaceInput> {
     return state
   }
 
-  private tuning(state: CourseRaceState, car: Car, now: number): CarTuning {
+  private tuning(state: CourseRaceState, car: Car, now: number, turbo: boolean): CarTuning {
     if (!this.closed) {
       const gravel = inStretch(state.def.gravel, car.idx, state.samples.length)
       return gravel ? COURSE_GRAVEL_TUNING : {}
     }
-    let maxSpeedScale = car.draft ? DRAFT.maxSpeedScale : 1
-    let accelScale = car.draft ? DRAFT.accelScale : 1
-    if (now < car.boostUntil) {
-      maxSpeedScale *= BOOST.maxSpeedScale
-      accelScale *= BOOST.accelScale
-    }
-    return { maxSpeedScale, accelScale }
+    return carTuning(car.draft, turbo, now < car.boostUntil ? BOOST : null)
   }
 
   // A driver who left becomes a ghost (no contact, no slipstream) that no longer holds the race open.
@@ -375,6 +391,8 @@ class CourseRace implements MiniGame<CourseRaceState, CourseRaceInput> {
           gone: c.gone,
           vx: Math.round(c.vx * 10) / 10,
           vy: Math.round(c.vy * 10) / 10,
+          ...(this.cfg.handbrake ? { driftMs: toMs(c.driftS), kickMs: toMs(c.kickS) } : {}),
+          ...(this.cfg.turbo ? { turbo: meter3(c.turboMeter), turboMs: toMs(c.turboS) } : {}),
         }
       }),
       remainingMs: Math.max(0, state.endsAt - now),

@@ -1,4 +1,5 @@
 import {
+  compound,
   ODD_ONE_OUT_WRONG_COOLDOWN_MS,
   type OddOneOutBoard,
   type OddOneOutInput,
@@ -8,6 +9,25 @@ import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './Mi
 
 const DEFAULT_DURATION_MS = 40_000
 const LEVELS = 30
+// The ramp (D40). The grid grows a row and a column every two levels, 2×2 up to 7×7 (still a
+// thumb-sized tile on a phone). The odd tile's brightness gap compounds down ~12% a level — the same
+// step in how much harder it is to see, every level, with no plateau: 72 → 26 by level 8 → 12 by
+// level 14 → a barely-there 5 from level 21. And from level 0 it is lighter or darker on a coin flip,
+// so scanning for the brightest tile doesn't cut it.
+const MAX_SIDE = 7
+const DELTA_START = 72
+const DELTA_FACTOR = 0.88
+const DELTA_MIN = 5
+
+// The odd tile's brightness gap (per channel, 0–255) at a level.
+export function oddOneOutDelta(level: number): number {
+  return Math.round(compound(DELTA_START, DELTA_FACTOR, level, DELTA_MIN))
+}
+
+// The grid side at a level.
+export function oddOneOutSide(level: number): number {
+  return Math.min(2 + Math.floor(level / 2), MAX_SIDE)
+}
 
 export interface OddOneOutState {
   players: PlayerId[]
@@ -25,7 +45,7 @@ export interface OddOneOutState {
 }
 
 // Real-time FFA "spot the different tile". A seeded sequence of boards (grid grows, brightness gap
-// shrinks) is shared by everyone; each player advances at their own pace. The odd tile differs in
+// shrinks by a steady percentage every level) is shared by everyone; each player advances at their own pace. The odd tile differs in
 // brightness — not hue alone — so it is solvable without color discrimination. A wrong tile costs a
 // short tap cooldown, so hunting by tapping everything is slower than looking. Pure domain logic.
 export class OddOneOut implements MiniGame<OddOneOutState, OddOneOutInput> {
@@ -38,14 +58,15 @@ export class OddOneOut implements MiniGame<OddOneOutState, OddOneOutInput> {
     const r = ctx.random
     const boards: OddOneOutBoard[] = []
     for (let level = 0; level < LEVELS; level++) {
-      const side = Math.min(2 + Math.floor(level / 2), 6)
-      // Mid-brightness base hue; the odd tile is lightened by a delta that shrinks as levels rise.
+      const side = oddOneOutSide(level)
+      // Mid-brightness base hue; the odd tile is lightened or darkened by a delta that shrinks as
+      // levels rise.
       const hue = {
         r: 60 + Math.floor(r.next() * 120),
         g: 60 + Math.floor(r.next() * 120),
         b: 60 + Math.floor(r.next() * 120),
       }
-      const delta = Math.max(70 - level * 4, 14)
+      const delta = oddOneOutDelta(level) * (r.next() < 0.5 ? 1 : -1)
       const clamp = (v: number): number => Math.max(0, Math.min(255, v))
       const base = (hue.r << 16) | (hue.g << 8) | hue.b
       const odd = (clamp(hue.r + delta) << 16) | (clamp(hue.g + delta) << 8) | clamp(hue.b + delta)

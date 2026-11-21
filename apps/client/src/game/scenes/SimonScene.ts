@@ -1,4 +1,4 @@
-import { PALETTE, type SimonPlayerView, type SimonSnapshot } from '@pp/shared'
+import { PALETTE, type SimonPlayerView, type SimonSnapshot, simonPlayback } from '@pp/shared'
 import Phaser from 'phaser'
 import { ensureAvatarTexture } from '../avatars'
 import { addBanner, burst, flash, floatText, punch, ring, shake, showBanner } from '../fx'
@@ -6,13 +6,6 @@ import { bodyStyle, headlineStyle, hexToCss, shade } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
 const PAD_COLORS = [PALETTE.red, 0x3a7bd5, 0x2a9d3f, PALETTE.amber]
-const PLAY_ON_MS = 420
-const PLAY_GAP_MS = 180
-// A repeated pad (e.g. seq = [1, 1, 2]) needs a longer, clearer gap than a change of pad — with the
-// normal gap the second flash of the same color barely reads as a separate tap.
-const PLAY_REPEAT_GAP_MS = 420
-// Beat between "level up!" (or the round start) and the first pad of the playback.
-const PLAY_LEAD_IN_MS = 600
 const TAP_LIT_MS = 200
 // The device is drawn on a DEVICE_CELLS-wide pixel grid (each cell = one chunky art pixel).
 const DEVICE_CELLS = 48
@@ -40,14 +33,16 @@ interface PlaySlot {
 }
 
 // Precomputes each pad's on-window along the playback timeline, widening the gap before a slot whose
-// pad repeats the previous one.
+// pad repeats the previous one. The tempo speeds up with the level (the sequence length): see
+// simonPlayback in @pp/shared.
 function buildPlaySlots(seq: number[]): PlaySlot[] {
+  const { leadInMs, onMs, gapMs, repeatGapMs } = simonPlayback(seq.length)
   const slots: PlaySlot[] = []
-  let t = PLAY_LEAD_IN_MS
+  let t = leadInMs
   seq.forEach((pad, i) => {
-    if (i > 0) t += pad === seq[i - 1] ? PLAY_REPEAT_GAP_MS : PLAY_GAP_MS
-    slots.push({ pad, start: t, end: t + PLAY_ON_MS })
-    t += PLAY_ON_MS
+    if (i > 0) t += pad === seq[i - 1] ? repeatGapMs : gapMs
+    slots.push({ pad, start: t, end: t + onMs })
+    t += onMs
   })
   return slots
 }
@@ -86,11 +81,12 @@ function paintCells(
 }
 
 // Simon (sequence memory) canvas: a round pixel-art Simon device with four quarter-ring pads around a
-// count display. WATCH: the player's growing sequence plays back (input locked, device rim amber);
-// YOUR TURN: repeat it (rim lime, pips below track the replay). Pads have clearly distinct unlit/lit
-// states plus a glow halo; a level-up celebrates before the next playback; a wrong pad blinks the pad
-// that was expected. Pads answer to clicks/taps and to Q W / A S (or 1-4), printed on the pads on
-// keyboard-sized screens. The server owns the sequence and the verdicts. Scene key === mini-game id.
+// count display. WATCH: the player's growing sequence plays back, a little faster every level (input
+// locked, device rim amber); YOUR TURN: repeat it (rim lime, pips below track the replay). Pads have
+// clearly distinct unlit/lit states plus a glow halo; a level-up celebrates before the next playback;
+// a wrong pad blinks the pad that was expected. Pads answer to clicks/taps and to Q W / A S (or 1-4),
+// printed on the pads on keyboard-sized screens. The server owns the sequence and the verdicts.
+// Scene key === mini-game id.
 export class SimonScene extends MiniGameScene<SimonSnapshot> {
   private prompt?: Phaser.GameObjects.Text
   private shell?: Phaser.GameObjects.Image

@@ -152,6 +152,58 @@ describe('BubblePop', () => {
     expect(game.isFinished(next, 7)).toBe(true)
   })
 
+  test('the ceiling drops ever more often: the gaps shrink most at the end of the round', () => {
+    const s = init(['a'])
+    const t = s.dropTimes
+    expect(t[0]).toBe(10_000)
+    expect(t.length).toBeGreaterThanOrEqual(6)
+    const gaps = t.slice(1).map((x, i) => x - (t[i] as number))
+    for (let i = 1; i < gaps.length; i++) expect(gaps[i] ?? 0).toBeLessThan(gaps[i - 1] ?? 0)
+    // Non-linear: the late squeezes are far bigger than the first one.
+    const shrink = gaps.slice(1).map((g, i) => (gaps[i] as number) - g)
+    expect(shrink.at(-1) ?? 0).toBeGreaterThan(1.5 * (shrink[0] ?? 0))
+    expect(gaps.at(-1) ?? 0).toBeLessThan(5000)
+  })
+
+  test('a ceiling drop pushes a new row in from the top of every board still in play', () => {
+    const game = new BubblePop()
+    const s = init(['a', 'done', 'jam'])
+    const board = emptyBoard()
+    board[idx(0, 2)] = 3
+    board[idx(1, 2)] = 4
+    s.boards.set('a', board)
+    s.doneAt.set('done', 5)
+    s.boards.set('done', emptyBoard())
+    s.jammed.add('jam')
+    const jammedBefore = [...nn(s.boards.get('jam'))]
+    const at = nn(s.dropTimes[0])
+    game.tick(s, 50, at - 1)
+    expect(s.drops).toBe(0)
+    expect(game.snapshot(s, at - 1).nextDropMs).toBe(1)
+    game.tick(s, 50, at)
+    expect(s.drops).toBe(1)
+    expect(game.snapshot(s, at).drops).toBe(1)
+    const after = nn(s.boards.get('a'))
+    expect(after.slice(0, COLS)).toEqual(nn(s.dropRows[0]))
+    expect(after[idx(1, 2)]).toBe(3)
+    expect(after[idx(2, 2)]).toBe(4)
+    expect(nn(s.boards.get('done')).every((c) => c === 0)).toBe(true)
+    expect(nn(s.boards.get('jam'))).toEqual(jammedBefore)
+  })
+
+  test('a drop with a bubble already on the bottom row jams the board', () => {
+    const game = new BubblePop()
+    const s = init(['a', 'b'])
+    const board = emptyBoard()
+    for (let r = 0; r < ROWS; r++) board[idx(r, 0)] = (r % 2) + 2 // one column down to the floor
+    s.boards.set('a', board)
+    const before = [...board]
+    game.tick(s, 50, nn(s.dropTimes[0]))
+    expect(s.jammed.has('a')).toBe(true)
+    expect(nn(s.boards.get('a'))).toEqual(before)
+    expect(s.jammed.has('b')).toBe(false)
+  })
+
   test('on equal points a jammed board ranks below a live one', () => {
     const game = new BubblePop()
     const s = init(['jam', 'live'])

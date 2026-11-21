@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { ServerMsg } from '@pp/shared'
+import { AUTO_ROUNDS_CAP, MINIGAMES, type ServerMsg } from '@pp/shared'
 import { Player } from '../../domain/entities/Player'
 import { Room } from '../../domain/entities/Room'
 import type { Random } from '../../domain/ports/Random'
@@ -185,8 +185,9 @@ describe('SessionEngine', () => {
   test('skips picked games whose player range does not fit the headcount (D27)', () => {
     const room = Room.create('FIT', 12)
     room.add(Player.create({ id: 'a', name: 'a', color: '#fff', avatar: 'x' }))
-    // A duel needs a second player: a solo host only plays the game that fits one.
-    room.configure(['sink-the-fleet', 'button-masher'], 2)
+    // A duel needs a second player: a solo host only plays the game that fits one (auto rounds = one
+    // per playable game).
+    room.configure(['sink-the-fleet', 'button-masher'], 0)
 
     let t = 0
     const clock: Clock = { now: () => t }
@@ -337,10 +338,10 @@ describe('SessionEngine', () => {
     expect(engine.skipRound('a')).toBe(false)
   })
 
-  test('caps rounds at the number of distinct games (no-repeat)', () => {
+  test('more rounds than distinct games starts the line-up over, never back-to-back (D40)', () => {
     const room = Room.create('CAP', 10)
     room.add(Player.create({ id: 'a', name: 'a', color: '#fff', avatar: 'x' }))
-    // Two distinct solo-friendly games but five rounds requested — a no-repeat session plays only two.
+    // Two distinct solo-friendly games but five rounds requested: the line-up plays in passes.
     room.configure(['button-masher', 'color-trap'], 5)
 
     let t = 0
@@ -354,7 +355,7 @@ describe('SessionEngine', () => {
       CONFIG,
     )
     engine.start()
-    for (let i = 0; i < 1600 && !engine.isFinished; i++) {
+    for (let i = 0; i < 4000 && !engine.isFinished; i++) {
       t += 1000 / CONFIG.tickHz
       engine.onInput('a', { kind: 'mash' })
       engine.onInput('a', { kind: 'tap' })
@@ -362,10 +363,39 @@ describe('SessionEngine', () => {
     }
 
     const ids = captured.flatMap((m) => (m.type === 'ROUND_INTRO' ? [m.minigameId] : []))
-    expect(ids.length).toBe(2)
+    expect(ids.length).toBe(5)
     expect(new Set(ids).size).toBe(2)
+    for (let i = 1; i < ids.length; i++) expect(ids[i]).not.toBe(ids[i - 1])
     const intro = captured.find((m) => m.type === 'ROUND_INTRO')
-    expect(intro?.type === 'ROUND_INTRO' && intro.totalRounds).toBe(2)
+    expect(intro?.type === 'ROUND_INTRO' && intro.totalRounds).toBe(5)
+    expect(engine.isFinished).toBe(true)
+  })
+
+  test('auto rounds (0) play each playable game once, capped at AUTO_ROUNDS_CAP (D40)', () => {
+    const ids = (n: number): ServerMsg[] => {
+      const room = Room.create(`AUTO${n}`, 12)
+      room.add(Player.create({ id: 'a', name: 'a', color: '#fff', avatar: 'x' }))
+      const solo = MINIGAMES.filter((g) => g.players.min <= 1 && g.format === 'ffa').map(
+        (g) => g.id,
+      )
+      room.configure(solo.slice(0, n), 0)
+      const captured: ServerMsg[] = []
+      const engine = new SessionEngine(
+        room,
+        { toRoom: (_c, m) => captured.push(m) },
+        { now: () => 0 },
+        noRandom,
+        CONFIG,
+      )
+      engine.start()
+      return captured
+    }
+    const totalOf = (msgs: ServerMsg[]): number => {
+      const intro = msgs.find((m) => m.type === 'ROUND_INTRO')
+      return intro?.type === 'ROUND_INTRO' ? intro.totalRounds : 0
+    }
+    expect(totalOf(ids(3))).toBe(3)
+    expect(totalOf(ids(30))).toBe(AUTO_ROUNDS_CAP)
   })
 
   test('avoids two consecutive games sharing the same primary skill axis when an alternative exists', () => {

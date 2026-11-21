@@ -2,15 +2,19 @@ import {
   type MicroRacePoint,
   type RaceCarPhysics,
   type RaceCarTuning,
+  type RaceDriftPhysics,
   sampleSpline,
 } from './microRace'
 
 // Course racers built on the Micro Race engine, on courses bigger than a screen (the client follows
 // your car and shows a minimap):
 //  - Rally Stage (`rally-stage`): a point-to-point time trial on a twisty stage of gravel and tarmac.
-//    Everyone starts together but drives as a ghost (no contact); checkpoints give split times.
+//    Everyone starts together but drives as a ghost (no contact); checkpoints give split times. The car
+//    drifts (RaceDriftPhysics): loose on gravel, grippy on tarmac, a handbrake to kick the tail out and
+//    a short boost for a clean drift.
 //  - Speed Circuit (`speed-circuit`): a multi-lap, wheel-to-wheel race on a proper circuit, with a
-//    slipstream (tuck in behind a car for more top speed) and boost pads on the straights.
+//    slipstream (tuck in behind a car for more top speed), boost pads on the straights and a turbo
+//    (RACE_TURBO) the driver fires.
 // Both apps derive the same centreline from a course def (`sampleCourse`).
 
 export type CourseKind = 'stage' | 'circuit'
@@ -32,8 +36,30 @@ export interface CourseDef {
 
 export const COURSE_SPACING = 8
 
+// Rally drift (see RaceDriftPhysics). On tarmac the travel direction catches up with the nose in
+// ~50 ms (a full-lock corner opens ~10°: grip, not a drift); gravel takes its traction from
+// COURSE_GRAVEL_TUNING (~30° at full lock: a held drift); the handbrake drops it to almost nothing and
+// swings the nose 1.4× harder, so a ~0.15 s pull flicks the tail out ~40°. A drift (≥ 0.3 rad at ≥ 110)
+// held ≥ 0.2 s banks 0.8 s of boost (+15 % top speed, +80 % pull) per second of drift, capped at 1 s.
+export const RALLY_DRIFT: RaceDriftPhysics = {
+  traction: 14,
+  offTraction: 3,
+  handbrakeTraction: 1.2,
+  handbrakeDecel: 160,
+  handbrakeYaw: 1.4,
+  slideDrag: 1.2,
+  driftSlip: 0.3,
+  driftSpeed: 110,
+  spinSlip: 1.75,
+  minDriftS: 0.2,
+  kickPerS: 0.8,
+  maxKickS: 1,
+  kick: { maxSpeedScale: 1.15, accelScale: 1.8 },
+}
+
 // Car physics per course kind (the shared integrator in microRace.ts; the client predicts its own car
-// with the same numbers). Rally: a lively tarmac car that slides on gravel. Circuit: faster, grippier.
+// with the same numbers). Rally: a lively car that drifts, grippy on tarmac and loose on gravel.
+// Circuit: faster, grippier, on rails like the tabletop cars.
 export const COURSE_PHYSICS: Readonly<Record<CourseKind, RaceCarPhysics>> = {
   stage: {
     maxSpeed: 270,
@@ -51,6 +77,7 @@ export const COURSE_PHYSICS: Readonly<Record<CourseKind, RaceCarPhysics>> = {
     turnFullSpeed: 70,
     understeerFrom: 170,
     highSpeedUndersteer: 0.3,
+    drift: RALLY_DRIFT,
   },
   circuit: {
     maxSpeed: 320,
@@ -71,8 +98,8 @@ export const COURSE_PHYSICS: Readonly<Record<CourseKind, RaceCarPhysics>> = {
   },
 }
 export const COURSE_CAR_R: Readonly<Record<CourseKind, number>> = { stage: 12, circuit: 13 }
-// Rally gravel: loose (less grip) and a little slower.
-export const COURSE_GRAVEL_TUNING: Readonly<RaceCarTuning> = { grip: 4.2, maxSpeedScale: 0.93 }
+// Rally gravel: loose (far less traction than tarmac) and a little slower.
+export const COURSE_GRAVEL_TUNING: Readonly<RaceCarTuning> = { traction: 6, maxSpeedScale: 0.93 }
 // Circuit boost pads: +25 % top speed, +60 % pull for BOOST_MS.
 export const COURSE_BOOST_MS = 1200
 export const COURSE_BOOST = { maxSpeedScale: 1.25, accelScale: 1.6 } as const
@@ -249,6 +276,12 @@ export interface CourseCar {
   // Velocity (world units/s), for dead reckoning and the client's own-car reconciliation.
   vx: number
   vy: number
+  // Stage: how long the current drift has lasted and the exit boost left (ms).
+  driftMs?: number
+  kickMs?: number
+  // Circuit: the turbo meter (0…1, full = ready) and the burn left (ms; 0 = not lit).
+  turbo?: number
+  turboMs?: number
 }
 
 export interface CourseRaceSnapshot {
@@ -264,9 +297,12 @@ export interface CourseRaceSnapshot {
   closing: boolean
 }
 
-// Same controls as Micro Race: steer in [-1, 1], throttle in [-1, 1] (negative = brake, then reverse).
+// Micro Race's controls (steer in [-1, 1], throttle in [-1, 1]: negative = brake, then reverse) plus,
+// both optional and held: the handbrake (stage only) and the turbo key (circuit only).
 export interface CourseRaceInput {
   kind: 'drive'
   steer: number
   throttle: number
+  handbrake?: boolean
+  turbo?: boolean
 }

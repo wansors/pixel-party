@@ -209,4 +209,27 @@ describe('PixelRain', () => {
     expect(late.length).toBeGreaterThan(early.length * 1.4)
     expect(meanFall(late)).toBeLessThan(meanFall(early) * 0.8)
   })
+
+  test('the ramp is non-linear: the last quarter thickens far more than the first', () => {
+    // A constant RNG isolates the curve: every gap and fall time is the ramp multiplier at work.
+    const s = new PixelRain().init({
+      players: ['p'],
+      seed: 1,
+      random: { next: () => 0.5 },
+      now: 0,
+      config: { durationMs: 40_000 },
+    })
+    const at = (ms: number) => {
+      const i = s.obstacles.findIndex((o) => o.spawnAt >= ms)
+      const o = s.obstacles[i]
+      const prev = s.obstacles[i - 1]
+      if (!o || !prev) throw new Error(`no obstacle at ${ms}`)
+      return { gap: o.spawnAt - prev.spawnAt, fall: o.fallMs }
+    }
+    const [q0, q1, q3, q4] = [at(1000), at(10_000), at(30_000), at(39_500)]
+    expect(q3.gap - q4.gap).toBeGreaterThan(2 * (q0.gap - q1.gap))
+    expect(q3.fall - q4.fall).toBeGreaterThan(2 * (q0.fall - q1.fall))
+    // Still a fair finish: blocks keep falling for well over half a second.
+    expect(q4.fall).toBeGreaterThan(900)
+  })
 })

@@ -83,6 +83,24 @@ describe('Pang', () => {
     expect(a.balloons.length).toBeGreaterThan(0)
   })
 
+  test('every wave cleared brings faster balloons: the speed compounds wave after wave', () => {
+    const s = init(['a'])
+    const a = arena(s, 'a')
+    const speedOf = (wave: number): number => {
+      a.balloons = []
+      a.nextWaveAt = 1
+      a.wave = wave - 1
+      game.tick(s, 50, 10)
+      return Math.abs(a.balloons[0]?.vx ?? 0)
+    }
+    const speeds = [1, 2, 3, 4, 5, 6, 7].map(speedOf)
+    expect(speeds[0]).toBeCloseTo(PANG.vx * 1.07)
+    // Compounding: each step up is bigger than the one before (until the cap).
+    const steps = speeds.slice(1).map((v, i) => v - (speeds[i] as number))
+    for (let i = 1; i < steps.length; i++) expect(steps[i] ?? 0).toBeGreaterThan(steps[i - 1] ?? 0)
+    expect(speedOf(40)).toBeCloseTo(PANG.vx * 1.7)
+  })
+
   test('a missed harpoon vanishes at the ceiling', () => {
     const s = init(['a'])
     const a = arena(s, 'a')

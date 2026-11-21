@@ -1,4 +1,4 @@
-import type { PixelDashInput, PixelDashSnapshot } from '@pp/shared'
+import { type PixelDashInput, type PixelDashSnapshot, rampEase } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 40_000
@@ -14,16 +14,20 @@ const WASTED_MS = 400
 const SLACK_MS = 40
 // How long before arrival an obstacle is visible/approaching (the snapshot lead window), and how far
 // past the runner (in `t` units) obstacles stay in the snapshot so they scroll off-screen; obstacles
-// also show a little before they enter, so the client's extrapolation never pops them in late.
-const LEAD_MS = 1200
+// also show a little before they enter, so the client's extrapolation never pops them in late. The
+// run speeds up over the round: the lead window shrinks on an ease-in (1200 ms → 760 ms, i.e. the
+// world scrolls ~1.6× faster by the end), so the last stretch leaves far less time to react.
+const LEAD_START_MS = 1200
+const LEAD_END_MS = 760
 const SHOW_FROM_T = 1.15
 const SHOW_UNTIL_T = -0.35
 const FIRST_MS = 1500
-const GAP_MIN_MS = 700
-const GAP_JITTER_MS = 600
-// The track tightens over the round: by the end the random part of each gap is this much shorter
-// (gaps 700–1300 ms at the start, 700–1000 ms at the end — never shorter than a jump plus a landing).
-const JITTER_RAMP = 0.5
+// The track tightens over the round on the same ease-in: gaps 700–1300 ms at the start, 560–780 ms at
+// the very end — never shorter than a jump plus a landing (AIR_MS + LAND_MS).
+const GAP_START_MS = 700
+const GAP_END_MS = 560
+const JITTER_START_MS = 600
+const JITTER_END_MS = 220
 const END_PAD_MS = 800
 
 interface Obstacle {
@@ -65,8 +69,9 @@ export class PixelDash implements MiniGame<PixelDashState, PixelDashInput> {
     let id = 0
     while (t < durationMs - END_PAD_MS) {
       obstacles.push({ id: id++, arriveAt: t })
-      const ramp = 1 - JITTER_RAMP * (t / durationMs)
-      t += GAP_MIN_MS + Math.floor(r.next() * GAP_JITTER_MS * ramp)
+      const p = t / durationMs
+      const gap = rampEase(GAP_START_MS, GAP_END_MS, p)
+      t += Math.round(gap + r.next() * rampEase(JITTER_START_MS, JITTER_END_MS, p))
     }
     return {
       players: [...ctx.players],
@@ -153,15 +158,23 @@ export class PixelDash implements MiniGame<PixelDashState, PixelDashInput> {
     return { placements: sorted, ranks, stats }
   }
 
+  // The lead window (ms an obstacle takes to cross the screen) in force at `now`.
+  private leadAt(state: PixelDashState, now: number): number {
+    const span = Math.max(1, state.endsAt - state.startedAt)
+    return Math.round(rampEase(LEAD_START_MS, LEAD_END_MS, (now - state.startedAt) / span))
+  }
+
   snapshot(state: PixelDashState, now: number): PixelDashSnapshot {
+    const leadMs = this.leadAt(state, now)
     const obstacles = state.obstacles.flatMap((o) => {
-      const t = (state.startedAt + o.arriveAt - now) / LEAD_MS
+      const t = (state.startedAt + o.arriveAt - now) / leadMs
       return t >= SHOW_UNTIL_T && t <= SHOW_FROM_T ? [{ id: o.id, t }] : []
     })
     const scores: Record<string, number> = {}
     for (const pid of state.players) scores[pid] = state.cleared.get(pid)?.size ?? 0
     return {
       obstacles,
+      leadMs,
       scores,
       stumbles: Object.fromEntries(state.stumbles),
       remainingMs: Math.max(0, state.endsAt - now),

@@ -19,8 +19,8 @@ export class Player {
   private constructor(
     readonly id: string,
     private _name: string,
-    readonly color: string,
-    readonly avatar: string,
+    private _color: string,
+    private _avatar: string,
     private _ready = false,
     private _connected = true,
     readonly touch = false,
@@ -58,6 +58,12 @@ export class Player {
   get name(): string {
     return this._name
   }
+  get color(): string {
+    return this._color
+  }
+  get avatar(): string {
+    return this._avatar
+  }
   get ready(): boolean {
     return this._ready
   }
@@ -76,5 +82,12 @@ export class Player {
   }
   setTeam(team: TeamId | undefined): void {
     this._team = team
+  }
+  // Lobby profile edit (SET_PROFILE): the caller has already cleaned and checked every value.
+  setProfile(name: string, avatar: string, color: string): void {
+    if (name.trim().length === 0) throw new Error('player name must not be empty')
+    this._name = name.trim()
+    this._avatar = avatar
+    this._color = color
   }
 }

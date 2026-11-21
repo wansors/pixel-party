@@ -18,7 +18,8 @@ const jumper = (s: JumpRopeState, id: string) => {
   return j
 }
 const run = (s: JumpRopeState, from: number, to: number): void => {
-  for (let t = from + 50; t <= to; t += 50) game.tick(s, 50, t)
+  for (let t = from + 50; t < to; t += 50) game.tick(s, 50, t)
+  game.tick(s, 50, to)
 }
 
 describe('JumpRope', () => {
@@ -26,9 +27,24 @@ describe('JumpRope', () => {
     const s = init(['a'])
     expect(s.passes[0]).toBe(2200)
     const gaps = s.passes.slice(1).map((t, i) => t - (s.passes[i] as number))
-    expect(gaps[0]).toBe(1500)
+    expect(gaps[0]).toBeGreaterThan(1400)
     for (let i = 1; i < gaps.length; i++) expect(gaps[i] ?? 0).toBeLessThanOrEqual(gaps[i - 1] ?? 0)
-    expect(gaps.at(-1)).toBe(620)
+    // It keeps accelerating to the very end (no plateau), never quicker than a jump can follow.
+    expect(gaps.at(-1)).toBeLessThan(520)
+    expect(gaps.at(-1)).toBeGreaterThan(JUMP_ROPE.jumpMs)
+  })
+
+  test('the speed-up is non-linear: the last quarter accelerates far more than the first', () => {
+    const s = init(['a'])
+    // Turns per second at a given round time (the pass gap in force then).
+    const rateAt = (ms: number): number => {
+      const i = s.passes.findIndex((t) => t >= ms)
+      const gap = (s.passes[i] as number) - (s.passes[i - 1] as number)
+      return 1000 / gap
+    }
+    const firstQuarter = rateAt(12_500) - rateAt(3000)
+    const lastQuarter = rateAt(49_500) - rateAt(37_500)
+    expect(lastQuarter).toBeGreaterThan(firstQuarter * 2)
   })
 
   test('in the air as the rope passes: cleared; on the ground: a heart, then out', () => {

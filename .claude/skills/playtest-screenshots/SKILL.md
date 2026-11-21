@@ -48,8 +48,8 @@ cd "$WORK" && timeout 180 bun shoot.ts <tag>-phone 390x844 fruit-catch
   joins as a phone and the lobby's mobile hints show (D34).
 - Party mode (the production build, as players get it): build the client, start the server with
   `NODE_ENV=production` (it serves the build on :3000) and point the driver at it with
-  `PP_CLIENT=http://localhost:3000 PP_SERVER=http://localhost:3000`. A session is capped at 20
-  rounds, so sweep the catalog in several line-ups.
+  `PP_CLIENT=http://localhost:3000 PP_SERVER=http://localhost:3000`. `shoot.ts` asks for one round
+  per listed game (a session takes up to 99 — D40), so a whole-catalog sweep fits one run.
 - Output: `$WORK/shots/<tag>/NNN-<phase>.png` — look at them with the Read tool.
 - Per game: `-intro` (≈1.8 s into the countdown), `-play1` (≈1.5 s into the round), `-play2` (after a
   few clicks + Space, ≈4 s later), `-finish` (the frozen last frame with the FINISH stamp),
@@ -65,6 +65,22 @@ cd "$WORK" && timeout 180 bun shoot.ts <tag>-phone 390x844 fruit-catch
   `PP_REPO=<repo root> bun shoot.ts …` for those.
 - Team games get real teams (the lobby assigns them when the line-up has a team game). Bots never
   play properly, so opponents look idle and turn-based games mostly show waiting states.
+
+## Game-picker thumbnails (`thumbs.ts`)
+The lobby's game cards show a real in-play screenshot per game: `apps/client/public/thumbs/<id>.webp`
+(384×240, 16:10 center crop of the canvas, ~5–15 KB each; a game without one gets a pixel
+placeholder). Regenerate them after a visual change to a game, or when adding one:
+```bash
+cp .claude/skills/playtest-screenshots/thumbs.ts "$WORK/"
+cd "$WORK" && PP_REPO=<repo root> PP_CLIENT=http://localhost:3000 PP_SERVER=http://localhost:3000 \
+  timeout 900 bun thumbs.ts                  # the whole catalog, ~10 s per game
+cd "$WORK" && PP_REPO=<repo root> … bun thumbs.ts rally-stage,pang   # just these
+```
+Bots host a 4-player room and run the games as one session; ~4.5 s into each round (`--delay=ms`) the
+browser player's canvas is captured, then the host skips the round. Use party mode (a production
+build, no hot reload) so half-finished edits don't end up in a thumbnail. Look at a few with the Read
+tool; re-shoot single games whose moment came out dull (bump `--delay`), or that caught the results
+screen / your OUT! banner (a quick game: `--delay=2000 --nopoke`).
 
 ## Checklist when reviewing shots
 Nothing clipped or overlapping at 1280x800 **and** 390x844; the HUD strip (score chip, seconds,

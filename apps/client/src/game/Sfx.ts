@@ -238,6 +238,30 @@ export class Sfx {
     })
   }
 
+  // Tyres sliding (a drift): a short burst, re-fired while the slide lasts. `loose` = gravel's crunchy
+  // hiss; otherwise the tarmac squeal.
+  skid(loose = false): void {
+    if (loose) {
+      this.noise(150, { filter: 'bandpass', freq: 1100, freqTo: 700, q: 0.9, gain: 0.14 })
+      return
+    }
+    this.noise(140, { filter: 'bandpass', freq: 2600, q: 7, gain: 0.12 })
+    this.tone(1250, 140, { type: 'triangle', slideTo: 1150, gain: 0.05 })
+  }
+
+  // A turbo lighting: a deep roar climbing into a hiss.
+  turbo(): void {
+    this.tone(110, 420, { type: 'sawtooth', slideTo: 440, gain: 0.16 })
+    this.noise(480, {
+      filter: 'bandpass',
+      freq: 400,
+      freqTo: 3200,
+      q: 1.1,
+      gain: 0.22,
+      attackMs: 40,
+    })
+  }
+
   // Into the water (off the ice, through the glass, off the edge).
   splash(): void {
     this.noise(480, { filter: 'bandpass', freq: 2200, freqTo: 300, q: 0.9, gain: 0.3 })

@@ -66,9 +66,10 @@ export class Room {
   get(playerId: string): Player | undefined {
     return this.players.get(playerId)
   }
-  hasName(name: string): boolean {
+  // `exceptId`: ignore that member (a player renaming to a new spelling of their own name).
+  hasName(name: string, exceptId?: string): boolean {
     const n = name.trim().toLowerCase()
-    return this.list().some((p) => p.name.toLowerCase() === n)
+    return this.list().some((p) => p.id !== exceptId && p.name.toLowerCase() === n)
   }
 
   // First joiner becomes host; host reassigns to the next member when the current host leaves.

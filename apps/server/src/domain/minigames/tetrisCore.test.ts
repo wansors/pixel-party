@@ -24,6 +24,7 @@ import {
   createPlayerBoard,
   createQueue,
   FALL_INTERVAL_MS,
+  gravityMs,
   isTetrisInput,
   ROWS,
   restartBoard,
@@ -154,6 +155,30 @@ describe('tetris engine (shared)', () => {
     const locks = tetrisFall(s, FALL_INTERVAL_MS, always(O))
     expect(locks.length).toBe(1)
     expect(s.current).toEqual(tetrisSpawn(O))
+  })
+
+  test('gravity eases in over the round, and the board carries it to the client', () => {
+    const at = (t: number): number => gravityMs(0, 60_000, t, 170)
+    expect(at(0)).toBe(FALL_INTERVAL_MS)
+    expect(at(60_000)).toBe(170)
+    expect(at(90_000)).toBe(170)
+    // Non-linear: the last quarter speeds gravity up several times more than the first one did.
+    expect(at(45_000) - at(60_000)).toBeGreaterThan(3 * (at(0) - at(15_000)))
+    // The engine follows the board's own gravity…
+    const s = stateWith({ shape: O, x: 0, y: 0, rot: 0 })
+    s.fallMs = 200
+    tetrisFall(s, 199, always(O))
+    expect(s.current?.y).toBe(0)
+    tetrisFall(s, 1, always(O))
+    expect(s.current?.y).toBe(1)
+    // …and the wire hands it to the client's prediction.
+    const queue = [T, S, O, I]
+    const p = createPlayerBoard(queue)
+    expect(boardView(p, queue).fallMs).toBeUndefined()
+    p.fallMs = 300
+    const view = boardView(p, queue)
+    expect(view.fallMs).toBe(300)
+    expect(tetrisDecodeBoard(view).state.fallMs).toBe(300)
   })
 
   test('a piece that cannot spawn tops the board out and every input becomes a no-op', () => {

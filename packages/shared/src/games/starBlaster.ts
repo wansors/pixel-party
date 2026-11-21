@@ -10,6 +10,8 @@
 // ship, the score, which enemies that player has destroyed (an enemy shoots only while it's alive) and
 // which bullets hit them. World units: the viewport is STAR.w × STAR.h, y grows downward.
 
+import { rampEase } from '../difficulty'
+
 export const STAR = {
   w: 1,
   h: 1.3,
@@ -210,7 +212,9 @@ export function starBulletNear(
 }
 
 // The round's attack script: formations of drones every couple of seconds, a gunner every ~6 s that
-// hovers and sprays a pattern, a boss for the last stretch. Denser as the round goes on.
+// hovers and sprays a pattern, a boss for the last stretch. It escalates on an ease-in (rampEase): the
+// opening waves are a warm-up, the run-up to the boss is quick, armed swarms and faster gunner
+// volleys, and the boss's spiral itself winds up quicker and quicker until the bell.
 export function buildStarScript(seed: number, durationMs: number): StarScript {
   const rng = mulberry32(seed)
   const enemies: StarEnemy[] = []
@@ -227,13 +231,13 @@ export function buildStarScript(seed: number, durationMs: number): StarScript {
     const n = 4 + Math.floor(rng() * 3)
     const kind = rng()
     const x0 = 0.15 + rng() * 0.7
-    const vy = 0.32 + p * 0.18 + rng() * 0.06
+    const vy = rampEase(0.32, 0.56, p) + rng() * 0.06
     const turnY = STAR.h * (0.5 + rng() * 0.15)
     // Down to the turn, then at most ~1.6 s veering out of the side.
     const lifeMs = Math.round(((turnY + 0.06) / vy) * 1000 + 1600)
     for (let i = 0; i < n; i++) {
       const at = t + i * 260
-      const shooter = rng() < 0.1 + p * 0.2
+      const shooter = rng() < rampEase(0.08, 0.42, p)
       const path: Path =
         kind < 0.4
           ? {
@@ -274,14 +278,16 @@ export function buildStarScript(seed: number, durationMs: number): StarScript {
         speed: 0.4,
       })
     }
-    t += Math.round(2600 - p * 900 + rng() * 600)
+    t += Math.round(rampEase(2600, 1500, p) + rng() * 600)
   }
   // Gunners.
   for (let t = 5000; t < bossAt - 2000; t += Math.round(5600 + rng() * 1800)) {
+    const p = t / bossAt
     const stayMs = 4800
     const pattern: StarPattern = rng() < 0.5 ? 'ring' : 'fan'
     const shots: number[] = []
-    for (let s = t + ENTER_MS + 300; s < t + ENTER_MS + stayMs; s += 1600) shots.push(s)
+    const every = Math.round(rampEase(1600, 1000, p))
+    for (let s = t + ENTER_MS + 300; s < t + ENTER_MS + stayMs; s += every) shots.push(s)
     add({
       kind: 'gunner',
       spawnAt: t,
@@ -296,14 +302,19 @@ export function buildStarScript(seed: number, durationMs: number): StarScript {
       },
       shots,
       pattern,
-      count: pattern === 'ring' ? 8 : 5,
-      speed: 0.34,
+      count: (pattern === 'ring' ? 8 : 5) + Math.round(rampEase(0, 2, p)),
+      speed: rampEase(0.34, 0.42, p),
     })
   }
-  // The boss: a long hover spraying spirals.
+  // The boss: a long hover spraying spirals, ever quicker (800 ms → 420 ms a volley by the bell).
   const stayMs = Math.max(4000, durationMs - bossAt - ENTER_MS - 400)
   const bossShots: number[] = []
-  for (let s = bossAt + ENTER_MS + 400; s < bossAt + ENTER_MS + stayMs; s += 650) bossShots.push(s)
+  const fightFrom = bossAt + ENTER_MS + 400
+  const fightTo = bossAt + ENTER_MS + stayMs
+  for (let s = fightFrom; s < fightTo; ) {
+    bossShots.push(s)
+    s += Math.round(rampEase(800, 420, (s - fightFrom) / Math.max(1, fightTo - fightFrom)))
+  }
   add({
     kind: 'boss',
     spawnAt: bossAt,

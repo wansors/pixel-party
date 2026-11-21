@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { PixelBeatInput } from '@pp/shared'
 import type { MiniGameInitCtx } from './MiniGame'
-import { PixelBeat } from './pixelBeat'
+import { beatLength, PixelBeat } from './pixelBeat'
 
 // A short round stays in the steady opening tempo — plain quarter notes exactly 650ms apart:
 // 1200, 1850, 2500, ...
@@ -31,14 +31,23 @@ describe('PixelBeat', () => {
     const game = new PixelBeat()
     const beats = game.init(baseCtx({ config: { durationMs: 40_000 } })).beatTimes
     const gaps = beats.slice(1).map((t, i) => t - (beats[i] as number))
-    const early = gaps.filter((_, i) => (beats[i] as number) < 8000)
+    const early = gaps.filter((_, i) => (beats[i] as number) < 4000)
     expect(new Set(early)).toEqual(new Set([650]))
     const late = gaps.filter((_, i) => (beats[i] as number) > 30_000)
     // Off-beats (half a beat) and a quicker beat by the end; never closer than a playable half beat.
     expect(Math.min(...late)).toBeLessThan(300)
-    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(230)
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(220)
     expect(late.some((g) => g > 400 && g < 560)).toBe(true) // a whole beat is quicker than 650
     expect(late.some((g) => g > 650)).toBe(true) // a rest
+  })
+
+  test('the tempo quickens non-linearly: the last quarter speeds up far more than the first', () => {
+    const bpm = (t: number): number => 60_000 / beatLength(t)
+    const firstQuarter = bpm(10_000) - bpm(0)
+    const lastQuarter = bpm(40_000) - bpm(30_000)
+    expect(lastQuarter).toBeGreaterThan(firstQuarter * 3)
+    expect(beatLength(0)).toBe(650)
+    expect(beatLength(40_000)).toBe(440)
   })
 
   test('a beat let pass breaks the streak', () => {

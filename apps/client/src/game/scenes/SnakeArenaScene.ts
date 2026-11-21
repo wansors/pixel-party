@@ -9,6 +9,7 @@ import {
   snakeCanTurn,
   snakeCell,
   snakeStep,
+  snakeStepsAt,
 } from '@pp/shared'
 import type Phaser from 'phaser'
 import { ensureAvatarTexture } from '../avatars'
@@ -102,6 +103,8 @@ interface Base {
   step: number
   stepMs: number
   t: number
+  // The round length the server's speed-up spans (undefined: a constant stepMs).
+  rampMs?: number
   remainingMs: number
 }
 
@@ -329,10 +332,9 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
       waiting: v.waiting,
     }
     const elapsed = this.state.final ? 0 : this.clock.since(base.remainingMs, now)
-    const target = Math.min(
-      base.step + MAX_PREDICT_STEPS,
-      Math.floor((base.t + elapsed) / base.stepMs),
-    )
+    const t = base.t + elapsed
+    const due = base.rampMs ? snakeStepsAt(t, base.rampMs) : Math.floor(t / base.stepMs)
+    const target = Math.min(base.step + MAX_PREDICT_STEPS, due)
     let food = base.food
     for (let k = base.step + 1; k <= target; k++) {
       if (snakeStep(sim, k, food, base.grid, base.stepMs) === 'ate') food = null
@@ -390,6 +392,7 @@ export class SnakeArenaScene extends MiniGameScene<SnakeSnapshot> {
       step: snap.step,
       stepMs: snap.stepMs,
       t: snap.t,
+      rampMs: snap.rampMs,
       remainingMs: snap.remainingMs,
     }
     const now = this.time.now

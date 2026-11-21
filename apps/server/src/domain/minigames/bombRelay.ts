@@ -1,4 +1,4 @@
-import type { BombRelayInput, BombRelaySnapshot, TeamId } from '@pp/shared'
+import { type BombRelayInput, type BombRelaySnapshot, rampEase, type TeamId } from '@pp/shared'
 import type { Random } from '../ports/Random'
 import { MASHER_MAX_PRESSES_PER_SEC } from './buttonMasher'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
@@ -7,6 +7,9 @@ const DEFAULT_DURATION_MS = 25_000
 const LEG_TAPS = 12 // mashes to fill a leg and pass the bomb on
 const FUSE_MIN_MS = 2500 // hidden fuse window per leg (never sent on the wire)
 const FUSE_MAX_MS = 5000
+// The fuses burn shorter as the round goes on, on an ease-in: by the bell a leg's fuse is FUSE_RAMP of
+// what it was at the start (2.5–5 s → ~1.4–2.8 s), so the last laps punish a slow pair of hands.
+const FUSE_RAMP = 0.55
 // A holder who hasn't mashed for this long since the bomb reached them (or since their last mash) is
 // skipped: the bomb moves on with a fresh fuse and no relay credit, so an AFK-but-connected teammate
 // costs the team this much time per lap instead of a whole fuse.
@@ -67,7 +70,7 @@ export class BombRelay implements MiniGame<BombRelayState, BombRelayInput> {
         legProgress: 0,
         relays: 0,
         explosions: 0,
-        fuseEndsAt: ctx.now + fuse(ctx.random),
+        fuseEndsAt: ctx.now + fuse(ctx.random, 0),
         lastActionAt: ctx.now,
       })
     }
@@ -103,7 +106,7 @@ export class BombRelay implements MiniGame<BombRelayState, BombRelayInput> {
     if (bomb.legProgress >= LEG_TAPS) {
       // Passed safely before the fuse: score the relay and hand it on.
       bomb.relays++
-      handOff(bomb, (bomb.holderIdx + 1) % bomb.members.length, state.random, now)
+      handOff(bomb, (bomb.holderIdx + 1) % bomb.members.length, state, now)
     }
     return state
   }
@@ -116,11 +119,11 @@ export class BombRelay implements MiniGame<BombRelayState, BombRelayInput> {
       if (now >= bomb.fuseEndsAt) {
         // Caught holding it: explosion, drop the leg, rotate on, re-arm.
         bomb.explosions++
-        handOff(bomb, next, state.random, now)
+        handOff(bomb, next, state, now)
       } else if (now - bomb.lastActionAt >= IDLE_PASS_MS) {
         // Asleep on the bomb: skip them. The next holder gets a fresh fuse, as on any hand-off —
         // inheriting a half-burnt one would blow up on a teammate who did nothing wrong.
-        handOff(bomb, next, state.random, now)
+        handOff(bomb, next, state, now)
       }
     }
     return state
@@ -136,7 +139,7 @@ export class BombRelay implements MiniGame<BombRelayState, BombRelayInput> {
     bomb.members.splice(idx, 1)
     if (idx < bomb.holderIdx) bomb.holderIdx--
     else if (idx === bomb.holderIdx) {
-      handOff(bomb, idx < bomb.members.length ? idx : 0, state.random, now)
+      handOff(bomb, idx < bomb.members.length ? idx : 0, state, now)
     }
     return state
   }
@@ -190,16 +193,18 @@ export class BombRelay implements MiniGame<BombRelayState, BombRelayInput> {
   }
 }
 
-// The bomb goes to member `holderIdx` for a new leg: progress reset, a fresh hidden fuse, idle clock
-// restarted.
-function handOff(bomb: TeamBomb, holderIdx: number, random: Random, now: number): void {
+// The bomb goes to member `holderIdx` for a new leg: progress reset, a fresh hidden fuse (shorter the
+// later it is), idle clock restarted.
+function handOff(bomb: TeamBomb, holderIdx: number, state: BombRelayState, now: number): void {
   bomb.holderIdx = holderIdx
   bomb.legProgress = 0
-  bomb.fuseEndsAt = now + fuse(random)
+  const progress = (now - state.startedAt) / Math.max(1, state.endsAt - state.startedAt)
+  bomb.fuseEndsAt = now + fuse(state.random, progress)
   bomb.lastActionAt = now
 }
 
-// Hidden per-leg fuse duration, seeded via the Random port.
-function fuse(random: Random): number {
-  return FUSE_MIN_MS + Math.floor(random.next() * (FUSE_MAX_MS - FUSE_MIN_MS))
+// Hidden per-leg fuse duration at round `progress` (0..1), seeded via the Random port.
+function fuse(random: Random, progress: number): number {
+  const base = FUSE_MIN_MS + random.next() * (FUSE_MAX_MS - FUSE_MIN_MS)
+  return Math.floor(base * rampEase(1, FUSE_RAMP, progress))
 }

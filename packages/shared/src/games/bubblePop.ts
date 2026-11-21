@@ -3,7 +3,8 @@
 // board and their own pointer into the shared queue. A shot sticks under the lowest bubble in its
 // column; 3+ touching bubbles of its colour pop, and anything left hanging drops. A column filled to the
 // bottom row takes no more shots, and a board with every column filled to the bottom is jammed (out for
-// the round). The client runs the same `bubbleShoot` on its own board, so a shot lands, pops and loads
+// the round). Every so often (ever more often) the ceiling drops: a new row pushes in from the top and
+// the stack moves down one row — a bubble already on the bottom row then jams the board too. The client runs the same `bubbleShoot` on its own board, so a shot lands, pops and loads
 // the next colour on the frame it hits — the snapshot confirms it.
 
 export const BUBBLE = { rows: 8, cols: 7, colors: 4 } as const
@@ -122,6 +123,10 @@ export interface BubblePopSnapshot {
   boards: Record<string, BubblePopBoard>
   // playerId -> score, mirrored from `boards` for generic live-scoreboard consumers.
   scores: Record<string, number>
+  // Ceiling drops so far (a counter, so the client plays each one once), and the time until the next
+  // one (absent once none is left this round). Boards still in play already include every drop.
+  drops?: number
+  nextDropMs?: number
   remainingMs: number
 }
 

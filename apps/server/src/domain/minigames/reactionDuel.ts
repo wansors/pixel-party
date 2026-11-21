@@ -2,7 +2,9 @@ import type { ReactionInput, ReactionSnapshot } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const MIN_DELAY_MS = 1500
-const DELAY_SPREAD_MS = 3000
+const DELAY_SPREAD_MS = 4500
+// Mean of the (truncated) exponential wait past MIN_DELAY_MS — see foreperiodMs.
+const DELAY_MEAN_MS = 1400
 const REACT_WINDOW_MS = 5000
 // Bounds on the client's own timing (see creditedMs): nobody reacts faster than a human can, and the
 // client may claim back at most this much of the server's measurement as network latency.
@@ -19,6 +21,16 @@ export interface ReactionState {
   gone: Set<PlayerId>
 }
 
+// The red-light wait: `min` plus an exponential draw truncated to `spread` (D40). A uniform wait gets
+// more predictable the longer it runs — past the middle, green is ever more surely due, and at the end
+// it's certain, so a player can jump it on rhythm. The exponential is memoryless: at any moment green
+// is about as likely in the next 100 ms as it was a second ago, so waiting for it is the only play.
+// `u` is one Random draw in [0, 1); u = 0 gives `min`.
+export function foreperiodMs(u: number, min: number, spread: number, meanMs: number): number {
+  const reach = 1 - Math.exp(-spread / meanMs)
+  return min + Math.min(spread - 1, Math.floor(-meanMs * Math.log(1 - u * reach)))
+}
+
 // The server times a tap from green to arrival, which includes the round trip: the green light reaches
 // the player late and the tap reaches the server late (≈ the winning margin on wifi). The client times
 // it from the moment its own screen turned green, so the scene sends that too. It's trusted only so
@@ -31,14 +43,14 @@ function creditedMs(serverMs: number, claimed: unknown): number {
 }
 
 // Real-time FFA reflex test. The green-light delay is drawn from the injected Random port (seeded per
-// round) so it is reproducible; time arrives as `now`. Fastest valid reaction wins; a tap that reaches
+// round, memoryless so it can't be timed) so it is reproducible; time arrives as `now`. Fastest valid reaction wins; a tap that reaches
 // the server before green is a false start, and false starts / no-taps rank last.
 export class ReactionDuel implements MiniGame<ReactionState, ReactionInput> {
   readonly id = 'reaction-duel'
   readonly format = 'ffa' as const
 
   init(ctx: MiniGameInitCtx): ReactionState {
-    const delay = MIN_DELAY_MS + Math.floor(ctx.random.next() * DELAY_SPREAD_MS)
+    const delay = foreperiodMs(ctx.random.next(), MIN_DELAY_MS, DELAY_SPREAD_MS, DELAY_MEAN_MS)
     const greenAt = ctx.now + delay
     return {
       players: [...ctx.players],

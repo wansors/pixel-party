@@ -7,6 +7,19 @@ import type { TeamId } from './theme'
 // instead of misbehaving silently.
 export const PROTOCOL_VERSION = 5
 
+// Session length bounds (D40). A host may ask for up to MAX_ROUNDS rounds; past the number of playable
+// games the line-up starts over (each game once per pass, never back-to-back). `rounds: 0` is AUTO:
+// one round per playable game, capped at AUTO_ROUNDS_CAP so a select-all line-up stays a sane length.
+export const MAX_ROUNDS = 99
+export const AUTO_ROUNDS_CAP = 20
+
+// The round count a session will actually run for `rounds` (0 = auto) against `playable` games.
+export function effectiveRounds(rounds: number, playable: number): number {
+  if (playable <= 0) return 0
+  if (rounds <= 0) return Math.min(playable, AUTO_ROUNDS_CAP)
+  return Math.min(Math.floor(rounds), MAX_ROUNDS)
+}
+
 // ---------------------------------------------------------------------------------------------------
 // Shared DTOs
 // ---------------------------------------------------------------------------------------------------
@@ -100,8 +113,13 @@ export type ClientMsg =
   // LOBBY_STATE lists them); the server re-attaches the seat and replays the current session state.
   | { type: 'REJOIN'; playerId: string; token: string }
   | { type: 'SET_READY'; ready: boolean }
+  // Change your own name / avatar / color after joining (lobby only — D40). Cleaned and checked like
+  // JOIN: a name another member already uses is refused (ACK reason `name_taken`). Omitted avatar or
+  // color = keep the current one.
+  | { type: 'SET_PROFILE'; name: string; avatar?: string; color?: string }
   // Host-only: configure the session (which games, how many rounds, catch-up on/off). Ignored from
-  // non-hosts. `handicap` omitted = leave the current setting unchanged.
+  // non-hosts. `rounds`: 1..MAX_ROUNDS, or 0 = auto (see effectiveRounds). `handicap` omitted = leave
+  // the current setting unchanged.
   | { type: 'HOST_CONFIG'; minigameIds: MiniGameId[]; rounds: number; handicap?: boolean }
   // Host-only: move a player to a team (team-format line-ups only).
   | { type: 'SET_TEAM'; playerId: string; team: TeamId }
@@ -155,6 +173,7 @@ export type ServerMsg =
       players: PlayerDto[]
       hostId: string
       minigameIds: MiniGameId[]
+      // Requested round count; 0 = auto (one per playable game, capped — see effectiveRounds).
       rounds: number
       // True when the configured line-up includes a team-format game — the lobby then shows team UI.
       usesTeams: boolean

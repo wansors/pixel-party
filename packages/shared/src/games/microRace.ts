@@ -180,6 +180,9 @@ export interface MicroRaceCar {
   // their own predicted car against it.
   vx: number
   vy: number
+  // Turbo meter (0…1, full = ready to fire) and the burn left (ms; 0 = not lit).
+  turbo?: number
+  turboMs?: number
 }
 
 export interface MicroRaceSnapshot {
@@ -196,12 +199,14 @@ export interface MicroRaceSnapshot {
   closing: boolean
 }
 
-// Drive: steer in [-1, 1] (right positive), throttle in [-1, 1] (negative = brake, then reverse). The
-// server holds the last drive until the next one.
+// Drive: steer in [-1, 1] (right positive), throttle in [-1, 1] (negative = brake, then reverse), and
+// the turbo key held (optional: fires once the meter is full). The server holds the last drive until
+// the next one.
 export interface MicroRaceInput {
   kind: 'drive'
   steer: number
   throttle: number
+  turbo?: boolean
 }
 
 // --- Car physics, shared by the server and the client's own-car prediction ---------------------------
@@ -234,6 +239,38 @@ export interface RaceCarPhysics {
   // Above understeerFrom the steering loosens, up to highSpeedUndersteer at top speed.
   understeerFrom: number
   highSpeedUndersteer: number
+  // A drift model (Rally Stage only): the body can point away from where the car is going.
+  drift?: RaceDriftPhysics
+}
+
+// Rally drift: instead of the velocity turning with the nose (the tabletop cars' on-rails feel), the
+// direction of travel chases the nose at a surface's `traction` rate, so a slip angle opens up whenever
+// the nose swings faster than the tyres can follow — gently on tarmac, a lot on gravel, and a big
+// tail-out flick with the handbrake. A sliding car's tail is free (no understeer) and a slide costs
+// speed (`slideDrag`), but a clean drift banks a short exit boost: the fast way round a hairpin.
+export interface RaceDriftPhysics {
+  // Rate (1/s) at which the travel direction swings back in line with the nose: tarmac (the surface
+  // can override it per step), off the road, and with the handbrake pulled.
+  traction: number
+  offTraction: number
+  handbrakeTraction: number
+  // Rear wheels locked: no drive, forward speed bled at handbrakeDecel (units/s²), and the nose swings
+  // at handbrakeYaw × the full steering rate (no understeer).
+  handbrakeDecel: number
+  handbrakeYaw: number
+  // Speed lost to a slide: rate (1/s) × sin² of the slip angle.
+  slideDrag: number
+  // A drift: slip ≥ driftSlip (rad) at ≥ driftSpeed. The tail frees up from driftSlip / 2 on; past
+  // spinSlip the car has spun (the drift is lost).
+  driftSlip: number
+  driftSpeed: number
+  spinSlip: number
+  // Straightening out of a drift that lasted ≥ minDriftS banks kickPerS boost seconds per drift
+  // second, up to maxKickS — spun out, off the road or scrubbed to a crawl banks nothing.
+  minDriftS: number
+  kickPerS: number
+  maxKickS: number
+  kick: { readonly maxSpeedScale: number; readonly accelScale: number }
 }
 
 // What the integrator reads and writes on a car.
@@ -248,11 +285,22 @@ export interface RaceCarBody {
   off: boolean
   // Set once the car took the flag: it then brakes to a stop on its own.
   finishMs: number | null
+  // Drift model only: the handbrake held, how long the current drift has lasted and the exit boost
+  // left (seconds).
+  handbrake?: boolean
+  driftS?: number
+  kickS?: number
+  // Turbo (stepRaceTurbo): the key held, the meter (0…1) and the burn left (seconds).
+  turbo?: boolean
+  turboMeter?: number
+  turboS?: number
 }
 
-// Per-step tweaks a game layers on top of the base physics (a surface's grip, a slipstream, a boost).
+// Per-step tweaks a game layers on top of the base physics (a surface's grip or traction, a
+// slipstream, a boost).
 export interface RaceCarTuning {
   grip?: number
+  traction?: number
   maxSpeedScale?: number
   accelScale?: number
 }
@@ -280,6 +328,64 @@ export const MICRO_RACE_PHYSICS: RaceCarPhysics = {
 // Slipstream (Micro Race and Speed Circuit): a little more top speed and pull.
 export const RACE_DRAFT_TUNING = { maxSpeedScale: 1.1, accelScale: 1.15 } as const
 export const RACE_WALL_BOUNCE = 0.4
+// Above the top speed (a boost, a tow or a turbo just ended) a car sheds the excess at this rate
+// (units/s²) instead of all at once.
+export const RACE_OVERSPEED_DECEL = 450
+
+// Turbo (Micro Race and Speed Circuit): the meter fills in `chargeS` seconds of driving on the road at
+// `fullSpeed` or more (slower driving fills it proportionally slower, off the road not at all, a
+// slipstream twice as fast); with the key held and the meter full it lights for `burnS` seconds of
+// extra top speed and pull. It doesn't stack with a boost pad (the stronger one counts) but does with a
+// slipstream.
+export const RACE_TURBO = {
+  chargeS: 7,
+  fullSpeed: 120,
+  draftCharge: 2,
+  burnS: 1.2,
+  boost: { maxSpeedScale: 1.3, accelScale: 2 },
+} as const
+
+const NO_BOOST = { maxSpeedScale: 1, accelScale: 1 } as const
+
+// One turbo sub-step, before the car's integration: a lit turbo burns down, otherwise the meter charges
+// and lights when the driver holds the key with it full. Returns whether the turbo burns this step.
+export function stepRaceTurbo(car: RaceCarBody, h: number, draft: boolean): boolean {
+  if (car.finishMs !== null) {
+    car.turboS = 0
+    return false
+  }
+  const left = car.turboS ?? 0
+  if (left > 0) {
+    car.turboS = Math.max(0, left - h)
+    return true
+  }
+  const pace = car.off ? 0 : Math.min(1, Math.hypot(car.vx, car.vy) / RACE_TURBO.fullSpeed)
+  const charge = (pace * (draft ? RACE_TURBO.draftCharge : 1) * h) / RACE_TURBO.chargeS
+  const meter = Math.min(1, (car.turboMeter ?? 0) + charge)
+  car.turboMeter = meter
+  if (car.turbo === true && meter >= 1 - 1e-9) {
+    car.turboMeter = 0
+    car.turboS = RACE_TURBO.burnS
+    return true
+  }
+  return false
+}
+
+// The per-step tuning of a car in a slipstream, burning its turbo and/or on a boost pad (`pad` = that
+// game's pad scales).
+export function raceTuning(
+  draft: boolean,
+  turbo: boolean,
+  pad: { readonly maxSpeedScale: number; readonly accelScale: number } | null = null,
+): RaceCarTuning {
+  const d = draft ? RACE_DRAFT_TUNING : NO_BOOST
+  const t = turbo ? RACE_TURBO.boost : NO_BOOST
+  const p = pad ?? NO_BOOST
+  return {
+    maxSpeedScale: d.maxSpeedScale * Math.max(t.maxSpeedScale, p.maxSpeedScale),
+    accelScale: d.accelScale * Math.max(t.accelScale, p.accelScale),
+  }
+}
 
 export const raceWrapAngle = (a: number): number => {
   let r = a
@@ -297,6 +403,10 @@ export function integrateRaceCar(
   p: RaceCarPhysics,
   tune: RaceCarTuning = {},
 ): void {
+  if (p.drift) {
+    integrateDriftCar(car, h, p, p.drift, tune)
+    return
+  }
   const maxSpeed = p.maxSpeed * (tune.maxSpeedScale ?? 1)
   const accel = p.accel * (tune.accelScale ?? 1)
   const fx = Math.cos(car.a)
@@ -316,7 +426,7 @@ export function integrateRaceCar(
   }
   vF -= vF * (car.off ? p.offDrag : p.rollDrag) * h
   if (car.off && vF > p.offMaxSpeed) vF = Math.max(p.offMaxSpeed, vF - p.offDecel * h)
-  vF = Math.min(maxSpeed, vF)
+  if (vF > maxSpeed) vF = Math.max(maxSpeed, vF - RACE_OVERSPEED_DECEL * h)
   vR *= Math.exp(-(car.off ? p.offGrip : (tune.grip ?? p.grip)) * h)
   const speed = Math.abs(vF)
   const understeer =
@@ -333,6 +443,109 @@ export function integrateRaceCar(
   car.vy = nfy * vF + nfx * vR
   car.x += car.vx * h
   car.y += car.vy * h
+}
+
+// Slip angle of a (forward, lateral) velocity against the car's axis, folded so that rolling straight
+// backwards is no slip: (-π/2, π/2].
+const foldedSlip = (vF: number, vR: number): number => Math.atan2(vR, Math.abs(vF))
+
+// The drift model's sub-step (see RaceDriftPhysics).
+function integrateDriftCar(
+  car: RaceCarBody,
+  h: number,
+  p: RaceCarPhysics,
+  d: RaceDriftPhysics,
+  tune: RaceCarTuning,
+): void {
+  const kick = (car.kickS ?? 0) > 0 ? d.kick : NO_BOOST
+  const maxSpeed = p.maxSpeed * (tune.maxSpeedScale ?? 1) * kick.maxSpeedScale
+  const accel = p.accel * (tune.accelScale ?? 1) * kick.accelScale
+  const fx = Math.cos(car.a)
+  const fy = Math.sin(car.a)
+  let vF = car.vx * fx + car.vy * fy
+  let vR = -car.vx * fy + car.vy * fx
+  const done = car.finishMs !== null
+  const throttle = done ? (vF > 1 ? -0.5 : 0) : car.throttle
+  const steer = done ? 0 : car.steer
+  const handbrake = !done && car.handbrake === true
+  // Drive along the nose; the handbrake locks the rear wheels instead.
+  if (handbrake) {
+    vF = vF > 0 ? Math.max(0, vF - d.handbrakeDecel * h) : Math.min(0, vF + d.handbrakeDecel * h)
+  } else if (throttle > 0) {
+    if (vF < 0) vF = Math.min(0, vF + p.brake * throttle * h)
+    else if (vF < maxSpeed * throttle) vF = Math.min(maxSpeed * throttle, vF + accel * h)
+  } else if (throttle < 0) {
+    if (vF > 0) vF = Math.max(0, vF + p.brake * throttle * h)
+    else vF = Math.max(-p.maxReverse, vF + p.reverseAccel * throttle * h)
+  }
+  vF -= vF * (car.off ? p.offDrag : p.rollDrag) * h
+  // Top speed caps the whole velocity, not just its forward part (a slide must not add speed).
+  let speed = Math.hypot(vF, vR)
+  const cap = car.off ? Math.min(maxSpeed, p.offMaxSpeed) : maxSpeed
+  if (speed > cap && speed > 0) {
+    const over = car.off && speed > p.offMaxSpeed ? p.offDecel : RACE_OVERSPEED_DECEL
+    const k = Math.max(cap, speed - over * h) / speed
+    vF *= k
+    vR *= k
+    speed *= k
+  }
+  // Steering. Once sliding the tail is free (understeer fades out); the handbrake swings it harder.
+  const slip0 = Math.abs(foldedSlip(vF, vR))
+  const free = Math.max(0, Math.min(1, (slip0 - d.driftSlip / 2) / (d.driftSlip / 2)))
+  const under =
+    1 -
+    p.highSpeedUndersteer *
+      Math.max(0, Math.min(1, (speed - p.understeerFrom) / (maxSpeed - p.understeerFrom)))
+  const yaw = handbrake ? d.handbrakeYaw : under + (1 - under) * free
+  const dir = vF < -5 ? -1 : 1
+  const authority = Math.min(1, speed / p.turnFullSpeed) * yaw * dir
+  car.a = raceWrapAngle(car.a + steer * p.turnRate * authority * h)
+  // The velocity stays put in the world while the nose turns: re-split it against the new heading,
+  // then swing the travel direction toward the nose axis at the traction rate (keeping the speed, less
+  // the slide's scrub).
+  const wx = fx * vF - fy * vR
+  const wy = fy * vF + fx * vR
+  const nfx = Math.cos(car.a)
+  const nfy = Math.sin(car.a)
+  vF = wx * nfx + wy * nfy
+  vR = -wx * nfy + wy * nfx
+  if (speed > 1e-6) {
+    const traction = car.off
+      ? d.offTraction
+      : handbrake
+        ? d.handbrakeTraction
+        : (tune.traction ?? d.traction)
+    const back = vF < 0 ? -1 : 1
+    const slip = foldedSlip(vF, vR)
+    const s = Math.sin(slip)
+    const left = speed * Math.exp(-d.slideDrag * s * s * h)
+    const settled = slip * Math.exp(-traction * h)
+    vF = back * left * Math.cos(settled)
+    vR = left * Math.sin(settled)
+  }
+  car.vx = nfx * vF - nfy * vR
+  car.vy = nfy * vF + nfx * vR
+  car.x += car.vx * h
+  car.y += car.vy * h
+  // Drift bookkeeping: time spent sliding past driftSlip; straightening out (below half of it) cashes
+  // a clean drift in as an exit boost.
+  const kickLeft = Math.max(0, (car.kickS ?? 0) - h)
+  car.kickS = kickLeft
+  const out = Math.hypot(vF, vR)
+  const raw = Math.abs(Math.atan2(vR, vF))
+  if (done || car.off || raw >= d.spinSlip || out < d.driftSpeed / 2) {
+    car.driftS = 0
+    return
+  }
+  const slip = Math.abs(foldedSlip(vF, vR))
+  const drift = car.driftS ?? 0
+  if (slip >= d.driftSlip && out >= d.driftSpeed) {
+    car.driftS = drift + h
+  } else if (slip < d.driftSlip / 2 && drift > 0) {
+    if (drift >= d.minDriftS)
+      car.kickS = Math.min(d.maxKickS, Math.max(kickLeft, drift * d.kickPerS))
+    car.driftS = 0
+  }
 }
 
 // The world edge is a hard wall.

@@ -5,6 +5,7 @@ import {
   bubbleJammed,
   bubbleNextShot,
   bubbleShoot,
+  rampEase,
 } from '@pp/shared'
 import type { Random } from '../ports/Random'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
@@ -13,6 +14,13 @@ const { rows: ROWS, cols: COLS, colors: COLORS } = BUBBLE
 const CELLS = ROWS * COLS
 const QUEUE_LENGTH = 100
 const DEFAULT_DURATION_MS = 60_000
+// The ceiling drops: a new seeded row pushes in from the top (everything moves down a row), so a board
+// left alone creeps toward the cannon. The first drop comes a sixth of the way in; then the gaps shrink
+// on an ease-in (18% → 5% of the round: 10.8 s → 3 s in a minute), so the last stretch is a scramble
+// to keep the stack off the floor. Fractions of the round, so any round length gets the same curve.
+const FIRST_DROP_AT = 1 / 6
+const DROP_GAP_START = 0.18
+const DROP_GAP_END = 0.05
 
 function randomColor(random: Random): number {
   return Math.floor(random.next() * COLORS) + 1
@@ -33,9 +41,33 @@ function nextValidShot(board: number[], queue: number[], from: number) {
   return bubbleNextShot(board, (i) => queue[i % queue.length] as number, from, queue.length)
 }
 
+// When each ceiling drop comes (ms from the start).
+function dropSchedule(durationMs: number): number[] {
+  const out: number[] = []
+  for (let p = FIRST_DROP_AT; p < 1; p += rampEase(DROP_GAP_START, DROP_GAP_END, p)) {
+    out.push(Math.round(p * durationMs))
+  }
+  return out
+}
+
+// The ceiling drops `row` onto `board` (in place): every bubble moves down a row and `row` fills the
+// top. False, with the board untouched, when a bubble already sits on the bottom row: the stack would
+// be shoved through the floor.
+function dropRow(board: number[], row: readonly number[]): boolean {
+  for (let i = (ROWS - 1) * COLS; i < CELLS; i++) if (board[i] !== 0) return false
+  board.copyWithin(COLS, 0, (ROWS - 1) * COLS)
+  for (let c = 0; c < COLS; c++) board[c] = row[c] ?? 1
+  return true
+}
+
 export interface BubblePopState {
   players: PlayerId[]
   shotQueue: number[]
+  // Ceiling drops: when each comes (ms from the start), the seeded row it pushes in, and how many
+  // have come so far.
+  dropTimes: number[]
+  dropRows: number[][]
+  drops: number
   startedAt: number
   endsAt: number
   boards: Map<PlayerId, number[]>
@@ -45,7 +77,8 @@ export interface BubblePopState {
   score: Map<PlayerId, number>
   // 0 = not finished; otherwise the server time the player fully cleared their board.
   doneAt: Map<PlayerId, number>
-  // Players whose board jammed (every column blocked at the bottom): out of shots, done for the round.
+  // Players whose board jammed (every column blocked at the bottom, or a ceiling drop shoved the stack
+  // through the floor): out of shots, done for the round.
   jammed: Set<PlayerId>
   // Players gone mid-round: the race doesn't wait for them.
   left: Set<PlayerId>
@@ -55,8 +88,9 @@ export interface BubblePopState {
 // shared by everyone, each player mutates their own copy. The shot rules live in @pp/shared, so the
 // client predicts its own board with the same code. A simplified rectangular grid + "choose a
 // column" aim stand in for a true hex-grid bubble-shooter, but the pop/clear rules are the real thing.
-// Most bubbles popped wins; a full clear beats any score (the faster, the better). Let the stack reach
-// the bottom of every column and the board jams: you're out of shots for the round.
+// Most bubbles popped wins; a full clear beats any score (the faster, the better). The ceiling drops a
+// new row ever more often; let the stack reach the bottom of every column, or be on the bottom row
+// when the ceiling drops, and the board jams: you're out of shots for the round.
 export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
   readonly id = 'bubble-pop'
   readonly format = 'ffa' as const
@@ -67,9 +101,14 @@ export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
     const r = ctx.random
     const startBoard = buildStartBoard(r)
     const shotQueue = buildShotQueue(r)
+    const dropTimes = dropSchedule(durationMs)
+    const dropRows = dropTimes.map(() => Array.from({ length: COLS }, () => randomColor(r)))
     return {
       players: [...ctx.players],
       shotQueue,
+      dropTimes,
+      dropRows,
+      drops: 0,
       startedAt: ctx.now,
       endsAt: ctx.now + durationMs,
       boards: new Map(ctx.players.map((pid) => [pid, [...startBoard]])),
@@ -113,7 +152,23 @@ export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
     return state
   }
 
-  tick(state: BubblePopState, _dt: number, _now: number): BubblePopState {
+  // Ceiling drops that have come due land on every board still in play.
+  tick(state: BubblePopState, _dt: number, now: number): BubblePopState {
+    while (
+      state.drops < state.dropTimes.length &&
+      state.startedAt + (state.dropTimes[state.drops] as number) <= now &&
+      now < state.endsAt
+    ) {
+      const row = state.dropRows[state.drops] as number[]
+      for (const pid of state.players) {
+        if ((state.doneAt.get(pid) ?? 0) > 0 || state.jammed.has(pid) || state.left.has(pid))
+          continue
+        const board = state.boards.get(pid)
+        if (!board) continue
+        if (!dropRow(board, row) || bubbleJammed(board)) state.jammed.add(pid)
+      }
+      state.drops += 1
+    }
     return state
   }
 
@@ -175,12 +230,16 @@ export class BubblePop implements MiniGame<BubblePopState, BubblePopInput> {
       }
       scores[pid] = score
     }
+    const nextDrop = state.dropTimes[state.drops]
     return {
       rows: ROWS,
       cols: COLS,
       queue: state.shotQueue.join(''),
       boards,
       scores,
+      drops: state.drops,
+      nextDropMs:
+        nextDrop === undefined ? undefined : Math.max(0, state.startedAt + nextDrop - now),
       remainingMs: Math.max(0, state.endsAt - now),
     }
   }

@@ -5,9 +5,9 @@ import { addBanner, burst, floatText, punch, ring, shake, showBanner } from '../
 import { bodyStyle, ensureBevelPanel, fitText, headlineStyle, hexToCss, shade } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
-// Mirrors the server's colorTrap.ts DEFAULT_PROMPT_MS (the snapshot only carries the live prompt's
-// remaining time) so the HUD can show the whole round draining, not just the current prompt.
-const PROMPT_MS = 1800
+// The prompt windows shrink as the round goes on (D40); the snapshot carries the live one's length
+// (`promptMs`) and the round's remaining time. This is only the fallback for a snapshot without them.
+const FALLBACK_PROMPT_MS = 1800
 const FUSE_SEGMENTS = 18
 
 // 'unknown' = a prompt whose verdict this client never saw (it was answered, or already over, before a
@@ -170,7 +170,10 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
 
   protected override remainingMs(snap: ColorTrapSnapshot): number | null {
     if (snap.word === null) return 0
-    return (snap.total - snap.index - 1) * PROMPT_MS + snap.promptRemainingMs
+    return (
+      snap.remainingMs ??
+      (snap.total - snap.index - 1) * FALLBACK_PROMPT_MS + snap.promptRemainingMs
+    )
   }
 
   // Whether the live prompt still takes a tap on this client's clock.
@@ -261,7 +264,10 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
       // A fresh card turned over (not when a relayout restart redraws the live one).
       if (!this.firstSnapshot) this.sfx.flip()
     }
-    this.renderFuse(this.open(snap) ? this.endsAt - this.time.now : 0)
+    this.renderFuse(
+      this.open(snap) ? this.endsAt - this.time.now : 0,
+      snap.promptMs || FALLBACK_PROMPT_MS,
+    )
 
     const locked = snap.answeredCurrent.includes(this.selfId) || this.answeredLocally(snap.index)
     this.status?.setText(this.t(locked ? 'game.colorTrap.locked' : 'game.colorTrap.instruction'))
@@ -390,9 +396,10 @@ export class ColorTrapScene extends MiniGameScene<ColorTrapSnapshot> {
     })
   }
 
-  private renderFuse(remaining: number): void {
+  // The fuse burns down over the live prompt's own window (`windowMs`), however long that one is.
+  private renderFuse(remaining: number, windowMs: number): void {
     if (!this.fuse) return
-    const frac = Phaser.Math.Clamp(remaining / PROMPT_MS, 0, 1)
+    const frac = Phaser.Math.Clamp(remaining / windowMs, 0, 1)
     const lit = Math.ceil(frac * FUSE_SEGMENTS)
     if (lit === this.lastFuseLit) return
     this.lastFuseLit = lit

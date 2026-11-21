@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { simonPlayback } from '@pp/shared'
 import type { Random } from '../ports/Random'
 import { Simon, type SimonState } from './simon'
 
@@ -99,6 +100,24 @@ describe('Simon', () => {
       if (s.ps.get('a')?.pads.join() !== s.ps.get('b')?.pads.join()) differs = true
     }
     expect(differs).toBe(true)
+  })
+
+  test('the playback tempo compounds: each level plays faster, by more every level', () => {
+    // Pads per second at a level (one lit beat + one dark beat per pad).
+    const tempo = (level: number): number => {
+      const p = simonPlayback(level)
+      return 1000 / (p.onMs + p.gapMs)
+    }
+    // The first level stays relaxed.
+    expect(simonPlayback(1)).toMatchObject({ onMs: 440, gapMs: 200, repeatGapMs: 440 })
+    for (let level = 1; level < 24; level++)
+      expect(tempo(level + 1)).toBeGreaterThanOrEqual(tempo(level))
+    // Non-linear: level 8 → 9 gains more tempo than level 1 → 2 did.
+    expect(tempo(9) - tempo(8)).toBeGreaterThan(tempo(2) - tempo(1))
+    // Level 10 plays well over half again as fast as level 1…
+    expect(tempo(10) / tempo(1)).toBeGreaterThan(1.6)
+    // …and the longest sequences stay readable: the floors hold.
+    expect(simonPlayback(24)).toMatchObject({ onMs: 200, gapMs: 80, repeatGapMs: 240 })
   })
 
   test('a leaver is out, so the round ends once everyone else is', () => {

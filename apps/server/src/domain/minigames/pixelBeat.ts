@@ -1,15 +1,17 @@
-import type { PixelBeatInput, PixelBeatSnapshot } from '@pp/shared'
+import { type PixelBeatInput, type PixelBeatSnapshot, rampEase } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 40_000
 const FIRST_BEAT_MS = 1200
-// The tempo: a steady beat while everyone finds it, then it tightens toward the end of a full round.
+// The tempo: a steady beat while everyone finds it, then it quickens on an ease-in — barely at first,
+// sharply in the last stretch of a full round (650 → 440 ms a beat; half beats stay ≥ 220 ms).
 const START_BEAT_MS = 650
-const END_BEAT_MS = 470
-const RAMP_FROM_MS = 8000
-const RAMP_TO_MS = 36_000
+const END_BEAT_MS = 440
+const RAMP_FROM_MS = 4000
+const RAMP_TO_MS = 38_000
 // Bars of four beats. Each bar plays one rhythm (offsets in beats from the bar's start; .5 = an
-// off-beat), seeded per bar. Plain quarter notes first; rests and off-beats join as the round goes on.
+// off-beat), seeded per bar. Plain quarter notes first; rests and off-beats join as the round goes on,
+// and the final stretch adds busy, syncopated bars (one even skips the downbeat).
 const PATTERNS: readonly { from: number; bars: readonly (readonly number[])[] }[] = [
   { from: 0, bars: [[0, 1, 2, 3]] },
   {
@@ -29,6 +31,16 @@ const PATTERNS: readonly { from: number; bars: readonly (readonly number[])[] }[
       [0, 1, 2.5, 3],
       [0, 0.5, 1, 1.5, 2, 3],
       [0, 1, 2, 3, 3.5],
+    ],
+  },
+  {
+    from: 31_000,
+    bars: [
+      [0, 0.5, 1, 1.5, 2, 3],
+      [0, 1, 1.5, 2, 2.5, 3, 3.5],
+      [0, 0.5, 1, 2, 2.5, 3],
+      [0.5, 1, 1.5, 2.5, 3, 3.5],
+      [0, 0.5, 1, 1.5, 2, 2.5, 3],
     ],
   },
 ]
@@ -62,9 +74,8 @@ export interface PixelBeatState {
 }
 
 // One beat's length at round time t (ms).
-function beatLength(t: number): number {
-  const k = Math.max(0, Math.min(1, (t - RAMP_FROM_MS) / (RAMP_TO_MS - RAMP_FROM_MS)))
-  return START_BEAT_MS + (END_BEAT_MS - START_BEAT_MS) * k
+export function beatLength(t: number): number {
+  return rampEase(START_BEAT_MS, END_BEAT_MS, (t - RAMP_FROM_MS) / (RAMP_TO_MS - RAMP_FROM_MS))
 }
 
 // The round's beat timeline: bar after bar, each one a seeded rhythm from the pool unlocked so far,

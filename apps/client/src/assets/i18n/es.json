@@ -1,7 +1,8 @@
 {
   "common": {
     "copyLink": "Copiar enlace",
-    "copied": "¡Copiado!"
+    "copied": "¡Copiado!",
+    "close": "Cerrar"
   },
   "lang": {
     "en": "EN",
@@ -204,7 +205,8 @@
       "pulls": "tirones",
       "solved": "¡resuelto!",
       "off": "de error",
-      "steps": "pasos"
+      "steps": "pasos",
+      "survivor": "superviviente"
     },
     "skip": {
       "button": "SALTAR JUEGO",
@@ -214,6 +216,34 @@
       "doneSelf": "Has pasado de {{game}}: esta ronda no cuenta",
       "short": "SALTAR",
       "failed": "{{game}} ha petado y nos lo saltamos: esta ronda no cuenta"
+    },
+    "profile": {
+      "title": "Tu jugador",
+      "edit": "Cambiar nombre y look",
+      "save": "Guardar",
+      "cancel": "Cancelar"
+    },
+    "rounds": {
+      "auto": "Auto",
+      "autoHint": "Una ronda por juego elegido (hasta {{n}})",
+      "less": "Una ronda menos",
+      "more": "Una ronda más",
+      "eta": "≈ {{n}} min",
+      "repeat": "Se repiten juegos",
+      "repeatHint": "Más rondas que juegos elegidos: la lista vuelve a empezar (nunca el mismo juego dos veces seguidas)",
+      "session": "Partida"
+    },
+    "picker": {
+      "search": "Busca un juego…",
+      "surprise": "Sorpréndeme",
+      "surpriseHint": "Te monto una partida al azar con los juegos que se ven y caben en esta sala",
+      "pickedOnly": "Elegidos",
+      "length": "Lo que dura la ronda",
+      "about": "De qué va este juego",
+      "noMatch": "Ningún juego pasa estos filtros.",
+      "clearFilters": "Quitar filtros",
+      "add": "Meter en la partida",
+      "remove": "Quitar de la partida"
     }
   },
   "team": {
@@ -226,7 +256,9 @@
     "session_in_progress": "La partida ya ha empezado",
     "name_taken": "Ese nombre ya lo tiene otro",
     "no_games_fit": "Ningún juego elegido vale para tantos jugadores",
-    "invalid_name": "Ponte un nombre con alguna letra, anda"
+    "invalid_name": "Ponte un nombre con alguna letra, anda",
+    "not_in_lobby": "Eso solo se cambia en el lobby",
+    "unknown_player": "Has perdido tu sitio: vuelve a entrar en la sala"
   },
   "catalog": {
     "axis": {
@@ -268,7 +300,7 @@
       },
       "number-rush": {
         "name": "Fiebre de Números",
-        "blurb": "Pulsa del 1 al 25 en orden, a toda leche.",
+        "blurb": "Pulsa del 1 al 25 en orden, a toda leche: los que quedan se van barajando sobre la marcha.",
         "controls": "Clic del 1 al 25 en orden · fallo = medio segundo quieto"
       },
       "quick-math": {
@@ -366,7 +398,7 @@
       },
       "bubble-pop": {
         "name": "Revienta Pompas",
-        "blurb": "Junta tres o más pompas del mismo color para reventarlas. Gana quien más reviente; limpiar el tablero entero gana a todo.",
+        "blurb": "Junta tres o más pompas del mismo color para reventarlas, que el techo no para de bajar y cada vez más rápido. Gana quien más reviente; limpiar el tablero entero gana a todo.",
         "controls": "RATÓN o ← →: apuntar · CLIC / ESPACIO: disparar"
       },
       "fruit-catch": {
@@ -425,8 +457,8 @@
       },
       "micro-race": {
         "name": "Micro Carreras",
-        "blurb": "Cochecitos y circuitos de mesa: tres vueltas, empujones y a cruzar la meta el primero.",
-        "controls": "← → A D: girar · ↑ W: gas · ↓ S ESPACIO: frenar · o ratón"
+        "blurb": "Cochecitos y circuitos de mesa: tres vueltas, empujones, turbo a tope y a cruzar la meta el primero.",
+        "controls": "← → A D: girar · ↑ W: gas · ↓ S: frenar · ESPACIO: turbo · o ratón"
       },
       "dash-100m": {
         "name": "100 metros lisos",
@@ -504,13 +536,13 @@
       },
       "rally-stage": {
         "name": "Tramo de Rally",
-        "blurb": "De punta a punta contra el crono: en la grava derrapas, el asfalto agarra y hay parciales. Gana el tramo más rápido.",
-        "controls": "← → A D: girar · ↑ W: gas · ↓ S ESPACIO: frenar · o ratón"
+        "blurb": "De punta a punta contra el crono: derrapa en la grava (¡tira del freno de mano!), agarra en el asfalto y bate los parciales. Gana el tramo más rápido.",
+        "controls": "← → A D: girar · ↑ W: gas · ↓ S: frenar · ESPACIO: freno de mano · o ratón"
       },
       "speed-circuit": {
         "name": "Circuito de Velocidad",
-        "blurb": "Dos vueltas rueda con rueda: pégate al rebufo, pisa los turbos y llega el primero a la bandera.",
-        "controls": "← → A D: girar · ↑ W: gas · ↓ S ESPACIO: frenar · o ratón"
+        "blurb": "Dos vueltas rueda con rueda: pégate al rebufo, pisa las flechas, suelta el turbo y llega el primero a la bandera.",
+        "controls": "← → A D: girar · ↑ W: gas · ↓ S: frenar · ESPACIO: turbo · o ratón"
       },
       "honeycomb-cut": {
         "name": "Recorta el Caramelo",
@@ -535,6 +567,30 @@
         "blurb": "Raro, pero de verdad: pilla la respuesta real entre las absurdas. Cuanto antes, más puntos.",
         "tagline": "Todo es verdad. Por desgracia.",
         "controls": "A–D o 1–4 · o clic en una respuesta"
+      },
+      "neon-trails": {
+        "name": "Estelas de Neón",
+        "blurb": "Tu moto deja un muro de luz detrás y cada vez va más rápida. Encierra a los demás y no te la pegues: gana el último en pie.",
+        "controls": "← ↑ → ↓ o W A S D: girar · desliza en el móvil",
+        "tagline": "El muro que dejas detrás es tuyo. La culpa, también."
+      },
+      "wing-it": {
+        "name": "A Aletazos",
+        "blurb": "Pulsa para aletear y colarte entre las torres; cada vez va más rápido y los huecos se encogen. Gana el último que siga en el aire.",
+        "controls": "ESPACIO / ↑ / W o clic / toque: aletear",
+        "tagline": "La gravedad siempre gana. Tú hazla esperar."
+      },
+      "rock-paper-scissors": {
+        "name": "Piedra, Papel o Tijera",
+        "blurb": "El clásico, mano a mano: sacáis a la vez y gana el primero que llegue a 3. Ojo, que cada tirada te deja menos tiempo para pensar.",
+        "controls": "1 2 3 / ← ↓ → / A S D o los botones: piedra · papel · tijera",
+        "tagline": "La ciencia dice piedra. Tu rival también lo ha leído."
+      },
+      "sharpshooter": {
+        "name": "Tirador del Oeste",
+        "blurb": "Bandidos en las ventanas, botellas en la valla, latas por los aires… y la mirilla se te mueve con cada respiración. Aguanta el aire, aprieta el gatillo y no le des a los vecinos.",
+        "controls": "RATÓN o ← ↑ → ↓ / WASD: apuntar · CLIC / ESPACIO: disparar · mantén SHIFT / clic derecho: aguantar el aire · R: recargar",
+        "tagline": "Este pueblo es demasiado pequeño para tu puntería."
       }
     }
   },
@@ -642,7 +698,8 @@
       "done": "¡FIN!",
       "find": "Busca {{n}}",
       "hint": "Clic del 1 al {{n}} en orden · cada fallo, medio segundo castigado",
-      "cooldown": "¡Ese no! Castigado…"
+      "cooldown": "¡Ese no! Castigado…",
+      "shuffle": "¡A BARAJAR!"
     },
     "higherLower": {
       "higher": "▲ MAYOR",
@@ -918,8 +975,8 @@
       "hint": "Teclea el resultado (o haz clic en él)"
     },
     "microRace": {
-      "hint": "← → / A D girar · ↑ / W acelerar · ↓ / S / ESPACIO frenar · o mantén el ratón donde quieras ir",
-      "hintTouch": "Mantén pulsado hacia donde quieras ir",
+      "hint": "← → / A D girar · ↑ / W acelerar · ↓ / S frenar · ESPACIO / MAYÚS turbo · o mantén el ratón donde quieras ir (clic derecho: turbo)",
+      "hintTouch": "Mantén pulsado hacia donde quieras ir · TURBO cuando esté a tope",
       "status": "VUELTA {{lap}}/{{laps}} · P{{pos}}",
       "lap": "VUELTA {{n}}",
       "finalLap": "¡ÚLTIMA VUELTA!",
@@ -930,7 +987,9 @@
       "rescued": "¡TE HAS SALIDO!",
       "wrongWay": "¡KAMIKAZE!",
       "bump": "¡PUM!",
-      "outOfTime": "¡SE ACABÓ EL TIEMPO!"
+      "outOfTime": "¡SE ACABÓ EL TIEMPO!",
+      "turbo": "TURBO",
+      "actionKey": "ESPACIO / MAYÚS"
     },
     "athletics": {
       "set": "LISTOS…",
@@ -1090,7 +1149,12 @@
       "stageStatus": "PARCIAL {{cp}}/{{cps}} · {{pct}}%",
       "split": "PARCIAL {{time}}",
       "circuitStatus": "VUELTA {{lap}}/{{laps}} · P{{pos}}",
-      "lap": "¡VUELTA {{lap}}!"
+      "lap": "¡VUELTA {{lap}}!",
+      "hintRally": "← → / A D girar · ↑ / W acelerar · ↓ / S frenar · ESPACIO / MAYÚS freno de mano · o mantén el ratón donde quieras ir (clic derecho: freno de mano)",
+      "hintRallyTouch": "Mantén pulsado hacia donde quieras ir · FRENO DE MANO para derrapar",
+      "handbrake": "FRENO DE MANO",
+      "drift": "DERRAPE {{s}}s",
+      "driftBoost": "¡DERRAPAZO!"
     },
     "honeycomb": {
       "pressure": "PRESIÓN",
@@ -1140,6 +1204,51 @@
       "nobody": "¡NI DIOS LO SABÍA!",
       "everybody": "¡CHUPADO!",
       "fooled": "¡{{n}} HAN PICADO!"
+    },
+    "neonTrails": {
+      "hint": "← ↑ → ↓ / W A S D para girar (desliza en el móvil) · ni rozar un muro",
+      "ready": "¡PREPARADOS!",
+      "readySub": "Gira con las flechas o WASD",
+      "speed": "VELOCIDAD {{n}}",
+      "speedUp": "¡MÁS RÁPIDO!",
+      "lastRider": "¡EL ÚLTIMO EN PIE!"
+    },
+    "wingIt": {
+      "hint": "ESPACIO / ↑ / W o clic / toque para aletear · ni rozar las torres ni el suelo",
+      "ready": "¡PREPARADOS!",
+      "readySub": "Pulsa para aletear · ESPACIO / ↑ / W",
+      "score": "★ {{n}}",
+      "lastFlying": "¡EL ÚLTIMO EN EL AIRE!"
+    },
+    "rps": {
+      "keys": "1 / ← / A piedra · 2 / ↓ / S papel · 3 / → / D tijera",
+      "rock": "PIEDRA",
+      "paper": "PAPEL",
+      "scissors": "TIJERA",
+      "chant0": "PIEDRA…",
+      "chant1": "PAPEL…",
+      "chant2": "¡TIJERA…!",
+      "ready": "LISTO",
+      "throwNo": "Tirada {{n}} · gana el primero a 3",
+      "waiting": "¡Hecho! Esperando a {{name}}…",
+      "youWinThrow": "¡TE LLEVAS LA TIRADA!",
+      "theyWinThrow": "PUNTO PARA TU RIVAL",
+      "drawThrow": "EMPATE… ¡OTRA!",
+      "youWinThrowShort": "se lleva la tirada",
+      "theyWinThrowShort": "pierde la tirada",
+      "drawThrowShort": "empate",
+      "watchThrow": "{{name}}: {{outcome}}",
+      "tooSlow": "Demasiado lento: sin sacar no hay punto",
+      "bye": "Esta ronda no tienes rival: te apuntas un empate"
+    },
+    "sharpshooter": {
+      "hint": "Apunta con el ratón o las flechas · CLIC / ESPACIO dispara · mantén SHIFT / clic derecho para aguantar el aire · R recarga · ni se te ocurra darle a un vecino",
+      "ready": "PREPARADOS…",
+      "draw": "¡DESENFUNDA!",
+      "reloading": "RECARGANDO",
+      "oops": "¡UN VECINO!",
+      "saloon": "SALOON",
+      "store": "ULTRAMARINOS"
     }
   }
 }
