@@ -1,4 +1,4 @@
-import { PALETTE, type PixelDashSnapshot } from '@pp/shared'
+import { DASH, PALETTE, type PixelDashSnapshot } from '@pp/shared'
 import type Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
 import { burst, floatText, punch, ring, shake } from '../fx'
@@ -17,15 +17,43 @@ import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 // Mirrors the server's pixelDash.ts: an obstacle's `t` is its time-to-arrival over the snapshot's
 // `leadMs` (1 = just entering from the right, 0 = at the runner). The lead shrinks over the round, so
 // the world scrolls faster and faster. Obstacles are drawn so t = 0 lands exactly on the runner.
-// A jump is AIR_MS in the air (it clears an obstacle arriving meanwhile, LATE_MS of grace included);
-// the runner can jump again LAND_MS after landing, WASTED_MS later still after a jump that cleared
-// nothing. The server waits a little less, so a jump this scene allows is never refused.
-const START_LEAD_MS = 1200
-const AIR_MS = 380
-const LATE_MS = 60
-const LAND_MS = 150
-const WASTED_MS = 400
+// The jump timing is DASH (@pp/shared): a jump is AIR_MS in the air (it clears a ground obstacle
+// arriving meanwhile, LATE_MS of grace included, and flies into any bird); the runner can jump again
+// LAND_MS after landing, WASTED_MS later still after a jump that cleared nothing, and a stumble trips it
+// for TRIP_MS. The server waits a little less, so a jump this scene allows is never refused.
+const {
+  startLeadMs: START_LEAD_MS,
+  airMs: AIR_MS,
+  lateMs: LATE_MS,
+  landMs: LAND_MS,
+  wastedMs: WASTED_MS,
+  tripMs: TRIP_MS,
+} = DASH
 const JUMP_UP_MS = AIR_MS / 2
+// A bird flies in at head height — two wing frames, facing the runner.
+const BIRD_FRAMES = [
+  [
+    'k_________k_',
+    'kk_______kk_',
+    '_kk_____kk__',
+    '__kkbbbkk___',
+    '_okbbbbbbk__',
+    'oo_kbbbbk___',
+    '____kkkk____',
+    '____________',
+  ],
+  [
+    '____________',
+    '____________',
+    '____kkkk____',
+    '_okbbbbbbk__',
+    'oo_kbbbbbkk_',
+    '__kk____kkk_',
+    '_kk______kk_',
+    'k_________k_',
+  ],
+]
+const BIRD_LEGEND = { k: 0x2a2d44, b: 0xd84a3a, o: PALETTE.amber }
 const RUN_FRAME_MS = 90
 const STREAK_EVERY = 5
 
@@ -96,6 +124,9 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
   private readonly sprites = new Map<number, Phaser.GameObjects.Image>()
   private readonly clock = new ServerClock()
   private obstacleKeys: string[] = []
+  private birdKeys: string[] = []
+  // The first bird of the round gets a STAY DOWN! callout.
+  private birdWarned = false
   private lastTick = -1
   private lastScore = -1
   private lastStumbles = 0
@@ -136,6 +167,7 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
     this.readyAt = 0
     this.ready = true
     this.spectating = false
+    this.birdWarned = false
     this.layers = []
     for (const s of this.sprites.values()) s.destroy()
     this.sprites.clear()
@@ -144,6 +176,9 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
     const compact = Math.min(width, height) < 520
     this.obstacleKeys = OBSTACLES.map((o, i) =>
       ensurePixelGrid(this, { key: `pp-dash-obstacle-${i}`, rows: o.rows, legend: o.legend }),
+    )
+    this.birdKeys = BIRD_FRAMES.map((rows, i) =>
+      ensurePixelGrid(this, { key: `pp-dash-bird-${i}`, rows, legend: BIRD_LEGEND }),
     )
 
     const playH = height - this.top
@@ -315,8 +350,11 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
     if (this.spectating || now < this.readyAt) return
     this.sendInput({ kind: 'jump' })
     this.sfx.jump()
-    // Airborne until now + AIR_MS: does an obstacle arrive meanwhile? (The server judges it the same.)
-    const wasted = !this.obstacleTimes(now).some((ms) => ms >= -LATE_MS && ms <= AIR_MS)
+    // Airborne until now + AIR_MS: does a ground obstacle arrive meanwhile? (The server judges it the
+    // same; a bird arriving meanwhile knocks you down, which the snapshot reports when it gets here.)
+    const wasted = !this.obstacleTimes(now).some(
+      (o) => !o.high && o.ms >= -LATE_MS && o.ms <= AIR_MS,
+    )
     this.readyAt = now + AIR_MS + LAND_MS + (wasted ? WASTED_MS : 0)
     this.setReady(false)
     if (this.button) {
@@ -378,13 +416,13 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
     if (ready) punch(this, this.button, 0.08, 80)
   }
 
-  // Every obstacle's time-to-arrival right now (ms), on the server clock.
-  private obstacleTimes(now: number): number[] {
+  // Every obstacle's time-to-arrival right now (ms), on the server clock, and whether it's a bird.
+  private obstacleTimes(now: number): { ms: number; high: boolean }[] {
     const snap = this.snap
     if (!snap) return []
     const lead = snap.leadMs ?? START_LEAD_MS
     const since = this.state.final ? 0 : this.clock.since(snap.remainingMs, now)
-    return snap.obstacles.map((o) => o.t * lead - since)
+    return snap.obstacles.map((o) => ({ ms: o.t * lead - since, high: o.high === true }))
   }
 
   protected frame(snap: PixelDashSnapshot | null, _time: number, delta: number): void {
@@ -493,6 +531,9 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
       10,
       180,
     )
+    // Tripped: the button stays grey a moment (the server holds the jump the same way).
+    this.readyAt = Math.max(this.readyAt, this.time.now + TRIP_MS)
+    this.setReady(false)
     // Already back in the air for the next one (the stumble report trails the obstacle): no trip.
     if (!runner || this.crashing || this.jumping) return
     // Stumble: the runner trips forward, blinks and gets back up.
@@ -529,8 +570,19 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
     for (const o of snap.obstacles) {
       const x = this.runnerX + ((o.t * lead - since) * this.span) / lead
       if (x < -this.obstacleH) continue
-      this.drawObstacle(o.id, x)
+      this.drawObstacle(o.id, x, o.high === true, now)
       live.add(o.id)
+      if (o.high && !this.birdWarned && !this.spectating && x < this.scale.width * 0.9) {
+        this.birdWarned = true
+        floatText(
+          this,
+          this.runnerX + this.runnerH,
+          this.groundY - this.runnerH * 2.2,
+          this.t('game.pixelDash.duck'),
+          PALETTE.amber,
+          16,
+        )
+      }
     }
     // Retire sprites for obstacles that have passed off-screen.
     for (const [id, sprite] of this.sprites) {
@@ -541,16 +593,25 @@ export class PixelDashScene extends MiniGameScene<PixelDashSnapshot> {
     }
   }
 
-  private drawObstacle(id: number, x: number): void {
+  // Ground obstacles sit on the grass; birds fly over a standing runner's head — right where a
+  // jumping one would be.
+  private drawObstacle(id: number, x: number, high: boolean, now: number): void {
     let sprite = this.sprites.get(id)
     if (!sprite) {
+      const key = high
+        ? (this.birdKeys[0] ?? '')
+        : (this.obstacleKeys[id % this.obstacleKeys.length] ?? '')
       sprite = this.add
-        .image(x, this.groundY, this.obstacleKeys[id % this.obstacleKeys.length] ?? '')
+        .image(x, high ? this.groundY - this.runnerH * 1.15 : this.groundY, key)
         .setOrigin(0.5, 1)
-        .setDisplaySize(this.obstacleH, this.obstacleH)
+        .setDisplaySize(
+          this.obstacleH * (high ? 1.2 : 1),
+          high ? this.obstacleH * 0.8 : this.obstacleH,
+        )
         .setDepth(20)
       this.sprites.set(id, sprite)
     }
     sprite.setX(x)
+    if (high) sprite.setTexture(this.birdKeys[Math.floor(now / 120) % 2] ?? '')
   }
 }

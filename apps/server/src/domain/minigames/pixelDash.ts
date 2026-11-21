@@ -1,38 +1,51 @@
-import { type PixelDashInput, type PixelDashSnapshot, rampEase } from '@pp/shared'
+import { DASH, type PixelDashInput, type PixelDashSnapshot, rampEase } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 40_000
-// A jump keeps the runner airborne for AIR_MS: an obstacle arriving meanwhile is cleared (with LATE_MS of
-// grace for the tap's trip to the server). The ideal jump puts the apex over the obstacle.
-export const AIR_MS = 380
-const LATE_MS = 60
-// Back on the ground the runner needs LAND_MS before jumping again — and WASTED_MS more after a jump
-// that cleared nothing (an awkward landing), so mashing leaves you grounded when the next one comes.
-// The client waits the full time; the server forgives SLACK_MS of network jitter.
-const LAND_MS = 150
-const WASTED_MS = 400
+// A jump keeps the runner airborne for AIR_MS: a ground obstacle arriving meanwhile is cleared (with
+// LATE_MS of grace for the tap's trip to the server), a bird arriving meanwhile knocks you down. The ideal
+// jump puts the apex over the obstacle. Back on the ground the runner needs LAND_MS before jumping
+// again — and WASTED_MS more after a jump that cleared nothing (an awkward landing), so mashing leaves
+// you grounded when the next one comes; a stumble trips you for TRIP_MS. The timing lives in DASH
+// (@pp/shared) so the client shows the same jump. The client waits the full time; the server forgives
+// SLACK_MS of network jitter.
+const {
+  airMs: AIR_MS,
+  lateMs: LATE_MS,
+  landMs: LAND_MS,
+  wastedMs: WASTED_MS,
+  tripMs: TRIP_MS,
+} = DASH
 const SLACK_MS = 40
 // How long before arrival an obstacle is visible/approaching (the snapshot lead window), and how far
 // past the runner (in `t` units) obstacles stay in the snapshot so they scroll off-screen; obstacles
 // also show a little before they enter, so the client's extrapolation never pops them in late. The
-// run speeds up over the round: the lead window shrinks on an ease-in (1200 ms → 760 ms, i.e. the
-// world scrolls ~1.6× faster by the end), so the last stretch leaves far less time to react.
-const LEAD_START_MS = 1200
-const LEAD_END_MS = 760
+// run speeds up over the round: the lead window shrinks on an ease-in (1200 ms → 600 ms, i.e. the
+// world scrolls 2× faster by the end), so the last stretch leaves far less time to react.
+const LEAD_START_MS = DASH.startLeadMs
+const LEAD_END_MS = 600
 const SHOW_FROM_T = 1.15
 const SHOW_UNTIL_T = -0.35
 const FIRST_MS = 1500
-// The track tightens over the round on the same ease-in: gaps 700–1300 ms at the start, 560–780 ms at
+// The track tightens over the round on the same ease-in: gaps 700–1300 ms at the start, 520–720 ms at
 // the very end — never shorter than a jump plus a landing (AIR_MS + LAND_MS).
 const GAP_START_MS = 700
-const GAP_END_MS = 560
+const GAP_END_MS = 520
 const JITTER_START_MS = 600
-const JITTER_END_MS = 220
+const JITTER_END_MS = 200
 const END_PAD_MS = 800
+// Birds join from BIRDS_FROM of the round (never two in a row); pairs of ground obstacles from
+// DOUBLES_FROM, the second one a jump, a landing and a hair later.
+const BIRDS_FROM = 0.2
+const BIRD_CHANCE = 0.33
+const DOUBLES_FROM = 0.35
+const DOUBLE_CHANCE = 0.35
+const DOUBLE_GAP_MS = AIR_MS + LAND_MS + 70
 
 interface Obstacle {
   id: number
   arriveAt: number // ms offset from start
+  high: boolean
 }
 
 export interface PixelDashState {
@@ -49,13 +62,16 @@ export interface PixelDashState {
   resolvedMiss: Map<PlayerId, Set<number>>
   // playerId → when they may jump again (server time; 0 = any time).
   readyAt: Map<PlayerId, number>
+  // playerId → birds they jumped into (they knock them down on arrival).
+  doomed: Map<PlayerId, Set<number>>
 }
 
 // Real-time FFA endless-runner reflex game. One seeded track of obstacles (each with a fixed arrival
 // time) is shared by everyone; each player taps JUMP to be in the air when the obstacle reaches them.
 // Timing-based (no continuous physics): the track comes from the injected Random port and time arrives as
-// `now`. Jumps aren't free — airtime plus a landing (longer after a wasted jump) — so mashing loses to
-// timing. Most obstacles cleared wins; the more accurate jumper breaks ties.
+// `now`. Jumps aren't free — airtime plus a landing (longer after a wasted jump), a trip after a
+// stumble — and birds punish a jump at the wrong moment, so mashing loses to timing (D53). Most
+// obstacles cleared (a bird passing over counts) wins; the more accurate jumper breaks ties.
 export class PixelDash implements MiniGame<PixelDashState, PixelDashInput> {
   readonly id = 'pixel-dash'
   readonly format = 'ffa' as const
@@ -67,9 +83,16 @@ export class PixelDash implements MiniGame<PixelDashState, PixelDashInput> {
     const obstacles: Obstacle[] = []
     let t = FIRST_MS
     let id = 0
+    let lastHigh = false
     while (t < durationMs - END_PAD_MS) {
-      obstacles.push({ id: id++, arriveAt: t })
       const p = t / durationMs
+      const high: boolean = !lastHigh && p >= BIRDS_FROM && r.next() < BIRD_CHANCE
+      obstacles.push({ id: id++, arriveAt: t, high })
+      lastHigh = high
+      if (!high && p >= DOUBLES_FROM && r.next() < DOUBLE_CHANCE) {
+        t += DOUBLE_GAP_MS
+        obstacles.push({ id: id++, arriveAt: t, high: false })
+      }
       const gap = rampEase(GAP_START_MS, GAP_END_MS, p)
       t += Math.round(gap + r.next() * rampEase(JITTER_START_MS, JITTER_END_MS, p))
     }
@@ -83,6 +106,7 @@ export class PixelDash implements MiniGame<PixelDashState, PixelDashInput> {
       stumbles: new Map(ctx.players.map((pid) => [pid, 0])),
       resolvedMiss: new Map(ctx.players.map((pid) => [pid, new Set<number>()])),
       readyAt: new Map(ctx.players.map((pid) => [pid, 0])),
+      doomed: new Map(ctx.players.map((pid) => [pid, new Set<number>()])),
     }
   }
 
@@ -99,10 +123,17 @@ export class PixelDash implements MiniGame<PixelDashState, PixelDashInput> {
     // Still in the air, or still finding their feet.
     if (now < (state.readyAt.get(playerId) ?? 0)) return state
 
-    // Airborne until now + AIR_MS: clears the obstacle arriving in that span (gaps are wider than it, so
-    // at most one), judged against the ideal take-off, the apex right over it.
+    // Airborne until now + AIR_MS: clears the ground obstacle arriving in that span (gaps are wider than
+    // it, so at most one), judged against the ideal take-off, the apex right over it — and flies into
+    // any bird arriving in it (it knocks you down when it gets there).
+    const doomed = state.doomed.get(playerId)
+    for (const o of state.obstacles) {
+      if (!o.high || cleared.has(o.id) || missed.has(o.id)) continue
+      const arrive = state.startedAt + o.arriveAt
+      if (now >= arrive - AIR_MS && now <= arrive + LATE_MS) doomed?.add(o.id)
+    }
     const hit = state.obstacles.find((o) => {
-      if (cleared.has(o.id) || missed.has(o.id)) return false
+      if (o.high || cleared.has(o.id) || missed.has(o.id)) return false
       const arrive = state.startedAt + o.arriveAt
       return now >= arrive - AIR_MS && now <= arrive + LATE_MS
     })
@@ -122,13 +153,21 @@ export class PixelDash implements MiniGame<PixelDashState, PixelDashInput> {
     for (const pid of state.players) {
       const cleared = state.cleared.get(pid)
       const missed = state.resolvedMiss.get(pid)
+      const doomed = state.doomed.get(pid)
       if (!cleared || !missed) continue
       for (const o of state.obstacles) {
         if (cleared.has(o.id) || missed.has(o.id)) continue
-        if (state.startedAt + o.arriveAt + LATE_MS < now) {
-          missed.add(o.id)
-          state.stumbles.set(pid, (state.stumbles.get(pid) ?? 0) + 1)
+        const arrive = state.startedAt + o.arriveAt
+        if (arrive + LATE_MS >= now) continue
+        // A bird passes over a runner who stayed down.
+        if (o.high && !doomed?.has(o.id)) {
+          cleared.add(o.id)
+          continue
         }
+        missed.add(o.id)
+        state.stumbles.set(pid, (state.stumbles.get(pid) ?? 0) + 1)
+        // Tripped: no jumping until back on their feet.
+        state.readyAt.set(pid, Math.max(state.readyAt.get(pid) ?? 0, arrive + TRIP_MS - SLACK_MS))
       }
     }
     return state
@@ -168,7 +207,8 @@ export class PixelDash implements MiniGame<PixelDashState, PixelDashInput> {
     const leadMs = this.leadAt(state, now)
     const obstacles = state.obstacles.flatMap((o) => {
       const t = (state.startedAt + o.arriveAt - now) / leadMs
-      return t >= SHOW_UNTIL_T && t <= SHOW_FROM_T ? [{ id: o.id, t }] : []
+      if (t < SHOW_UNTIL_T || t > SHOW_FROM_T) return []
+      return [o.high ? { id: o.id, t, high: true } : { id: o.id, t }]
     })
     const scores: Record<string, number> = {}
     for (const pid of state.players) scores[pid] = state.cleared.get(pid)?.size ?? 0

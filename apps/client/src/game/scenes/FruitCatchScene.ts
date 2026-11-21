@@ -1,4 +1,4 @@
-import { type FruitCatchSnapshot, type FruitItem, PALETTE } from '@pp/shared'
+import { FRUIT, type FruitCatchSnapshot, type FruitItem, PALETTE } from '@pp/shared'
 import Phaser from 'phaser'
 import { AvatarSprite, avatarPx } from '../avatars'
 import { burst, flash, floatText, ring, shake } from '../fx'
@@ -6,13 +6,11 @@ import { ServerClock } from '../netcode/ServerClock'
 import { bodyStyle, ensurePixelGrid, fitText, shade } from '../pixelStyle'
 import { MiniGameScene, type SceneDeps } from './MiniGameScene'
 
-// Mirrors the server's fruitCatch.ts tuning: items resolve at CATCH_Y, the basket catches within
-// ±BASKET_HALF of its centre (normalized x) and slides toward its target at most BASKET_SPEED widths
-// per second. The basket is drawn exactly that wide, sliding the same way, so what you see is what
-// scores.
-const CATCH_Y = 0.9
-const BASKET_HALF = 0.12
-const BASKET_SPEED = 1.8
+// The server's basket tuning (FRUIT in @pp/shared): items resolve at CATCH_Y, the basket catches
+// within ±BASKET_HALF of its centre (normalized x) and slides toward its target at most BASKET_SPEED
+// widths per second. The basket is drawn exactly that wide, sliding the same way, so what you see is
+// what scores.
+const { catchY: CATCH_Y, basketHalf: BASKET_HALF, basketSpeed: BASKET_SPEED } = FRUIT
 // A moving pointer's target is sent at most this often (keys send every press/release at once).
 const SEND_EVERY_MS = 33
 // A score rise this soon after a catch rang at the rim is that catch's confirmation.

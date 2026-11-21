@@ -415,8 +415,8 @@
       },
       "pixel-dash": {
         "name": "Corre que te Pillo",
-        "blurb": "Pulsa para saltar todo lo que se te echa encima. Gana quien más salte.",
-        "controls": "ESPACIO / ↑ / CLIC: saltar"
+        "blurb": "Salta lo que viene por el suelo… pero si llega un pájaro, quieto parao. Cada vez va más rápido. Gana quien más obstáculos supere.",
+        "controls": "ESPACIO / ↑ / CLIC: saltar · pájaros: ¡ni se te ocurra saltar!"
       },
       "snake-arena": {
         "name": "La Serpiente",
@@ -940,8 +940,9 @@
       "lastStanding": "¡ÚLTIMO EN PIE!"
     },
     "pixelDash": {
-      "hint": "ESPACIO, ↑ o CLIC para saltar. ¡A tiempo, sin aporrear!",
-      "wasted": "¡UY!"
+      "hint": "ESPACIO, ↑ o CLIC para saltar · ¡si te quedas quieto, los pájaros te pasan por encima!",
+      "wasted": "¡UY!",
+      "duck": "¡PÁJARO! ¡QUIETO!"
     },
     "bugSmash": {
       "hint": "¡Espachurra los bichos y no toques las bombas!",

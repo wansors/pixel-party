@@ -178,10 +178,14 @@ mini-games total.**
 - **Type**: FFA (own track, identical layout) · **Input**: click / tap, SPACE / ↑ / W / ENTER to jump ·
   **Duration**: up to ~30 s · **Banter**: 💥💥💥
 - **Rules**: identical track; each obstacle reaches the runner at a fixed time, 700–1300 ms apart at the
-  start, tightening to 700–1000 ms by the end (never shorter than a jump plus a landing). A jump keeps you
-  airborne 380 ms and clears an obstacle arriving in that span (60 ms of grace for the tap's trip); an
-  obstacle that gets through is a stumble. Back on the ground you need 150 ms before jumping again —
-  400 ms more after a jump that cleared nothing — so mashing loses to timing.
+  start, tightening to 520–720 ms by the end (never shorter than a jump plus a landing) while the world
+  scrolls twice as fast (D40, D53). A jump keeps you airborne 330 ms and clears a ground obstacle
+  arriving in that span (40 ms of grace for the tap's trip); an obstacle that gets through is a stumble
+  and trips you (no jumping for 450 ms). From a fifth of the round, birds fly in at head height (a third
+  of the obstacles, never two in a row): stay down and they pass over you (+1), jump into one and you
+  stumble. From 35 %, some ground obstacles come in pairs, a jump and a landing apart. Back on the
+  ground you need 150 ms before jumping again — 400 ms more after a jump that cleared nothing — so
+  mashing loses to timing.
 - **Win condition**: most obstacles cleared; ties go to the more accurate jumper (smallest summed gap
   between each clearing jump and the ideal one, apex over the obstacle). · **Result**: ranking by
   clears.
@@ -324,7 +328,7 @@ mini-games total.**
 - **Type**: FFA (same seed) · **Input**: mouse (the basket follows the pointer; drag on touch) or ← → /
   A D · **Duration**: 30 s · **Banter**: 💥💥
 - **Rules**: identical drop pattern; a fruit +1, a bomb −1 (never below 0) and breaks the combo. The
-  basket slides toward where you steer at most 1.8 widths/s (the mouse can't teleport it, so mouse and
+  basket catches within ±0.08 of the field's width (16 % of it, D53) and slides toward where you steer at most 1.8 widths/s (the mouse can't teleport it, so mouse and
   keys play the same game; a held key heads for that side, letting go stops on the spot). Items fall
   linearly, so the client draws them on the server's clock (`ServerClock`) and slides your basket the
   server's way: what you see reaching the basket is what gets judged.

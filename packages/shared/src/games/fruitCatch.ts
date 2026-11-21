@@ -4,6 +4,11 @@
 // items on the server's clock (each falls linearly, so it extrapolates from the last snapshot) and its own
 // basket locally.
 
+// The basket, shared so the server judges and the client draws the very same one: items resolve at
+// `catchY` (normalized y), the basket catches within ±`basketHalf` of its centre (normalized x) and
+// slides toward where its player steers at most `basketSpeed` widths per second.
+export const FRUIT = { catchY: 0.9, basketHalf: 0.08, basketSpeed: 1.8 } as const
+
 export type FruitKind = 'fruit' | 'bomb'
 
 export interface FruitItem {

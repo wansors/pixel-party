@@ -412,8 +412,8 @@
       },
       "pixel-dash": {
         "name": "Pixel Dash",
-        "blurb": "Tap to jump the obstacles as they rush in. Clear the most to win.",
-        "controls": "SPACE / ↑ / CLICK jump"
+        "blurb": "Jump what rushes along the ground — but when a bird flies in, stay down. It keeps speeding up. Most obstacles passed wins.",
+        "controls": "SPACE / ↑ / CLICK: jump · birds: don’t jump!"
       },
       "snake-arena": {
         "name": "Snake Arena",
@@ -934,8 +934,9 @@
       "lastStanding": "LAST ONE STANDING!"
     },
     "pixelDash": {
-      "hint": "SPACE, ↑ or CLICK to jump. Time it, don't mash!",
-      "wasted": "OOPS!"
+      "hint": "SPACE, ↑ or CLICK to jump · birds fly over you if you stay down!",
+      "wasted": "OOPS!",
+      "duck": "BIRD! STAY DOWN!"
     },
     "bugSmash": {
       "hint": "Smash the bugs — dodge the bombs!",

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
+import { FRUIT } from '@pp/shared'
 import type { Random } from '../ports/Random'
-import { BASKET_SPEED, FruitCatch } from './fruitCatch'
+import { FruitCatch } from './fruitCatch'
 
 // Deterministic RNG: next()=0.5 → every item is a fruit (0.5 ≥ BOMB_CHANCE) at x=0.5, mid fall speed.
 const half: Random = { next: () => 0.5 }
@@ -155,8 +156,25 @@ describe('FruitCatch basket speed', () => {
     let s = game.init({ players: ['p'], seed: 1, random: { next: () => 0.5 }, now: 0 })
     s = game.onInput(s, 'p', { kind: 'move', x: 1 }, 0)
     s = game.tick(s, 50, 50)
-    expect(s.baskets.get('p')).toBeCloseTo(0.5 + (BASKET_SPEED * 50) / 1000, 6)
+    expect(s.baskets.get('p')).toBeCloseTo(0.5 + (FRUIT.basketSpeed * 50) / 1000, 6)
     s = game.tick(s, 1000, 1050)
     expect(s.baskets.get('p')).toBe(1)
+  })
+})
+
+describe('FruitCatch basket width', () => {
+  test('a fruit just inside the basket’s reach is caught; just outside it is missed', () => {
+    const game = new FruitCatch()
+    for (const [offset, caught] of [
+      [FRUIT.basketHalf - 0.005, 1],
+      [FRUIT.basketHalf + 0.005, 0],
+    ] as const) {
+      let s = game.init({ players: ['p'], seed: 1, random: { next: () => 0.5 }, now: 0 })
+      const item = s.items[0] as NonNullable<(typeof s.items)[0]>
+      s = game.onInput(s, 'p', { kind: 'move', x: item.x + offset }, 0)
+      s = game.tick(s, 1000, 0)
+      s = game.tick(s, 0, item.spawnAt + item.fallMs)
+      expect(s.scores.get('p')).toBe(caught)
+    }
   })
 })

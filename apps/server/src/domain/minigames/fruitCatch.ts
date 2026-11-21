@@ -1,15 +1,19 @@
-import { type FruitCatchInput, type FruitCatchSnapshot, type FruitKind, rampEase } from '@pp/shared'
+import {
+  FRUIT,
+  type FruitCatchInput,
+  type FruitCatchSnapshot,
+  type FruitKind,
+  rampEase,
+} from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
 const DEFAULT_DURATION_MS = 30_000
-// The basket sits near the bottom; an item is resolved (caught or missed) once it reaches this line.
-const CATCH_Y = 0.9
-// Half-width of the basket's catch zone in normalized x.
-const BASKET_HALF = 0.12
-// The basket slides toward where its player steers at most this fast (widths per second): the mouse
-// can't teleport it, so mouse and keys play the same game — and the client, sliding at the same cap
-// toward the same spot, shows the basket where the server judges it.
-export const BASKET_SPEED = 1.8
+// The basket (FRUIT in @pp/shared) sits near the bottom: an item is resolved (caught or missed) once it
+// reaches FRUIT.catchY, caught within ±FRUIT.basketHalf. The basket slides toward where its player
+// steers at most FRUIT.basketSpeed widths per second: the mouse can't teleport it, so mouse and keys
+// play the same game — and the client, sliding at the same cap toward the same spot, shows the basket
+// where the server judges it.
+const { catchY: CATCH_Y, basketHalf: BASKET_HALF, basketSpeed: BASKET_SPEED } = FRUIT
 const SPAWN_MIN_MS = 420
 const SPAWN_JITTER_MS = 360
 const FALL_MIN_MS = 2200

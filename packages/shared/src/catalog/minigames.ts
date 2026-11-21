@@ -318,7 +318,8 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     realtime: true,
     mobileFriendly: true,
     durationSec: 30,
-    blurb: 'Tap to jump the obstacles as they rush in. Clear the most to win.',
+    blurb:
+      'Jump what rushes along the ground — but when a bird flies in, stay down. It keeps speeding up. Most obstacles passed wins.',
     axes: ['reflexes', 'precision'],
   },
   {

@@ -1523,3 +1523,27 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   ranking, the snapshot copy). Bot `bots/bar-rush.ts`.
 - **Revert**: the four files, the registry / catalog / scene-map / i18n entries, the bot and the
   thumbnail.
+
+### D53 — Playtest tuning: a smaller fruit basket, a harder runner — DONE
+
+- **Date**: 2026-11-21. **Context**: the owner played v1.5.0: "Pilla la Fruta: the basket is too big"
+  and "Corre que te Pillo is still too easy".
+- **Fruit Catch**: the basket's catch zone goes from ±0.12 to ±0.08 of the field's width (24 % → 16 %,
+  about two and a half fruits wide on a PC). Its tuning (`catchY`, `basketHalf`, `basketSpeed`) moved
+  to `FRUIT` in `@pp/shared`, so the server's judging and the client's drawing can't drift apart (it was
+  copied by hand in both). Test: a fruit just inside the reach is caught, just outside it is missed.
+- **Pixel Dash** (it cleared ~100 % for an accurate player: a 440 ms window per obstacle, all alike,
+  and a miss cost nothing):
+  - Tighter jump: 330 ms in the air (was 380), 40 ms of grace for the trip (was 60).
+  - Birds at head height from a fifth of the round (33 %, never two in a row): staying down lets them
+    pass over (+1); a jump that would be airborne when one arrives knocks you down when it gets there.
+    The first bird of a round gets a STAY DOWN! callout.
+  - Pairs from 35 % of the round (35 %): a second ground obstacle a jump, a landing and 70 ms later.
+  - A stumble trips you: no jumping for 450 ms, so one miss can drag the next one with it.
+  - Faster: the lead window shrinks 1200 → 600 ms (was 760), gaps end at 520–720 ms (was 560–780).
+  - The jump timing moved to `DASH` in `@pp/shared` (also hand-copied before). Snapshots flag birds
+    (`high: true`, additive). A ±80 ms "decent human" now clears ~95 % instead of all, mashing under
+    half; the tests pin birds, pairs, trips and the new pace.
+- **Revert**: the constants in `FRUIT` / the server-side track generation and judging in
+  `pixelDash.ts`, plus the client's bird drawing.
+
