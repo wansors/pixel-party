@@ -1586,3 +1586,18 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   times, leavers, the buzzer).
 - **Revert**: the previous `stopClock.ts` (shared + server) and `StopClockScene.ts`.
 
+### D56 — A settings cog instead of the SND button, with the language inside — DONE
+
+- **Date**: 2026-11-21. **Context**: the owner: "swap SON for a pixelated cog icon and put the
+  language in there".
+- **What**: `shared/audio-controls` became `shared/settings-menu` (`app-settings-menu`): a 16×16 pixel
+  cog (one crisp SVG path, 2 px a cell; amber while open) opening the popover with the music / SFX
+  sliders, the EN|ES toggle and the app version. It sits where SND was: the join screen's corner and
+  the room header. The lobby's title-bar toggle and the join screen's footer toggle are gone.
+- **The language rule (D44) holds**: the room passes `langLocked` once it's past the lobby
+  (`store.view() !== 'lobby'`): the toggle shows greyed out with a one-line note ("the language
+  changes in the lobby, not mid-game"). `LanguageToggleComponent` gained a `disabled` input.
+- i18n: `settings.open` (the cog's label / tooltip), `settings.language`, `settings.langLocked`;
+  `audio.snd` removed.
+- **Revert**: restore `audio-controls.component.ts`, the two toggles and `audio.snd`.
+

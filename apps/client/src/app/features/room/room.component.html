@@ -43,7 +43,8 @@
           }
         </button>
       }
-      <app-audio-controls />
+      <!-- The language only changes in the lobby, never mid-game (D44). -->
+      <app-settings-menu [langLocked]="store.view() !== 'lobby'" />
     </span>
   </header>
 

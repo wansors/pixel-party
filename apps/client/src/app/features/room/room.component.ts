@@ -10,7 +10,7 @@ import {
 import { ActivatedRoute, Router } from '@angular/router'
 import { TranslocoPipe } from '@jsverse/transloco'
 import { AVATARS, type AvatarId, PLAYER_COLORS } from '@pp/shared'
-import { AudioControlsComponent } from '../../shared/audio-controls.component'
+import { SettingsMenuComponent } from '../../shared/settings-menu.component'
 import { FinalComponent } from './final/final.component'
 import { RoundIntroComponent } from './intro/round-intro.component'
 import { LiveBoardComponent } from './live-board/live-board.component'
@@ -26,7 +26,7 @@ const pick = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length
 @Component({
   selector: 'app-room',
   imports: [
-    AudioControlsComponent,
+    SettingsMenuComponent,
     LobbyComponent,
     RoundIntroComponent,
     RoundResultComponent,

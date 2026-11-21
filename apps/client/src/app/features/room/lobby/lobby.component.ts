@@ -10,7 +10,6 @@ import {
   type SkillAxis,
 } from '@pp/shared'
 import { CatalogI18nService } from '../../../core/i18n/catalog-i18n.service'
-import { LanguageToggleComponent } from '../../../shared/language-toggle.component'
 import { PixelAvatarComponent } from '../../../shared/pixel-avatar.component'
 import { SkillRadarComponent } from '../../../shared/skill-radar.component'
 import { RoomStore } from '../room.store'
@@ -26,7 +25,6 @@ import { ProfileEditorComponent } from './profile-editor.component'
   selector: 'app-lobby',
   imports: [
     GamePickerComponent,
-    LanguageToggleComponent,
     PixelAvatarComponent,
     ProfileEditorComponent,
     SkillRadarComponent,

@@ -7,24 +7,17 @@ import { APP_VERSION, AVATARS, type AvatarId, MINIGAMES, PLAYER_COLORS } from '@
 import { firstValueFrom } from 'rxjs'
 import { AudioService } from '../../core/audio/audio.service'
 import { appUrl } from '../../core/net/app-url'
-import { AudioControlsComponent } from '../../shared/audio-controls.component'
-import { LanguageToggleComponent } from '../../shared/language-toggle.component'
 import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
+import { SettingsMenuComponent } from '../../shared/settings-menu.component'
 
 // Entry point: pick a name + pixel avatar + color, then create a fresh room or enter an existing code.
 // Identity (name/color/avatar) travels to the room via query params.
 @Component({
   selector: 'app-join',
-  imports: [
-    FormsModule,
-    PixelAvatarComponent,
-    AudioControlsComponent,
-    LanguageToggleComponent,
-    TranslocoPipe,
-  ],
+  imports: [FormsModule, PixelAvatarComponent, SettingsMenuComponent, TranslocoPipe],
   template: `
     <main class="join">
-      <div class="sound"><app-audio-controls /></div>
+      <div class="sound"><app-settings-menu /></div>
       <h1 class="logo" aria-label="Pixel Party">
         @for (ch of logo; track $index) {
           <span [style.color]="ch.color" [style.animationDelay.ms]="$index * 90">{{ ch.char }}</span>
@@ -95,7 +88,6 @@ import { PixelAvatarComponent } from '../../shared/pixel-avatar.component'
         </div>
       </div>
       <footer>
-        <app-language-toggle />
         <span class="version">v{{ version }}</span>
       </footer>
     </main>

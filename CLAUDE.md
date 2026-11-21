@@ -159,7 +159,7 @@ blueprint in `docs/technical-architecture.md`.
   playful — never neutral, D26), mirroring `../utopia-offline` — static bundled
   loader (`assets/i18n/{en,es}.json`), `LanguageService` (signal + localStorage `pp_lang`, default EN),
   `CatalogI18nService` for mini-game names/blurbs (English fallback to `@pp/shared` meta), runtime
-  EN|ES toggle — on the join screen and in the lobby's title bar only, never mid-session (D44). Phaser scenes receive a `Translate` fn injected via `GameClient` (framework-agnostic).
+  EN|ES toggle — inside the settings cog (sound + language, D56), usable on the join screen and in the lobby only, never mid-session (D44). Phaser scenes receive a `Translate` fn injected via `GameClient` (framework-agnostic).
 - **No database, permanently** — rooms, sessions, players and scores are in-memory/ephemeral; nothing is
   persisted when a room closes. Players are anonymous (unique color + preset pixel avatar + name). This
   is a durable product decision, not an MVP simplification — there is no future phase that adds

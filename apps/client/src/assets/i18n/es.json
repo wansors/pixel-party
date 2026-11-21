@@ -10,7 +10,6 @@
     "code": "es"
   },
   "audio": {
-    "snd": "SON",
     "music": "Música",
     "sfx": "Efectos"
   },
@@ -1421,5 +1420,10 @@
         "¡ESTO ES UN CACHONDEO!"
       ]
     }
+  },
+  "settings": {
+    "open": "Ajustes",
+    "language": "Idioma",
+    "langLocked": "El idioma se cambia en la sala, no en plena partida."
   }
 }

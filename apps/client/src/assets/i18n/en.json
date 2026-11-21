@@ -10,7 +10,6 @@
     "code": "en"
   },
   "audio": {
-    "snd": "SND",
     "music": "Music",
     "sfx": "SFX"
   },
@@ -1398,5 +1397,10 @@
         "UNBELIEVABLE"
       ]
     }
+  },
+  "settings": {
+    "open": "Settings",
+    "language": "Language",
+    "langLocked": "The language changes in the lobby, not mid-game."
   }
 }

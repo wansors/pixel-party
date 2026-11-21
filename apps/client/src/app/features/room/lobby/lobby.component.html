@@ -4,8 +4,6 @@
       {{ 'room.lobby.title' | transloco }} ·
       {{ 'room.lobby.playersCount' | transloco: { n: store.players().length } }}
     </span>
-    <!-- The language can only change here, in the lobby — never mid-game. -->
-    <app-language-toggle />
   </div>
 
   <div class="body">
