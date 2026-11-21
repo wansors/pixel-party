@@ -610,6 +610,12 @@
         "blurb": "Esquiva el tráfico y cruza el río subido a los troncos. Cada cruce suma; si te atropellan o te caes al agua, vuelta a empezar.",
         "controls": "↑ ↓ ← → / WASD saltar (ESPACIO = arriba) · o la cruceta en pantalla",
         "tagline": "Mira a los dos lados. Y otra vez. Y luego corre."
+      },
+      "brick-buster": {
+        "name": "A Ladrillazos",
+        "blurb": "Tu pala, tu bola y la misma pared que todos: revienta ladrillos, pilla las cápsulas y despeja la pared para llevarte un extra. Gana quien más puntos haga.",
+        "controls": "Ratón o ← → / A D mueven la pala · en el móvil, arrastra",
+        "tagline": "La pared empezó."
       }
     }
   },
@@ -1316,6 +1322,24 @@
         "¡AGUA HASTA LAS CEJAS!",
         "COMIDA PARA PECES",
         "ESE TRONCO NO ERA"
+      ]
+    },
+    "brickBuster": {
+      "hint": "Ratón o ← → / A D: pala · W = pala ancha · M = multibola · despeja la pared: +10",
+      "hintShort": "Arrastra para mover la pala",
+      "ready": "¡PREPARADOS!",
+      "readySub": "¡Que no caiga la bola y a por la pared!",
+      "score": "★ {{n}}",
+      "cleared": "¡PARED FUERA! +{{n}}",
+      "wide": "¡PALA ANCHA!",
+      "multi": "¡MULTIBOLA!",
+      "dropped": [
+        "¡MANOS DE MANTEQUILLA!",
+        "EL SUELO GANA",
+        "AGUR, BOLA",
+        "NI DE LEJOS",
+        "¡SE TE HA COLADO!",
+        "GRAVEDAD 1, TÚ 0"
       ]
     }
   }

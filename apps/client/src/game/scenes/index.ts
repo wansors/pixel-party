@@ -4,6 +4,7 @@ import { BalloonChickenScene } from './BalloonChickenScene'
 import { BomberExpressScene } from './BomberExpressScene'
 import { BombRelayScene } from './BombRelayScene'
 import { BrawlScene } from './BrawlScene'
+import { BrickBusterScene } from './BrickBusterScene'
 import { BubblePopScene } from './BubblePopScene'
 import { BugSmashScene } from './BugSmashScene'
 import { ButtonMasherScene } from './ButtonMasherScene'
@@ -126,6 +127,7 @@ export const SCENES: Readonly<Record<string, SceneCtor>> = {
   'spook-snatch': SpookSnatchScene,
   'hit-pull-twist': HitPullTwistScene,
   'road-hop': RoadHopScene,
+  'brick-buster': BrickBusterScene,
   'tug-of-war': TugOfWarScene,
   'bomb-relay': BombRelayScene,
   'fleet-battle': FleetBattleScene,

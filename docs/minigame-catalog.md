@@ -64,7 +64,8 @@ Then (2026-10-03) J1 Weird Trivia (`weird-trivia`), the first brand-new idea aft
 Then (2026-11-21) K1 Neon Trails (`neon-trails`, D41), K2 Wing It (`wing-it`, D42), K3 Rock Paper
 Scissors (`rock-paper-scissors`, D43), K4 Sharpshooter (`sharpshooter`, D45), and the counter-intuitive
 pair K5 Spook Snatch (`spook-snatch`, D46) and K6 Hit, Pull, Twist (`hit-pull-twist`, D47). Then the
-arcade-classics wave: K7 Road Hop (`road-hop`, D48). **62 mini-games total.**
+arcade-classics wave: K7 Road Hop (`road-hop`, D48) and K8 Brick Buster (`brick-buster`, D49). **63
+mini-games total.**
 
 > **Difficulty curves (D40, 2026-11-21)**: about 26 games were retuned from linear or flat pacing to
 > non-linear ramps (the shared `easeIn` / `rampEase` / `rampExp` / `compound` helpers in
@@ -997,19 +998,34 @@ avatar. See `implementation-decisions.md` D22.
   integrated on a fixed grid, so your hopper is predicted bit for bit; hops carry the moment they were
   pressed and the server judges 150 ms behind.
 
+### K8. ✅ Brick Buster — implemented (`brick-buster`)
+- **Concept**: a brick breaker in the genre of the arcade bat-and-ball wall smashers (own name and
+  look), as a 60-second score race on everyone's own board (D49).
+- **Type**: FFA, 1–12 (best 2–12) · **Input**: mouse / drag, or ← → / A D · **Duration**: 60 s ·
+  **Banter**: 💥 · **Mobile-friendly**: yes
+- **Rules**: everyone plays their own board against the same seeded walls (mirror-symmetric, taller
+  and harder each time; silver bricks take two hits). Every brick hit scores 1; a cleared wall scores
+  +10 and brings the next one. Some bricks drop capsules: W widens the paddle for 12 s, M splits every
+  ball in three. A lost ball costs time (a new one waits on the paddle), not points. The ball speeds
+  up over the round (D40) and with every wall.
+- **Win condition / Result**: highest score (`41 pts`); fewer lost balls break ties.
+- **Latency**: low — the board rules are shared and integrated on a fixed grid; the paddle chases its
+  aim at a capped speed and aims carry the moment they were set, so the client predicts its own board
+  bit for bit while the server judges 150 ms behind.
+
 ---
 
 ## Variety coverage
 
 | Axis | Covered by |
 |------|------------|
-| Reflexes / reaction | A1, A6, B1, E7, F5, F7, G2, G5, I3, K2, K6 |
+| Reflexes / reaction | A1, A6, B1, E7, F5, F7, G2, G5, I3, K2, K6, K8 |
 | Attention / focus (inhibition) | E1, E3, E4, G1, K5, K6 |
 | Speed / endurance | A2, A9, C1, F1, F2, G3 |
 | Knowledge | A3, J1 |
 | Mental math | E2 |
 | Memory | A4, A11, E8 |
-| Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4, F6, G4, I2, K4, K7 |
+| Precision / aim / timing | A5, A10, B2, E6, F2, F3, F4, F6, G4, I2, K4, K7, K8 |
 | Survival / dodging | A7, A8, B3, I1, I3, I5, K1, K2, K7 |
 | Nerve / chance | D1, D3, E5, G1, G2, G3, G6, K3 |
 | Teamwork | C1, C2, C3 |
@@ -1019,7 +1035,7 @@ avatar. See `implementation-decisions.md` D22.
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6, J1, K1, K2, K4–K6, K7 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6, J1, K1, K2, K4–K6, K7, K8 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7, G6, K3 |
 | Team | C1, C2, C3 |
 

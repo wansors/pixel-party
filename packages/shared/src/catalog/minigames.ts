@@ -749,6 +749,18 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     axes: ['reflexes', 'precision'],
   },
   {
+    id: 'brick-buster',
+    name: 'Brick Buster',
+    format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 12] },
+    realtime: true,
+    mobileFriendly: true,
+    durationSec: 60,
+    blurb:
+      'Your paddle, your ball, the same wall as everyone: smash the bricks, catch the capsules, clear the wall for a bonus. Highest score wins.',
+    axes: ['reflexes', 'precision'],
+  },
+  {
     id: 'marbles-duel',
     name: 'Marbles Duel',
     format: 'duel',

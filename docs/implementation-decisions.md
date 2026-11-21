@@ -1411,3 +1411,28 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   snapshot, everyone leaving). Bot `bots/road-hop.ts`.
 - **Revert**: the four files, the registry / catalog / scene-map / i18n / stat-word entries, the bot
   and the thumbnail.
+
+### D49 — Brick Buster: everyone's own board, the same walls — DONE
+
+- **Date**: 2026-11-21. **Context**: the arcade-classics wave (D48), second game: a brick breaker.
+- **What**: `brick-buster`, FFA, 1–12 (best 2–12), 60 s, mobile-friendly.
+  - Own board per player (1 wide × 1.3 tall), the same seeded walls for everyone: 8 per round
+    (wrapping), mirror-symmetric, 5 → 7 rows, fuller and with more two-hit silver bricks each time,
+    4–6 capsule bricks each (WIDE paddle 12 s / MULTI-ball ×3, max 6 balls).
+  - Scoring: 1 per brick hit, +10 for a cleared wall (the next wall comes in, the ball back on the
+    paddle). A lost last ball costs ~1.6 s (a new one appears on the paddle and launches), not points.
+    Ball speed 0.7 → 1.3 units/s on an ease-in over 55 s (D40), +7 % per wall cleared.
+  - Control: the paddle chases an aim (0..1) at a capped 2.6 units/s, so a mouse, a finger or held
+    keys all drive it the same way; aims go out at most every 35 ms when they move.
+  - Netcode like Wing It / Road Hop (D42, D48): the board (`brickStep` / `brickRun`) is integrated on a
+    5 ms grid with plain arithmetic (plus `Math.sqrt`, correctly rounded everywhere) in `@pp/shared`;
+    aims carry their time and the server judges 150 ms behind, so the client predicts its own board
+    bit for bit. Rivals are carried forward on their own aims for the side mini boards.
+  - Ranked by score (`41 pts`), then fewer lost balls. Bot simulations (3 bots, 4 seeds): 23–77
+    points, about half clear the first wall.
+- **Tests**: `brickBuster.test.ts` (the speed curve, serving and launch, the capped paddle, wall and
+  ceiling bounces, angled paddle returns, brick hits incl. hard bricks and capsule drops, WIDE and
+  MULTI, a lost ball, a cleared wall, seeded walls, aims before GO / press-time clamp / mashing / junk,
+  behind-real-time judging, ranking, the snapshot copy). Bot `bots/brick-buster.ts`.
+- **Revert**: the four files, the registry / catalog / scene-map / i18n entries, the bot and the
+  thumbnail.

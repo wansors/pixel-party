@@ -607,6 +607,12 @@
         "blurb": "Hop across the traffic, then ride the logs over the river. Every crossing scores — squashed or soaked, you start again.",
         "controls": "↑ ↓ ← → / WASD hop (SPACE = up) · or the on-screen pad",
         "tagline": "Look both ways. Then look again. Then run."
+      },
+      "brick-buster": {
+        "name": "Brick Buster",
+        "blurb": "Your paddle, your ball, the same wall as everyone: smash the bricks, catch the capsules, clear the wall for a bonus. Highest score wins.",
+        "controls": "Mouse or ← → / A D move the paddle · on a phone, drag",
+        "tagline": "The wall started it."
       }
     }
   },
@@ -1301,6 +1307,24 @@
         "THAT’S GONNA DENT"
       ],
       "splashed": ["GLUG GLUG", "SPLASH!", "SWIM, THEN", "SOAKED!", "FISH FOOD", "WRONG LOG"]
+    },
+    "brickBuster": {
+      "hint": "Mouse or ← → / A D: paddle · W = wide paddle · M = multi-ball · clear the wall for +10",
+      "hintShort": "Drag to move the paddle",
+      "ready": "GET READY!",
+      "readySub": "Keep the ball up, break the wall!",
+      "score": "★ {{n}}",
+      "cleared": "WALL CLEARED! +{{n}}",
+      "wide": "WIDE!",
+      "multi": "MULTI-BALL!",
+      "dropped": [
+        "BUTTERFINGERS",
+        "THE FLOOR WINS",
+        "BYE, BALL",
+        "NOT EVEN CLOSE",
+        "SLIPPED!",
+        "GRAVITY 1, YOU 0"
+      ]
     }
   }
 }

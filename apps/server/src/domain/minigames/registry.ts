@@ -4,6 +4,7 @@ import { BalloonChicken } from './balloonChicken'
 import { BomberExpress } from './bomberExpress'
 import { BombRelay } from './bombRelay'
 import { Brawl } from './brawl'
+import { BrickBuster } from './brickBuster'
 import { BubblePop } from './bubblePop'
 import { BugSmash } from './bugSmash'
 import { ButtonMasher } from './buttonMasher'
@@ -125,6 +126,7 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'spook-snatch': () => new SpookSnatch() as unknown as MiniGame<unknown, unknown>,
   'hit-pull-twist': () => new HitPullTwist() as unknown as MiniGame<unknown, unknown>,
   'road-hop': () => new RoadHop() as unknown as MiniGame<unknown, unknown>,
+  'brick-buster': () => new BrickBuster() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)
