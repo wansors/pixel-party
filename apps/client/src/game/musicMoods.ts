@@ -18,7 +18,8 @@ const BY_GAME: Partial<Record<MiniGameId, RoundMusic>> = {
   'marbles-duel': 'tension',
   'honeycomb-cut': 'tension',
   sharpshooter: 'tension',
-  'stop-clock': 'tension',
+  // A blind stopwatch: a beat would be a metronome (D55).
+  'stop-clock': 'none',
   'color-trap': 'think',
   'bubble-pop': 'think',
   'maze-sprint': 'think',

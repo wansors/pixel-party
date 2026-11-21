@@ -326,8 +326,8 @@
       },
       "stop-clock": {
         "name": "Para el Reloj",
-        "blurb": "Para la aguja lo más cerca posible del objetivo. Tres intentos.",
-        "controls": "ESPACIO / INTRO o clic en PARAR"
+        "blurb": "Un cronómetro escondido: páralo justo en los segundos que te pide. Ni aguja ni números, a ojo de buen cubero. Tres intentos.",
+        "controls": "ESPACIO / INTRO o clic en PARAR cuando creas que ha pasado el tiempo"
       },
       "memory-flash": {
         "name": "Memoria de Pez",
@@ -759,12 +759,16 @@
     "stopClock": {
       "stop": "PARAR",
       "doneBtn": "FIN",
-      "info": "Intento {{n}}/{{total}}   err {{err}}",
-      "prompt": "¡Para en el objetivo verde!",
       "done": "Sin intentos. Ahora, a mirar",
       "try": "Intento {{n}}/{{total}}",
-      "off": "{{err}} de error",
-      "keys": "ESPACIO / INTRO o clic en PARAR"
+      "off": "{{err}} s de diferencia",
+      "keys": "ESPACIO / INTRO o clic en PARAR cuando creas que ha pasado el tiempo",
+      "target": "PARA A LOS {{s}} S",
+      "ready": "Preparados…",
+      "running": "En marcha — páralo a los {{s}} s",
+      "timedOut": "Se ha parado solo — te has dormido",
+      "late": "¡TARDE!",
+      "early": "¡PRONTO!"
     },
     "simon": {
       "watch": "Atento…",

@@ -195,8 +195,9 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     players: { min: 1, max: 12, best: [2, 8] },
     realtime: true,
     mobileFriendly: true,
-    durationSec: 25,
-    blurb: 'Stop the needle as close to the target as you can. Three tries.',
+    durationSec: 45,
+    blurb:
+      'A hidden stopwatch: stop it at exactly the seconds it asks for — no needle, no numbers, just your gut. Three tries.',
     axes: ['precision'],
   },
   {

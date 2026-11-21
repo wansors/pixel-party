@@ -192,11 +192,16 @@ mini-games total.**
 - **Latency**: medium (client sim + server validation). · **Complexity**: medium/high.
 
 ### A10. ✅ Stop the clock ("Timing") — implemented (`stop-clock`)
-- **Concept**: a fast-moving bar/needle; stop it as close to the target as possible.
-- **Type**: FFA · **Input**: click / tap STOP, or SPACE / ENTER · **Duration**: 20–30 s (3 attempts) ·
+- **Concept**: a blind stopwatch (D55, replacing the original sweeping needle): stop it at exactly the
+  number of seconds it asks for, with nothing on screen to count along with.
+- **Type**: FFA · **Input**: click / tap STOP, or SPACE / ENTER · **Duration**: up to 45 s (3 attempts) ·
   **Banter**: 💥💥
-- **Rules**: 3 attempts; summed distance to target. Lower = better. An attempt never made (time ran out,
-  or the player left) is charged the worst error (1.00), and the result shows that penalised total.
+- **Rules**: 3 attempts, each a seeded whole number of seconds, the same for everyone and longer each
+  time (3–5, 5–8, 7–11 s, D40). GET READY (no countdown), GO!, then the display only shows "??.??"
+  until you press; then it shows the time you made and how far off it was. No music in this round (a
+  beat would be a metronome). Not stopped by twice the target + 2 s, it stops itself. Summed error in
+  seconds; lower = better. An attempt never made (time ran out, or the player left) costs 5 s, and the
+  result shows that penalised total.
 - **Win condition**: lowest accumulated error. · **Result**: ranking by error.
 - **Latency**: low. · **Complexity**: low.
 

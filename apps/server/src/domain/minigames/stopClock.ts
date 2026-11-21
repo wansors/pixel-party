@@ -1,30 +1,32 @@
-import type { StopClockInput, StopClockSnapshot } from '@pp/shared'
+import { STOP_CLOCK, type StopClockInput, type StopClockSnapshot } from '@pp/shared'
 import type { MiniGame, MiniGameInitCtx, NormalizedResult, PlayerId } from './MiniGame'
 
-const ATTEMPTS = 3
-const DEFAULT_DURATION_MS = 25_000
-// Missing an attempt costs the worst possible error, so skipping never beats a real try.
-const MISS_PENALTY = 1
-
-// Accumulated error with every unused attempt charged the miss penalty, so skipping (running out of
-// time, leaving) ranks below real tries.
-function penalisedError(state: StopClockState, id: PlayerId): number {
-  const missed = ATTEMPTS - (state.attemptsDone.get(id) ?? 0)
-  return (state.totalError.get(id) ?? 0) + missed * MISS_PENALTY
-}
+const ATTEMPTS = STOP_CLOCK.attempts
+const DEFAULT_DURATION_MS = 45_000
 
 export interface StopClockState {
   players: PlayerId[]
+  // Seconds per try.
   targets: number[]
   startedAt: number
   endsAt: number
   attemptsDone: Map<PlayerId, number>
+  times: Map<PlayerId, number[]>
+  // Seconds of error so far.
   totalError: Map<PlayerId, number>
 }
 
-// Real-time FFA precision game. The needle sweep is animated + reported by the client (a friendly,
-// latency-tolerant timing game); the server owns the seeded targets and scores the absolute error.
-// Lowest accumulated error wins. Pure domain logic (targets from the seeded Random port).
+// Accumulated error with every unused try charged the miss penalty, so skipping (running out of time,
+// leaving) ranks below real tries.
+function penalisedError(state: StopClockState, id: PlayerId): number {
+  const missed = ATTEMPTS - (state.attemptsDone.get(id) ?? 0)
+  return (state.totalError.get(id) ?? 0) + missed * STOP_CLOCK.missPenaltySec
+}
+
+// Stop the Clock (D55): a real-time FFA blind-stopwatch game. Each try asks for a seeded whole number of
+// seconds (longer try by try); the stopwatch runs hidden on the player's device, which reports the time
+// it was stopped at; the server scores the absolute error in seconds. Lowest accumulated error wins.
+// Pure domain logic (targets from the seeded Random port).
 export class StopClock implements MiniGame<StopClockState, StopClockInput> {
   readonly id = 'stop-clock'
   readonly format = 'ffa' as const
@@ -32,14 +34,16 @@ export class StopClock implements MiniGame<StopClockState, StopClockInput> {
   init(ctx: MiniGameInitCtx): StopClockState {
     const durationMs =
       typeof ctx.config?.durationMs === 'number' ? ctx.config.durationMs : DEFAULT_DURATION_MS
-    // Targets kept away from the edges so the needle sweep always passes through them.
-    const targets = Array.from({ length: ATTEMPTS }, () => 0.2 + ctx.random.next() * 0.6)
+    const targets = STOP_CLOCK.ranges.map(
+      ([lo, hi]) => lo + Math.min(hi - lo, Math.floor(ctx.random.next() * (hi - lo + 1))),
+    )
     return {
       players: [...ctx.players],
       targets,
       startedAt: ctx.now,
       endsAt: ctx.now + durationMs,
       attemptsDone: new Map(ctx.players.map((id) => [id, 0])),
+      times: new Map(ctx.players.map((id) => [id, []])),
       totalError: new Map(ctx.players.map((id) => [id, 0])),
     }
   }
@@ -50,15 +54,17 @@ export class StopClock implements MiniGame<StopClockState, StopClockInput> {
     input: StopClockInput,
     now: number,
   ): StopClockState {
-    if (input.kind !== 'stop' || typeof input.attempt !== 'number' || typeof input.pos !== 'number')
-      return state
+    if (input?.kind !== 'stop' || !Number.isInteger(input.attempt)) return state
+    if (typeof input.ms !== 'number' || !Number.isFinite(input.ms)) return state
     if (now >= state.endsAt) return state
     const done = state.attemptsDone.get(playerId)
-    // Only accept the player's current, live attempt (drops stale/duplicate stops).
+    // Only accept the player's current, live try (drops stale/duplicate stops).
     if (done === undefined || done >= ATTEMPTS || input.attempt !== done) return state
-    const pos = Math.max(0, Math.min(1, input.pos))
+    const ms = Math.round(Math.max(0, Math.min(STOP_CLOCK.maxMs, input.ms)))
     const target = state.targets[done] as number
-    state.totalError.set(playerId, (state.totalError.get(playerId) ?? 0) + Math.abs(pos - target))
+    const err = Math.abs(ms / 1000 - target)
+    state.totalError.set(playerId, (state.totalError.get(playerId) ?? 0) + err)
+    state.times.get(playerId)?.push(ms)
     state.attemptsDone.set(playerId, done + 1)
     return state
   }
@@ -90,7 +96,7 @@ export class StopClock implements MiniGame<StopClockState, StopClockInput> {
       prev = e
     })
     const stats: Record<PlayerId, string> = {}
-    // The error the ranking used, penalty included: an idle player shows "3.00 off", not "0.00".
+    // The error the ranking used (seconds), penalty included: an idle player shows "15.00 off".
     for (const id of state.players) stats[id] = `${errorOf(id).toFixed(2)} off`
     return { placements: sorted, ranks, stats }
   }
@@ -102,6 +108,7 @@ export class StopClock implements MiniGame<StopClockState, StopClockInput> {
       targets: state.targets,
       attempts: ATTEMPTS,
       attemptsDone: Object.fromEntries(state.attemptsDone),
+      times: Object.fromEntries(state.players.map((id) => [id, [...(state.times.get(id) ?? [])]])),
       totalError: Object.fromEntries(
         state.players.map((id) => [
           id,

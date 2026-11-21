@@ -1564,3 +1564,25 @@ misses — each would be speculative or gated, and the project rule is "nothing 
 - **Revert**: restore the restart in `lineClearSprint.ts` (+ `restartBoard`, `topOutPenalty` and the
   client's `onRestart`).
 
+### D55 — Stop the Clock becomes a blind stopwatch — DONE
+
+- **Date**: 2026-11-21. **Context**: the owner: "ask me to stop a stopwatch at exactly 7 seconds, say;
+  I press SPACE when I think 7 s have gone by and it shows the value I got — but no moving bar. The
+  seconds are random." The sweeping needle was a pure reaction game; this one tests your inner clock.
+- **What**: three tries, each a seeded whole number of seconds (the same for everyone), longer each
+  time (3–5, 5–8, 7–11 s, D40). A try shows the ask ("STOP AT 7 s"), GET READY for 1.3 s (no 3-2-1:
+  no rhythm to calibrate on), GO!, and then only "??.??" on a pixel stopwatch — nothing moves. STOP
+  (Space / Enter / the big key) reveals the time and the signed difference, graded (perfect < 0.05 s,
+  great < 0.15 s, good < 0.35 s); not stopped by 2 × target + 2 s, it stops itself. The cards keep
+  each try's target and time; the strip, everyone's tries and running error.
+  - The stopwatch runs on the player's device with `performance.now()` (not the frame clock), and the
+    time goes to the server (`{ kind: 'stop', attempt, ms }`), which scores |ms − target| in seconds —
+    the same client trust as the old needle position, fine for a LAN of friends.
+  - The round plays no music (`musicMoods`: `none`): a beat would be a metronome.
+  - Unused tries cost 5 s of error; the round lasts up to 45 s and ends when everyone is done.
+- **Removed**: `stopClockPeriodMs` and the needle.
+- **Tests**: `stopClock.test.ts` (seeded whole-second targets inside each range, errors in seconds,
+  stale / duplicate / junk stops, clamping, the self-stop, the penalised result, the snapshot's
+  times, leavers, the buzzer).
+- **Revert**: the previous `stopClock.ts` (shared + server) and `StopClockScene.ts`.
+

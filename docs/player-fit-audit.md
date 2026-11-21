@@ -46,7 +46,7 @@
 | `odd-one-out` | 1–12 | 2–10 | OK | Wrong taps are free, so spamming is viable on later levels. Strip shows the top 6. |
 | `higher-lower` | 1–12 | 2–8 | **real** | A miss keeps your streak, so speed decides, not nerve. The shared deck leaks your next card (a rival's current one) on the wire. An idle seat keeps the round alive. |
 | `bug-smash` | 1–12 | 2–10 | OK | Bombs cost nothing at score 0. No domain test. |
-| `stop-clock` | 1–12 | 2–8 | OK | **Bug**: the result stat shows the raw error without the miss penalty (an idle player shows "0.00 off"). |
+| `stop-clock` | 1–12 | 2–8 | OK | A blind stopwatch since D55; everyone plays their own tries, so the headcount only fills the strip. |
 | `memory-flash` | 1–12 | 2–8 | minor | The tiebreak time also moves on wrong answers. Idle-wins-tiebreak bug (see cross-cutting). |
 | `simon` | 1–12 | 2–8 | **real** | 30 s in the catalog vs 60 s in the module: about 7 levels max, so timing decides. **Bug**: at the same level, dying sooner ranks higher. The sequence leaks on the wire. |
 | `pixel-hoops` | 1–12 | 2–8 | OK | Player strip cramped at 12. No domain test. |
