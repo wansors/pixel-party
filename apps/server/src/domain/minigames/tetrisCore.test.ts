@@ -27,7 +27,6 @@ import {
   gravityMs,
   isTetrisInput,
   ROWS,
-  restartBoard,
   shapeAtOf,
 } from './tetrisCore'
 
@@ -238,21 +237,6 @@ describe('tetrisCore (server)', () => {
     expect(isTetrisInput({ kind: 'move', dir: 'up' })).toBe(false)
     expect(isTetrisInput({ kind: 'rotate', dir: 'sideways' })).toBe(false)
     expect(isTetrisInput(null)).toBe(false)
-  })
-
-  test('restartBoard empties a topped-out board and respawns the piece that could not spawn', () => {
-    const queue = [I, O, T, O]
-    const p = createPlayerBoard(queue)
-    for (let i = 0; i < ROWS * 2 && !p.toppedOut; i++) applyInput(p, { kind: 'drop' }, queue)
-    expect(p.toppedOut).toBe(true)
-    const lines = p.linesCleared
-    const next = p.queueIndex
-    restartBoard(p, queue)
-    expect(p.toppedOut).toBe(false)
-    expect(p.board.every((c) => c === 0)).toBe(true)
-    expect(p.current).toEqual(tetrisSpawn(queue[next % queue.length] as number))
-    expect(p.queueIndex).toBe(next)
-    expect(p.linesCleared).toBe(lines)
   })
 
   test('the wire view round-trips into the same state for the client to predict from', () => {

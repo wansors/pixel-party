@@ -11,16 +11,11 @@ import {
   isTetrisInput,
   type PlayerBoardState,
   ROWS,
-  restartBoard,
   shapeAtOf,
 } from './tetrisCore'
 
 const DEFAULT_DURATION_MS = 60_000
 const QUEUE_LENGTH = 300
-// Topping out costs TOPOUT_PENALTY lines (never below 0) and RESTART_MS frozen while the stack crumbles;
-// then the board starts over empty.
-const TOPOUT_PENALTY = 2
-const RESTART_MS = 1500
 // Gravity eases in from the opening 550 ms a row to this at the buzzer (see gravityMs).
 export const FASTEST_FALL_MS = 170
 
@@ -28,9 +23,8 @@ export interface LineClearSprintState {
   players: PlayerId[]
   queue: number[]
   boards: Map<PlayerId, PlayerBoardState>
-  // playerId → when their topped-out board restarts (absent while they're playing).
-  restartAt: Map<PlayerId, number>
-  topOuts: Map<PlayerId, number>
+  // playerId → when their board topped out (absent while they're still playing).
+  toppedAt: Map<PlayerId, number>
   // Players gone mid-round; once nobody is left the round ends.
   left: Set<PlayerId>
   startedAt: number
@@ -38,9 +32,9 @@ export interface LineClearSprintState {
 }
 
 // FFA real-time: maximize lines cleared in a fixed time window, under gravity that speeds up for
-// everyone as the clock runs down (gently, then steeply). Topping out isn't the end: it costs a
-// couple of lines and a short freeze, then the board starts over — nobody sits out the rest of the
-// round. Most lines wins; fewer top-outs breaks ties.
+// everyone as the clock runs down (gently, then steeply). Topping out is the end of your run (D54): the
+// board freezes with the lines you made, and the round ends early once every board is out. Most lines
+// wins; on equal lines a board still standing beats a topped-out one, and a later top-out an earlier.
 export class LineClearSprint implements MiniGame<LineClearSprintState, TetrisSprintInput> {
   readonly id = 'line-clear-sprint'
   readonly format = 'ffa' as const
@@ -53,8 +47,7 @@ export class LineClearSprint implements MiniGame<LineClearSprintState, TetrisSpr
       players: [...ctx.players],
       queue,
       boards: new Map(ctx.players.map((id) => [id, createPlayerBoard(queue)])),
-      restartAt: new Map(),
-      topOuts: new Map(ctx.players.map((id) => [id, 0])),
+      toppedAt: new Map(),
       left: new Set(),
       startedAt: ctx.now,
       endsAt: ctx.now + durationMs,
@@ -81,28 +74,21 @@ export class LineClearSprint implements MiniGame<LineClearSprintState, TetrisSpr
       const p = state.boards.get(pid)
       if (!p) continue
       p.fallMs = fallMs
-      const restartAt = state.restartAt.get(pid)
-      if (restartAt !== undefined && now >= restartAt) {
-        restartBoard(p, state.queue)
-        state.restartAt.delete(pid)
-      }
+      if (p.toppedOut) continue
       tetrisFall(p, dt, shapeAtOf(state.queue))
       this.onTopOut(state, pid, p, now)
     }
     return state
   }
 
-  // A board that just topped out pays the penalty and is scheduled to restart.
+  // A board that just topped out is out: remember when (the tiebreak).
   private onTopOut(
     state: LineClearSprintState,
     pid: PlayerId,
     p: PlayerBoardState,
     now: number,
   ): void {
-    if (!p.toppedOut || state.restartAt.has(pid)) return
-    p.linesCleared = Math.max(0, p.linesCleared - TOPOUT_PENALTY)
-    state.topOuts.set(pid, (state.topOuts.get(pid) ?? 0) + 1)
-    state.restartAt.set(pid, now + RESTART_MS)
+    if (p.toppedOut && !state.toppedAt.has(pid)) state.toppedAt.set(pid, now)
   }
 
   leave(state: LineClearSprintState, playerId: PlayerId, _now: number): LineClearSprintState {
@@ -110,16 +96,21 @@ export class LineClearSprint implements MiniGame<LineClearSprintState, TetrisSpr
     return state
   }
 
-  // Every board can always go on (a top-out restarts), so only the clock — or an empty room — ends it.
+  // The clock, or no board left in play (every one topped out or gone).
   isFinished(state: LineClearSprintState, now: number): boolean {
-    return now >= state.endsAt || state.players.every((pid) => state.left.has(pid))
+    return (
+      now >= state.endsAt ||
+      state.players.every((pid) => state.left.has(pid) || state.toppedAt.has(pid))
+    )
   }
 
-  // Most lines; equal lines go to whoever topped out less.
+  // Most lines; then still standing beats topped out; then the later top-out.
   private cmp(state: LineClearSprintState, a: PlayerId, b: PlayerId): number {
     const lines = (id: PlayerId): number => state.boards.get(id)?.linesCleared ?? 0
-    const topOuts = (id: PlayerId): number => state.topOuts.get(id) ?? 0
-    return lines(b) - lines(a) || topOuts(a) - topOuts(b)
+    const lasted = (id: PlayerId): number => state.toppedAt.get(id) ?? Number.POSITIVE_INFINITY
+    const la = lasted(a)
+    const lb = lasted(b)
+    return lines(b) - lines(a) || (la === lb ? 0 : lb > la ? 1 : -1)
   }
 
   getResult(state: LineClearSprintState): NormalizedResult {
@@ -150,7 +141,6 @@ export class LineClearSprint implements MiniGame<LineClearSprintState, TetrisSpr
       boards,
       progress,
       remainingMs: Math.max(0, state.endsAt - now),
-      topOutPenalty: TOPOUT_PENALTY,
     }
   }
 }

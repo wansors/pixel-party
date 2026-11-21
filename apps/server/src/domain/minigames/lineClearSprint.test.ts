@@ -100,20 +100,20 @@ describe('LineClearSprint', () => {
     expect(nn(result.stats).b).toBe('1 lines')
   })
 
-  test('a tie in linesCleared is broken in favor of the player who topped out less', () => {
+  test('equal lines: a board still standing beats a topped-out one, a later top-out an earlier', () => {
     const game = new LineClearSprint()
-    const state = init(['a', 'b'])
-    nn(state.boards.get('a')).linesCleared = 2
-    nn(state.boards.get('b')).linesCleared = 2
-    state.topOuts.set('b', 1)
+    const state = init(['a', 'b', 'c'])
+    for (const id of ['a', 'b', 'c']) nn(state.boards.get(id)).linesCleared = 2
+    state.toppedAt.set('b', 5000)
+    state.toppedAt.set('c', 9000)
     const result = game.getResult(state)
-    expect(result.placements[0]).toBe('a')
-    expect(nn(result.ranks).a).toBeLessThan(nn(result.ranks).b)
+    expect(result.placements).toEqual(['a', 'c', 'b'])
+    expect(nn(result.ranks).a).toBeLessThan(nn(result.ranks).c)
   })
 
-  test('topping out costs lines and a short freeze, then the board starts over empty', () => {
+  test('topping out is final: the board freezes with its lines and never comes back', () => {
     const game = new LineClearSprint()
-    let state = init(['p'])
+    let state = init(['p', 'q'])
     const p = nn(state.boards.get('p'))
     p.linesCleared = 5
     // Hard-dropping I pieces in the middle stacks one row each until the next one can't spawn.
@@ -121,30 +121,27 @@ describe('LineClearSprint', () => {
       state = game.onInput(state, 'p', { kind: 'drop' }, 1000)
     }
     expect(p.toppedOut).toBe(true)
-    expect(p.linesCleared).toBe(3)
-    expect(state.topOuts.get('p')).toBe(1)
-    // Frozen for a moment (inputs are ignored)...
-    state = game.tick(state, 50, 2400)
-    state = game.onInput(state, 'p', { kind: 'move', dir: 'left' }, 2400)
+    expect(p.linesCleared).toBe(5)
+    expect(state.toppedAt.get('p')).toBe(1000)
+    const frozen = p.board.join('')
+    state = game.tick(state, 50, 9000)
+    state = game.onInput(state, 'p', { kind: 'move', dir: 'left' }, 9000)
     expect(p.toppedOut).toBe(true)
-    // ...then back in the game with an empty board, the penalty paid once.
-    state = game.tick(state, 50, 2500)
-    expect(p.toppedOut).toBe(false)
-    expect(p.board.every((c) => c === 0)).toBe(true)
-    expect(p.linesCleared).toBe(3)
-    expect(game.snapshot(state, 2500).boards.p?.toppedOut).toBe(false)
-    expect(game.isFinished(state, 2500)).toBe(false)
+    expect(p.board.join('')).toBe(frozen)
+    expect(game.snapshot(state, 9000).boards.p?.toppedOut).toBe(true)
+    // 'q' is still playing, so the round goes on.
+    expect(game.isFinished(state, 9000)).toBe(false)
   })
 
-  test('the lines penalty never goes below zero', () => {
+  test('the round ends early once every board is out', () => {
     const game = new LineClearSprint()
-    let state = init(['p'])
-    const p = nn(state.boards.get('p'))
-    p.linesCleared = 1
-    for (let i = 0; i < ROWS && !p.toppedOut; i++) {
-      state = game.onInput(state, 'p', { kind: 'drop' }, 1000)
+    let state = init(['a', 'b'])
+    for (const id of ['a', 'b']) {
+      const board = nn(state.boards.get(id))
+      for (let i = 0; i < ROWS && !board.toppedOut; i++)
+        state = game.onInput(state, id, { kind: 'drop' }, 1000)
     }
-    expect(p.linesCleared).toBe(0)
+    expect(game.isFinished(state, 1000)).toBe(true)
   })
 
   test('the round ends early once every player has left', () => {

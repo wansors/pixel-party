@@ -421,9 +421,10 @@ Additional candidates, kept as short specs until scheduled. Full cards written w
   (`line-clear-sprint`): a Tetris engine (shared with Quick Tetris, see E13) on a 6×12 board: the seven
   tetrominoes, dealt to everyone from the same seeded 7-bags (no droughts, no floods), turning about
   their centre (SRS-style) with wall/floor kicks; a ghost shows where the piece lands and NEXT the coming
-  one. Maximize lines cleared in a fixed 60 s window. Topping out isn't the end: it costs 2
-  lines (never below 0) and a 1.5 s freeze, then the board restarts empty — nobody sits out the rest of
-  the round. Ranked by lines cleared, fewer top-outs breaking ties. The engine lives in `@pp/shared`
+  one. Maximize lines cleared in a fixed 60 s window. Topping out is the end of your run (D54): the
+  board freezes with the lines you made, and the round ends early once every board is out. Ranked by
+  lines cleared; on equal lines a board still standing beats a topped-out one, a later top-out an
+  earlier. The engine lives in `@pp/shared`
   (`tetrisSprint`), so your board is predicted: every move, turn, drop and lock shows on the frame you
   press.* FFA · ← → / A D move (held: 150 ms, then a step every 45 ms — the same on every machine), ↑ /
   W / X rotate, Z rotate back, ↓ / S soft drop, SPACE / ENTER hard drop, or the on-screen buttons · 60 s

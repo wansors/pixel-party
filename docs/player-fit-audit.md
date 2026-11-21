@@ -81,7 +81,7 @@
 | `snake-arena` | 1–12 | 2–10 | minor | **Bug**: two quick turns in one step drop one. Boards are independent (the blurb says "arena"). |
 | `sumo-push` | 2–12 | 4–8 | **real** | Equal masses, so a centre-holder can't be pushed out and 2-player rounds always draw. Solo ends instantly. |
 | `maze-sprint` | 1–12 | 2–8 | minor | Rival tokens reveal the path. Speed follows the OS key-repeat rate. Rivals stack in 4 corner slots. |
-| `line-clear-sprint` | 1–12 | 2–10 | OK | **Bug**: the round never ends when every board has topped out. Rival list caps at 9. |
+| `line-clear-sprint` | 1–12 | 2–10 | OK | A top-out is final (D54); the round ends early once every board is out. Rival list caps at 9. |
 | `quick-tetris` | 1–12 | 2–8 | OK | **Bug**: a topped-out player never "finishes", so the round always runs the full 45 s. Rival list caps at 9. |
 | `bubble-pop` | 1–12 | 2–10 | minor | **Bugs**: a jammed board softlocks (35 of 200 boards), and shots pass through bubbles. Full clears are rare. |
 | `glass-bridge` | 2–12 | 4–8 | **real** | Vest order decides the ranking, and waiting for the glint is dominant. **Bug**: players still queued at timeout rank with the fallen. At 11–12, someone may never get a turn (it was capped at 10 until fixed). |

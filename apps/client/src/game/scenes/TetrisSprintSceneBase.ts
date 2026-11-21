@@ -143,8 +143,8 @@ interface Pending {
 // tetrisSprint): every move, turn, drop, gravity step and lock shows on the frame it happens, and each
 // snapshot (the server's word) is the new base the unacknowledged inputs are replayed on. Controls:
 // ◀ ▶ / A D move (auto-shift when held), ↑ / W / X turn, Z turn back, ↓ / S soft drop, SPACE / ENTER
-// hard drop, or the four arcade buttons. Line clears, top-outs (final in quick-tetris; a penalty and a
-// fresh board in line-clear-sprint) and finishing get their feedback. Subclasses only pick the scene
+// hard drop, or the four arcade buttons. Line clears, top-outs (final in both games, D54) and finishing
+// get their feedback. Subclasses only pick the scene
 // key (=== mini-game id), which also names the i18n namespace.
 export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSnapshot> {
   private readonly i18nNs: string
@@ -178,7 +178,6 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
   private synced = false
   private wasTopped = false
   private wasDone = false
-  private serverLines = 0
   private compact = false
   private controlsTop = 0
   private targetLines = 0
@@ -228,7 +227,6 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
     this.synced = false
     this.wasTopped = false
     this.wasDone = false
-    this.serverLines = 0
     this.targetLines = 0
     this.shiftSide = undefined
     this.padSide = undefined
@@ -608,8 +606,6 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
     const now = this.time.now
     this.pending = this.pending.filter((p) => p.seq > board.ack && now - p.at < PENDING_TTL_MS)
     const done = (board.doneAt ?? 0) > 0
-    // Line Clear Sprint restarts a topped-out board (minus a few lines); in Quick Tetris it's final.
-    const restarts = snap.topOutPenalty !== undefined
     if (!this.synced) {
       // First snapshot of this (possibly restarted) scene: adopt the state without replaying fx, and
       // carry on numbering inputs after the ones the server has already seen.
@@ -618,9 +614,7 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
       this.shownLines = board.linesCleared
       if (board.toppedOut) this.toppedAt = this.time.now - TOPPLE_ROW_MS * snap.rows
     } else {
-      if (board.toppedOut && !this.wasTopped)
-        this.onToppedOut(this.serverLines - board.linesCleared, restarts)
-      if (!board.toppedOut && this.wasTopped) this.onRestart()
+      if (board.toppedOut && !this.wasTopped) this.onToppedOut()
       if (done && !this.wasDone) this.onDone()
     }
     if (board.toppedOut || done) {
@@ -629,10 +623,9 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
       this.softArmed = false
     }
     if (done) this.showEnd(this.t(`${ns}.win`), PALETTE.lime, true)
-    else if (board.toppedOut) this.showEnd(this.t(`${ns}.toppedOut`), PALETTE.red, !restarts)
+    else if (board.toppedOut) this.showEnd(this.t(`${ns}.toppedOut`), PALETTE.red, true)
     this.wasTopped = board.toppedOut
     this.wasDone = done
-    this.serverLines = board.linesCleared
   }
 
   // A piece settled into the stack (gravity or a soft drop on it): a tight click. A hard drop already
@@ -646,8 +639,8 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
     this.sfx.lock()
   }
 
-  // The rest of the room: a board finishing, or (quick-tetris) topping out for good — one quieter
-  // sound each per snapshot, however many happen at once.
+  // The rest of the room: a board finishing, or topping out for good — one quieter sound each per
+  // snapshot, however many happen at once.
   private watchRivals(snap: TetrisSprintSnapshot): void {
     const primed = this.rivalEnds.size > 0
     let out = false
@@ -657,7 +650,7 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
       const now = { topped: board.toppedOut, done: (board.doneAt ?? 0) > 0 }
       const was = this.rivalEnds.get(id)
       if (primed && was) {
-        if (now.topped && !was.topped && snap.topOutPenalty === undefined) out = true
+        if (now.topped && !was.topped) out = true
         if (now.done && !was.done) finished = true
       }
       this.rivalEnds.set(id, now)
@@ -666,7 +659,7 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
     if (finished) this.sfx.quiet(() => this.sfx.cheer(), 0.5)
   }
 
-  // The shown line count moved: a clear (flash + pop), or a top-out penalty (just the number).
+  // The shown line count moved: a clear (flash + pop).
   private onLines(lines: number, locks: TetrisLock[]): void {
     if (lines !== this.shownLines) {
       const gained = lines - this.shownLines
@@ -808,29 +801,13 @@ export abstract class TetrisSprintSceneBase extends MiniGameScene<TetrisSprintSn
     if (count >= 2) shake(this, 0.004 * count, 160)
   }
 
-  // `lost`: lines the top-out cost (Line Clear Sprint's penalty), shown over the crumbling stack.
-  // `restarts`: the board comes back (Line Clear Sprint); in Quick Tetris a top-out is out.
-  private onToppedOut(lost = 0, restarts = false): void {
+  // The stack reached the top: you're out (the stack topples grey row by row).
+  private onToppedOut(): void {
     this.toppedAt = this.time.now
     this.sfx.crash()
-    if (restarts) this.sfx.hurt()
-    else this.sfx.eliminated()
+    this.sfx.eliminated()
     shake(this, 0.012, 260)
     flash(this, PALETTE.red, 160)
-    if (lost <= 0) return
-    const { x, y, cell, cols, rows } = this.well
-    floatText(this, x + (cols * cell) / 2, y + (rows * cell) / 2, `-${lost}`, PALETTE.red, 24)
-  }
-
-  // A topped-out board came back empty (Line Clear Sprint): clear the banner and go again.
-  private onRestart(): void {
-    this.banner?.setVisible(false)
-    this.subline?.setVisible(false)
-    // The emptied board starts its own count of locked cells.
-    this.lockedMax = -1
-    this.sfx.go()
-    const { x, y, cell, cols } = this.well
-    burst(this, x + (cols * cell) / 2, y + cell, PALETTE.cyan, 12, 200)
   }
 
   private onDone(): void {

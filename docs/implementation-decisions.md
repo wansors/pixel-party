@@ -1547,3 +1547,20 @@ misses — each would be speculative or gated, and the project rule is "nothing 
 - **Revert**: the constants in `FRUIT` / the server-side track generation and judging in
   `pixelDash.ts`, plus the client's bird drawing.
 
+### D54 — Line Clear Sprint: reaching the top is the end — DONE
+
+- **Date**: 2026-11-21. **Context**: the owner: "in the Tetris, if you reach the top you should die".
+  Quick Tetris already worked that way; Line Clear Sprint charged 2 lines and restarted the board
+  after 1.5 s ("nobody sits out the rest of the round"), so stacking carelessly cost almost nothing.
+- **What**: a top-out in Line Clear Sprint is final — the board freezes with the lines made so far
+  (no penalty: the lost time is the cost), the round ends early once every board is out (or gone), and
+  on equal lines a board still standing beats a topped-out one, a later top-out an earlier. The client
+  shows the same OUT moment as Quick Tetris (TOPPED OUT, the stack greying row by row, the KO face in
+  the standings).
+- **Removed**: the restart path (`restartBoard` in `tetrisCore`, the client's restart effects) and
+  the wire's `topOutPenalty` — no game sends it any more.
+- **Tests**: `lineClearSprint.test.ts` (a top-out freezes the board and keeps its lines, the round ends
+  once every board is out, the tie-break).
+- **Revert**: restore the restart in `lineClearSprint.ts` (+ `restartBoard`, `topOutPenalty` and the
+  client's `onRestart`).
+

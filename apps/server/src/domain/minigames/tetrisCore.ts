@@ -96,16 +96,6 @@ export function isTetrisInput(input: unknown): input is TetrisSprintInput {
   return kind === 'soft' || kind === 'drop'
 }
 
-// A topped-out board starts over: emptied, with the piece that couldn't spawn back at the top (the
-// queue carries on where it was). Line Clear Sprint uses it so one top-out doesn't bench you for the
-// rest of the round.
-export function restartBoard(p: PlayerBoardState, queue: readonly number[]): void {
-  p.board = tetrisEmptyBoard()
-  p.current = tetrisSpawn(queue[p.queueIndex % queue.length] ?? 0)
-  p.fallAccum = 0
-  p.toppedOut = false
-}
-
 export function boardView(p: PlayerBoardState, queue: readonly number[]): TetrisBoard {
   return tetrisEncodeBoard(p, shapeAtOf(queue), p.ack)
 }

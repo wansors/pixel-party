@@ -386,7 +386,7 @@
       },
       "line-clear-sprint": {
         "name": "Line Clear Sprint",
-        "blurb": "Stack pixels, clear lines, beat the clock. Most lines wins.",
+        "blurb": "Stack pixels, clear lines, beat the clock — but reach the top and you are out. Most lines wins.",
         "controls": "← → move · ↑ X Z rotate · ↓ soft drop · SPACE drop"
       },
       "quick-tetris": {

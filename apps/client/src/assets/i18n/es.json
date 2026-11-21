@@ -389,7 +389,7 @@
       },
       "line-clear-sprint": {
         "name": "Líneas Contrarreloj",
-        "blurb": "Apila piezas y haz líneas contra el reloj. Gana quien más líneas borre.",
+        "blurb": "Apila piezas y haz líneas contra el reloj… pero si llegas arriba, estás fuera. Gana quien más líneas borre.",
         "controls": "← → mover · ↑ X Z girar · ↓ bajar · ESPACIO soltar"
       },
       "quick-tetris": {

@@ -442,7 +442,8 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     realtime: true,
     mobileFriendly: false,
     durationSec: 60,
-    blurb: 'Stack pixels, clear lines, beat the clock. Most lines wins.',
+    blurb:
+      'Stack pixels, clear lines, beat the clock — but reach the top and you are out. Most lines wins.',
     axes: ['precision'],
   },
   {
