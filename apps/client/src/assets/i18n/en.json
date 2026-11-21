@@ -588,6 +588,18 @@
         "blurb": "Bandits in the windows, bottles on the fence, cans in the air — and your aim sways with every breath. Hold it, squeeze, but spare the townsfolk.",
         "controls": "MOUSE or ← ↑ → ↓ / WASD aim · CLICK / SPACE shoot · hold SHIFT / right-click: steady your breath · R reload",
         "tagline": "This town ain’t big enough for your aim."
+      },
+      "spook-snatch": {
+        "name": "Spook Snatch",
+        "blurb": "Grab the object shown exactly as it is — or, if none is, the one whose shape and colour appear nowhere. Fastest right answers score; a wrong grab locks you out.",
+        "controls": "1–5 or click / tap the object · one grab per card",
+        "tagline": "The ghost took the photo. You have to guess what it was looking at."
+      },
+      "hit-pull-twist": {
+        "name": "Hit, Pull, Twist!",
+        "blurb": "Do what it says, faster and faster — but obey the word, not the colour, flip it when it says UPSIDE DOWN and touch nothing on FREEZE. One slip and you are out.",
+        "controls": "↑ W hit · → D pull · ← A twist · ↓ S shake · or tap the buttons",
+        "tagline": "Your hands know what to do. Your brain disagrees."
       }
     }
   },
@@ -1240,6 +1252,32 @@
       "oops": "A CIVILIAN!",
       "saloon": "SALOON",
       "store": "GENERAL STORE"
+    },
+    "spookSnatch": {
+      "hint": "Shown exactly? Grab that one. None is? Grab the one whose shape and colour aren’t on the card · 1–5",
+      "ready": "GET READY…",
+      "boo": "BOO!",
+      "place": "#{{n}}!",
+      "locked": "LOCKED {{s}}s",
+      "hintShort": "Shown exactly → that one · none → the one not there"
+    },
+    "hpt": {
+      "hit": "HIT",
+      "pull": "PULL",
+      "twist": "TWIST",
+      "shake": "SHAKE",
+      "hitCall": "HIT IT!",
+      "pullCall": "PULL IT!",
+      "twistCall": "TWIST IT!",
+      "shakeCall": "SHAKE IT!",
+      "freeze": "FREEZE!",
+      "flipped": "UPSIDE DOWN! Do the opposite",
+      "hint": "↑ W hit · → D pull · ← A twist · ↓ S shake · obey the word, not the colour",
+      "ready": "GET READY…",
+      "streak": "×{{n}}",
+      "wrong": "That was not it!",
+      "moved": "You moved on FREEZE!",
+      "slow": "Too slow!"
     }
   }
 }

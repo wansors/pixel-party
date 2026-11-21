@@ -1330,3 +1330,54 @@ misses — each would be speculative or gated, and the project rule is "nothing 
   frame steady) and a phone.
 - **Revert**: the game's four files and its registry, catalog, scene-map, music-mood and i18n entries,
   the bot and its thumbnail.
+
+### D46 — Spook Snatch: grab the object shown exactly — or the one that isn't there — DONE
+
+- **Date**: 2026-11-21. **Context**: the owner proposed three counter-intuitive games inspired by
+  well-known party games (a ghost-grabbing card race, a totem-grabbing symbol-match game and an
+  electronic "do what it says" toy). Weighed against the catalogue: the symbol-match game was dropped —
+  on screen it becomes "press when two match", which Reaction Duel and Quick Draw already are, and its
+  best part (two players fighting for the totem) doesn't translate; its decoy idea fed the other two.
+  Both kept games use the mechanics with their own names, objects and look.
+- **What**: `spook-snatch`, FFA, 2–12 (best 3–10), 45 s, mobile-friendly.
+  - Five objects, shape i in colour i: blue cube, red ball, green star, yellow triangle, purple heart
+    (procedural 16×16 masks). A card shows two figures of mixed shape and colour. The answer
+    (`spookAnswer`, shared): the object shown exactly, else the one whose shape and colour appear
+    nowhere. The seeded dealer makes 45 % "exact" cards (one exact figure + a decoy that matches
+    nothing exactly) and 55 % "absent" cards (two objects' shapes in two others' colours) — always
+    exactly one answer (tested over the whole deck).
+  - A race per card, judged in arrival order: one grab each; the first right answers score 3, 2, 1,
+    then 1 while the card is open; a wrong grab locks you out 2 s (into the next card too). The card
+    closes on its window (4.2 s × 0.93 per card, floor 1.9 s — D40), when half the room (≥ 3) got it,
+    or when everyone answered; a 1.5 s reveal follows. From card 6 the figures turn and shrink.
+  - Scene: the card as an old photo with a ghost peeking from its corner (it shouts BOO! on the
+    reveal), five object buttons (1–5), a draining bar, a strip of everyone's place or ✕ on this
+    card, the buttons greyed with a countdown while you're locked. Bot `bots/spook-snatch.ts`.
+- **Tests**: `spookSnatch.test.ts` (the rule both ways, ambiguous cards flagged, window + awards, the
+  whole seeded deck valid with both kinds and the twist, arrival-order places, the lock spilling
+  into the next card, closing rules, stale/junk grabs, leaving, ranking).
+
+### D47 — Hit, Pull, Twist: called-out moves that turn on you — DONE
+
+- **Date**: 2026-11-21. **Context**: the owner's "do what it says" toy idea (D46), with the
+  counter-intuitive twists they proposed: an action painted in another action's colour, and controls
+  that flip for a few orders.
+- **What**: `hit-pull-twist`, FFA elimination, 1–12 (best 2–12), 60 s cap, mobile-friendly.
+  - Four moves on the arrows / WASD / a cross of buttons: HIT ↑ (red), PULL → (blue), TWIST ← (green),
+    SHAKE ↓ (yellow). One order at a time with a window of 1.7 s × 0.955 per order (floor 0.5 s, D40);
+    the next shows 380 ms after the answer. A wrong move or a missed window is out.
+  - Tricks: from order 6, 45 % are painted in another action's colour (obey the word and the arrow);
+    from order 12, UPSIDE DOWN! stretches (4 of every 12) flip every move; from order 18, 12 % are
+    FREEZE! (touch nothing until it passes; never inside a flipped stretch).
+  - Everyone plays the same orders at their own pace: `hptOrder(seed, k)` is a tiny 32-bit integer
+    PRNG (mulberry32 steps) in `@pp/shared`, so the client runs its orders locally from the snapshot's
+    seed. The server keeps each player's clock: order k's window runs from the arrival of answer k−1
+    + the gap, so the trip time cancels; answers up to 250 ms past the window still count; a FREEZE
+    passes by itself. A test autopilot and a browser run (30 orders, real key presses) never desync.
+  - Ranked by orders done (`streak 23`); survivors level at the bell share the top.
+- **Tests**: `hitPullTwist.test.ts` (seeded orders identical, tricks at their orders, the expected
+  move incl. flips and FREEZE, the shrinking window, right moves + the gap, wrong / late / FREEZE outs,
+  the trip allowance, stale / early / junk answers, ranking, ties at the bell, the snapshot clock).
+  Bot `bots/hit-pull-twist.ts`; the browser capture plays its own orders right.
+- **Revert** (both): each game's four files and its registry, catalog, scene-map and i18n entries,
+  the bot and the thumbnail.

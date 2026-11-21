@@ -14,6 +14,7 @@ import { FreezeDollScene } from './FreezeDollScene'
 import { FruitCatchScene } from './FruitCatchScene'
 import { GlassBridgeScene } from './GlassBridgeScene'
 import { HigherLowerScene } from './HigherLowerScene'
+import { HitPullTwistScene } from './HitPullTwistScene'
 import { HoneycombCutScene } from './HoneycombCutScene'
 import { Hurdles110mScene } from './Hurdles110mScene'
 import { JavelinThrowScene } from './JavelinThrowScene'
@@ -50,6 +51,7 @@ import { SimonScene } from './SimonScene'
 import { SinkTheFleetScene } from './SinkTheFleetScene'
 import { SnakeArenaScene } from './SnakeArenaScene'
 import { SpeedCircuitScene } from './SpeedCircuitScene'
+import { SpookSnatchScene } from './SpookSnatchScene'
 import { StarBlasterScene } from './StarBlasterScene'
 import { StopClockScene } from './StopClockScene'
 import { SudokuRaceScene } from './SudokuRaceScene'
@@ -120,6 +122,8 @@ export const SCENES: Readonly<Record<string, SceneCtor>> = {
   'wing-it': WingItScene,
   'rock-paper-scissors': RockPaperScissorsScene,
   sharpshooter: SharpshooterScene,
+  'spook-snatch': SpookSnatchScene,
+  'hit-pull-twist': HitPullTwistScene,
   'tug-of-war': TugOfWarScene,
   'bomb-relay': BombRelayScene,
   'fleet-battle': FleetBattleScene,

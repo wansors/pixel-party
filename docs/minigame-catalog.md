@@ -62,8 +62,9 @@ total — every game idea on the roadmap is built.**
 Then (2026-10-03) J1 Weird Trivia (`weird-trivia`), the first brand-new idea after the roadmap.
 **55 mini-games total.**
 Then (2026-11-21) K1 Neon Trails (`neon-trails`, D41), K2 Wing It (`wing-it`, D42), K3 Rock Paper
-Scissors (`rock-paper-scissors`, D43) and K4 Sharpshooter (`sharpshooter`, D45). **59 mini-games
-total.**
+Scissors (`rock-paper-scissors`, D43), K4 Sharpshooter (`sharpshooter`, D45), and the counter-intuitive
+pair K5 Spook Snatch (`spook-snatch`, D46) and K6 Hit, Pull, Twist (`hit-pull-twist`, D47). **61
+mini-games total.**
 
 > **Difficulty curves (D40, 2026-11-21)**: about 26 games were retuned from linear or flat pacing to
 > non-linear ramps (the shared `easeIn` / `rampEase` / `rampExp` / `compound` helpers in
@@ -948,14 +949,46 @@ avatar. See `implementation-decisions.md` D22.
   carries where the crosshair was and when (accepted up to 250 ms late) and the server judges it
   against the target's position at that moment; your hit drops the target at once.
 
+### K5. ✅ Spook Snatch — implemented (`spook-snatch`)
+- **Concept**: a visual-elimination race in the genre of the ghost-grabbing card games (own name,
+  objects and look): five objects in a row — blue cube, red ball, green star, yellow triangle, purple
+  heart — and a card (a photo the ghost took) with two figures of mixed shape and colour (D46).
+- **Type**: FFA, 2–12 (best 3–10) · **Input**: 1–5 or click / tap an object · **Duration**: 45 s ·
+  **Banter**: 💥💥💥 · **Mobile-friendly**: yes
+- **Rules**: grab the object shown EXACTLY (its shape in its own colour); if none is, the one whose
+  shape and colour appear nowhere on the card — the dealer guarantees exactly one answer. One grab per
+  card: the first right answers score 3, 2, 1 (then 1 each until the card closes); a wrong grab locks
+  you out for 2 s (into the next card too). A card closes when its window runs out (4.2 s × 0.93 per
+  card, floor 1.9 s), when half the room (at least three) got it, or when everyone answered; the
+  answer glows and the ghost shouts BOO!. From card 6 the figures turn and shrink (D40).
+- **Win condition / Result**: most points (`9 pts`); first places, then fewer wrong grabs, break ties.
+- **Latency**: low/medium — judged in arrival order; your grab shows right or wrong at once (the rule
+  is shared).
+
+### K6. ✅ Hit, Pull, Twist — implemented (`hit-pull-twist`)
+- **Concept**: called-out moves in the genre of the electronic "do what it says" toys (own name and
+  look), as an elimination round with tricks that pile up (D47).
+- **Type**: FFA, 1–12 (best 2–12) · **Input**: ↑ W hit · → D pull · ← A twist · ↓ S shake, or the four
+  buttons (arrow-key layout) · **Duration**: 60 s cap · **Banter**: 💥💥💥 · **Mobile-friendly**: yes
+- **Rules**: one order at a time — an arrow and a word — and a window to do it (1.7 s × 0.955 per
+  order, floor 0.5 s); the next order shows 380 ms after your answer. A wrong move or a missed window
+  is OUT. Tricks: from order 6 the order may be painted in another action's colour (obey the word and
+  the arrow); from order 12, UPSIDE DOWN! stretches (4 of every 12 orders) flip every move; from
+  order 18, FREEZE! orders (touch nothing until it passes). Everyone gets the same seeded orders and
+  plays them at their own pace.
+- **Win condition / Result**: most orders done (`streak 23`); survivors level at the bell share the top.
+- **Latency**: low — the orders come from a shared integer PRNG (`hptOrder`), so the client runs them
+  locally; the server keeps each player's clock from the arrival of their answers (the trip cancels
+  out) and confirms every move, timeout and FREEZE.
+
 ---
 
 ## Variety coverage
 
 | Axis | Covered by |
 |------|------------|
-| Reflexes / reaction | A1, A6, B1, E7, F5, F7, G2, G5, I3, K2 |
-| Attention / focus (inhibition) | E1, E3, E4, G1 |
+| Reflexes / reaction | A1, A6, B1, E7, F5, F7, G2, G5, I3, K2, K6 |
+| Attention / focus (inhibition) | E1, E3, E4, G1, K5, K6 |
 | Speed / endurance | A2, A9, C1, F1, F2, G3 |
 | Knowledge | A3, J1 |
 | Mental math | E2 |
@@ -970,7 +1003,7 @@ avatar. See `implementation-decisions.md` D22.
 
 | Format | Mini-games |
 |--------|-----------|
-| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6, J1, K1, K2, K4 |
+| Individual (FFA) | A1–A11, D1–D3, E1–E6, E8–E10, F1–F7, G1–G5, I1–I6, J1, K1, K2, K4–K6 |
 | Duel (1v1 / bracket) | B1, B2, B3, E7, G6, K3 |
 | Team | C1, C2, C3 |
 

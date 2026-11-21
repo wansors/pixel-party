@@ -15,6 +15,7 @@ import { FreezeDoll } from './freezeDoll'
 import { FruitCatch } from './fruitCatch'
 import { GlassBridge } from './glassBridge'
 import { HigherLower } from './higherLower'
+import { HitPullTwist } from './hitPullTwist'
 import { HoneycombCut } from './honeycombCut'
 import { JumpRope } from './jumpRope'
 import { LineClearSprint } from './lineClearSprint'
@@ -46,6 +47,7 @@ import { Sharpshooter } from './sharpshooter'
 import { Simon } from './simon'
 import { SinkTheFleet } from './sinkTheFleet'
 import { SnakeArena } from './snakeArena'
+import { SpookSnatch } from './spookSnatch'
 import { StarBlaster } from './starBlaster'
 import { StopClock } from './stopClock'
 import { SudokuRace } from './sudokuRace'
@@ -119,6 +121,8 @@ const FACTORIES: Record<MiniGameId, () => MiniGame<unknown, unknown>> = {
   'wing-it': () => new WingIt() as unknown as MiniGame<unknown, unknown>,
   'rock-paper-scissors': () => new RockPaperScissors() as unknown as MiniGame<unknown, unknown>,
   sharpshooter: () => new Sharpshooter() as unknown as MiniGame<unknown, unknown>,
+  'spook-snatch': () => new SpookSnatch() as unknown as MiniGame<unknown, unknown>,
+  'hit-pull-twist': () => new HitPullTwist() as unknown as MiniGame<unknown, unknown>,
 }
 
 export const MINIGAME_IDS: readonly MiniGameId[] = Object.keys(FACTORIES)

@@ -97,6 +97,8 @@
 | `neon-trails` | 2–12 | 3–8 | OK (added 2026-11-21, D41) | Last rider standing; the arena grows with the room (54×36 at 9–12). |
 | `wing-it` | 1–12 | 2–12 | OK (added 2026-11-21, D42) | Everyone flies the same course as ghosts, so the headcount changes nothing but the crowd. |
 | `sharpshooter` | 1–12 | 2–12 | OK (added 2026-11-21, D45) | Every player gets every target (no stealing); rivals only show as holes in their colors. |
+| `spook-snatch` | 2–12 | 3–10 | OK (added 2026-11-21, D46) | A race per card: the first right answers score (half the room, at least three, can); a wrong grab locks you out. |
+| `hit-pull-twist` | 1–12 | 2–12 | OK (added 2026-11-21, D47) | Everyone plays the same orders at their own pace, so the headcount only fills the strip. |
 
 ### Racing & athletics
 

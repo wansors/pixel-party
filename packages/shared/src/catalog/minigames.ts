@@ -713,6 +713,30 @@ export const MINIGAMES: readonly MiniGameMeta[] = [
     axes: ['precision', 'reflexes'],
   },
   {
+    id: 'spook-snatch',
+    name: 'Spook Snatch',
+    format: 'ffa',
+    players: { min: 2, max: 12, best: [3, 10] },
+    realtime: true,
+    mobileFriendly: true,
+    durationSec: 45,
+    blurb:
+      'Grab the object shown exactly as it is — or, if none is, the one whose shape and colour appear nowhere. Fastest right answers score; a wrong grab locks you out.',
+    axes: ['focus', 'reflexes'],
+  },
+  {
+    id: 'hit-pull-twist',
+    name: 'Hit, Pull, Twist!',
+    format: 'ffa',
+    players: { min: 1, max: 12, best: [2, 12] },
+    realtime: true,
+    mobileFriendly: true,
+    durationSec: 60,
+    blurb:
+      'Do what it says, faster and faster — but obey the word, not the colour, flip it when it says UPSIDE DOWN and touch nothing on FREEZE. One slip and you are out.',
+    axes: ['reflexes', 'focus'],
+  },
+  {
     id: 'marbles-duel',
     name: 'Marbles Duel',
     format: 'duel',

@@ -591,6 +591,18 @@
         "blurb": "Bandidos en las ventanas, botellas en la valla, latas por los aires… y la mirilla se te mueve con cada respiración. Aguanta el aire, aprieta el gatillo y no le des a los vecinos.",
         "controls": "RATÓN o ← ↑ → ↓ / WASD: apuntar · CLIC / ESPACIO: disparar · mantén SHIFT / clic derecho: aguantar el aire · R: recargar",
         "tagline": "Este pueblo es demasiado pequeño para tu puntería."
+      },
+      "spook-snatch": {
+        "name": "Pilla al Fantasma",
+        "blurb": "Coge el objeto que sale tal cual o, si no sale ninguno, el que no comparte ni forma ni color con la foto. Puntúan los más rápidos; si fallas, te quedas bloqueado.",
+        "controls": "1–5 o clic / toque en el objeto · un intento por carta",
+        "tagline": "El fantasma hizo la foto. Tú adivinas qué estaba mirando."
+      },
+      "hit-pull-twist": {
+        "name": "¡Dale, Tira, Gira!",
+        "blurb": "Haz lo que te dice, cada vez más rápido. Pero ojo: haz caso a la palabra y no al color, al revés cuando diga AL REVÉS, y quieto parao cuando diga QUIETO. Un fallo y a la calle.",
+        "controls": "↑ W dale · → D tira · ← A gira · ↓ S agita · o toca los botones",
+        "tagline": "Tus manos saben lo que hacer. Tu cerebro no está de acuerdo."
       }
     }
   },
@@ -1249,6 +1261,32 @@
       "oops": "¡UN VECINO!",
       "saloon": "SALOON",
       "store": "ULTRAMARINOS"
+    },
+    "spookSnatch": {
+      "hint": "¿Sale tal cual? Ese. ¿No sale ninguno? El que no comparte ni forma ni color con la foto · 1–5",
+      "ready": "PREPARADOS…",
+      "boo": "¡BU!",
+      "place": "¡{{n}}º!",
+      "locked": "BLOQUEADO {{s}} s",
+      "hintShort": "¿Tal cual? Ese · ¿Ninguno? El que no sale"
+    },
+    "hpt": {
+      "hit": "DALE",
+      "pull": "TIRA",
+      "twist": "GIRA",
+      "shake": "AGITA",
+      "hitCall": "¡DALE!",
+      "pullCall": "¡TIRA!",
+      "twistCall": "¡GIRA!",
+      "shakeCall": "¡AGITA!",
+      "freeze": "¡QUIETO!",
+      "flipped": "¡AL REVÉS! Haz lo contrario",
+      "hint": "↑ W dale · → D tira · ← A gira · ↓ S agita · caso a la palabra, no al color",
+      "ready": "PREPARADOS…",
+      "streak": "×{{n}}",
+      "wrong": "¡Eso no era!",
+      "moved": "¡Te has movido!",
+      "slow": "¡Demasiado lento!"
     }
   }
 }
